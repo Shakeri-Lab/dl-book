@@ -1,0 +1,64 @@
+# Chapter Drafting Template (AI session prompt)
+
+Use this fixed prompt structure for every chapter-drafting session. One chapter per
+session. Fill the ALL-CAPS slots.
+
+---
+
+## Prompt
+
+You are drafting **Chapter N: TITLE** of *Deep Learning: Making It Learnable* — the
+course-companion book for DS 6050 (UVA), written in Professor Heman Shakeri's voice.
+
+**Inputs (read all, in this order):**
+1. `docs/style-guide.md` — the voice calibration target. Follow it strictly.
+2. `sources/SEED_FILES` — his LaTeX lecture notes for this chapter (authoritative for
+   math and structure).
+3. `drafts/partN/XX-raw.md` — mechanical pandoc conversion of the seeds (use for LaTeX→md
+   fidelity, never for structure).
+4. Course transcripts: `TRANSCRIPT_FILES` (his spoken explanations, analogies, and
+   worked examples — mine these for voice and examples; auto-captions, read for meaning).
+5. Chapter contract: the abstract in `chapters/partN/XX-....qmd` (the stub).
+
+**Output:** the complete chapter as a single `.qmd` file, replacing the stub.
+
+**Requirements:**
+- Structure: motivation/problem first (never notation first) → concrete example with
+  numbers → formalism → executable code → "make it learnable" pivot where applicable →
+  recap → exercises (3–5, mix of pencil and code).
+- Math: KaTeX-compatible; use the book macros (`\vect`, `\matr`, `\E`, `\norm`, …);
+  every symbol defined at first use with dimensions stated before matrix products.
+- Code: executable Python cells (```{python}), CPU-only, <60 s total per chapter,
+  seeded (`torch.manual_seed(6050)`), tensor shapes narrated in comments the way the
+  `[coding]_` transcripts do. From-scratch NumPy before `torch` where the chapter calls
+  for it. NO d2l imports, no copied D2L code.
+- Callouts per the style guide mapping (note = definitions, tip = make-it-learnable
+  pivots + hygiene, warning = pitfalls he actually flags).
+- Cross-references: `@sec-...` to other chapters; frontmatter must include
+  `lecture-source:` listing the transcript filenames used.
+- Reuse HIS analogies from the style-guide inventory; do not invent new ones when his
+  exist.
+- Figures: matplotlib in-cell for anything data-driven; reference
+  `figures/generated/*.svg` for architecture diagrams (list any new TikZ needed at the
+  top of the draft as a TODO comment).
+
+**Hard constraints:**
+- Every technical claim must be traceable to the seeds or transcripts. If you add
+  anything genuinely new (missing-gap material), wrap it in
+  `<!-- NOVEL: needs sign-off -->` comments.
+- No D2L-derived text or code (licensing).
+
+---
+
+## After the draft: consistency audit (separate session)
+
+Prompt a second, independent session:
+
+> Audit `drafts/partN/XX-draft.qmd` against `sources/SEED_FILES` and
+> `TRANSCRIPT_FILES`. For every technical claim, mark: SUPPORTED (cite where),
+> NOVEL (flag for author sign-off), or CONTRADICTED (explain). Check all math for
+> correctness independently. Check every code cell runs mentally (shapes, imports,
+> seeds). Return the claim table + a fix list.
+
+Then: his edit → `quarto render --to html --to pdf` → cell execution check
+(`quarto render CHAPTER --execute`) → merge.

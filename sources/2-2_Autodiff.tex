@@ -1,0 +1,693 @@
+\documentclass{article}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{listings}
+\usepackage[margin=1in]{geometry}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{shapes, arrows, positioning, calc}
+\usepackage{tcolorbox}
+% Define colors for syntax highlighting
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+
+% Python style for highlighting
+\lstdefinestyle{pythonstyle}{
+    backgroundcolor=\color{backcolour},   
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,         
+    breaklines=true,                 
+    captionpos=b,                    
+    keepspaces=true,                 
+    numbers=left,                    
+    numbersep=5pt,                  
+    showspaces=false,                
+    showstringspaces=false,
+    showtabs=false,                  
+    tabsize=2
+}
+\lstset{style=pythonstyle}
+
+\title{Lecture 6: Automatic Differentiation in PyTorch}
+\author{Deep Learning Class}
+\date{\today}
+
+\begin{document}
+
+\section{PyTorch's Autograd System}
+
+\subsection{Basic Concepts}
+
+PyTorch's \texttt{autograd} package provides automatic differentiation for all operations on Tensors. Here are the key concepts:
+
+\begin{itemize}
+    \item \texttt{requires\_grad=True}: Tells PyTorch to track operations on a tensor
+    \item \texttt{grad\_fn}: Each tensor keeps track of the operation that created it
+    \item \texttt{backward()}: Computes gradients via backpropagation
+    \item \texttt{grad}: Stores the computed gradient
+\end{itemize}
+
+\subsection{Your First Autograd Example}
+
+\begin{lstlisting}[language=Python]
+import torch
+
+# Create tensors with gradient tracking
+x = torch.tensor(2.0, requires_grad=True)
+w = torch.tensor(3.0, requires_grad=True)
+b = torch.tensor(1.0, requires_grad=True)
+
+# Forward pass - PyTorch builds the graph automatically
+y = x * w + b  # y = 2*3 + 1 = 7
+L = y ** 2     # L = 49
+
+# Backward pass - compute all gradients
+L.backward()
+
+# Access gradients
+print(f"dL/dx = {x.grad}")  # dL/dx = 2*y*w = 2*7*3 = 42
+print(f"dL/dw = {w.grad}")  # dL/dw = 2*y*x = 2*7*2 = 28
+print(f"dL/db = {b.grad}")  # dL/db = 2*y*1 = 2*7*1 = 14
+\end{lstlisting}
+
+\begin{tcolorbox}[colback=yellow!5!white, colframe=orange!50!black, title=What Just Happened?]
+\begin{enumerate}
+    \item We created tensors and set \texttt{requires\_grad=True}
+    \item We performed operations - PyTorch automatically built a computational graph
+    \item We called \texttt{backward()} - PyTorch traversed the graph backwards computing gradients. And deletes the graph.
+    \item The gradients appeared in the \texttt{.grad} attribute of each tensor
+\end{enumerate}
+
+\end{tcolorbox}
+
+\subsection{Example: Linear Layer}
+
+\begin{lstlisting}[language=Python]
+# Simulate a mini-batch of 3 samples, 4 features each
+x = torch.randn(3, 4, requires_grad=True)
+
+# Linear layer parameters
+W = torch.randn(4, 2, requires_grad=True)
+b = torch.randn(2, requires_grad=True)
+
+# Forward pass
+y = torch.matmul(x, W) + b
+loss = y.mean()
+
+# Backward pass
+loss.backward()
+
+print(f"W.grad shape: {W.grad.shape}")  # (4, 2) - same as W
+print(f"b.grad shape: {b.grad.shape}")  # (2,) - same as b
+\end{lstlisting}
+
+\section{How Autograd Works Under the Hood}
+
+\subsection{The grad\_fn Attribute}
+
+Every tensor that's created by an operation has a \texttt{grad\_fn} that knows how to compute gradients:
+
+\begin{lstlisting}[language=Python]
+x = torch.tensor(2.0, requires_grad=True)
+y = x ** 2
+z = y + 3
+
+print(f"x.grad_fn: {x.grad_fn}")  # None - x is a leaf
+print(f"y.grad_fn: {y.grad_fn}")  # <PowBackward0 object>
+print(f"z.grad_fn: {z.grad_fn}")  # <AddBackward0 object>
+
+# The graph knows the path back
+print(z.grad_fn.next_functions[0][0])  # Points to y's grad_fn
+\end{lstlisting}
+
+\subsection{Dynamic Graphs}
+
+PyTorch uses \textbf{dynamic computational graphs} - the graph is built on-the-fly during the forward pass:
+
+\begin{lstlisting}[language=Python]
+x = torch.randn(1, requires_grad=True)
+
+# Different graph each iteration!
+for i in range(3):
+    if x > 0:
+        y = x ** 2
+    else:
+        y = x ** 3
+    
+    y.backward()
+    print(f"Iteration {i}: x.grad = {x.grad}")
+    x.grad.zero_()  # Reset gradient for next iteration
+\end{lstlisting}
+
+\section{Practical Usage in Neural Networks}
+
+\subsection{Training Loop Pattern}
+
+Here's the standard pattern you'll use thousands of times:
+
+\begin{lstlisting}[language=Python]
+# Model and optimizer
+model = MyNeuralNetwork()
+optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
+
+# Training loop
+for epoch in range(num_epochs):
+    for batch_data, batch_labels in dataloader:
+        # 1. Zero gradients from previous step
+        optimizer.zero_grad()
+        
+        # 2. Forward pass
+        predictions = model(batch_data)
+        loss = loss_function(predictions, batch_labels)
+        
+        # 3. Backward pass - compute gradients
+        loss.backward()
+        
+        # 4. Update parameters using gradients
+        optimizer.step()
+\end{lstlisting}
+
+\subsection{Gradient Accumulation}
+
+By default, gradients accumulate. This is why we need \texttt{zero\_grad()}:
+
+\begin{lstlisting}[language=Python]
+x = torch.tensor(2.0, requires_grad=True)
+
+# First backward pass
+y1 = x ** 2
+y1.backward()
+print(f"x.grad after first backward: {x.grad}")  # 4.0
+
+# Second backward pass - gradients ADD
+y2 = x ** 3
+y2.backward()
+print(f"x.grad after second backward: {x.grad}")  # 4.0 + 12.0 = 16.0
+\end{lstlisting}
+
+\section{When NOT to Track Gradients}
+
+\subsection{Inference Mode}
+
+During evaluation, we don't need gradients:
+
+\begin{lstlisting}[language=Python]
+model.eval()  # Set model to evaluation mode
+
+with torch.no_grad():  # Context manager disables gradient tracking
+    predictions = model(test_data)
+    # This is faster and uses less memory!
+\end{lstlisting}
+
+\subsection{Detaching from the Graph}
+
+Sometimes you need to stop gradient flow:
+
+\begin{lstlisting}[language=Python]
+x = torch.tensor(2.0, requires_grad=True)
+y = x ** 2
+
+# Create a new tensor that doesn't require gradients
+y_detached = y.detach()
+z = y_detached ** 2  # z won't propagate gradients to x
+
+# Or use .data (but .detach() is preferred)
+y_data = y.data
+\end{lstlisting}
+
+\section{Common Pitfalls and Tips}
+
+\begin{tcolorbox}[colback=red!5!white, colframe=red!50!black, title=Common Mistakes]
+\begin{enumerate}
+    \item \textbf{Forgetting zero\_grad()}: Gradients accumulate by default
+    \item \textbf{Using numpy operations}: These break the computational graph
+    \item \textbf{In-place operations}: Can cause errors with autograd
+\end{enumerate}
+\end{tcolorbox}
+
+\begin{lstlisting}[language=Python]
+# DON'T: In-place operations can cause problems
+x = torch.tensor(2.0, requires_grad=True)
+y = x ** 2
+y += 1  # In-place operation - might cause errors!
+
+# DO: Create new tensors
+x = torch.tensor(2.0, requires_grad=True)
+y = x ** 2
+y = y + 1  # Creates new tensor - safe!
+\end{lstlisting}
+
+\section{Summary}
+
+Automatic differentiation is the engine that powers modern deep learning:
+\begin{itemize}
+    \item PyTorch builds a computational graph as you perform operations
+    \item \texttt{backward()} traverses this graph to compute gradients automatically
+    \item This frees us to focus on model architecture rather than derivative calculations
+    \item The dynamic graph allows for flexible, Pythonic model definitions
+\end{itemize}
+
+In the next lecture, we'll see how to use these tools to build more complex architectures with skip connections and other advanced features.
+
+
+
+\section{Understanding Autograd: The Jacobian-Vector Product Engine}
+
+\subsection{Why We Usually Use Scalar Losses}
+
+In the previous lecture, we always called \texttt{backward()} on scalar tensors (like the final loss). This wasn't arbitrary—it reflects a fundamental design choice in PyTorch's autograd engine.
+
+\begin{tcolorbox}[colback=blue!5!white, colframe=blue!50!black, title=Key Insight: Autograd Computes Jacobian-Vector Products]
+PyTorch's \texttt{autograd} is designed to efficiently compute \textbf{Jacobian-vector products}, not full Jacobians. This design choice makes it perfect for deep learning, where we typically want gradients of a scalar loss with respect to millions of parameters.
+\end{tcolorbox}
+
+\subsection{Scalar vs Non-Scalar Backward}
+
+Let's understand the difference:
+
+\begin{lstlisting}[language=Python]
+import torch
+
+# Case 1: Scalar output (common case)
+x = torch.tensor([1., 2., 3.], requires_grad=True)
+y = x ** 2
+loss = y.sum()  # Scalar: shape ()
+
+# backward() works without arguments
+loss.backward()
+print(f"x.grad = {x.grad}")  # [2., 4., 6.]
+
+# Case 2: Vector output (less common)
+x = torch.tensor([1., 2., 3.], requires_grad=True)
+y = x ** 2  # Vector: shape (3,)
+
+# This would fail!
+try:
+    y.backward()
+except RuntimeError as e:
+    print(f"Error: grad can be implicitly created only for scalar outputs")
+
+# Must provide gradient argument
+x.grad = None  # Reset
+gradient = torch.tensor([1., 1., 1.])
+y.backward(gradient)
+print(f"x.grad = {x.grad}")  # [2., 4., 6.]
+\end{lstlisting}
+
+\subsection{The Mathematics Behind It}
+
+Consider a function $\mathbf{y} = f(\mathbf{x})$ where:
+- $\mathbf{x} \in \mathbb{R}^n$ (input vector)
+- $\mathbf{y} \in \mathbb{R}^m$ (output vector)
+
+The full Jacobian would be:
+$\mathbf{J} = \frac{\partial \mathbf{y}}{\partial \mathbf{x}} = \begin{bmatrix}
+\frac{\partial y_1}{\partial x_1} & \cdots & \frac{\partial y_1}{\partial x_n} \\
+\vdots & \ddots & \vdots \\
+\frac{\partial y_m}{\partial x_1} & \cdots & \frac{\partial y_m}{\partial x_n}
+\end{bmatrix}$
+
+This is an $m \times n$ matrix—potentially huge! Instead, autograd computes:
+$\mathbf{v}^T \mathbf{J} = \mathbf{v}^T \frac{\partial \mathbf{y}}{\partial \mathbf{x}}$
+
+where $\mathbf{v}$ is the ``gradient'' argument you provide to \texttt{backward()}.
+
+\paragraph{Why the name ``gradient"?}
+
+The name for the vector $\mathbf{v}$ comes from its role in the chain rule. Imagine a final scalar loss $L$ is calculated from our vector $\mathbf{y}$. The chain rule for finding the gradient of $L$ with respect to our original input $\mathbf{x}$ is:
+$$ \frac{\partial L}{\partial \mathbf{x}} = \underbrace{\frac{\partial L}{\partial \mathbf{y}}}_{\text{This is } \mathbf{v}^T} \cdot \underbrace{\frac{\partial \mathbf{y}}{\partial \mathbf{x}}}_{\text{This is } \mathbf{J}} $$
+The vector $\mathbf{v}$ that you provide to
+\texttt{y.backward(gradient=v)} is precisely this upstream gradient, $\frac{\partial L}{\partial \mathbf{y}}$. It's the gradient of the final loss with respect to the intermediate tensor $\mathbf{y}$. Because $\mathbf{v}$ is itself a gradient, the name `gradient` is a perfect fit. This also explains why \texttt{loss.backward()} works for a scalar: the ``upstream gradient" is $\frac{\partial L}{\partial L}$, which is simply \texttt{1}.
+
+\subsection{Why This Design Makes Sense}
+
+\begin{lstlisting}[language=Python]
+# In deep learning, we typically have:
+# - Millions of parameters (x)
+# - One scalar loss (y)
+
+model = torch.nn.Linear(1000, 1000)
+x = torch.randn(32, 1000)
+y = model(x)
+loss = y.mean()  # Scalar!
+
+# If y were a vector of size m, the Jacobian would be m x num_parameters
+# For m=32*1000 and 1M parameters, that's 32 billion numbers!
+
+# But with scalar loss (m=1), we just need the gradient vector
+loss.backward()  # Efficient: computes 1 x num_parameters
+\end{lstlisting}
+
+\subsection{When You Need Non-Scalar Backward}
+
+Sometimes you do need gradients of vector outputs:
+
+\begin{lstlisting}[language=Python]
+# Example: Computing per-sample gradients
+x = torch.randn(10, 5, requires_grad=True)
+w = torch.randn(5, 3, requires_grad=True)
+y = torch.matmul(x, w)  # Shape: (10, 3)
+
+# Want gradient of each output element separately
+for i in range(y.shape[0]):
+    for j in range(y.shape[1]):
+        if x.grad is not None:
+            x.grad.zero_()
+        
+        # Create one-hot gradient vector
+        grad_output = torch.zeros_like(y)
+        grad_output[i, j] = 1.0
+        
+        y.backward(grad_output, retain_graph=True)
+        # Now x.grad contains d(y[i,j])/dx
+\end{lstlisting}
+
+\begin{tcolorbox}[colback=yellow!5!white, colframe=orange!50!black, title=Practical Tip]
+In 99\% of deep learning applications, you'll call \texttt{backward()} on a scalar loss. The non-scalar case mainly appears in:
+\begin{itemize}
+    \item Advanced optimization techniques (e.g., computing Hessian-vector products)
+    \item Meta-learning algorithms
+    \item Certain GAN training procedures
+\end{itemize}
+\end{tcolorbox}
+\section{Graph Lifetime, Memory, monitoring}
+
+\subsection{The Computational Graph Lifecycle}
+
+By default, PyTorch deletes the computational graph after calling \texttt{backward()}. This is a memory optimization—graphs can be large!
+
+\begin{lstlisting}[language=Python]
+x = torch.tensor(2.0, requires_grad=True)
+y = x ** 2
+
+# First backward pass works fine
+y.backward()
+print(f"x.grad = {x.grad}")  # 4.0
+
+# Second backward pass fails!
+try:
+    y.backward()
+except RuntimeError as e:
+    print(f"Error: {e}")
+    # Error: Trying to backward through the graph a second time...
+\end{lstlisting}
+
+\begin{tcolorbox}[colback=blue!5!white, colframe=blue!50!black, title=Why Delete the Graph?]
+For a typical neural network with millions of parameters, storing the entire computational graph consumes significant memory. Since we usually only need one backward pass per forward pass, PyTorch frees this memory immediately after \texttt{backward()}.
+\end{tcolorbox}
+
+\subsection{Retaining the Graph}
+
+Sometimes you need multiple backward passes (e.g., for certain meta-learning algorithms):
+
+\begin{lstlisting}[language=Python]
+x = torch.tensor(2.0, requires_grad=True)
+y = x ** 2
+
+# First backward with retain_graph=True
+y.backward(retain_graph=True)
+print(f"After first backward: x.grad = {x.grad}")  # 4.0
+
+# Zero the gradient (important!)
+x.grad.zero_()
+
+# Second backward now works
+y.backward()
+print(f"After second backward: x.grad = {x.grad}")  # 4.0
+\end{lstlisting}
+
+\textbf{Warning}: Use \texttt{retain\_graph=True} sparingly—it keeps the entire graph in memory!
+
+\subsection{Debugging Gradient Flow}
+
+As networks get deeper, two problems often arise:
+\begin{itemize}
+    \item \textbf{Vanishing gradients}: Gradients become exponentially small
+    \item \textbf{Exploding gradients}: Gradients become exponentially large
+\end{itemize}
+
+Let's build tools to diagnose these issues.
+
+\subsubsection{Using Hooks to Monitor Gradients}
+
+Hooks are functions that run during forward or backward passes without modifying your model code:
+
+\begin{lstlisting}[language=Python]
+def print_grad_norm(name):
+    """Create a hook function that prints gradient norms."""
+    def hook(grad):
+        print(f"{name} gradient norm: {grad.norm():.4f}")
+        return grad  # Return grad unchanged
+    return hook
+
+# Example: Monitor gradients in a deep network
+model = nn.Sequential(
+    nn.Linear(10, 50),
+    nn.ReLU(),
+    nn.Linear(50, 50),
+    nn.ReLU(),
+    nn.Linear(50, 50),
+    nn.ReLU(),
+    nn.Linear(50, 1)
+)
+
+# Register hooks on some parameters
+model[0].weight.register_hook(print_grad_norm("Layer 0"))
+model[2].weight.register_hook(print_grad_norm("Layer 2"))
+model[4].weight.register_hook(print_grad_norm("Layer 4"))
+
+# Forward and backward
+x = torch.randn(32, 10)
+loss = model(x).mean()
+loss.backward()
+# Prints gradient norms during backward pass
+\end{lstlisting}
+
+\subsubsection{Gradient Histograms for Deeper Analysis}
+
+For more detailed analysis, we can collect gradient statistics:
+
+\begin{lstlisting}[language=Python]
+class GradientMonitor:
+    def __init__(self):
+        self.gradients = {}
+        
+    def register(self, module, name):
+        """Register a hook on module's parameters."""
+        def hook(grad):
+            self.gradients[name] = {
+                'norm': grad.norm().item(),
+                'mean': grad.mean().item(),
+                'std': grad.std().item(),
+                'min': grad.min().item(),
+                'max': grad.max().item()
+            }
+            return grad
+        module.weight.register_hook(hook)
+    
+    def report(self):
+        """Print gradient statistics."""
+        for name, stats in self.gradients.items():
+            print(f"\n{name}:")
+            for stat, value in stats.items():
+                print(f"  {stat}: {value:.6f}")
+
+# Usage
+monitor = GradientMonitor()
+for i, layer in enumerate(model):
+    if hasattr(layer, 'weight'):
+        monitor.register(layer, f"Layer_{i}")
+
+# After backward pass
+loss.backward()
+monitor.report()
+\end{lstlisting}
+
+\subsubsection{Gradient Clipping: Taming Exploding Gradients}
+
+When gradients explode (common in RNNs), gradient clipping provides a simple solution:
+
+\begin{lstlisting}[language=Python]
+# Method 1: Clip by value (rare)
+for param in model.parameters():
+    if param.grad is not None:
+        param.grad.data.clamp_(-1, 1)
+
+# Method 2: Clip by norm (common and recommended)
+torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+
+# In practice, use it in your training loop:
+def train_step(model, data, target, optimizer):
+    optimizer.zero_grad()
+    output = model(data)
+    loss = criterion(output, target)
+    loss.backward()
+    
+    # Clip gradients before optimizer step
+    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+    
+    optimizer.step()
+    return loss.item()
+\end{lstlisting}
+
+
+\section{Common Pitfalls and Solutions}
+
+\subsection{In-place Operations}
+
+In-place operations modify tensors directly and can corrupt the computational graph:
+
+\begin{lstlisting}[language=Python]
+# WRONG: In-place operation
+x = torch.tensor([1., 2., 3.], requires_grad=True)
+y = x ** 2
+x[0] = 0  # Modifies x in-place!
+# y still depends on the original x, but we changed it!
+
+# This will raise an error:
+try:
+    y.sum().backward()
+except RuntimeError as e:
+    print(f"Error: {e}")
+
+# CORRECT: Create new tensor
+x = torch.tensor([1., 2., 3.], requires_grad=True)
+y = x ** 2
+x_new = x.clone()
+x_new[0] = 0  # Modifies the clone, not the original
+# Original graph is intact
+y.sum().backward()  # Works fine!
+\end{lstlisting}
+
+\subsection{Detaching vs No Grad}
+
+Know when to use each:
+
+\begin{lstlisting}[language=Python]
+# Use no_grad() for inference - disables autograd entirely
+with torch.no_grad():
+    predictions = model(test_data)
+    # Faster, uses less memory
+
+# Use detach() to stop gradients selectively
+features = encoder(input_data)
+# Stop gradients to encoder, but train decoder
+features_detached = features.detach()
+output = decoder(features_detached)
+loss = criterion(output, target)
+loss.backward()  # Only decoder gets gradients
+\end{lstlisting}
+
+\subsection{Accumulating Gradients}
+
+Remember that PyTorch accumulates gradients by default:
+
+\begin{lstlisting}[language=Python]
+# Gradient accumulation for large effective batch sizes
+accumulation_steps = 4
+optimizer.zero_grad()
+
+for i, (data, target) in enumerate(dataloader):
+    output = model(data)
+    loss = criterion(output, target)
+    loss = loss / accumulation_steps  # Normalize loss
+    loss.backward()
+    
+    if (i + 1) % accumulation_steps == 0:
+        optimizer.step()
+        optimizer.zero_grad()
+\end{lstlisting}
+
+
+\section{Advanced Topics}
+
+\subsection{Custom Autograd Functions}
+
+Sometimes you need to define custom gradients (e.g., for non-differentiable operations):
+
+\begin{lstlisting}[language=Python]
+class StraightThroughEstimator(torch.autograd.Function):
+    """Forward: apply sign function. Backward: pretend it's identity."""
+    
+    @staticmethod
+    def forward(ctx, input):
+        # ctx stores information for backward pass
+        output = input.sign()
+        return output
+    
+    @staticmethod 
+    def backward(ctx, grad_output):
+        # Gradient flows through unchanged (identity function)
+        return grad_output
+
+# Usage
+ste = StraightThroughEstimator.apply
+x = torch.randn(5, requires_grad=True)
+y = ste(x)  # Forward: sign(x), Backward: identity
+loss = y.sum()
+loss.backward()
+print(f"x.grad = {x.grad}")  # Gradients flow through!
+\end{lstlisting}
+
+\subsection{Memory-Efficient Training with Gradient Checkpointing}
+
+For very deep models, storing all intermediate activations can exhaust memory. Gradient checkpointing trades computation for memory:
+
+\begin{lstlisting}[language=Python]
+from torch.utils.checkpoint import checkpoint
+
+class MemoryEfficientBlock(nn.Module):
+    def __init__(self, dim):
+        super().__init__()
+        self.layers = nn.Sequential(
+            nn.Linear(dim, dim * 4),
+            nn.ReLU(),
+            nn.Linear(dim * 4, dim),
+            nn.ReLU()
+        )
+    
+    def forward(self, x):
+        # Without checkpointing: stores all intermediate activations
+        # return self.layers(x)
+        
+        # With checkpointing: recomputes activations during backward
+        return checkpoint(self.layers, x)
+
+# Compare memory usage
+model_normal = nn.Sequential(*[MemoryEfficientBlock(1000) for _ in range(10)])
+model_checkpoint = nn.Sequential(*[MemoryEfficientBlock(1000) for _ in range(10)])
+
+# The checkpointed model uses much less memory during training!
+\end{lstlisting}
+
+\subsection{Visualizing Computational Graphs}
+
+For debugging complex models, visualizing the graph helps:
+
+\begin{lstlisting}[language=Python]
+# Install: pip install torchviz
+from torchviz import make_dot
+
+# Create a simple model
+model = nn.Sequential(
+    nn.Linear(10, 20),
+    nn.ReLU(),
+    nn.Linear(20, 1)
+)
+
+x = torch.randn(1, 10)
+y = model(x)
+
+# Create visualization
+dot = make_dot(y, params=dict(model.named_parameters()))
+dot.render('model_graph', format='png')
+\end{lstlisting}
+
+\end{document}
