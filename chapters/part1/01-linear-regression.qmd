@@ -89,6 +89,17 @@ bias $b$ shifts it away from the origin. In two dimensions this is the familiar 
 through a scatter of points; in $d$ dimensions it is a $d$-dimensional plane, but nothing
 about the algebra changes.
 
+<!-- NOVEL (framing surfaced early from the Module 8 kernel-regression bridge): -->
+There is a second way to read $\vect{w}^\top\vect{x}$, and it may be the most important
+sentence in this chapter: **a dot product is a similarity score.** It is large and
+positive when $\vect{x}$ points along $\vect{w}$, near zero when they are unrelated, and
+negative when they oppose. So a linear model is a *pattern matcher*: $\vect{w}$ is a
+template, and the output measures how well the input matches it. Keep this reading close
+at hand. In Part II, an image filter's response will be this same dot product slid
+across an image; in Part IV, *attention* will be built out of nothing but learned
+similarity scores between queries and keys. Both are this one primitive, asked the
+question we will ask all book long: *what if the template were learnable?*
+
 ### The augmentation trick
 
 Carrying $b$ separately clutters the algebra, so we will often fold it into the weights:
@@ -144,6 +155,13 @@ outside that space (it almost always does), the best we can do is **project** $\
 onto it. The leftover error $\vect{e} = \vect{y} - \hat{\vect{y}}$ is what our model
 cannot explain, and at the optimum it is *perpendicular* to the column space — no
 adjustment of the knobs can reduce it further.
+
+One more observation to file away: substituting @eq-normal back in gives
+$\hat{\vect{y}} = \matr{X}(\matr{X}^\top\matr{X})^{-1}\matr{X}^\top\vect{y}$ — the
+fitted predictions are a *weighted combination of the training targets* $\vect{y}$.
+Linear regression predicts by mixing the answers it has already seen. Hold that thought:
+in Part IV an entire architecture — attention — grows out of choosing such mixing
+weights by *similarity*.
 
 ![The normal equations, geometrically: the optimal prediction $\hat{\vect{y}} = \matr{X}\hat{\vect{w}}$ is the projection of $\vect{y}$ onto the column space of $\matr{X}$; the residual $\vect{e}$ is orthogonal to it.](../../figures/generated/1_1_lin_Recap-fig09.svg){#fig-projection width=70%}
 
@@ -409,49 +427,39 @@ $$
 $$
 
 nudging the model toward smaller, more stable weights — a little more bias for a lot
-less variance. Its cousin **lasso** uses the $L_1$ norm, $\lambda\norm{\vect{w}}_1$,
-and does something qualitatively different: it drives the least informative weights to
-*exactly zero*, performing automatic feature selection.
+less variance.
 
-Let us see that difference, not just assert it. We build a problem designed to punish
-an unregularized model: 20 features of which only 5 matter, noisy targets, and — the
-cruel part — barely more samples than parameters. This is exactly the high-dimensional
-regime where regularization shines:
+Let us see that, not just assert it. We build a problem designed to punish an
+unregularized model: 20 features of which only 5 matter, noisy targets, and — the cruel
+part — barely more samples than parameters. This is exactly the regime where variance
+explodes and regularization shines:
 
 ```{python}
-#| label: ridge-lasso
-from sklearn.linear_model import Lasso   # coordinate descent for L1 (no closed form)
-
+#| label: ridge-experiment
 n, d = 25, 20                            # barely more samples than knobs!
 w_true = torch.zeros(d)
 w_true[:5] = torch.tensor([3.0, -2.0, 1.5, 2.5, -1.0])   # only 5 real features
 Xh, yh = make_synthetic_data(w_true, bias=0.0, n_samples=n, noise=2.0)
 
-# OLS and ridge in closed form
-w_ols_h = torch.linalg.solve(Xh.T @ Xh, Xh.T @ yh)
+w_ols_h = torch.linalg.solve(Xh.T @ Xh, Xh.T @ yh)        # plain OLS
 lam = 10.0
 w_ridge = torch.linalg.solve(Xh.T @ Xh + lam * torch.eye(d), Xh.T @ yh)
-w_lasso = torch.tensor(
-    Lasso(alpha=0.4).fit(Xh.numpy(), yh.numpy()).coef_, dtype=torch.float32
-)
 
 def report(name: str, w_hat: torch.Tensor) -> None:
     err = ((w_hat - w_true) ** 2).mean()
-    zeros = int((w_hat.abs() < 1e-3).sum())
-    print(f"{name:>6}:  weight MSE = {err:.4f}   near-zero weights = {zeros}/20")
+    print(f"{name:>6}:  weight MSE = {err:.4f}")
 
 report("OLS", w_ols_h)
 report("ridge", w_ridge)
-report("lasso", w_lasso)
 ```
 
 OLS, with all its freedom and almost no data to discipline it, assigns large, confident,
 *wrong* weights to the 15 noise features — pure variance. Ridge shrinks everything and
-cuts the damage several-fold, but keeps every feature alive. Lasso does the
-one thing the others cannot: it identifies the noise features and sets them *exactly* to
-zero — a sparse, more interpretable model that has effectively performed feature
-selection for us. (Rerun this cell with `n = 100` and watch OLS become respectable
-again: variance decays like $1/n$.)
+cuts the damage several-fold: a little bias, traded for a lot of variance. (Rerun this
+cell with `n = 100` and watch OLS become respectable again — variance decays like
+$1/n$.) Ridge's $L_1$ cousin, **lasso**, can go further and zero out the irrelevant
+features entirely; we leave it to the exercises, because on the road ahead it is weight
+decay — the $L_2$ idea — that you will meet again and again.
 
 ## Okay, so — what did we just build?
 
@@ -495,6 +503,11 @@ nonlinearity is not optional.
 4. **(Code.)** Set the learning rate in `LinearRegressionScratch` to 1.0 and rerun.
    Describe what the loss curve does, and explain it using the blindfolded-descent
    picture.
-5. **(Code.)** In the ridge/lasso experiment, sweep $\lambda \in \{0.01, 0.1, 1, 10, 100\}$
-   for ridge and plot weight MSE against $\lambda$. Where is the sweet spot, and what
-   happens at the extremes? Connect your answer to bias and variance.
+5. **(Code.)** In the ridge experiment, sweep $\lambda \in \{0.01, 0.1, 1, 10, 100\}$
+   and plot weight MSE against $\lambda$. Where is the sweet spot, and what happens at
+   the extremes? Connect your answer to bias and variance.
+6. **(Code.)** **Lasso.** Replace the ridge penalty with the $L_1$ norm
+   $\lambda\norm{\vect{w}}_1$. There is no closed form — use
+   `sklearn.linear_model.Lasso(alpha=0.4)` on the same data and count how many weights
+   land *exactly* at zero. Compare with ridge: why can a diamond-shaped penalty zero
+   out coordinates when a spherical one cannot?

@@ -47,6 +47,14 @@ course-companion book for DS 6050 (UVA), written in Professor Heman Shakeri's vo
   anything genuinely new (missing-gap material), wrap it in
   `<!-- NOVEL: needs sign-off -->` comments.
 - No D2L-derived text or code (licensing).
+- **Pedagogical efficiency rule.** The book's destination is attention and
+  transformers. Before including any concept, name the later chapter where it pays off;
+  if it never recurs on the arc, demote it to an exercise or cut it (precedent: lasso in
+  Chapter 1 became Exercise 6). Conversely, plant forward seeds cheaply — one or two
+  sentences that a later chapter can call back to (precedents: "a dot product is a
+  similarity score" and "prediction as a weighted combination of training targets" in
+  Chapter 1, both harvested by Chapter 12). Check the target chapter's stub abstract for
+  the seeds it expects.
 
 ---
 
