@@ -538,6 +538,8 @@ f(\vect{x}_i) \approx y_i \quad \text{and, crucially, } f \text{ generalizes to 
 y = \vect{w}^\top \vect{x} + b .
 \]</span></p>
 <p>Geometrically, <span class="math inline">\(\vect{w}\)</span> sets the orientation — the slope — of a hyperplane, and the bias <span class="math inline">\(b\)</span> shifts it away from the origin. In two dimensions this is the familiar line through a scatter of points; in <span class="math inline">\(d\)</span> dimensions it is a <span class="math inline">\(d\)</span>-dimensional plane, but nothing about the algebra changes.</p>
+<!-- NOVEL (framing surfaced early from the Module 8 kernel-regression bridge): -->
+<p>There is a second way to read <span class="math inline">\(\vect{w}^\top\vect{x}\)</span>, and it may be the most important sentence in this chapter: <strong>a dot product is a similarity score.</strong> It is large and positive when <span class="math inline">\(\vect{x}\)</span> points along <span class="math inline">\(\vect{w}\)</span>, near zero when they are unrelated, and negative when they oppose. So a linear model is a <em>pattern matcher</em>: <span class="math inline">\(\vect{w}\)</span> is a template, and the output measures how well the input matches it. Keep this reading close at hand. In Part II, an image filter’s response will be this same dot product slid across an image; in Part IV, <em>attention</em> will be built out of nothing but learned similarity scores between queries and keys. Both are this one primitive, asked the question we will ask all book long: <em>what if the template were learnable?</em></p>
 <section id="the-augmentation-trick" class="level3">
 <h3 class="anchored" data-anchor-id="the-augmentation-trick">The augmentation trick</h3>
 <p>Carrying <span class="math inline">\(b\)</span> separately clutters the algebra, so we will often fold it into the weights: append a column of ones to the data matrix, making <span class="math inline">\(\matr{X} \in \R^{n \times (d+1)}\)</span>, and append <span class="math inline">\(b\)</span> to the weight vector, making <span class="math inline">\(\vect{w} \in \R^{d+1}\)</span>. Then</p>
@@ -576,6 +578,7 @@ y = \vect{w}^\top \vect{x} \qquad \text{(bias included)}.
 \hat{\vect{w}}_{\text{OLS}} = (\matr{X}^\top\matr{X})^{-1}\matr{X}^\top\vect{y} .
 \tag{1.2}\]</span></span></p>
 <p>There is a picture behind this formula worth carrying for the rest of your career. Our predictions <span class="math inline">\(\hat{\vect{y}} = \matr{X}\vect{w}\)</span> can only ever live in the <strong>column space</strong> of <span class="math inline">\(\matr{X}\)</span> — the span of its feature columns. If the true <span class="math inline">\(\vect{y}\)</span> lies outside that space (it almost always does), the best we can do is <strong>project</strong> <span class="math inline">\(\vect{y}\)</span> onto it. The leftover error <span class="math inline">\(\vect{e} = \vect{y} - \hat{\vect{y}}\)</span> is what our model cannot explain, and at the optimum it is <em>perpendicular</em> to the column space — no adjustment of the knobs can reduce it further.</p>
+<p>One more observation to file away: substituting <a href="#eq-normal" class="quarto-xref">Equation&nbsp;<span>1.2</span></a> back in gives <span class="math inline">\(\hat{\vect{y}} = \matr{X}(\matr{X}^\top\matr{X})^{-1}\matr{X}^\top\vect{y}\)</span> — the fitted predictions are a <em>weighted combination of the training targets</em> <span class="math inline">\(\vect{y}\)</span>. Linear regression predicts by mixing the answers it has already seen. Hold that thought: in Part IV an entire architecture — attention — grows out of choosing such mixing weights by <em>similarity</em>.</p>
 <div id="fig-projection" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-projection-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -624,7 +627,7 @@ Figure&nbsp;1.1: The normal equations, geometrically: the optimal prediction <sp
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>torch.manual_seed(<span class="dv">6050</span>)  <span class="co"># reproducible runs, always</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div id="setup" class="cell-output cell-output-display" data-execution_count="1">
-<pre><code>&lt;torch._C.Generator at 0x1275fc3d0&gt;</code></pre>
+<pre><code>&lt;torch._C.Generator at 0x1210fc3f0&gt;</code></pre>
 </div>
 </div>
 <p>First, synthetic data. We control the ground truth — the true weights and bias — so we can check whether each method actually recovers them.</p>
@@ -821,39 +824,30 @@ y = \vect{w}^\top\vect{x} + b + \epsilon, \qquad \epsilon \sim \mathcal{N}(0, \s
 \qquad
 \hat{\vect{w}}_{\text{ridge}} = (\matr{X}^\top\matr{X} + \lambda I)^{-1}\matr{X}^\top\vect{y},
 \]</span></p>
-<p>nudging the model toward smaller, more stable weights — a little more bias for a lot less variance. Its cousin <strong>lasso</strong> uses the <span class="math inline">\(L_1\)</span> norm, <span class="math inline">\(\lambda\norm{\vect{w}}_1\)</span>, and does something qualitatively different: it drives the least informative weights to <em>exactly zero</em>, performing automatic feature selection.</p>
-<p>Let us see that difference, not just assert it. We build a problem designed to punish an unregularized model: 20 features of which only 5 matter, noisy targets, and — the cruel part — barely more samples than parameters. This is exactly the high-dimensional regime where regularization shines:</p>
-<div id="ridge-lasso" class="cell" data-execution_count="8">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> sklearn.linear_model <span class="im">import</span> Lasso   <span class="co"># coordinate descent for L1 (no closed form)</span></span>
-<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>n, d <span class="op">=</span> <span class="dv">25</span>, <span class="dv">20</span>                            <span class="co"># barely more samples than knobs!</span></span>
-<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>w_true <span class="op">=</span> torch.zeros(d)</span>
-<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>w_true[:<span class="dv">5</span>] <span class="op">=</span> torch.tensor([<span class="fl">3.0</span>, <span class="op">-</span><span class="fl">2.0</span>, <span class="fl">1.5</span>, <span class="fl">2.5</span>, <span class="op">-</span><span class="fl">1.0</span>])   <span class="co"># only 5 real features</span></span>
-<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>Xh, yh <span class="op">=</span> make_synthetic_data(w_true, bias<span class="op">=</span><span class="fl">0.0</span>, n_samples<span class="op">=</span>n, noise<span class="op">=</span><span class="fl">2.0</span>)</span>
-<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a><span class="co"># OLS and ridge in closed form</span></span>
-<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a>w_ols_h <span class="op">=</span> torch.linalg.solve(Xh.T <span class="op">@</span> Xh, Xh.T <span class="op">@</span> yh)</span>
-<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a>lam <span class="op">=</span> <span class="fl">10.0</span></span>
-<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a>w_ridge <span class="op">=</span> torch.linalg.solve(Xh.T <span class="op">@</span> Xh <span class="op">+</span> lam <span class="op">*</span> torch.eye(d), Xh.T <span class="op">@</span> yh)</span>
-<span id="cb13-12"><a href="#cb13-12" aria-hidden="true" tabindex="-1"></a>w_lasso <span class="op">=</span> torch.tensor(</span>
-<span id="cb13-13"><a href="#cb13-13" aria-hidden="true" tabindex="-1"></a>    Lasso(alpha<span class="op">=</span><span class="fl">0.4</span>).fit(Xh.numpy(), yh.numpy()).coef_, dtype<span class="op">=</span>torch.float32</span>
-<span id="cb13-14"><a href="#cb13-14" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb13-15"><a href="#cb13-15" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-16"><a href="#cb13-16" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> report(name: <span class="bu">str</span>, w_hat: torch.Tensor) <span class="op">-&gt;</span> <span class="va">None</span>:</span>
-<span id="cb13-17"><a href="#cb13-17" aria-hidden="true" tabindex="-1"></a>    err <span class="op">=</span> ((w_hat <span class="op">-</span> w_true) <span class="op">**</span> <span class="dv">2</span>).mean()</span>
-<span id="cb13-18"><a href="#cb13-18" aria-hidden="true" tabindex="-1"></a>    zeros <span class="op">=</span> <span class="bu">int</span>((w_hat.<span class="bu">abs</span>() <span class="op">&lt;</span> <span class="fl">1e-3</span>).<span class="bu">sum</span>())</span>
-<span id="cb13-19"><a href="#cb13-19" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"</span><span class="sc">{</span>name<span class="sc">:&gt;6}</span><span class="ss">:  weight MSE = </span><span class="sc">{</span>err<span class="sc">:.4f}</span><span class="ss">   near-zero weights = </span><span class="sc">{</span>zeros<span class="sc">}</span><span class="ss">/20"</span>)</span>
-<span id="cb13-20"><a href="#cb13-20" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-21"><a href="#cb13-21" aria-hidden="true" tabindex="-1"></a>report(<span class="st">"OLS"</span>, w_ols_h)</span>
-<span id="cb13-22"><a href="#cb13-22" aria-hidden="true" tabindex="-1"></a>report(<span class="st">"ridge"</span>, w_ridge)</span>
-<span id="cb13-23"><a href="#cb13-23" aria-hidden="true" tabindex="-1"></a>report(<span class="st">"lasso"</span>, w_lasso)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>nudging the model toward smaller, more stable weights — a little more bias for a lot less variance.</p>
+<p>Let us see that, not just assert it. We build a problem designed to punish an unregularized model: 20 features of which only 5 matter, noisy targets, and — the cruel part — barely more samples than parameters. This is exactly the regime where variance explodes and regularization shines:</p>
+<div id="ridge-experiment" class="cell" data-execution_count="8">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>n, d <span class="op">=</span> <span class="dv">25</span>, <span class="dv">20</span>                            <span class="co"># barely more samples than knobs!</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>w_true <span class="op">=</span> torch.zeros(d)</span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>w_true[:<span class="dv">5</span>] <span class="op">=</span> torch.tensor([<span class="fl">3.0</span>, <span class="op">-</span><span class="fl">2.0</span>, <span class="fl">1.5</span>, <span class="fl">2.5</span>, <span class="op">-</span><span class="fl">1.0</span>])   <span class="co"># only 5 real features</span></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>Xh, yh <span class="op">=</span> make_synthetic_data(w_true, bias<span class="op">=</span><span class="fl">0.0</span>, n_samples<span class="op">=</span>n, noise<span class="op">=</span><span class="fl">2.0</span>)</span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>w_ols_h <span class="op">=</span> torch.linalg.solve(Xh.T <span class="op">@</span> Xh, Xh.T <span class="op">@</span> yh)        <span class="co"># plain OLS</span></span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>lam <span class="op">=</span> <span class="fl">10.0</span></span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a>w_ridge <span class="op">=</span> torch.linalg.solve(Xh.T <span class="op">@</span> Xh <span class="op">+</span> lam <span class="op">*</span> torch.eye(d), Xh.T <span class="op">@</span> yh)</span>
+<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> report(name: <span class="bu">str</span>, w_hat: torch.Tensor) <span class="op">-&gt;</span> <span class="va">None</span>:</span>
+<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a>    err <span class="op">=</span> ((w_hat <span class="op">-</span> w_true) <span class="op">**</span> <span class="dv">2</span>).mean()</span>
+<span id="cb13-12"><a href="#cb13-12" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"</span><span class="sc">{</span>name<span class="sc">:&gt;6}</span><span class="ss">:  weight MSE = </span><span class="sc">{</span>err<span class="sc">:.4f}</span><span class="ss">"</span>)</span>
+<span id="cb13-13"><a href="#cb13-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-14"><a href="#cb13-14" aria-hidden="true" tabindex="-1"></a>report(<span class="st">"OLS"</span>, w_ols_h)</span>
+<span id="cb13-15"><a href="#cb13-15" aria-hidden="true" tabindex="-1"></a>report(<span class="st">"ridge"</span>, w_ridge)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>   OLS:  weight MSE = 1.2347   near-zero weights = 0/20
- ridge:  weight MSE = 0.4400   near-zero weights = 0/20
- lasso:  weight MSE = 0.3489   near-zero weights = 12/20</code></pre>
+<pre><code>   OLS:  weight MSE = 1.2347
+ ridge:  weight MSE = 0.4400</code></pre>
 </div>
 </div>
-<p>OLS, with all its freedom and almost no data to discipline it, assigns large, confident, <em>wrong</em> weights to the 15 noise features — pure variance. Ridge shrinks everything and cuts the damage by an order of magnitude, but keeps every feature alive. Lasso does the one thing the others cannot: it identifies the noise features and sets them <em>exactly</em> to zero — a sparse, more interpretable model that has effectively performed feature selection for us. (Rerun this cell with <code>n = 100</code> and watch OLS become respectable again: variance decays like <span class="math inline">\(1/n\)</span>.)</p>
+<p>OLS, with all its freedom and almost no data to discipline it, assigns large, confident, <em>wrong</em> weights to the 15 noise features — pure variance. Ridge shrinks everything and cuts the damage several-fold: a little bias, traded for a lot of variance. (Rerun this cell with <code>n = 100</code> and watch OLS become respectable again — variance decays like <span class="math inline">\(1/n\)</span>.) Ridge’s <span class="math inline">\(L_1\)</span> cousin, <strong>lasso</strong>, can go further and zero out the irrelevant features entirely; we leave it to the exercises, because on the road ahead it is weight decay — the <span class="math inline">\(L_2\)</span> idea — that you will meet again and again.</p>
 </section>
 </section>
 <section id="okay-so-what-did-we-just-build" class="level2" data-number="1.9">
@@ -880,7 +874,8 @@ y = \vect{w}^\top\vect{x} + b + \epsilon, \qquad \epsilon \sim \mathcal{N}(0, \s
 <li><strong>(Pencil.)</strong> Repeat the derivation with the ridge penalty <span class="math inline">\(\lambda\norm{\vect{w}}_2^2\)</span> and show the solution becomes <span class="math inline">\((\matr{X}^\top\matr{X} + \lambda I)^{-1}\matr{X}^\top\vect{y}\)</span>. Why does the <span class="math inline">\(\lambda I\)</span> term guarantee invertibility for any <span class="math inline">\(\lambda &gt; 0\)</span>?</li>
 <li><strong>(Code.)</strong> In <code>make_synthetic_data</code>, raise <code>noise</code> to 1.0 and rerun all three implementations 10 times with different seeds. How much do the learned weights vary across runs? Which term of <a href="#eq-bias-variance" class="quarto-xref">Equation&nbsp;<span>1.5</span></a> are you watching?</li>
 <li><strong>(Code.)</strong> Set the learning rate in <code>LinearRegressionScratch</code> to 1.0 and rerun. Describe what the loss curve does, and explain it using the blindfolded-descent picture.</li>
-<li><strong>(Code.)</strong> In the ridge/lasso experiment, sweep <span class="math inline">\(\lambda \in \{0.01, 0.1, 1, 10, 100\}\)</span> for ridge and plot weight MSE against <span class="math inline">\(\lambda\)</span>. Where is the sweet spot, and what happens at the extremes? Connect your answer to bias and variance.</li>
+<li><strong>(Code.)</strong> In the ridge experiment, sweep <span class="math inline">\(\lambda \in \{0.01, 0.1, 1, 10, 100\}\)</span> and plot weight MSE against <span class="math inline">\(\lambda\)</span>. Where is the sweet spot, and what happens at the extremes? Connect your answer to bias and variance.</li>
+<li><strong>(Code.)</strong> <strong>Lasso.</strong> Replace the ridge penalty with the <span class="math inline">\(L_1\)</span> norm <span class="math inline">\(\lambda\norm{\vect{w}}_1\)</span>. There is no closed form — use <code>sklearn.linear_model.Lasso(alpha=0.4)</code> on the same data and count how many weights land <em>exactly</em> at zero. Compare with ridge: why can a diamond-shaped penalty zero out coordinates when a spherical one cannot?</li>
 </ol>
 
 
