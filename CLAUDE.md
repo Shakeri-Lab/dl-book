@@ -47,6 +47,14 @@ publishes to `gh-pages` → https://shakeri-lab.github.io/dl-book/). Never commi
 `/Users/setup/Library/CloudStorage/Box-Box/Teaching/6050/` (read-only inputs: `LaTeX/`
 seeds, `dl-course-site/transcripts/`).
 
+## Companion repo: dl-course-code (Manim animations)
+
+`~/dl-course-code` (clone of https://github.com/Shakeri-Lab/dl-course-code, his
+**constantly-evolving** working repo — `git pull` before each use, treat read-only).
+Per-module `MODULE_NOTES.md` files are polished lecture spines — the preferred prose
+source when drafting (they satisfy the traceability gate). `scenes/` shows his visual
+compositions for figures. Full guide: `docs/dl-course-code.md`.
+
 ## Writing a chapter, end to end
 
 1. **Pick the chapter.** Its stub in `chapters/partN/XX-*.qmd` lists the seed files and

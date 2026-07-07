@@ -11,14 +11,19 @@ You are drafting **Chapter N: TITLE** of *Deep Learning: Making It Learnable* �
 course-companion book for DS 6050 (UVA), written in Professor Heman Shakeri's voice.
 
 **Inputs (read all, in this order):**
-1. `docs/style-guide.md` — the voice calibration target. Follow it strictly.
-2. `sources/SEED_FILES` — his LaTeX lecture notes for this chapter (authoritative for
+1. `docs/style-guide.md` — the voice calibration target. Follow it strictly (including
+   the Book-Specific Writing Rules: em-dash reduction, deduction arrows, figure-rich,
+   lean folded code).
+2. `~/dl-course-code/<module>/MODULE_NOTES.md` — the **polished lecture spine** for this
+   module (preferred over raw captions; see `docs/dl-course-code.md`). Also skim the
+   module's `scenes/` for figure compositions to echo.
+3. `sources/SEED_FILES` — his LaTeX lecture notes for this chapter (authoritative for
    math and structure).
-3. `drafts/partN/XX-raw.md` — mechanical pandoc conversion of the seeds (use for LaTeX→md
+4. `drafts/partN/XX-raw.md` — mechanical pandoc conversion of the seeds (use for LaTeX→md
    fidelity, never for structure).
-4. Course transcripts: `TRANSCRIPT_FILES` (his spoken explanations, analogies, and
+5. Course transcripts: `TRANSCRIPT_FILES` (his spoken explanations, analogies, and
    worked examples — mine these for voice and examples; auto-captions, read for meaning).
-5. Chapter contract: the abstract in `chapters/partN/XX-....qmd` (the stub).
+6. Chapter contract: the abstract in `chapters/partN/XX-....qmd` (the stub).
 
 **Output:** the complete chapter as a single `.qmd` file, replacing the stub.
 

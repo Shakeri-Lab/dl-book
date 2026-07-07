@@ -168,6 +168,27 @@ Use **`callout-warning`** for:
 - Memory leaks from storing computation graphs unnecessarily
 - When NOT to use certain techniques (e.g., "Residual connections are designed for very deep networks. For shallow networks this is not necessary and maybe even not helpful.")
 
+## Book-Specific Writing Rules (author feedback, July 2026)
+
+1. **Fewer em dashes.** Use them sparingly, only where an aside genuinely helps. Prefer
+   commas, colons, parentheses, or a new sentence. Where the em dash was expressing a
+   *deduction* ("premise — so conclusion"), use a deduction arrow instead:
+   `premise $\rightarrow$ conclusion`. Example (his):
+   "We want the one that is most suited to our problem $\rightarrow$ the learning
+   algorithm needs a nudge in the right direction." Short process chains may also use
+   arrows: "(predict $\rightarrow$ measure $\rightarrow$ step)".
+2. **Figure-rich.** Every core geometric or dynamical idea gets a figure (projection,
+   descent paths, U-curves, gates, flows). Before designing one, check
+   `~/dl-course-code/<module>/scenes/` for how his Manim animations compose the same
+   idea, and echo that composition (see `docs/dl-course-code.md`). Verify TikZ
+   conversions *visually* before embedding — captions must match content.
+3. **Code: lean, typed, educational.** Keep type hints and shape comments (his hygiene),
+   cut every comment that merely restates the line. One idea per cell. Conceptual
+   figures may be self-contained folded cells placed right where the concept lives.
+4. **Code folded by default** (`code-fold: true` project-wide): outputs and plots are
+   the primary content; code is one click away. Give conceptual-figure cells a
+   descriptive `#| code-summary`.
+
 ## Closing Notes
 
 This guide reflects a teacher who believes:
