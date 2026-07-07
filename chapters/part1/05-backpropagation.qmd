@@ -1,18 +1,455 @@
 # Backpropagation {#sec-05-backpropagation}
 
-::: {.callout-warning}
-**Chapter stub.** This chapter is planned but not yet written. The abstract below is its
-contract; drafting sources are listed for provenance.
+<!-- lecture-source: m02_lecture-2-backpropagation_JcYMZxoxCBA.txt,
+     [coding]_m02_lecture-2-2-coding-in-pytorch-linear-regression-_MKh0OtgrVHQ.txt
+     spine: ~/dl-course-code/ds6050_02_autograd/MODULE_NOTES.md (§1–13; §14–18 deferred)
+     seeds: sources/2-1-backprop.tex, sources/2-2_Autodiff.tex -->
+
+Recall the update rule that ended @sec-01-linear-regression: new parameters come from
+old parameters by stepping against the gradient,
+$\vect{w}^{(t+1)} = \vect{w}^{(t)} - \eta\,\nabla_{\vect{w}}\loss$. For linear
+regression we could write that gradient down by hand. But a modern network has millions,
+sometimes billions, of knobs, tangled through layer after layer of composed functions
+$\rightarrow$ computing each partial derivative naively, one at a time, is hopeless.
+
+Backpropagation is the algorithm that computes *all* of them, exactly, in one backward
+sweep whose cost is linear in the number of parameters. It is not a new kind of
+calculus. It is the chain rule, *organized*. By the end of this chapter you will have
+derived it, implemented it by hand, rebuilt it as a 60-line autograd engine, and then
+checked that `torch.autograd` agrees with you to machine precision.
+
+## One neuron, one chain
+
+Start with the smallest possible case: one neuron on one training example. The
+previous activation $a^{(l-1)}$ is multiplied by a weight $w$, giving the
+pre-activation $z = w\,a^{(l-1)} + b$; the activation function produces
+$a = \sigma(z)$; and $a$ feeds a loss $L$.
+
+Now turn the knob $w$ a little. How much does $L$ change? Follow the chain: turning
+$w$ changes $z$; the change in $z$ changes $a$; the change in $a$ changes $L$. The
+chain rule multiplies these local sensitivities:
+
+$$
+\frac{\partial L}{\partial w}
+= \frac{\partial L}{\partial a}\cdot
+  \frac{\partial a}{\partial z}\cdot
+  \frac{\partial z}{\partial w} .
+$$ {#eq-chain}
+
+```{python}
+#| label: fig-chain-graph
+#| fig-cap: "Computation as a graph: the forward pass (top, blue) computes and caches values; the backward pass (bottom, orange) multiplies local derivatives along the same edges, in reverse."
+#| code-summary: "Code: draw the computation graph"
+import matplotlib.pyplot as plt
+import matplotlib.patches as mp
+
+fig, ax = plt.subplots(figsize=(7.2, 2.4))
+nodes = {r"$w$": 0, r"$z = w a^{(l-1)} + b$": 1, r"$a=\sigma(z)$": 2, r"$L$": 3}
+for label, i in nodes.items():
+    ax.add_patch(mp.FancyBboxPatch((i * 2.1, 0), 1.5, 0.7, boxstyle="round,pad=0.08",
+                                   fc="#E8EEF7", ec="#232D4B", lw=1.4))
+    ax.text(i * 2.1 + 0.75, 0.35, label, ha="center", va="center", fontsize=11)
+fwd = dict(arrowstyle="-|>", color="#5379AA", lw=1.8)
+bwd = dict(arrowstyle="-|>", color="#E57200", lw=1.8)
+lbl = [r"$\frac{\partial z}{\partial w}$", r"$\frac{\partial a}{\partial z}$",
+       r"$\frac{\partial L}{\partial a}$"]
+for i in range(3):
+    ax.annotate("", xy=(2.1 * (i + 1) - 0.1, 0.55), xytext=(2.1 * i + 1.6, 0.55),
+                arrowprops=fwd)
+    ax.annotate("", xy=(2.1 * i + 1.6, 0.12), xytext=(2.1 * (i + 1) - 0.1, 0.12),
+                arrowprops=bwd)
+    ax.text(2.1 * i + 1.85, -0.28, lbl[i], ha="center", fontsize=12, color="#E57200")
+ax.set_xlim(-0.3, 8.3); ax.set_ylim(-0.7, 1.1); ax.axis("off")
+plt.tight_layout(); plt.show()
+```
+
+Two things about this picture generalize to any network, however deep:
+
+1. **The forward pass caches.** Computing $L$ produces the intermediate values
+   ($z$, $a$) along the way; we keep them, because the backward pass will need them.
+2. **The backward pass reuses.** Each edge contributes one *local* derivative, and the
+   derivative of $L$ with respect to anything is the product of local derivatives along
+   the path back to it. Nothing is recomputed $\rightarrow$ the whole sweep costs about
+   as much as one forward pass.
+
+## The game of blame
+
+For a full layer of neurons the bookkeeping threatens to become a tangled mess of sums.
+The cure is to pick the right intermediate quantity and track only that. At the output
+of the network the error is obvious: it is just the gap to the target. What is *not*
+obvious is how much of that error is the fault of a weight buried ten layers deep.
+Backpropagation sends this blame backward, from where it is obvious to where it is not.
+
+::: {.callout-note}
+## The blame signal
+
+Define, for each layer $l$, the **blame signal**
+
+$$
+\delta^{(l)} \;:=\; \frac{\partial L}{\partial \vect{z}^{(l)}} ,
+$$
+
+the sensitivity of the loss to that layer's *pre-activations*. It answers: how much did
+each neuron's $z$ contribute to the final loss?
 :::
 
-*The chain rule, organized. We draw the computation graph, push blame backwards by hand, build an 80-line autograd engine, and then let `torch.autograd` do it — verifying it agrees with us.*
+Everything now unfolds in four short equations. With $\odot$ denoting elementwise
+(Hadamard) product:
 
-<!-- draft-sources
-seeds:
-- `sources/2-1-backprop.tex`
-- `sources/2-2_Autodiff.tex`
-- `sources/misc_backprop_GilStrang.tex`
-transcripts:
-- `m02_lecture-2-backpropagation_JcYMZxoxCBA.txt`
-- `[coding]_m02_lecture-2-2-coding-in-pytorch-linear-regression-_MKh0OtgrVHQ.txt`
--->
+**1. Start where blame is obvious (output layer $L$):**
+
+$$
+\delta^{(L)} = \frac{\partial L}{\partial \vect{a}^{(L)}} \odot \sigma'(\vect{z}^{(L)}) .
+$$ {#eq-bp1}
+
+For squared error, $\partial L / \partial \vect{a}^{(L)}$ is literally the prediction
+error $\vect{a}^{(L)} - \vect{y}$: the error, scaled by how sensitive the activation
+was to its input.
+
+**2. Propagate blame one layer back:**
+
+$$
+\delta^{(l)} = \Bigl( (\matr{W}^{(l+1)})^\top \delta^{(l+1)} \Bigr) \odot \sigma'(\vect{z}^{(l)}) .
+$$ {#eq-bp2}
+
+Blame flows backward through the same weights the signal flowed forward through, hence
+the transpose; then the local gate $\sigma'(\vect{z}^{(l)})$ scales it. This recursion
+runs from the last layer to the first.
+
+**3. Convert blame into weight gradients:**
+
+$$
+\frac{\partial L}{\partial \matr{W}^{(l)}} = \delta^{(l)} \, (\vect{a}^{(l-1)})^\top .
+$$ {#eq-bp3}
+
+**4. And into bias gradients:**
+
+$$
+\frac{\partial L}{\partial \vect{b}^{(l)}} = \delta^{(l)} .
+$$ {#eq-bp4}
+
+Equation @eq-bp3 deserves a pause, because its shapes tell the story. With $m$ neurons
+in layer $l$ and $n$ in layer $l-1$: $\delta^{(l)}$ is $(m \times 1)$, and
+$(\vect{a}^{(l-1)})^\top$ is $(1 \times n)$. Their **outer product** is an $m \times n$
+matrix, exactly the shape of $\matr{W}^{(l)}$, and entry $(i,j)$ is the blame of neuron
+$i$ times the activation of neuron $j$ that fed it. The update for a weight is
+*blame out times signal in*. No messy summations: the matrix form performs them all at
+once, and it maps directly onto the parallel matrix multiplies GPUs are built for. The
+same four equations govern a toy network and a billion-parameter model; only the matrix
+sizes change.
+
+## Build it, then check it against autograd
+
+Let us implement the four equations on a two-layer network, with no autograd anywhere,
+and then ask `torch.autograd` to differentiate the same network. If our blame algebra is
+right, the two answers must agree to machine precision.
+
+```{python}
+#| label: setup
+import torch
+
+torch.manual_seed(6050)
+```
+
+```{python}
+#| label: backprop-by-hand
+n, d, h = 32, 5, 8                            # batch, input dim, hidden dim
+X = torch.randn(n, d)
+y = torch.randn(n)
+
+W1, b1 = torch.randn(h, d) * 0.3, torch.zeros(h)
+W2, b2 = torch.randn(1, h) * 0.3, torch.zeros(1)
+
+# forward pass -- cache everything the backward pass will need
+Z1 = X @ W1.T + b1                            # (n, h)
+A1 = torch.sigmoid(Z1)                        # (n, h)
+Z2 = A1 @ W2.T + b2                           # (n, 1)
+L = ((Z2.squeeze() - y) ** 2).mean()
+
+# backward pass -- the four equations (batch-averaged)
+sig_prime = A1 * (1 - A1)                     # sigma'(z) = sigma(z)(1 - sigma(z))
+delta2 = 2 * (Z2.squeeze() - y)[:, None] / n  # eq. 1 (identity output: no gate)
+delta1 = (delta2 @ W2) * sig_prime            # eq. 2: blame through W^T, gated
+grads = {                                     # eqs. 3 & 4: blame out x signal in
+    "W2": delta2.T @ A1, "b2": delta2.sum(0),
+    "W1": delta1.T @ X,  "b1": delta1.sum(0),
+}
+
+# same network, autograd's turn
+params = {k: v.clone().requires_grad_(True) for k, v in
+          {"W1": W1, "b1": b1, "W2": W2, "b2": b2}.items()}
+A1_ = torch.sigmoid(X @ params["W1"].T + params["b1"])
+L_ = (((A1_ @ params["W2"].T + params["b2"]).squeeze() - y) ** 2).mean()
+L_.backward()
+
+for k in grads:
+    gap = (grads[k] - params[k].grad).abs().max()
+    print(f"{k}: max |ours - autograd| = {gap:.2e}")
+```
+
+Zeros, to floating-point precision. The blame equations *are* what autograd computes;
+the framework simply builds the computation graph for us as we go and then walks it
+backward, caching and reusing exactly as we did.
+
+## A 60-line autograd engine
+
+To remove the last trace of magic, let us build the graph ourselves. Each `Value` node
+remembers how it was made (its parents and the local derivative rule); calling
+`backward()` walks the graph in reverse topological order, accumulating blame into every
+node's `grad`.
+
+```{python}
+#| label: micro-autograd
+#| code-fold: show
+class Value:
+    """A scalar that remembers its history -- a node in the computation graph."""
+
+    def __init__(self, data: float, parents=(), backward_rule=lambda: None):
+        self.data = data
+        self.grad = 0.0
+        self._parents = parents
+        self._backward_rule = backward_rule
+
+    def __add__(self, other):
+        other = other if isinstance(other, Value) else Value(other)
+        out = Value(self.data + other.data, (self, other))
+        def rule():                      # d(out)/d(self) = d(out)/d(other) = 1
+            self.grad += out.grad
+            other.grad += out.grad
+        out._backward_rule = rule
+        return out
+
+    def __mul__(self, other):
+        other = other if isinstance(other, Value) else Value(other)
+        out = Value(self.data * other.data, (self, other))
+        def rule():                      # product rule, one side at a time
+            self.grad += other.data * out.grad
+            other.grad += self.data * out.grad
+        out._backward_rule = rule
+        return out
+
+    def sigmoid(self):
+        s = 1 / (1 + 2.718281828459045 ** (-self.data))
+        out = Value(s, (self,))
+        def rule():                      # sigma' = s (1 - s), the gate
+            self.grad += s * (1 - s) * out.grad
+        out._backward_rule = rule
+        return out
+
+    def backward(self):
+        order, seen = [], set()
+        def topo(v):                     # children before parents
+            if v not in seen:
+                seen.add(v)
+                for p in v._parents:
+                    topo(p)
+                order.append(v)
+        topo(self)
+        self.grad = 1.0                  # dL/dL = 1: blame starts here
+        for v in reversed(order):
+            v._backward_rule()
+```
+
+```{python}
+#| label: micro-autograd-check
+w, x, b = Value(0.7), Value(2.0), Value(-0.5)
+a = ((w * x) + b).sigmoid()             # one neuron, forward
+loss = (a + (-0.3)) * (a + (-0.3))      # squared error vs target 0.3
+loss.backward()
+
+# analytic check: dL/dw = 2(a - y) * sigma'(z) * x
+z = 0.7 * 2.0 - 0.5
+s = 1 / (1 + 2.718281828459045 ** (-z))
+print(f"micro-autograd: dL/dw = {w.grad:.6f}")
+print(f"by hand:        dL/dw = {2 * (s - 0.3) * s * (1 - s) * 2.0:.6f}")
+```
+
+Sixty lines, and it is the real thing: PyTorch's autograd is this idea with tensors
+instead of scalars, a compiled graph walker, and thousands of derivative rules.
+
+::: {.callout-warning}
+## Autograd hygiene (the pitfalls that actually bite)
+
+- **Gradients accumulate.** `backward()` *adds* into `.grad`; forget
+  `optimizer.zero_grad()` and every step uses the sum of all past gradients.
+- **Updates happen outside the graph.** Parameter updates go inside
+  `torch.no_grad()`; otherwise the update itself is recorded and memory explodes.
+- **`detach()` cuts the tape.** Use it when you want a value without its history
+  (logging, plotting, building targets).
+:::
+
+## The gate, and the problem with deep chains
+
+Look again at @eq-bp2. Every backward step multiplies by $\sigma'(\vect{z}^{(l)})$. That
+derivative acts as a **gate** on the blame: wide open, and the signal passes; nearly
+closed, and it dies.
+
+Now examine the sigmoid's gate. From $\sigma'(z) = \sigma(z)(1-\sigma(z))$, its maximum
+value, at $z = 0$, is exactly $0.25$; away from zero the neuron *saturates* and the gate
+approaches $0$. The sigmoid gate is at best a quarter open, and often nearly closed.
+
+```{python}
+#| label: fig-gates
+#| fig-cap: "Two gates. The sigmoid's derivative never exceeds 0.25 and vanishes under saturation; ReLU's is fully open (exactly 1) for every active neuron."
+#| code-summary: "Code: plot the two gates"
+import matplotlib.pyplot as plt
+
+z = torch.linspace(-6, 6, 300)
+sig = torch.sigmoid(z)
+fig, axes = plt.subplots(1, 2, figsize=(7.4, 2.9), sharey=True)
+axes[0].plot(z, sig * (1 - sig), color="#232D4B")
+axes[0].axhline(0.25, ls="--", color="#E57200", lw=1)
+axes[0].text(2.1, 0.26, "ceiling: 0.25", color="#E57200", fontsize=9)
+axes[0].set_title(r"sigmoid gate $\sigma'(z)$"); axes[0].set_xlabel("$z$")
+axes[1].plot(z, (z > 0).float(), color="#232D4B")
+axes[1].set_title(r"ReLU gate"); axes[1].set_xlabel("$z$")
+plt.tight_layout(); plt.show()
+```
+
+Here is the consequence, and it is the single most important failure mode in deep
+learning. The chain rule *multiplies* gates across layers $\rightarrow$ with sigmoid
+activations the backward signal shrinks by a factor of at most $0.25$ per layer, so
+after $k$ layers it is bounded by $0.25^k$. Ten layers in, the ceiling is below one in a
+million. The blame reaching the early layers is too weak to update them: the
+**vanishing gradient** problem.
+
+The fix is almost embarrassingly simple. $\mathrm{ReLU}(z) = \max(0, z)$ has derivative
+$1$ for $z > 0$ and $0$ otherwise (the kink at exactly zero never matters in floating
+point). The gate is either fully open or fully closed. For every neuron that was active
+in the forward pass, blame passes through *unchanged*: a **gradient superhighway**
+through the network. This, more than anything, is why ReLU and its variants are the
+default in deep networks.
+
+Do not take the argument on faith; measure it. We build the same 30-layer network twice
+(sigmoid vs. ReLU), push one batch through, and record how much gradient reaches each
+layer:
+
+```{python}
+#| label: fig-vanishing
+#| fig-cap: "Gradient reaching each layer of a 30-layer MLP (log scale). Depth attenuates both, but the sigmoid gates compound the decay so violently that below layer 5 the gradient falls beneath floating-point precision entirely, while ReLU's per-layer decay stays gentle enough for usable signal to reach the input."
+#| code-summary: "Code: the depth experiment"
+from torch import nn
+
+def grad_by_layer(activation: type[nn.Module], depth: int = 30, width: int = 64):
+    layers = []
+    for _ in range(depth):
+        layers += [nn.Linear(width, width), activation()]
+    net = nn.Sequential(*layers, nn.Linear(width, 1))
+    out = net(torch.randn(128, width)).mean()
+    out.backward()
+    return [lin.weight.grad.norm().item()
+            for lin in net if isinstance(lin, nn.Linear)][:-1]
+
+torch.manual_seed(6050)
+plt.figure(figsize=(6.2, 3.4))
+for act, color in [(nn.Sigmoid, "#232D4B"), (nn.ReLU, "#E57200")]:
+    plt.semilogy(grad_by_layer(act), "o-", ms=3, color=color, label=act.__name__)
+plt.xlabel("layer (0 = closest to input)")
+plt.ylabel(r"$\|\partial L / \partial W^{(l)}\|$")
+plt.legend(); plt.tight_layout(); plt.show()
+```
+
+Read the slopes: every step backward through a sigmoid layer multiplies the signal by
+its nearly-closed gate, and the compounding is so violent that by five layers from the
+input the gradient is numerically *zero* — those layers will never learn. ReLU is not
+magic (depth still attenuates the signal), but its open gates make the per-layer decay
+orders of magnitude gentler, and usable blame reaches all the way down. When we build
+deep MLPs for real in @sec-03-nonlinearity-mlp, this plot is the reason they train at
+all.
+
+## Initialization: setting the signal's energy
+
+One more lever lives in this chapter, because it falls out of the same variance
+bookkeeping. Think of the network as a pipeline and the variance of the signal as its
+*energy*. If each layer multiplies the variance by more than one, activations explode
+after enough layers; by less than one, they vanish, and by @eq-bp2 the gradients follow.
+A good initialization keeps the energy roughly constant in both directions.
+
+The analysis is one line. For $z = \sum_{i=1}^{n_{\text{in}}} w_i x_i$ with independent,
+zero-mean inputs and weights, $\var(z) = n_{\text{in}} \var(w) \var(x)$. Keeping
+$\var(z) = \var(x)$ demands
+
+$$
+\var(w) = \frac{1}{n_{\text{in}}} \quad \text{(forward)}, \qquad
+\var(w) = \frac{1}{n_{\text{out}}} \quad \text{(backward)}.
+$$
+
+**Xavier initialization** splits the difference for symmetric activations like tanh and
+sigmoid, $\var(w) = 2/(n_{\text{in}} + n_{\text{out}})$. **He initialization** accounts
+for ReLU discarding half its input distribution by doubling the forward recipe,
+$\var(w) = 2/n_{\text{in}}$. PyTorch applies sensible defaults for you; the difference
+between a good and a careless choice is smooth training versus a dead or exploding
+network:
+
+```{python}
+#| label: fig-init
+#| fig-cap: "Signal energy through 40 ReLU layers. Careless scales lose or amplify the signal exponentially; He initialization holds it steady."
+#| code-summary: "Code: signal energy vs depth"
+def signal_std(scale_fn, depth: int = 40, width: int = 256):
+    x = torch.randn(512, width)
+    stds = []
+    for _ in range(depth):
+        W = scale_fn(torch.randn(width, width), width)
+        x = torch.relu(x @ W)
+        stds.append(x.std().item())
+    return stds
+
+torch.manual_seed(6050)
+schemes = {
+    "naive  (std = 0.05)": lambda W, n: W * 0.05,
+    "naive  (std = 0.12)": lambda W, n: W * 0.12,
+    "He  (std = sqrt(2/n))": lambda W, n: W * (2 / n) ** 0.5,
+}
+plt.figure(figsize=(6.2, 3.4))
+for (name, fn), color in zip(schemes.items(), ["#5379AA", "#722F37", "#E57200"]):
+    plt.semilogy(signal_std(fn), color=color, label=name)
+plt.xlabel("layer"); plt.ylabel("std of activations")
+plt.legend(); plt.tight_layout(); plt.show()
+```
+
+Initialization gives a stable *start*. Keeping the signal stable *during* training, as
+the weights move, is the job of normalization layers; and for very deep networks even
+that is not enough, and gradients get an architectural bypass: skip connections that add
+a block's input straight to its output. Both belong to later chapters
+(normalization with training practice in @sec-04-training-loss-sgd and
+@sec-09-modern-cnns-transfer; the residual idea in @sec-09-modern-cnns-transfer, and
+layer normalization where it becomes essential, inside the Transformer of
+@sec-14-self-attention-transformer). What you should carry from here is the invariant
+they all serve: *keep the signal, forward and backward, at constant energy*.
+
+## Okay, so — the chain rule, organized
+
+1. **The graph.** Any network is a computation graph; the forward pass computes and
+   caches, the backward pass multiplies local derivatives in reverse.
+2. **The blame signal.** $\delta^{(l)} = \partial L / \partial \vect{z}^{(l)}$ turns
+   the tangle into four equations: start at the output (@eq-bp1), propagate through
+   $\matr{W}^\top$ and the gate (@eq-bp2), then read off weight and bias gradients
+   (@eq-bp3, @eq-bp4). Cost: one extra forward pass, for *every* gradient at once.
+3. **We verified it**: our hand-built equations match `torch.autograd` to
+   $10^{-8}$, and a 60-line `Value` class reproduces the machinery end to end.
+4. **The gate rules the depth.** Multiplied sigmoid gates vanish like $0.25^k$;
+   ReLU's open gate is a gradient superhighway. Initialization sets the signal's
+   energy so neither direction explodes or dies at the start.
+
+Backpropagation is the engine under every remaining chapter. The next time a deep model
+fails to learn, your first questions now have names: *is the gradient reaching the early
+layers? what is gating it? what is its energy?*
+
+## Exercises {.unnumbered}
+
+1. **(Pencil.)** Derive the four blame equations for a network whose output layer uses
+   the identity activation and squared-error loss (the network of our verification
+   cell). Confirm that your $\delta^{(2)}$ matches the `delta2` line in the code.
+2. **(Pencil.)** In @eq-bp2, why does the blame flow through $(\matr{W}^{(l+1)})^\top$
+   rather than $\matr{W}^{(l+1)}$? Argue from shapes: what are the dimensions of
+   $\delta^{(l)}$, $\delta^{(l+1)}$, and $\matr{W}^{(l+1)}$?
+3. **(Code.)** Extend the `Value` class with `tanh` and use it to train the one-neuron
+   model from the check cell for 50 steps (write the update loop yourself). Verify the
+   loss decreases.
+4. **(Code.)** In the depth experiment, give the sigmoid network Xavier initialization
+   (`nn.init.xavier_normal_` on each linear layer). How much of the vanishing does good
+   initialization recover at depth 30? What does that tell you about why both fixes,
+   initialization *and* ReLU, became standard?
+5. **(Code.)** Comment out `optimizer.zero_grad()` in any training loop from
+   @sec-01-linear-regression and describe what happens to the loss curve. Explain it
+   with one sentence about `.grad` accumulation.
