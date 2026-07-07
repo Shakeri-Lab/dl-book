@@ -38,7 +38,9 @@ Execution uses Quarto **freeze** — CI never runs cells; refresh a chapter's ca
 Chapters are drafted from the instructor's LaTeX lecture notes (`sources/`), the course's
 lecture transcripts, and his roadmap essay — see `docs/drafting-template.md` and
 `docs/style-guide.md`. Mechanical conversion: `scripts/tex2qmd.sh`; TikZ figures:
-`scripts/build_tikz.sh`.
+`scripts/build_tikz.sh`. The full operational runbook (environment, per-chapter steps,
+quality gates, failure modes) is in [CLAUDE.md](CLAUDE.md) — it is auto-loaded by Claude
+Code sessions working in this repo.
 
 ## License
 
