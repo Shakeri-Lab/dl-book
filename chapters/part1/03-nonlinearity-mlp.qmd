@@ -1,18 +1,376 @@
 # Nonlinearity and the MLP {#sec-03-nonlinearity-mlp}
 
-::: {.callout-warning}
-**Chapter stub.** This chapter is planned but not yet written. The abstract below is its
-contract; drafting sources are listed for provenance.
+<!-- lecture-source: [coding]_m03_3-2-training-mlp-i_1H8vhZk8kHo.txt,
+     [coding]_m03_3-3-training-mlp-ii_XdzQ5C5NSBw.txt
+     seeds: sources/1_2_nonlinearity.tex, sources/1-4-XOR.tex, sources/1LS-1_UAT_Principles.tex -->
+
+Our linear models can regress (@sec-01-linear-regression) and classify
+(@sec-02-logistic-softmax), and it is tempting to think we could get more power by
+simply stacking them: feed the output of one linear layer into another. Watch what
+happens:
+
+$$
+\matr{W}_2\bigl(\matr{W}_1\vect{x} + \vect{b}_1\bigr) + \vect{b}_2
+= (\matr{W}_2\matr{W}_1)\,\vect{x} + (\matr{W}_2\vect{b}_1 + \vect{b}_2)
+= \matr{W}_{\text{new}}\,\vect{x} + \vect{b}_{\text{new}} .
+$$ {#eq-collapse}
+
+The stack *collapses*. Two linear layers, or twenty, are exactly one linear layer with
+different knobs $\rightarrow$ no amount of stacking buys any new expressive power. To
+learn the patterns of the real world we need a magic ingredient: **nonlinearity**. This
+chapter is about what one small bend does to everything.
+
+## The tiny dataset that embarrassed a field
+
+You do not need real-world data to expose the linear ceiling. Four points suffice. The
+XOR function outputs 1 exactly when its two binary inputs *differ*:
+
+| $x_1$ | $x_2$ | XOR |
+|:-:|:-:|:-:|
+| 0 | 0 | 0 |
+| 0 | 1 | 1 |
+| 1 | 0 | 1 |
+| 1 | 1 | 0 |
+
+Plot the four points and try to separate the 1s from the 0s with a single line. The
+positive examples sit on one diagonal, the negatives on the other; any line you draw
+puts at least one point on the wrong side. A linear classifier cannot represent this
+function, no matter how it is trained.
+
+::: {.callout-note}
+## A historical scar
+
+This is not a toy observation. The XOR limitation of single-layer perceptrons,
+publicized in 1969, helped freeze neural-network research for years — part of the first
+"AI winter." The thaw came with multi-layer networks and backpropagation
+(@sec-05-backpropagation), which is to say: with the contents of this chapter and the
+next two.
 :::
 
-*Stacked linear layers collapse back to one line — XOR proves it. One bend (ReLU) changes everything: neurons carve space into polytopes, depth multiplies expressivity, and the universal approximation theorem tells us what's possible (and what it doesn't promise).*
+Let us confirm the ceiling empirically, with the tools we already have:
 
-<!-- draft-sources
-seeds:
-- `sources/1_2_nonlinearity.tex`
-- `sources/1-4-XOR.tex`
-- `sources/1LS-1_UAT_Principles.tex`
-transcripts:
-- `[coding]_m03_3-2-training-mlp-i_1H8vhZk8kHo.txt`
-- `[coding]_m03_3-3-training-mlp-ii_XdzQ5C5NSBw.txt`
--->
+```{python}
+#| label: xor-training
+import torch
+from torch import nn
+
+torch.manual_seed(6050)
+X_xor = torch.tensor([[0., 0.], [0., 1.], [1., 0.], [1., 1.]])
+y_xor = torch.tensor([0., 1., 1., 0.])
+
+def train(model, X, y, steps=4000, lr=0.5):
+    opt = torch.optim.SGD(model.parameters(), lr=lr)
+    for _ in range(steps):
+        opt.zero_grad()
+        loss = nn.functional.binary_cross_entropy_with_logits(model(X).squeeze(-1), y)
+        loss.backward()
+        opt.step()
+    return model
+
+linear = train(nn.Linear(2, 1), X_xor, y_xor)
+mlp = train(nn.Sequential(nn.Linear(2, 4), nn.ReLU(), nn.Linear(4, 1)),
+            X_xor, y_xor)
+
+for name, model in [("linear", linear), ("MLP (4 hidden)", mlp)]:
+    acc = ((model(X_xor).squeeze(-1) > 0).float() == y_xor).float().mean()
+    print(f"{name:>15}: accuracy {acc:.0%}")
+```
+
+The linear model lands at 25%: *worse than guessing*, because XOR is adversarial to
+lines. The little network with one bend in it is perfect. The rest of the chapter
+explains what that bend actually buys.
+
+```{python}
+#| label: fig-xor
+#| fig-cap: "Left: no line separates XOR — whatever the linear model learns, a diagonal pair is misclassified. Right: the trained 4-hidden-unit MLP carves the plane so that both diagonals get their own region."
+#| code-summary: "Code: decision regions"
+import numpy as np
+import matplotlib.pyplot as plt
+
+gx, gy = np.meshgrid(np.linspace(-0.6, 1.6, 220), np.linspace(-0.6, 1.6, 220))
+grid = torch.tensor(np.stack([gx.ravel(), gy.ravel()], 1), dtype=torch.float32)
+
+fig, axes = plt.subplots(1, 2, figsize=(7.4, 3.4), sharey=True)
+for ax, model, title in [(axes[0], linear, "linear model"),
+                         (axes[1], mlp, "MLP with ReLU")]:
+    with torch.no_grad():
+        Z = (model(grid).squeeze(-1) > 0).float().reshape(gx.shape)
+    ax.contourf(gx, gy, Z, levels=[-0.5, 0.5, 1.5],
+                colors=["#DCE6F2", "#FDE3C8"], alpha=0.9)
+    for cls, marker, color in [(0, "o", "#232D4B"), (1, "s", "#E57200")]:
+        pts = X_xor[y_xor == cls]
+        ax.scatter(pts[:, 0], pts[:, 1], marker=marker, s=120, c=color,
+                   edgecolors="white", linewidths=1.5, zorder=3,
+                   label=f"class {cls}")
+    ax.set_title(title); ax.set_xlabel("$x_1$")
+axes[0].set_ylabel("$x_2$"); axes[0].legend(loc="center right")
+plt.tight_layout(); plt.show()
+```
+
+## The neuron: a threshold with a bend
+
+The artificial neuron takes its inspiration from biology: a neuron receives signals,
+and it *fires* only when the accumulated stimulus crosses a threshold. The modern,
+computationally friendly version of that thresholding is the **rectified linear unit**:
+
+$$
+\mathrm{ReLU}(z) = \max(0, z), \qquad
+f(\vect{x}) = \mathrm{ReLU}(\vect{w}^\top\vect{x} + b).
+$$ {#eq-neuron}
+
+The weighted input $\vect{w}^\top\vect{x} + b$ is the stimulus — and recall from
+@sec-01-linear-regression that it is a *similarity score* against the template
+$\vect{w}$. Below threshold, the neuron is silent (output 0); above it, the neuron
+fires with intensity proportional to the stimulus.
+
+In one dimension a single neuron turns a line into a **hinge**, and in two dimensions
+it draws a line through the plane: an OFF region and an ON region, with $\vect{w}$
+perpendicular to the boundary. That boundary is the fundamental unit of computation in
+everything that follows.
+
+(What about the sharp corner at $z=0$, where the derivative is undefined? In practice,
+never a problem: libraries assign it 0, and the chance of a floating-point number
+landing exactly on 0 is essentially nil. The gradient story of this choice — why this
+open-or-shut gate is *the* reason deep networks train — is told in
+@sec-05-backpropagation.)
+
+## Layers of hinges: bumps and polytopes
+
+One neuron makes one boundary. A layer of $k$ neurons makes $k$ boundaries, and their
+intersections partition the input space into cells — each cell a **convex polytope**,
+and within each cell the layer computes a plain linear function. With $d$-dimensional
+inputs, $k$ neurons can create on the order of $k^d$ regions.
+
+The simplest constructive example lives in 1D. Take two hinges and subtract:
+
+```{python}
+#| label: fig-hinge-bump
+#| fig-cap: "The lecture's construction, exactly: two hinges ($h_1$, $h_2$) and one subtraction make a bump. Bumps are the brush strokes of function approximation."
+#| code-summary: "Code: hinges into a bump"
+xs = torch.linspace(-3, 5, 400)
+h1 = torch.relu(0.67 * xs + 1)
+h2 = torch.relu(0.8 * xs - 0.4)
+bump = h1 - 1.25 * h2
+
+fig, axes = plt.subplots(1, 2, figsize=(7.4, 3))
+axes[0].plot(xs, h1, color="#5379AA", label=r"$h_1 = \mathrm{ReLU}(0.67x + 1)$")
+axes[0].plot(xs, h2, color="#6B8E6B", label=r"$h_2 = \mathrm{ReLU}(0.8x - 0.4)$")
+axes[0].set_title("two hidden units"); axes[0].legend(fontsize=8)
+axes[1].plot(xs, bump, color="#E57200", lw=2.5, label=r"$y = h_1 - 1.25\,h_2$")
+axes[1].set_title("their combination: a bump"); axes[1].legend(fontsize=9)
+for ax in axes: ax.set_xlabel("$x$")
+plt.tight_layout(); plt.show()
+```
+
+Follow the pieces: before the first hinge, both units are silent and the output is
+zero. Between the hinges, only $h_1$ is on, so the output climbs. After the second
+hinge, $h_2$'s negative contribution takes over and the output descends back to zero.
+Three linear pieces $\rightarrow$ one bump.
+
+## The universal approximation theorem
+
+Bumps are the whole secret. If you can make one bump, you can make many, at any
+position and height $\rightarrow$ with enough hidden units you can *tile* any
+continuous function, the way an artist paints a shape with brush strokes. That is the
+intuition behind the **universal approximation theorem**: a network with a single
+hidden layer can, in principle, approximate any continuous function on a bounded region
+to any desired accuracy.
+
+Watch the theorem materialize as width grows:
+
+```{python}
+#| label: fig-uat
+#| fig-cap: "One hidden layer approximating a wiggly target with a jump. Width 2 manages a single hinge-pair; width 8 catches the shape; width 64 traces it closely — except at the discontinuity, which no finite (or infinite) width fully conquers: the theorem promises continuous functions only."
+#| code-summary: "Code: the width sweep"
+xs1 = torch.linspace(-3, 3, 200)[:, None]
+target = torch.sin(2 * xs1) + 0.5 * torch.sign(xs1)
+
+def fit(width: int, steps: int = 3000, lr: float = 0.05):
+    torch.manual_seed(6050)
+    net = nn.Sequential(nn.Linear(1, width), nn.ReLU(), nn.Linear(width, 1))
+    opt = torch.optim.SGD(net.parameters(), lr=lr)
+    for _ in range(steps):
+        opt.zero_grad()
+        ((net(xs1) - target) ** 2).mean().backward()
+        opt.step()
+    with torch.no_grad():
+        return net(xs1).squeeze(-1)
+
+plt.figure(figsize=(6.6, 3.6))
+plt.plot(xs1, target, color="#232D4B", lw=2.5, label="target")
+for width, color in [(2, "#B8B8A8"), (8, "#5379AA"), (64, "#E57200")]:
+    plt.plot(xs1, fit(width), color=color, lw=1.6, label=f"width {width}")
+plt.xlabel("$x$"); plt.legend(); plt.tight_layout(); plt.show()
+```
+
+Now read the theorem's fine print, because it is where beginners over-promise:
+
+::: {.callout-warning}
+## What the theorem does *not* say
+
+1. It does not tell you **how to find the weights** — existence of a good network is
+   not a training algorithm. Finding the weights is the job of the loss and the
+   optimizer, and nothing guarantees gradient descent lands on the theorem's solution.
+2. It does not say the network is **small**. Tiling a complicated function with
+   one-layer bumps can require astronomically many units.
+3. It speaks of **continuous functions on bounded regions** — note our jump refusing to
+   be captured — and says nothing about how the fit behaves *between* or *beyond* your
+   samples. Approximation is not generalization; that distinction gets its own chapter
+   (@sec-06-generalization-inductive-bias).
+:::
+
+## Why depth: boundaries that bend
+
+If one hidden layer suffices in principle, why is the field called *deep* learning?
+Efficiency, and geometry. A second hidden layer receives, as its inputs, the
+piecewise-linear outputs of the first $\rightarrow$ its boundaries are no longer
+straight lines. They *bend* wherever the first layer's boundaries cut the space.
+Boundaries composed of boundaries: each layer folds the space the previous layer drew.
+
+```{python}
+#| label: fig-polytopes
+#| fig-cap: "The plane, colored by which ReLUs are on/off in a random 2-layer network (2 → 8 → 8): every cell is a region where the network is exactly linear. First-layer boundaries are straight; second-layer boundaries visibly bend where they cross them."
+#| code-summary: "Code: activation-pattern regions"
+torch.manual_seed(6050)
+net2 = nn.Sequential(nn.Linear(2, 8), nn.ReLU(), nn.Linear(8, 8), nn.ReLU())
+
+gx2, gy2 = np.meshgrid(np.linspace(-2, 2, 500), np.linspace(-2, 2, 500))
+G = torch.tensor(np.stack([gx2.ravel(), gy2.ravel()], 1), dtype=torch.float32)
+with torch.no_grad():
+    h1_ = torch.relu(net2[0](G))
+    h2_ = torch.relu(net2[2](h1_))
+    pattern = torch.cat([(h1_ > 0), (h2_ > 0)], 1).float()
+    code = (pattern @ (2 ** torch.arange(16).float())).reshape(gx2.shape)
+
+plt.figure(figsize=(5.4, 4.6))
+plt.imshow(code, extent=[-2, 2, -2, 2], origin="lower", cmap="tab20", alpha=0.85)
+plt.xlabel("$x_1$"); plt.ylabel("$x_2$")
+plt.tight_layout(); plt.show()
+```
+
+This bending compounds: theory shows the number of linear regions grows
+**exponentially with depth but only polynomially with width**. A deep, narrow network
+can carve a partition that a shallow network would need exponentially many units to
+match. That is the economic argument for depth — the same expressive budget, spent far
+more efficiently.
+
+## Your first real MLP
+
+Time to build the thing properly, the way the live session does: as a class.
+
+::: {.callout-tip}
+## Coding hygiene: the house and its foundation
+
+Every model you write from now on subclasses `nn.Module`, and the first line of your
+`__init__` is always `super().__init__()`. Think of it as pouring the foundation
+before building the house: it is what wires up parameter tracking, `.parameters()`,
+and everything the optimizer and autograd need. Forget it and PyTorch fails loudly —
+the one favor a framework can do you.
+:::
+
+```{python}
+#| label: mlp-class
+class MLP(nn.Module):
+    """A multilayer perceptron: linear layers with bends between them."""
+
+    def __init__(self, input_dim: int, hidden_dim: int, output_dim: int):
+        super().__init__()                      # the foundation
+        self.hidden = nn.Linear(input_dim, hidden_dim)
+        self.out = nn.Linear(hidden_dim, output_dim)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.out(torch.relu(self.hidden(x)))
+```
+
+And a problem worthy of it: two interleaved moons, the classic shape no line can
+separate well. Same training loop as always — the model is the only thing that changed:
+
+```{python}
+#| label: fig-moons
+#| fig-cap: "Two moons: the linear model does what it can with one line (about 90% here); the MLP bends its boundary through the gap and separates the classes completely."
+#| code-summary: "Code: moons, linear vs. MLP"
+torch.manual_seed(6050)
+n = 200
+t = torch.rand(n) * torch.pi
+moon1 = torch.stack([torch.cos(t), torch.sin(t)], 1) + 0.12 * torch.randn(n, 2)
+moon2 = torch.stack([1 - torch.cos(t), 0.4 - torch.sin(t)], 1) + 0.12 * torch.randn(n, 2)
+X_m = torch.cat([moon1, moon2])
+y_m = torch.cat([torch.zeros(n), torch.ones(n)])
+
+torch.manual_seed(6050)
+lin_m = train(nn.Linear(2, 1), X_m, y_m, steps=3000, lr=0.8)
+torch.manual_seed(6050)
+mlp_m = train(MLP(2, 16, 1), X_m, y_m, steps=3000, lr=0.8)
+
+gx3, gy3 = np.meshgrid(np.linspace(-1.6, 2.6, 240), np.linspace(-1.1, 1.6, 240))
+grid3 = torch.tensor(np.stack([gx3.ravel(), gy3.ravel()], 1), dtype=torch.float32)
+
+fig, axes = plt.subplots(1, 2, figsize=(7.6, 3.3), sharey=True)
+for ax, model, title in [(axes[0], lin_m, "linear"), (axes[1], mlp_m, "MLP (16 hidden)")]:
+    with torch.no_grad():
+        acc = ((model(X_m).squeeze(-1) > 0).float() == y_m).float().mean()
+        Z = (model(grid3).squeeze(-1) > 0).float().reshape(gx3.shape)
+    ax.contourf(gx3, gy3, Z, levels=[-0.5, 0.5, 1.5],
+                colors=["#DCE6F2", "#FDE3C8"], alpha=0.9)
+    ax.scatter(X_m[y_m == 0, 0], X_m[y_m == 0, 1], s=8, c="#232D4B")
+    ax.scatter(X_m[y_m == 1, 0], X_m[y_m == 1, 1], s=8, c="#E57200")
+    ax.set_title(f"{title}: {acc:.1%}"); ax.set_xlabel("$x_1$")
+axes[0].set_ylabel("$x_2$")
+plt.tight_layout(); plt.show()
+```
+
+One honest footnote on the XOR network: in principle *two* hidden units suffice, but
+such minimal networks are temperamental — across random seeds they frequently get stuck
+at 50% accuracy in poor local minima (you will verify this in Exercise 3, and the noisy
+escape story of @sec-04-training-loss-sgd is part of the cure). A few spare units cost
+little and buy reliability.
+
+## A cautionary tale, and a look ahead
+
+There is a seductive story about what the layers of an MLP learn: the first layer
+detects edges, the next combines them into shapes, the next into objects — a tidy
+hierarchy of increasingly abstract features. It is the *idealized* story, and for
+fully-connected networks on raw images it is mostly **not what happens**. A
+fully-connected layer sees its input as one long, structureless vector; it has no
+notion that pixel potentially relates to its neighbor. Nothing in the architecture
+encourages the tidy hierarchy, and with every pixel connected to every unit, the
+parameter count explodes long before the hierarchy emerges.
+
+We now hold real expressive power — networks that can, in principle, represent almost
+anything. @sec-04-training-loss-sgd trains them at scale and
+@sec-05-backpropagation supplies their gradients. And then
+@sec-06-generalization-inductive-bias asks this chapter's uncomfortable question:
+what happens when all that flexibility meets data it does not understand the
+*structure* of? The answer — watch an MLP fail, in pictures, then fix it by building
+knowledge into the architecture — is the turn the whole book pivots on.
+
+## Okay, so — one bend changed everything
+
+1. **Linear stacks collapse** (@eq-collapse); XOR proves four points can defeat any
+   line.
+2. **A neuron is a thresholded similarity score**: below the boundary silent, above it
+   proportional. One neuron $\rightarrow$ one boundary; a layer $\rightarrow$ a
+   polytope partition; two hinges $\rightarrow$ a bump.
+3. **Bumps tile functions** (universal approximation) — but the theorem promises
+   existence, not learnability, economy, or generalization.
+4. **Depth bends boundaries**: regions grow exponentially with depth, polynomially
+   with width. That is why the field is *deep* learning.
+5. **The MLP is a class now** (`nn.Module`, foundation first), and it separates what
+   no line can.
+
+## Exercises {.unnumbered}
+
+1. **(Pencil.)** Generalize @eq-collapse: show by induction that any stack of $L$
+   linear layers equals a single linear layer. Where exactly does inserting
+   $\mathrm{ReLU}$ between layers break your proof?
+2. **(Pencil.)** Using the bump construction, give explicit weights for a
+   one-hidden-layer network that outputs approximately 1 on $[0,1]$ and 0 outside
+   $[-0.2, 1.2]$. How many hidden units did you need?
+3. **(Code.)** Retrain the XOR network with `hidden_dim = 2` across ten different
+   seeds. How often does it reach 100%? Inspect a failed run: what happened to its
+   hidden units? (Hint: check how many are permanently silent.)
+4. **(Code.)** In the polytope figure, count distinct activation patterns as you vary
+   width at depth 1 versus depth at width 4 (keep total units comparable). Which grows
+   the region count faster?
+5. **(Code.)** Replace the moons MLP's ReLU with `nn.Identity()` and retrain. Explain
+   the resulting boundary in one sentence using @eq-collapse.
