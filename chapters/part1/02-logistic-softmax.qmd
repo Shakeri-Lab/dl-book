@@ -107,7 +107,7 @@ and the $e^c$ cancels top and bottom. Only the *differences* between scores matt
 
 ```{python}
 #| label: fig-softmax
-#| fig-cap: "Softmax turns scores into a distribution. Shifting all logits by a constant (right) changes the probabilities not at all — only score differences carry information."
+#| fig-cap: "Softmax turns scores into a distribution. Shifting every logit by the same constant (right panel) leaves the probabilities unchanged: only the differences between scores carry information."
 #| code-summary: "Code: scores to probabilities, shift invariance"
 logits = torch.tensor([2.0, 0.5, -1.0, 1.0])
 fig, axes = plt.subplots(1, 2, figsize=(7.2, 2.9), sharey=True)
@@ -133,6 +133,32 @@ favoring the large scores without silencing the small ones. Today the scores are
 logits. In Part IV, the scores will be *similarities between a query and a set of
 keys*, and this exact same machine will turn them into **attention weights**
 (@sec-13-attention). One normalizer, the whole book long.
+:::
+
+::: {.callout-note}
+## What "differentiable" buys us — softening the hard
+
+That word *differentiable* deserves a moment in the light, because it names one of the
+great design patterns of this field.
+
+Consider the obvious way to pick a class: take the **max** — output 1 for the highest
+logit and 0 for the rest. That operation is *hard*: nudge a losing logit slightly and
+the output does not move at all; nudge it past the winner and the output jumps all at
+once. Its derivative is zero almost everywhere $\rightarrow$ gradient descent receives
+no signal, and by @sec-05-backpropagation, no signal means no learning. The hard max is
+a wall that blame cannot flow through.
+
+Softmax is that same operation, *softened* — the name is literal: a **soft max**.
+Instead of crowning one winner, it distributes belief in proportion to the scores, and
+now every logit feels a gradient at every step. We gave up a little decisiveness and
+bought trainability.
+
+Watch for this move; it is everywhere once you see it. Whenever a useful operation is
+hard — a lookup, a yes/no choice, even *sorting a list* (yes, researchers have built
+differentiable sorting!) — the play is the same: replace it with a smooth version that
+gradients can flow through, train, and sharpen later if needed. The one to remember for
+this book: fetching a value from memory is a hard lookup, and in Part IV we will soften
+it. A *differentiable lookup*, it turns out, is precisely attention.
 :::
 
 ### Cross-entropy, multiclass edition
@@ -174,9 +200,10 @@ it in the code below; the deeper story of floating-point limits lives in
 
 ## Build it: three classes, from scratch
 
-The full classifier, with the pieces named: $K{=}3$ templates, stable softmax,
-cross-entropy, and — because @eq-ce-grad is so clean — the *manually derived* gradient,
-no autograd needed. On three Gaussian blobs:
+Now we assemble the full classifier on three Gaussian blobs. It has four pieces, all
+of which you have already met: three templates (one per class), the stable softmax, the
+cross-entropy loss, and the gradient. And since @eq-ce-grad reduced that gradient to
+$\hat{y} - y$, we can implement it by hand $\rightarrow$ no autograd needed:
 
 ```{python}
 #| label: blobs-scratch
@@ -235,12 +262,17 @@ print(f"ours: {ce:.6f}   torch: {loss_fn(X @ W.T + b, y):.6f}")
 ```
 
 ::: {.callout-warning}
-## The most common classification bug
+## Let PyTorch do the logits-to-probabilities conversion
 
-`nn.CrossEntropyLoss` takes **raw logits**, not softmax outputs — it applies
-(log-)softmax internally, with the stability trick built in. Feed it probabilities and
-your model still trains, just badly, with no error message. If a classifier is
-mysteriously mediocre, check this first.
+`nn.CrossEntropyLoss` expects **raw logits**, and that is a feature, not a quirk: it
+fuses the softmax and the logarithm internally using the log-sum-exp trick, which is
+more numerically stable than any softmax-then-log you would write yourself. So the
+advice is: have your model output logits, hand them straight to the loss, and only
+apply softmax when you actually need probabilities to report. (The same goes for
+binary problems: prefer `binary_cross_entropy_with_logits` over sigmoid-then-BCE.)
+The classic bug is feeding softmax outputs into `CrossEntropyLoss` — the model still
+trains, just badly and silently. If a classifier is mysteriously mediocre, check this
+first.
 :::
 
 ## Okay, so — classification is regression plus a normalizer
