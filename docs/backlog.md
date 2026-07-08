@@ -51,3 +51,15 @@ chapter stub's draft-sources; revisit during the planned outline session with th
 - Run `scripts/fetch_notebooks.py` for the remaining Colab notebooks (m02-03 fetched
   2026-07-07; others pending) — provenance for later chapters' code.
 - Course-site integration (`bookChapter` field) once the author blesses Part I chapters.
+
+## 5. GPU experiment queue (author rule, July 2026)
+
+Experiments that need full-dataset/GPU scale carry a standardized in-chapter
+placeholder (`::: {.callout-caution}` titled "GPU run pending" — grep for it) and are
+queued here. Run on Rivanna/Colab, then fold real numbers back into the chapter.
+
+- **Ch. 9 scorecard, full scale**: LeNet / VGG / NiN / deep ResNet on all 60k
+  Fashion-MNIST images — reproduce the lecture frontier (≈89% / >90% / ≈90% @ 30k
+  params / higher).
+- **Ch. 9 transfer, full scale**: ImageNet ResNet-18 on full FashionMNIST at 224px —
+  linear probe (≈93%) vs last-block fine-tune (≈94%) vs scratch baseline.
