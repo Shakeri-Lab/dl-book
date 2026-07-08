@@ -1,22 +1,358 @@
 # When It Fails: Generalization in Pictures, and Inductive Bias {#sec-06-generalization-inductive-bias}
 
-::: {.callout-warning}
-**Chapter stub.** This chapter is planned but not yet written. The abstract below is its
-contract; drafting sources are listed for provenance.
+<!-- lecture-source: m04_lecture-4-convolutional-neural-networks-cnns_s6xDEvdz3tY.txt (opening),
+     m03 sessions; outline approved by author 2026-07-08 (drafts/part1/06-outline.md)
+     seeds: sources/4.1-CNN.tex (§Fundamental Problem, Fatal Flaw, Two Key Principles),
+            sources/ML_concepts_roadmap.tex; weight-viz: m02-03-shared.ipynb
+     pacing: 3Blue1Brown "Gradient descent" lesson (author-cited) — show, then name -->
+
+Part I has given us everything a course could promise: models with universal expressive
+power (@sec-03-nonlinearity-mlp), losses grounded in maximum likelihood
+(@sec-02-logistic-softmax), an optimizer that scales (@sec-04-training-loss-sgd), and
+gradients for anything (@sec-05-backpropagation). This chapter takes all of it, aims it
+at real images, and succeeds completely.
+
+Then we will look a little closer, and the wheels will come off. Watching *how* they
+come off — in pictures, not in theorems — is the most important lesson of Part I,
+because the cure is the idea the entire rest of this book is built on.
+
+## Victory
+
+The data is a subset of Fashion-MNIST, the classic benchmark from our live sessions:
+28×28 grayscale images of clothing in ten classes. The model and training loop hold no
+surprises — an MLP from @sec-03-nonlinearity-mlp, trained exactly as in
+@sec-04-training-loss-sgd:
+
+```{python}
+#| label: victory
+import torch
+from torch import nn
+
+torch.manual_seed(6050)
+train = torch.load("../../data/fashion-train.pt")
+test = torch.load("../../data/fashion-test.pt")
+X_tr = train["X"].float().reshape(-1, 784) / 255.0     # (1200, 784)
+X_te = test["X"].float().reshape(-1, 784) / 255.0      # (600, 784)
+y_tr, y_te, classes = train["y"], test["y"], train["classes"]
+
+def train_mlp(X, y, hidden=256, epochs=40, seed=6050):
+    torch.manual_seed(seed)
+    net = nn.Sequential(nn.Linear(784, hidden), nn.ReLU(), nn.Linear(hidden, 10))
+    opt = torch.optim.Adam(net.parameters(), lr=1e-3)
+    for _ in range(epochs):
+        perm = torch.randperm(len(X))
+        for i in range(0, len(X), 64):
+            idx = perm[i:i + 64]
+            opt.zero_grad()
+            nn.functional.cross_entropy(net(X[idx]), y[idx]).backward()
+            opt.step()
+    return net
+
+def accuracy(net, X, y):
+    with torch.no_grad():
+        return (net(X).argmax(1) == y).float().mean().item()
+
+net = train_mlp(X_tr, y_tr)
+print(f"train accuracy: {accuracy(net, X_tr, y_tr):.1%}")
+print(f"test accuracy:  {accuracy(net, X_te, y_te):.1%}")
+```
+
+Eighty percent on unseen images, from twelve hundred examples and a few seconds of
+CPU. The test set is honest, the loop is standard, the number is real. By every metric
+we have learned to compute, we are done.
+
+The rest of this chapter is about why we are not.
+
+## Two experiments that should worry you
+
+### Experiment 1: move everything two pixels
+
+Take the test images and shift each one two pixels to the right. Nothing about any
+garment changes — a coat is a coat, wherever it hangs in the frame. Any human would
+call the two test sets identical.
+
+```{python}
+#| label: shift-experiment
+def shift_right(X, px: int):
+    img = X.reshape(-1, 28, 28)
+    out = torch.zeros_like(img)
+    if px > 0:
+        out[:, :, px:] = img[:, :, :-px]
+    else:
+        out = img.clone()
+    return out.reshape(-1, 784)
+
+for px in [0, 2]:
+    print(f"shift {px}px: test accuracy {accuracy(net, shift_right(X_te, px), y_te):.1%}")
+```
+
+Two pixels, and the accuracy is nearly cut in half. Push further and the collapse
+completes:
+
+```{python}
+#| label: fig-shift-cliff
+#| fig-cap: "The cliff. Each pixel of horizontal shift destroys accuracy the garments themselves never changed. By four pixels the model is approaching guesswork."
+#| code-summary: "Code: accuracy vs. shift"
+import matplotlib.pyplot as plt
+
+shifts = list(range(5))
+accs = [accuracy(net, shift_right(X_te, s), y_te) for s in shifts]
+plt.figure(figsize=(5.6, 3.3))
+plt.plot(shifts, accs, "o-", color="#E57200", lw=2, ms=7)
+plt.axhline(0.1, ls=":", color="#B8B8A8")
+plt.text(0.1, 0.115, "chance (10 classes)", color="#8A8A7A", fontsize=9)
+plt.xlabel("shift (pixels right)"); plt.ylabel("test accuracy")
+plt.ylim(0, 0.9); plt.xticks(shifts)
+plt.tight_layout(); plt.show()
+```
+
+### Experiment 2: destroy the images entirely
+
+Now the stranger experiment, from the lecture's "fatal flaw" argument. Choose one fixed
+random permutation of the 784 pixel positions and apply it to *every* image, train and
+test alike. The results are not pictures anymore — no human could classify them. Every
+trace of spatial structure is gone. Retrain the same MLP on this scrambled world:
+
+```{python}
+#| label: shuffle-experiment
+torch.manual_seed(0)
+pixel_perm = torch.randperm(784)          # one fixed scrambling for all images
+
+net_shuffled = train_mlp(X_tr[:, pixel_perm], y_tr)
+print(f"original images:  test accuracy {accuracy(net, X_te, y_te):.1%}")
+print(f"shuffled pixels:  test accuracy "
+      f"{accuracy(net_shuffled, X_te[:, pixel_perm], y_te):.1%}")
+```
+
+The accuracy is *the same* (the small difference is seed noise). Read that again:
+destroying everything that makes an image an image cost the MLP **nothing**.
+
+Hold the two results side by side and the diagnosis writes itself:
+
+> The model is **indifferent** to the structure that matters — pixel adjacency, shape,
+> the entire geometry of the image — and **hypersensitive** to a nuisance that should
+> not matter at all — where the garment happens to sit. It learned the dataset without
+> ever learning what a picture is.
+
+## The autopsy, in pictures
+
+Why exactly does shifting hurt a model that shuffling cannot? Look at what the model
+actually learned. Each row of the first layer's weight matrix is a 784-vector — which
+means we can reshape it into a 28×28 image and look at it. And we know from
+@sec-01-linear-regression what such a row *is*: a **template**, scored against the
+input by dot product.
+
+```{python}
+#| label: fig-templates
+#| fig-cap: "Sixteen first-layer templates, reshaped into images. Each is a global, full-frame pattern: fabric-like textures and garment silhouettes smeared across the entire 28×28 canvas. A template that spans the whole frame breaks the moment its pattern moves — and never needed the frame to be a picture in the first place."
+#| code-summary: "Code: first-layer weights as images"
+W1 = net[0].weight.detach()               # (256, 784)
+order = W1.norm(dim=1).argsort(descending=True)[:16]
+
+fig, axes = plt.subplots(2, 8, figsize=(7.6, 2.2))
+for ax, i in zip(axes.ravel(), order):
+    ax.imshow(W1[i].reshape(28, 28), cmap="RdBu_r")
+    ax.set_xticks([]); ax.set_yticks([])
+plt.tight_layout(); plt.show()
+```
+
+There is the whole story in one figure. Every template is **global** — a pattern
+stretched across the entire frame, tuned to where garments sat in the training images.
+Shift the input two pixels and every pixel of every template now scores against the
+wrong part of the garment; a thousand carefully tuned dot products all misfire at once.
+And conversely: a global bag-of-pixels template has no notion of *adjacency* to lose,
+so scrambling the pixels — consistently — just hands it a different bag, which it
+learns as happily as the first. Indifference and hypersensitivity are the same fact
+about the same templates.
+
+Capacity was never the issue. By @sec-03-nonlinearity-mlp's universal approximation
+theorem, this network *can represent* a perfectly shift-tolerant classifier. It has no
+reason to find one: nothing in its architecture, loss, or data ever told it that
+position is a nuisance and adjacency is meaningful.
+
+## Naming the disease
+
+With the failure in hand, the classical concepts of Part I snap into focus.
+
+### Hunting the U-curve
+
+The textbook story (@sec-01-linear-regression's cartoon) predicts that as capacity
+grows, validation error should fall and then *rise* as the model overfits. We now have
+everything needed to test the cartoon on real data — a width sweep at two dataset
+sizes:
+
+```{python}
+#| label: fig-ucurve
+#| fig-cap: "Hunting the U-curve: validation error vs. hidden width at two training-set sizes. Error falls steeply as capacity grows — then flattens. At n=300 the predicted upturn is barely a whisper (width 64 → 256); at n=1200 it is absent. More data lowers and flattens the whole curve (variance ~ 1/n). The cartoon is real physics but weak medicine: capacity is not what is failing here."
+#| code-summary: "Code: the width sweep"
+widths = [2, 4, 8, 16, 64, 256]
+plt.figure(figsize=(6, 3.5))
+for n, color in [(300, "#5379AA"), (1200, "#232D4B")]:
+    errs = [1 - accuracy(train_mlp(X_tr[:n], y_tr[:n], hidden=h, epochs=60), X_te, y_te)
+            for h in widths]
+    plt.semilogx(widths, errs, "o-", color=color, label=f"n = {n}", base=2)
+plt.xlabel("hidden width (capacity)"); plt.ylabel("validation error")
+plt.legend(); plt.tight_layout(); plt.show()
+```
+
+Read it honestly. The left side of the cartoon is emphatically real: too little
+capacity underfits badly. But the dreaded right side barely materializes — a whisper of
+an upturn at the small dataset, nothing at the larger one. This is the modern
+experience of deep learning, and it is exactly the caveat planted in
+@sec-01-linear-regression: the U is a helpful cartoon, not a law of nature. The noisy
+optimizer of @sec-04-training-loss-sgd quietly regularizes, more data flattens the
+curve, and over-parameterized networks routinely generalize fine.
+
+Which sharpens our problem instead of solving it: **our model does not fail for having
+too much capacity. It fails for having no knowledge.** No point on either curve
+survives a two-pixel shift.
+
+### The curse of dimensionality
+
+Could we fix everything with data alone — just show the model garments at every
+position? Count what that costs. Our images live in 784 dimensions; a small color image
+(32×32×3) needs 3,072 numbers, a one-megapixel photo three million, an ImageNet input
+150,528. And covering a $d$-dimensional space densely requires exponentially many
+examples: if 9 points cover a 1-D interval at some resolution, matching that density
+takes $9^2$ points in 2-D and $9^d$ in $d$ dimensions. For $d = 784$, there are not
+enough atoms in the universe, at any exchange rate.
+
+High dimensionality also breaks the very idea of "similar examples":
+
+```{python}
+#| label: fig-curse
+#| fig-cap: "Distance concentration: for 300 random points, the average ratio of nearest-neighbor to farthest-neighbor distance, by dimension. In 2-D your nearest neighbor is genuinely near (ratio 0.03). At d = 784 — our images' dimension — it is already 89% as far as the farthest point: 'nearby examples' have effectively ceased to exist."
+#| code-summary: "Code: nearest/farthest ratio vs. dimension"
+torch.manual_seed(6050)
+dims = [2, 10, 100, 784, 5000]
+ratios = []
+for d in dims:
+    P = torch.rand(300, d)
+    D = torch.cdist(P, P)
+    ratios.append(((D + torch.eye(300) * 1e9).min(1).values / D.max(1).values).mean())
+
+plt.figure(figsize=(5.6, 3.2))
+plt.semilogx(dims, ratios, "o-", color="#722F37", lw=2)
+plt.axvline(784, ls=":", color="#B8B8A8")
+plt.text(830, 0.25, "Fashion-MNIST\n(d = 784)", fontsize=9, color="#8A8A7A")
+plt.xlabel("dimension $d$"); plt.ylabel("nearest / farthest distance")
+plt.ylim(0, 1); plt.tight_layout(); plt.show()
+```
+
+Memorization-plus-interpolation — the strategy a structure-blind model is implicitly
+betting on — requires neighbors, and in 784 dimensions there are none. Brute-force data
+cannot buy back what the architecture refuses to know.
+
+## The cure has a name
+
+Return to the word planted on the very first pages of this book
+(@sec-01-linear-regression): **inductive bias** — the nudge that steers a learner
+toward the functions we want, among the infinitely many that fit. Our MLP's failure is
+not a capacity problem or (fixably) a data problem. It is a *knowledge* problem: we
+knew things about images that we never told the model.
+
+Say them out loud — the two principles from the lecture:
+
+1. **Locality.** Nearby pixels are related; a pixel and its neighbor jointly form
+   edges, textures, parts. Distant pixels, far less so. (The shuffle experiment proved
+   our MLP holds no such belief.)
+2. **Translation invariance.** A sleeve is a sleeve anywhere in the frame; *what*
+   something is does not depend on *where* it is. (The shift experiment proved our MLP
+   believes the opposite.)
+
+Here is the move that powers the rest of this book: **build these beliefs into the
+architecture itself** — as constraints. Constrain each template to look at a small
+local patch instead of the whole frame. Then *share* that template across every
+position, so what it detects cannot depend on where. Two constraints, and both
+pathologies are attacked at their root — and as the lecture's arithmetic shows, the
+parameter count falls (135k for our little MLP; a stronger convolutional model will use
+half that) because sharing is a massive economy.
+
+::: {.callout-tip}
+## Constraints are knowledge
+
+A constraint looks like a *reduction* in power: the constrained model is a strict
+subset of the MLP. That is exactly the point. By @sec-01-linear-regression's
+bias–variance lens, we are spending bias — assumptions we are confident of — to
+collapse the search space onto functions that respect the structure of images,
+slashing variance and sample complexity. Inductive bias is not a limitation of a
+model; done right, it is everything you know about the world, cast in architecture.
+And it is a dial, not a dogma: give a weakly-biased model enough data and it can win
+again — a trade we will meet at the frontier in @sec-16-vit-scaling.
 :::
 
-*The signature chapter. We watch an MLP that aces MNIST fall apart when digits shift two pixels — in pictures. Capacity curves, sample complexity, the curse of dimensionality; and the cure: build what you know about the data into the architecture. That idea powers every remaining chapter.*
+## The pivot
 
-<!-- draft-sources
-seeds:
-- `sources/4.1-CNN.tex (curse-of-dim + inductive-bias sections)`
-- `sources/ML_concepts_roadmap.tex`
-transcripts:
-- `m03 lectures`
-- `m04_lecture-4-convolutional-neural-networks-cnns_s6xDEvdz3tY.txt (opening)`
-inspiration:
-- 3Blue1Brown, "Gradient descent, how neural networks learn":
-  https://www.3blue1brown.com/lessons/gradient-descent
-  (author-cited; echo its visual-first pacing: watch the failure happen before naming it)
-note: outline session with the author BEFORE drafting (docs/backlog.md §3)
--->
+Look once more at the templates figure. The fix is almost visible in it: the templates
+should not span the frame. They should be **small and local** — and they should
+**slide**, scoring every neighborhood of the image with the same little pattern,
+so that a sleeve found anywhere is the same sleeve.
+
+A local template, slid across the image, scoring each position by dot product. That
+machine has a name, it predates deep learning by decades, and Part II opens by building
+it with our bare hands — then asking this book's favorite question about it:
+
+*What if the template were learnable?*
+
+## Okay, so — the lesson of Part I
+
+1. **Every metric can say yes while the model has learned the wrong thing.** Our MLP
+   aced its test set while being indifferent to structure (shuffle: unchanged) and
+   hypersensitive to nuisance (two pixels: halved).
+2. **The autopsy is visual**: global templates, tuned to position, blind to adjacency.
+3. **Capacity is not the culprit** — the U-curve barely exists here — and **data alone
+   cannot pay the bill**: the curse of dimensionality (no neighbors at $d=784$) sees
+   to that.
+4. **The cure is inductive bias**: locality and translation invariance, built in as
+   constraints. Knowledge, cast in architecture.
+
+## Deeper dive {.unnumbered}
+
+::: {.callout-note collapse="true"}
+## For the curious: how deep this rabbit hole goes
+
+**Networks can memorize anything.** Zhang et al. famously trained standard deep
+networks to 100% *training* accuracy on ImageNet with completely random labels —
+capacity is so abundant that fitting noise is easy (Exercise 4 reproduces this on our
+subset). Generalization therefore cannot be explained by capacity limits; the
+explanation must involve the optimizer's implicit bias and the architecture's inductive
+bias.
+
+**The bias–variance picture, updated.** Our flattened U-curve is a mild case of a
+broader phenomenon: with modern training, test error can even *descend again* beyond
+the interpolation point — "double descent." The cartoon survives as intuition for the
+underfit regime; the overparameterized regime plays by subtler rules.
+
+**Further reading**
+
+- Zhang, Bengio, Hardt, Recht, Vinyals, "Understanding deep learning requires
+  rethinking generalization" (ICLR 2017) — the random-labels bombshell.
+- Neal, "On the Bias-Variance Tradeoff: Textbooks Need an Update" (2020) — the
+  source of this book's "cartoon, not a law" stance.
+- Belkin et al., "Reconciling modern machine-learning practice and the classical
+  bias–variance trade-off" (PNAS 2019) — double descent.
+- 3Blue1Brown, *Gradient descent, how neural networks learn* — the visual companion
+  to this chapter's pacing, including the memorable demonstration that a trained MLP
+  confidently classifies pure noise.
+:::
+
+## Exercises {.unnumbered}
+
+1. **(Pencil.)** Explain algebraically why the pixel shuffle costs the MLP nothing:
+   if $\matr{P}$ is a permutation matrix and we train on $\matr{P}\vect{x}$ instead of
+   $\vect{x}$, exhibit the weight matrix that makes the two networks identical. Why
+   does no analogous argument work for the shift?
+2. **(Code.)** Augment the training set with random shifts of ±3 pixels and retrain.
+   Re-plot the cliff. How much robustness did augmentation buy, what did it cost in
+   clean accuracy and compute, and — the real question — what *knowledge* did
+   augmentation encode, compared to building invariance into the architecture?
+3. **(Code.)** The U-curve hunt used widths up to 256. Push to 1024 and 4096 at
+   $n = 300$. Does the upturn ever arrive convincingly? Relate what you see to the
+   optimizer's implicit regularization from @sec-04-training-loss-sgd.
+4. **(Code.)** Randomly permute the training *labels* and train a wide MLP for long
+   enough. Report train and test accuracy, and state in one sentence what this proves
+   about capacity as an explanation of generalization.
+5. **(Pencil.)** Estimate the first-layer parameter count of an MLP with 1,000 hidden
+   units on an ImageNet-scale input (224×224×3). At one float32 per parameter, how
+   much memory is that — and how does the number change if each unit instead sees only
+   a 7×7×3 patch?
