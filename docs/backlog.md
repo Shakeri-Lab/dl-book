@@ -13,7 +13,7 @@ what a float is (sign/exponent/mantissa), machine epsilon, why $0.1 + 0.2 \neq 0
 catastrophic cancellation, log-sum-exp as the fix pattern (ties to softmax in Ch. 2),
 mixed precision in training.
 
-## 2. Per-chapter "Deeper dive" section (collapsed by default)
+## 2. Per-chapter "Deeper dive" section (collapsed by default) — PILOTED in ch. 6 (2026-07-08)
 
 Author spec: each chapter may end with a **Deeper dive** section, collapsed by default,
 containing (a) more digestible/extended treatments of the chapter's machinery (e.g., for
@@ -35,7 +35,7 @@ Implementation when activated: a standard pattern at chapter end —
 :::
 ```
 
-Retrofit Chapters 1 and 5 first (Ch. 5's deeper dive: autograd internals + Baydin et al.
+Pilot shipped in Chapter 6 (Zhang/Neal/Belkin/3b1b). If the author approves the pattern, retrofit Chapters 1 and 5 next (Ch. 5's deeper dive: autograd internals + Baydin et al.
 autodiff survey, Rumelhart–Hinton–Williams 1986, Glorot & Bengio 2010, He et al. 2015).
 Add the pattern to `docs/drafting-template.md` once the author approves the first one.
 
