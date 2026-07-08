@@ -113,6 +113,12 @@ Available: `\vect{}`, `\matr{}`, `\E`, `\Ex`, `\var`, `\cov`, `\norm{}`, `\argma
 | Render hangs or times out | you're probably in Box; work in `~/dl-book` |
 | Subagents unavailable (spend limit) | draft inline: read seed + transcripts fully first, then write; audit-by-construction and verify code by executing |
 
+## Backlog
+
+Author-requested future work lives in `docs/backlog.md` (floating-point appendix — stub
+at a4; per-chapter collapsed "Deeper dive" sections with further-reading papers; ch. 6
+3Blue1Brown-inspired pacing). Check it before proposing new structural ideas.
+
 ## Related, but out of scope here
 
 The course website (`…/6050/dl-course-site`, separate repo) will link mature chapters as
