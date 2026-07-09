@@ -23,6 +23,41 @@ ul.task-list li input[type="checkbox"] {
   margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
   vertical-align: middle;
 }
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
 </style>
 
 
@@ -97,6 +132,35 @@ ul.task-list li input[type="checkbox"] {
   };
 </script>
 
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
 
 </head>
 
@@ -352,8 +416,20 @@ ul.task-list li input[type="checkbox"] {
 </nav>
 <div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
 <!-- margin-sidebar -->
-    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar zindex-bottom">
-        
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Table of contents</h2>
+   
+  <ul>
+  <li><a href="#two-rnns-and-a-handoff" id="toc-two-rnns-and-a-handoff" class="nav-link active" data-scroll-target="#two-rnns-and-a-handoff"><span class="header-section-number">11.1</span> Two RNNs and a handoff</a></li>
+  <li><a href="#the-padding-trap" id="toc-the-padding-trap" class="nav-link" data-scroll-target="#the-padding-trap"><span class="header-section-number">11.2</span> The padding trap</a></li>
+  <li><a href="#teacher-forcing-training-on-the-gold-rail" id="toc-teacher-forcing-training-on-the-gold-rail" class="nav-link" data-scroll-target="#teacher-forcing-training-on-the-gold-rail"><span class="header-section-number">11.3</span> Teacher forcing: training on the gold rail</a></li>
+  <li><a href="#getting-answers-out-search" id="toc-getting-answers-out-search" class="nav-link" data-scroll-target="#getting-answers-out-search"><span class="header-section-number">11.4</span> Getting answers out: search</a></li>
+  <li><a href="#the-vector-in-the-middle" id="toc-the-vector-in-the-middle" class="nav-link" data-scroll-target="#the-vector-in-the-middle"><span class="header-section-number">11.5</span> The vector in the middle</a></li>
+  <li><a href="#okay-so" id="toc-okay-so" class="nav-link" data-scroll-target="#okay-so"><span class="header-section-number">11.6</span> Okay, so —</a></li>
+  <li><a href="#exercises" id="toc-exercises" class="nav-link" data-scroll-target="#exercises">Exercises</a></li>
+  </ul>
+<div class="toc-actions"><ul><li><a href="https://github.com/Shakeri-Lab/dl-book/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></nav>
     </div>
 <!-- main -->
 <main class="content" id="quarto-document-content">
@@ -377,31 +453,406 @@ ul.task-list li input[type="checkbox"] {
 </header>
 
 
+<!-- lecture-source: m06_lecture-6-encoder-decoder-architectures_XxePU8jubto.txt
+     (spine #1-3, #9: fixed-size contract, variable-length challenge, bridge to
+     translation), m07 spine #11 (encoder-decoder bottleneck bridge)
+     seeds: sources/7.2-TF-Beam.tex (§Teacher Forcing, §Exposure Bias, §Scheduled
+            Sampling, §Masking & Padded Sequences, §Greedy, §Beam, §Length Norm),
+            his old/train_seq2seq.py (architecture template) + rnn_data_prep.py
+            (special-token conventions; its dataset pipeline is D2L-derived and is
+            NOT used — the book's task is synthetic and self-contained)
+     note: m06's PCA/autoencoder spine (#4-8) belongs to @sec-19-generative. -->
+<p>Chapter 10 ended with a promise: if one recurrent cell can read a sequence <em>into</em> a state, two cells can translate — one reads, one writes. This chapter builds that machine and the craft around it: how to train it fast (teacher forcing), what poisonous bookkeeping to avoid (padding), and how to get answers back out of it (greedy versus beam search). It ends where Part III must: staring at the one vector in the middle.</p>
+<p>The lecture frames the stakes well. Every model so far has lived on a <strong>fixed-size contract</strong> — 784 pixels in, 10 logits out; <span class="math inline">\(28 \times 28\)</span> garments in, one verdict out. The interesting world breaks that contract on both ends at once: translation maps a sentence of <em>any</em> length to a sentence of <em>some other</em> length, in a different vocabulary. The recurrent cell broke the contract on the input side; today we break it on both.</p>
+<section id="two-rnns-and-a-handoff" class="level2" data-number="11.1">
+<h2 data-number="11.1" class="anchored" data-anchor-id="two-rnns-and-a-handoff"><span class="header-section-number">11.1</span> Two RNNs and a handoff</h2>
+<p>The architecture is one idea long. An <strong>encoder</strong> RNN reads the source sequence and keeps nothing but its final state — the entire input compressed into one vector, the <strong>context</strong>. A <strong>decoder</strong> RNN starts <em>from</em> that state and generates the output token by token, feeding each token back in, exactly like Chapter 10’s character model. A language model, in other words — but one with something to say.</p>
+<p>Our laboratory task keeps every property of translation and none of the downloads: <strong>date normalization</strong>. The source language is human-written dates in several dialects; the target language is ISO 8601:</p>
+<pre><code>march 5, 2021        -&gt; 2021-03-05
+26 september 2024    -&gt; 2024-09-26
+12/15/1950           -&gt; 1950-12-15</code></pre>
+<p>Variable-length input, different output alphabet, real long-range structure (the year arrives <em>last</em> in most sources but must be emitted <em>first</em>), and — by deliberate design, visible below — a dialect ambiguity that will give beam search something genuine to reveal: numeric dates are written <code>mm/dd/yyyy</code> by 70% of our imaginary writers (the US convention) and <code>dd/mm/yyyy</code> by 30%, and nothing in <code>03/05/2021</code> says which. Machine translation in miniature.</p>
+<div id="date-data" class="cell" data-execution_count="1">
+<details class="code-fold">
+<summary>Code: the two date languages, generated on the fly</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> random, torch</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch.nn <span class="im">as</span> nn</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch.nn.functional <span class="im">as</span> F</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>MONTHS <span class="op">=</span> [<span class="st">"january"</span>, <span class="st">"february"</span>, <span class="st">"march"</span>, <span class="st">"april"</span>, <span class="st">"may"</span>, <span class="st">"june"</span>, <span class="st">"july"</span>,</span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>          <span class="st">"august"</span>, <span class="st">"september"</span>, <span class="st">"october"</span>, <span class="st">"november"</span>, <span class="st">"december"</span>]</span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>DAYS <span class="op">=</span> <span class="bu">dict</span>(<span class="bu">zip</span>(MONTHS, [<span class="dv">31</span>, <span class="dv">28</span>, <span class="dv">31</span>, <span class="dv">30</span>, <span class="dv">31</span>, <span class="dv">30</span>, <span class="dv">31</span>, <span class="dv">31</span>, <span class="dv">30</span>, <span class="dv">31</span>, <span class="dv">30</span>, <span class="dv">31</span>]))</span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> make_date(rng):</span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    mo <span class="op">=</span> rng.randrange(<span class="dv">12</span>)</span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    d <span class="op">=</span> rng.randrange(<span class="dv">1</span>, DAYS[MONTHS[mo]] <span class="op">+</span> <span class="dv">1</span>)</span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>    y <span class="op">=</span> rng.randrange(<span class="dv">1950</span>, <span class="dv">2026</span>)</span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    iso <span class="op">=</span> <span class="ss">f"</span><span class="sc">{</span>y<span class="sc">:04d}</span><span class="ss">-</span><span class="sc">{</span>mo<span class="op">+</span><span class="dv">1</span><span class="sc">:02d}</span><span class="ss">-</span><span class="sc">{</span>d<span class="sc">:02d}</span><span class="ss">"</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    style <span class="op">=</span> rng.random()</span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> style <span class="op">&lt;</span> <span class="fl">0.35</span>:</span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>        src <span class="op">=</span> <span class="ss">f"</span><span class="sc">{</span>MONTHS[mo]<span class="sc">}</span><span class="ss"> </span><span class="sc">{</span>d<span class="sc">}</span><span class="ss">, </span><span class="sc">{</span>y<span class="sc">}</span><span class="ss">"</span></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>    <span class="cf">elif</span> style <span class="op">&lt;</span> <span class="fl">0.6</span>:</span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>        src <span class="op">=</span> <span class="ss">f"</span><span class="sc">{</span>d<span class="sc">}</span><span class="ss"> </span><span class="sc">{</span>MONTHS[mo]<span class="sc">}</span><span class="ss"> </span><span class="sc">{</span>y<span class="sc">}</span><span class="ss">"</span></span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>    <span class="cf">elif</span> rng.random() <span class="op">&lt;</span> <span class="fl">0.7</span>:</span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>        src <span class="op">=</span> <span class="ss">f"</span><span class="sc">{</span>mo<span class="op">+</span><span class="dv">1</span><span class="sc">:02d}</span><span class="ss">/</span><span class="sc">{</span>d<span class="sc">:02d}</span><span class="ss">/</span><span class="sc">{</span>y<span class="sc">}</span><span class="ss">"</span>            <span class="co"># US convention: mm/dd</span></span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>    <span class="cf">else</span>:</span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a>        src <span class="op">=</span> <span class="ss">f"</span><span class="sc">{</span>d<span class="sc">:02d}</span><span class="ss">/</span><span class="sc">{</span>mo<span class="op">+</span><span class="dv">1</span><span class="sc">:02d}</span><span class="ss">/</span><span class="sc">{</span>y<span class="sc">}</span><span class="ss">"</span>            <span class="co"># EU convention: dd/mm</span></span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> src, iso</span>
+<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a>rng <span class="op">=</span> random.Random(<span class="dv">6050</span>)</span>
+<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a>pairs <span class="op">=</span> [make_date(rng) <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">9000</span>)]</span>
+<span id="cb2-28"><a href="#cb2-28" aria-hidden="true" tabindex="-1"></a>train_pairs, test_pairs <span class="op">=</span> pairs[:<span class="dv">8000</span>], pairs[<span class="dv">8000</span>:]</span>
+<span id="cb2-29"><a href="#cb2-29" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="op">*</span>pairs[:<span class="dv">4</span>], sep<span class="op">=</span><span class="st">"</span><span class="ch">\n</span><span class="st">"</span>)</span>
+<span id="cb2-30"><a href="#cb2-30" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-31"><a href="#cb2-31" aria-hidden="true" tabindex="-1"></a>PAD, BOS, EOS <span class="op">=</span> <span class="dv">0</span>, <span class="dv">1</span>, <span class="dv">2</span>                             <span class="co"># special tokens first</span></span>
+<span id="cb2-32"><a href="#cb2-32" aria-hidden="true" tabindex="-1"></a>SRC <span class="op">=</span> <span class="bu">sorted</span>(<span class="bu">set</span>(<span class="st">""</span>.join(s <span class="cf">for</span> s, _ <span class="kw">in</span> pairs)))</span>
+<span id="cb2-33"><a href="#cb2-33" aria-hidden="true" tabindex="-1"></a>TGT <span class="op">=</span> <span class="bu">sorted</span>(<span class="bu">set</span>(<span class="st">""</span>.join(t <span class="cf">for</span> _, t <span class="kw">in</span> pairs)))</span>
+<span id="cb2-34"><a href="#cb2-34" aria-hidden="true" tabindex="-1"></a>src_stoi <span class="op">=</span> {c: i <span class="op">+</span> <span class="dv">3</span> <span class="cf">for</span> i, c <span class="kw">in</span> <span class="bu">enumerate</span>(SRC)}</span>
+<span id="cb2-35"><a href="#cb2-35" aria-hidden="true" tabindex="-1"></a>tgt_stoi <span class="op">=</span> {c: i <span class="op">+</span> <span class="dv">3</span> <span class="cf">for</span> i, c <span class="kw">in</span> <span class="bu">enumerate</span>(TGT)}</span>
+<span id="cb2-36"><a href="#cb2-36" aria-hidden="true" tabindex="-1"></a>tgt_itos <span class="op">=</span> {i: c <span class="cf">for</span> c, i <span class="kw">in</span> tgt_stoi.items()}</span>
+<span id="cb2-37"><a href="#cb2-37" aria-hidden="true" tabindex="-1"></a>V_src, V_tgt <span class="op">=</span> <span class="bu">len</span>(SRC) <span class="op">+</span> <span class="dv">3</span>, <span class="bu">len</span>(TGT) <span class="op">+</span> <span class="dv">3</span></span>
+<span id="cb2-38"><a href="#cb2-38" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"source vocab </span><span class="sc">{</span>V_src<span class="sc">}</span><span class="ss">, target vocab </span><span class="sc">{</span>V_tgt<span class="sc">}</span><span class="ss">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>('26 september 2024', '2024-09-26')
+('april 7, 1962', '1962-04-07')
+('12/15/1950', '1950-12-15')
+('14 february 1997', '1997-02-14')
+source vocab 37, target vocab 14</code></pre>
+</div>
+</div>
+<p>Three special tokens run the show, the same conventions as the course’s full translation pipeline: <code>&lt;pad&gt;</code> fills the short sequences of a batch out to a rectangle, <code>&lt;bos&gt;</code> tells the decoder “begin,” and <code>&lt;eos&gt;</code> lets the <em>model</em> say “I’m done” — remember, the machine must be free to choose its output length.</p>
+<p>One more new tool, and it earns a pause. Chapter 10 fed characters in as one-hot vectors. This chapter gives each token a learned vector instead: <code>nn.Embedding</code>, a table with one trainable row per vocabulary entry. There is no new math — an embedding is exactly a one-hot vector times a weight matrix, Chapter 1’s linear map wearing a lookup table’s clothes — but the reading matters: <em>the address is hard, the content is learned</em>. Row 17 is fetched by index, rigidly; what lives in row 17 is whatever training decides that token should mean. Keep the phrase “hard address, learned content” nearby: in <a href="../part4/13-attention.html" class="quarto-xref"><span>Chapter 13</span></a> we soften the address too, and that will be the whole story.</p>
+<div id="seq2seq-model" class="cell" data-execution_count="2">
+<details class="code-fold">
+<summary>Code: encoder, decoder, and the handoff</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Seq2Seq(nn.Module):</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, v_src: <span class="bu">int</span>, v_tgt: <span class="bu">int</span>, embed: <span class="bu">int</span> <span class="op">=</span> <span class="dv">32</span>,</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>                 hidden: <span class="bu">int</span> <span class="op">=</span> <span class="dv">128</span>, packed: <span class="bu">bool</span> <span class="op">=</span> <span class="va">True</span>):</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().<span class="fu">__init__</span>()</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.packed <span class="op">=</span> packed</span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.src_emb <span class="op">=</span> nn.Embedding(v_src, embed, padding_idx<span class="op">=</span>PAD)</span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.tgt_emb <span class="op">=</span> nn.Embedding(v_tgt, embed, padding_idx<span class="op">=</span>PAD)</span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.encoder <span class="op">=</span> nn.LSTM(embed, hidden, batch_first<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.decoder <span class="op">=</span> nn.LSTM(embed, hidden, batch_first<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.out <span class="op">=</span> nn.Linear(hidden, v_tgt)</span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> encode(<span class="va">self</span>, S, lengths):</span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>        e <span class="op">=</span> <span class="va">self</span>.src_emb(S)                          <span class="co"># (B, T_src, embed)</span></span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="va">self</span>.packed:                              <span class="co"># stop at each true length</span></span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a>            e <span class="op">=</span> nn.utils.rnn.pack_padded_sequence(</span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a>                e, lengths, batch_first<span class="op">=</span><span class="va">True</span>, enforce_sorted<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a>        _, state <span class="op">=</span> <span class="va">self</span>.encoder(e)</span>
+<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> state                                 <span class="co"># (h, c): the context</span></span>
+<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> forward(<span class="va">self</span>, S, lengths, T_in):             <span class="co"># teacher-forced pass</span></span>
+<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a>        o, _ <span class="op">=</span> <span class="va">self</span>.decoder(<span class="va">self</span>.tgt_emb(T_in), <span class="va">self</span>.encode(S, lengths))</span>
+<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="va">self</span>.out(o)                           <span class="co"># (B, T_tgt, V_tgt) logits</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+<p>The whole architecture is that <code>encode</code> return value: the LSTM’s final <span class="math inline">\((\vect{h},
+\vect{c})\)</span>, handed to the decoder as its <em>initial</em> state. Everything the decoder will ever know about the source crosses that bridge.</p>
+</section>
+<section id="the-padding-trap" class="level2" data-number="11.2">
+<h2 data-number="11.2" class="anchored" data-anchor-id="the-padding-trap"><span class="header-section-number">11.2</span> The padding trap</h2>
+<p>Before the machinery works, an honest detour through the way it <em>fails</em>, because the seed notes devote a full section to this and experience says everyone hits it once. Batching variable-length sequences means padding them to a rectangle, and padding poisons two places:</p>
+<ol type="1">
+<li><strong>The loss.</strong> Positions holding <code>&lt;pad&gt;</code> are not predictions to be graded. <code>F.cross_entropy(..., ignore_index=PAD)</code> excludes them — one argument, done.</li>
+<li><strong>The encoder.</strong> Subtler and far worse: an LSTM does not know your zeros are padding. It keeps stepping through them, and every pad step smears the final state — the context vector! — for every sequence shorter than the batch’s longest. Worse still, at inference you feed single sequences with <em>no</em> padding, so the model is tested in a regime it never trained in.</li>
+</ol>
+<p>Watch what that costs. Same model, same data, same budget — the only difference is whether the encoder is told the true lengths (<code>pack_padded_sequence</code>, which runs the recurrence only through each sequence’s real tokens):</p>
+<div id="padding-experiment" class="cell" data-execution_count="3">
+<details class="code-fold">
+<summary>Code: train twice — naive right-padding vs.&nbsp;packed sequences</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> batchify(prs, idx):</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    srcs <span class="op">=</span> [torch.tensor([src_stoi[c] <span class="cf">for</span> c <span class="kw">in</span> prs[i][<span class="dv">0</span>]]) <span class="cf">for</span> i <span class="kw">in</span> idx]</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    lengths <span class="op">=</span> torch.tensor([<span class="bu">len</span>(s) <span class="cf">for</span> s <span class="kw">in</span> srcs])</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    tgts <span class="op">=</span> [torch.tensor([BOS] <span class="op">+</span> [tgt_stoi[c] <span class="cf">for</span> c <span class="kw">in</span> prs[i][<span class="dv">1</span>]] <span class="op">+</span> [EOS])</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> i <span class="kw">in</span> idx]</span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>    S <span class="op">=</span> nn.utils.rnn.pad_sequence(srcs, batch_first<span class="op">=</span><span class="va">True</span>, padding_value<span class="op">=</span>PAD)</span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>    T <span class="op">=</span> nn.utils.rnn.pad_sequence(tgts, batch_first<span class="op">=</span><span class="va">True</span>, padding_value<span class="op">=</span>PAD)</span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> S, lengths, T</span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> train_seq2seq(mode: <span class="bu">str</span> <span class="op">=</span> <span class="st">"tf"</span>, packed: <span class="bu">bool</span> <span class="op">=</span> <span class="va">True</span>, epochs: <span class="bu">int</span> <span class="op">=</span> <span class="dv">25</span>,</span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>                  seed: <span class="bu">int</span> <span class="op">=</span> <span class="dv">6050</span>, batch: <span class="bu">int</span> <span class="op">=</span> <span class="dv">128</span>, checkpoints<span class="op">=</span>()):</span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>    torch.manual_seed(seed)</span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>    model <span class="op">=</span> Seq2Seq(V_src, V_tgt, packed<span class="op">=</span>packed)</span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>    opt <span class="op">=</span> torch.optim.Adam(model.parameters(), lr<span class="op">=</span><span class="fl">1e-3</span>)</span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>    n, curve <span class="op">=</span> <span class="bu">len</span>(train_pairs), {}</span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> ep <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">1</span>, epochs <span class="op">+</span> <span class="dv">1</span>):</span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>        perm <span class="op">=</span> torch.randperm(n)</span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">0</span>, n, batch):</span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a>            S, L, T <span class="op">=</span> batchify(train_pairs, perm[i:i <span class="op">+</span> batch].tolist())</span>
+<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> mode <span class="op">==</span> <span class="st">"tf"</span>:                         <span class="co"># gold rail: one parallel pass</span></span>
+<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a>                logits <span class="op">=</span> model(S, L, T[:, :<span class="op">-</span><span class="dv">1</span>])</span>
+<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a>            <span class="cf">else</span>:                                    <span class="co"># free-running: its own rail</span></span>
+<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a>                state <span class="op">=</span> model.encode(S, L)</span>
+<span id="cb5-24"><a href="#cb5-24" aria-hidden="true" tabindex="-1"></a>                tok, outs <span class="op">=</span> T[:, :<span class="dv">1</span>], []</span>
+<span id="cb5-25"><a href="#cb5-25" aria-hidden="true" tabindex="-1"></a>                <span class="cf">for</span> t <span class="kw">in</span> <span class="bu">range</span>(T.shape[<span class="dv">1</span>] <span class="op">-</span> <span class="dv">1</span>):</span>
+<span id="cb5-26"><a href="#cb5-26" aria-hidden="true" tabindex="-1"></a>                    o, state <span class="op">=</span> model.decoder(model.tgt_emb(tok), state)</span>
+<span id="cb5-27"><a href="#cb5-27" aria-hidden="true" tabindex="-1"></a>                    logit <span class="op">=</span> model.out(o)</span>
+<span id="cb5-28"><a href="#cb5-28" aria-hidden="true" tabindex="-1"></a>                    outs.append(logit)</span>
+<span id="cb5-29"><a href="#cb5-29" aria-hidden="true" tabindex="-1"></a>                    tok <span class="op">=</span> logit.argmax(<span class="op">-</span><span class="dv">1</span>)           <span class="co"># feed its own prediction</span></span>
+<span id="cb5-30"><a href="#cb5-30" aria-hidden="true" tabindex="-1"></a>                logits <span class="op">=</span> torch.cat(outs, <span class="dv">1</span>)</span>
+<span id="cb5-31"><a href="#cb5-31" aria-hidden="true" tabindex="-1"></a>            loss <span class="op">=</span> F.cross_entropy(logits.reshape(<span class="op">-</span><span class="dv">1</span>, V_tgt),</span>
+<span id="cb5-32"><a href="#cb5-32" aria-hidden="true" tabindex="-1"></a>                                   T[:, <span class="dv">1</span>:].reshape(<span class="op">-</span><span class="dv">1</span>), ignore_index<span class="op">=</span>PAD)</span>
+<span id="cb5-33"><a href="#cb5-33" aria-hidden="true" tabindex="-1"></a>            opt.zero_grad()<span class="op">;</span> loss.backward()</span>
+<span id="cb5-34"><a href="#cb5-34" aria-hidden="true" tabindex="-1"></a>            nn.utils.clip_grad_norm_(model.parameters(), <span class="fl">5.0</span>)</span>
+<span id="cb5-35"><a href="#cb5-35" aria-hidden="true" tabindex="-1"></a>            opt.step()</span>
+<span id="cb5-36"><a href="#cb5-36" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> ep <span class="kw">in</span> checkpoints:</span>
+<span id="cb5-37"><a href="#cb5-37" aria-hidden="true" tabindex="-1"></a>            curve[ep] <span class="op">=</span> exact_match(model, test_pairs[:<span class="dv">400</span>])</span>
+<span id="cb5-38"><a href="#cb5-38" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> model, curve</span>
+<span id="cb5-39"><a href="#cb5-39" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-40"><a href="#cb5-40" aria-hidden="true" tabindex="-1"></a><span class="at">@torch.no_grad</span>()</span>
+<span id="cb5-41"><a href="#cb5-41" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> translate(model, src: <span class="bu">str</span>, maxlen: <span class="bu">int</span> <span class="op">=</span> <span class="dv">12</span>):</span>
+<span id="cb5-42"><a href="#cb5-42" aria-hidden="true" tabindex="-1"></a>    S <span class="op">=</span> torch.tensor([[src_stoi[c] <span class="cf">for</span> c <span class="kw">in</span> src]])</span>
+<span id="cb5-43"><a href="#cb5-43" aria-hidden="true" tabindex="-1"></a>    state <span class="op">=</span> model.encode(S, torch.tensor([<span class="bu">len</span>(src)]))</span>
+<span id="cb5-44"><a href="#cb5-44" aria-hidden="true" tabindex="-1"></a>    tok, out <span class="op">=</span> torch.tensor([[BOS]]), <span class="st">""</span></span>
+<span id="cb5-45"><a href="#cb5-45" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(maxlen):</span>
+<span id="cb5-46"><a href="#cb5-46" aria-hidden="true" tabindex="-1"></a>        o, state <span class="op">=</span> model.decoder(model.tgt_emb(tok), state)</span>
+<span id="cb5-47"><a href="#cb5-47" aria-hidden="true" tabindex="-1"></a>        tok <span class="op">=</span> model.out(o).argmax(<span class="op">-</span><span class="dv">1</span>)                <span class="co"># greedy: best next char</span></span>
+<span id="cb5-48"><a href="#cb5-48" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> tok.item() <span class="op">==</span> EOS:</span>
+<span id="cb5-49"><a href="#cb5-49" aria-hidden="true" tabindex="-1"></a>            <span class="cf">break</span></span>
+<span id="cb5-50"><a href="#cb5-50" aria-hidden="true" tabindex="-1"></a>        out <span class="op">+=</span> tgt_itos.get(tok.item(), <span class="st">"?"</span>)</span>
+<span id="cb5-51"><a href="#cb5-51" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> out</span>
+<span id="cb5-52"><a href="#cb5-52" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-53"><a href="#cb5-53" aria-hidden="true" tabindex="-1"></a><span class="at">@torch.no_grad</span>()</span>
+<span id="cb5-54"><a href="#cb5-54" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> exact_match(model, prs):</span>
+<span id="cb5-55"><a href="#cb5-55" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="bu">sum</span>(translate(model, s) <span class="op">==</span> t <span class="cf">for</span> s, t <span class="kw">in</span> prs) <span class="op">/</span> <span class="bu">len</span>(prs)</span>
+<span id="cb5-56"><a href="#cb5-56" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-57"><a href="#cb5-57" aria-hidden="true" tabindex="-1"></a><span class="co"># the unambiguous test set: one defensible answer exists</span></span>
+<span id="cb5-58"><a href="#cb5-58" aria-hidden="true" tabindex="-1"></a>unamb <span class="op">=</span> [(s, t) <span class="cf">for</span> s, t <span class="kw">in</span> test_pairs</span>
+<span id="cb5-59"><a href="#cb5-59" aria-hidden="true" tabindex="-1"></a>         <span class="cf">if</span> <span class="st">"/"</span> <span class="kw">not</span> <span class="kw">in</span> s <span class="kw">or</span> <span class="bu">int</span>(s[:<span class="dv">2</span>]) <span class="op">&gt;</span> <span class="dv">12</span> <span class="kw">or</span> <span class="bu">int</span>(s[<span class="dv">3</span>:<span class="dv">5</span>]) <span class="op">&gt;</span> <span class="dv">12</span>]</span>
+<span id="cb5-60"><a href="#cb5-60" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-61"><a href="#cb5-61" aria-hidden="true" tabindex="-1"></a>naive, _ <span class="op">=</span> train_seq2seq(packed<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb5-62"><a href="#cb5-62" aria-hidden="true" tabindex="-1"></a>packed, _ <span class="op">=</span> train_seq2seq(packed<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb5-63"><a href="#cb5-63" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"naive right-padding:   exact match </span><span class="sc">{</span>exact_match(naive, unamb)<span class="sc">:.1%}</span><span class="ss">"</span>)</span>
+<span id="cb5-64"><a href="#cb5-64" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"packed (true lengths): exact match </span><span class="sc">{</span>exact_match(packed, unamb)<span class="sc">:.1%}</span><span class="ss">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>naive right-padding:   exact match 39.8%
+packed (true lengths): exact match 98.5%</code></pre>
+</div>
+</div>
+<p>Fifty-nine points. Not from a better architecture, optimizer, or dataset — from telling the encoder where the sentences actually end. Let the number sink in, because this is the cheapest lesson in the book: the two runs are identical except for bookkeeping, and the bookkeeping was worth more than every design decision in Part III so far.</p>
 <div class="callout callout-style-default callout-warning callout-titled">
 <div class="callout-header d-flex align-content-center">
 <div class="callout-icon-container">
 <i class="callout-icon"></i>
 </div>
 <div class="callout-title-container flex-fill">
-Warning
+<span class="screen-reader-only">Warning</span>The model will happily read your padding
 </div>
 </div>
 <div class="callout-body-container callout-body">
-<p><strong>Chapter stub.</strong> This chapter is planned but not yet written. The abstract below is its contract; drafting sources are listed for provenance.</p>
+<p>Nothing in the tensor marks <code>&lt;pad&gt;</code> as meaningless; meaning is something <em>you</em> enforce, in two places: <code>ignore_index</code> for the loss, <code>pack_padded_sequence</code> (or an explicit mask) for the encoder. When a sequence model underperforms mysteriously, audit the padding before touching the architecture. And file the general shape of this tool away: telling a model <em>which positions it may not look at</em> is called <strong>masking</strong>, and it returns center-stage in <a href="../part4/14-self-attention-transformer.html" class="quarto-xref"><span>Chapter 14</span></a>, where a <em>causal</em> mask is what turns a transformer into a language model.</p>
 </div>
 </div>
-<p><em>Compress a sentence into a vector, then unroll it in another language. Teacher forcing, scheduled sampling, beam search — and the fixed bottleneck that sets up everything in Part IV.</em></p>
-<!-- draft-sources
-seeds:
-- `sources/7.2-TF-Beam.tex`
-- `sources/Bridge_to_attention.tex`
-- `code/train_seq2seq.py + rnn_data_prep.py`
-transcripts:
-- `m06 lectures (all three)`
-- `[coding]_m06 parts 2-3`
--->
+</section>
+<section id="teacher-forcing-training-on-the-gold-rail" class="level2" data-number="11.3">
+<h2 data-number="11.3" class="anchored" data-anchor-id="teacher-forcing-training-on-the-gold-rail"><span class="header-section-number">11.3</span> Teacher forcing: training on the gold rail</h2>
+<p>Look back at the two <code>mode</code> branches in the training loop; they are this section. When the decoder is trained, what should it see as <em>its own previous output</em>?</p>
+<p><strong>Free-running</strong> (“fr”) is the honest answer: feed the model’s own predictions back in, exactly as at inference. But its flaws are structural. Early in training those predictions are garbage <span class="math inline">\(\rightarrow\)</span> the decoder learns conditioned on garbage <span class="math inline">\(\rightarrow\)</span> every sequence must be generated token-by-token in a Python loop, because step <span class="math inline">\(t\)</span>’s input does not exist until step <span class="math inline">\(t-1\)</span> is computed. Slow, and unstable exactly when training is young.</p>
+<p><strong>Teacher forcing</strong> (“tf”) conditions each step on the <em>ground-truth</em> previous token instead — the gold rail. Every conditioning input is then known in advance <span class="math inline">\(\rightarrow\)</span> the entire target trains in <strong>one parallel decoder pass</strong> (that is the whole <code>model(S, L, T[:, :-1])</code> line), and every step learns from a sensible context from epoch one. Watch both effects:</p>
+<div id="cell-fig-tf-vs-fr" class="cell" data-execution_count="4">
+<details class="code-fold">
+<summary>Code: teacher forcing vs.&nbsp;free-running, learning curves</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>cps <span class="op">=</span> (<span class="dv">2</span>, <span class="dv">4</span>, <span class="dv">6</span>, <span class="dv">8</span>, <span class="dv">12</span>, <span class="dv">16</span>, <span class="dv">20</span>, <span class="dv">25</span>)</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>tf_model, tf_curve <span class="op">=</span> train_seq2seq(<span class="st">"tf"</span>, checkpoints<span class="op">=</span>cps)</span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>fr_model, fr_curve <span class="op">=</span> train_seq2seq(<span class="st">"fr"</span>, checkpoints<span class="op">=</span>cps)</span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"final exact match (unambiguous): TF </span><span class="sc">{</span>exact_match(tf_model, unamb)<span class="sc">:.1%}</span><span class="ss">, "</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>      <span class="ss">f"FR </span><span class="sc">{</span>exact_match(fr_model, unamb)<span class="sc">:.1%}</span><span class="ss">"</span>)</span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>plt.figure(figsize<span class="op">=</span>(<span class="dv">6</span>, <span class="fl">3.2</span>))</span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>plt.plot(cps, [tf_curve[c] <span class="cf">for</span> c <span class="kw">in</span> cps], <span class="st">"o-"</span>, color<span class="op">=</span><span class="st">"#232D4B"</span>, lw<span class="op">=</span><span class="dv">2</span>,</span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>         label<span class="op">=</span><span class="st">"teacher forcing"</span>)</span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>plt.plot(cps, [fr_curve[c] <span class="cf">for</span> c <span class="kw">in</span> cps], <span class="st">"s-"</span>, color<span class="op">=</span><span class="st">"#E57200"</span>, lw<span class="op">=</span><span class="dv">2</span>,</span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>         label<span class="op">=</span><span class="st">"free-running"</span>)</span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>plt.xlabel(<span class="st">"epoch"</span>)<span class="op">;</span> plt.ylabel(<span class="st">"exact match"</span>)</span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a>plt.legend()<span class="op">;</span> plt.tight_layout()<span class="op">;</span> plt.show()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>final exact match (unambiguous): TF 98.5%, FR 99.4%</code></pre>
+</div>
+<div class="cell-output cell-output-display">
+<div id="fig-tf-vs-fr" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-tf-vs-fr-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="11-encoder-decoder_files/figure-html/fig-tf-vs-fr-output-2.png" width="567" height="297" class="figure-img">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-tf-vs-fr-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;11.1: Learning curves under the two training modes (exact-match on 400 held-out dates). Teacher forcing leads through the early and middle epochs (40% vs.&nbsp;33% at epoch 6, 86% vs.&nbsp;80% at 12) — and each of its epochs is one parallel decoder pass where free-running needs a token-by-token loop. The honest fine print: on this small task free-running closes the gap by epoch 16 and ends fractionally ahead, because it never suffers the train/inference mismatch described below.
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<p>So teacher forcing is the pragmatic default: parallel, stable, fast out of the gate. What it costs has a name. A teacher-forced decoder has <em>only ever seen perfect histories</em>. At inference it must condition on its own imperfect predictions — a distribution it never trained on. This mismatch is <strong>exposure bias</strong>: the model never learned to recover from its own mistakes, so one early slip can send the rest of the sequence somewhere strange. You can see the shape of this failure in our model’s rare residual errors:</p>
+<div id="error-gallery" class="cell" data-execution_count="5">
+<details class="code-fold">
+<summary>Code: the residual errors, up close</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>errs <span class="op">=</span> [(s, t, translate(tf_model, s))</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> s, t <span class="kw">in</span> unamb <span class="cf">if</span> translate(tf_model, s) <span class="op">!=</span> t]</span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"</span><span class="sc">{</span><span class="bu">len</span>(errs)<span class="sc">}</span><span class="ss"> errors on </span><span class="sc">{</span><span class="bu">len</span>(unamb)<span class="sc">}</span><span class="ss"> unambiguous dates; a sample:"</span>)</span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> s, t, g <span class="kw">in</span> errs[:<span class="dv">3</span>]:</span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"  </span><span class="sc">{</span>s<span class="sc">!r}</span><span class="ss"> -&gt; </span><span class="sc">{</span>g<span class="sc">!r}</span><span class="ss">   (truth </span><span class="sc">{</span>t<span class="sc">}</span><span class="ss">)"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>13 errors on 849 unambiguous dates; a sample:
+  '30/11/1961' -&gt; '1961-11-03'   (truth 1961-11-30)
+  '07/31/1955' -&gt; '1955-01-04'   (truth 1955-07-31)
+  '03/22/1956' -&gt; '1956-02-31'   (truth 1956-03-22)</code></pre>
+</div>
+</div>
+<p>Look at that third specimen: February 31st. Each character locally plausible given the last, the whole confidently impossible. Off the gold rail, the decoder does not consult the source so much as <em>invent</em> — hold that thought two sections.</p>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Note</span>Scheduled sampling: renting the rail
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>The engineered compromise (Bengio et al., 2015): during training, at <em>each timestep</em> flip a biased coin — probability <span class="math inline">\(\epsilon\)</span> of the gold token, <span class="math inline">\(1 -
+\epsilon\)</span> of the model’s own prediction — and anneal <span class="math inline">\(\epsilon\)</span> from 1 toward 0 as training matures. Early epochs enjoy the gold rail; late epochs practice recovery. One design detail from the original paper worth repeating: flip <strong>per token, not per sequence</strong> — committing a whole sequence to model predictions early in training lets consecutive errors amplify. Exercise 3 has you build it.</p>
+</div>
+</div>
+</section>
+<section id="getting-answers-out-search" class="level2" data-number="11.4">
+<h2 data-number="11.4" class="anchored" data-anchor-id="getting-answers-out-search"><span class="header-section-number">11.4</span> Getting answers out: search</h2>
+<p>Training is settled; now the neglected half. At inference the decoder defines a probability for every possible output sequence, and we want the best one. That is a <em>search problem</em> over a tree where every node branches <span class="math inline">\(V_{\text{tgt}}\)</span> ways — exhaustive search is <span class="math inline">\(V^{T}\)</span>, hopeless. Everything practical is a heuristic walk through that tree.</p>
+<p><strong>Greedy search</strong> — what <code>translate</code> above already does — takes the single most probable token at each step and never looks back. Complexity <span class="math inline">\(O(V \cdot T)\)</span>, quality: usually fine, occasionally myopic. The failure mode is structural: a token that looks best <em>right now</em> can commit the decoder to a mediocre continuation, when a slightly worse token now would have opened a much better path. Maximizing each step is not maximizing the sequence — you met this exact gap in <a href="../part1/02-logistic-softmax.html" class="quarto-xref"><span>Chapter 2</span></a>, where the hard max’s stepwise confidence hid the alternatives softmax kept alive.</p>
+<p><strong>Beam search</strong> widens the walk: carry the <span class="math inline">\(k\)</span> best partial sequences (the <em>beam</em>), expand each by all <span class="math inline">\(V\)</span> tokens, keep the top <span class="math inline">\(k\)</span> by <em>cumulative</em> log-probability, repeat. Complexity <span class="math inline">\(O(k \cdot V \cdot T)\)</span> — a small multiple of greedy, nothing like exhaustive.</p>
+<div id="beam-search" class="cell" data-execution_count="6">
+<details class="code-fold">
+<summary>Code: beam search, k candidate rails at once</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="at">@torch.no_grad</span>()</span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> beam_search(model, src: <span class="bu">str</span>, k: <span class="bu">int</span> <span class="op">=</span> <span class="dv">5</span>, maxlen: <span class="bu">int</span> <span class="op">=</span> <span class="dv">12</span>):</span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>    S <span class="op">=</span> torch.tensor([[src_stoi[c] <span class="cf">for</span> c <span class="kw">in</span> src]])</span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>    state <span class="op">=</span> model.encode(S, torch.tensor([<span class="bu">len</span>(src)]))</span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>    beams <span class="op">=</span> [([], <span class="fl">0.0</span>, state, <span class="va">False</span>)]               <span class="co"># (tokens, logp, state, done)</span></span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(maxlen):</span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>        cand <span class="op">=</span> []</span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> seq, lp, st, done <span class="kw">in</span> beams:</span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> done:</span>
+<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a>                cand.append((seq, lp, st, <span class="va">True</span>))<span class="op">;</span> <span class="cf">continue</span></span>
+<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a>            tok <span class="op">=</span> torch.tensor([[seq[<span class="op">-</span><span class="dv">1</span>] <span class="cf">if</span> seq <span class="cf">else</span> BOS]])</span>
+<span id="cb11-12"><a href="#cb11-12" aria-hidden="true" tabindex="-1"></a>            o, st2 <span class="op">=</span> model.decoder(model.tgt_emb(tok), st)</span>
+<span id="cb11-13"><a href="#cb11-13" aria-hidden="true" tabindex="-1"></a>            logp <span class="op">=</span> F.log_softmax(model.out(o)[<span class="dv">0</span>, <span class="op">-</span><span class="dv">1</span>], <span class="op">-</span><span class="dv">1</span>)</span>
+<span id="cb11-14"><a href="#cb11-14" aria-hidden="true" tabindex="-1"></a>            top <span class="op">=</span> torch.topk(logp, k)</span>
+<span id="cb11-15"><a href="#cb11-15" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> lg, ix <span class="kw">in</span> <span class="bu">zip</span>(top.values, top.indices):</span>
+<span id="cb11-16"><a href="#cb11-16" aria-hidden="true" tabindex="-1"></a>                cand.append((seq <span class="op">+</span> [ix.item()], lp <span class="op">+</span> lg.item(), st2,</span>
+<span id="cb11-17"><a href="#cb11-17" aria-hidden="true" tabindex="-1"></a>                             ix.item() <span class="op">==</span> EOS))</span>
+<span id="cb11-18"><a href="#cb11-18" aria-hidden="true" tabindex="-1"></a>        beams <span class="op">=</span> <span class="bu">sorted</span>(cand, key<span class="op">=</span><span class="kw">lambda</span> b: <span class="op">-</span>b[<span class="dv">1</span>])[:k]</span>
+<span id="cb11-19"><a href="#cb11-19" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="bu">all</span>(b[<span class="dv">3</span>] <span class="cf">for</span> b <span class="kw">in</span> beams):</span>
+<span id="cb11-20"><a href="#cb11-20" aria-hidden="true" tabindex="-1"></a>            <span class="cf">break</span></span>
+<span id="cb11-21"><a href="#cb11-21" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> [(<span class="st">""</span>.join(tgt_itos.get(i, <span class="st">"?"</span>) <span class="cf">for</span> i <span class="kw">in</span> seq <span class="cf">if</span> i <span class="op">&gt;</span> <span class="dv">2</span>), lp)</span>
+<span id="cb11-22"><a href="#cb11-22" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> seq, lp, _, _ <span class="kw">in</span> beams]</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+<p>Now the payoff, and it is exactly where we buried it: the ambiguous dates. For <code>03/05/2021</code>, “the one best answer” is the wrong question — the training world itself was split 70/30 between two readings. Greedy silently hands you one sequence. Beam search hands you the <em>distribution</em>:</p>
+<div id="beam-demo" class="cell" data-execution_count="7">
+<details class="code-fold">
+<summary>Code: beam search on genuinely ambiguous dates</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>amb <span class="op">=</span> [(s, t) <span class="cf">for</span> s, t <span class="kw">in</span> test_pairs</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>       <span class="cf">if</span> <span class="st">"/"</span> <span class="kw">in</span> s <span class="kw">and</span> <span class="bu">int</span>(s[:<span class="dv">2</span>]) <span class="op">&lt;=</span> <span class="dv">12</span> <span class="kw">and</span> <span class="bu">int</span>(s[<span class="dv">3</span>:<span class="dv">5</span>]) <span class="op">&lt;=</span> <span class="dv">12</span>]</span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> s, t <span class="kw">in</span> amb[:<span class="dv">4</span>]:</span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"</span><span class="sc">{</span>s<span class="sc">!r}</span><span class="ss">   greedy: </span><span class="sc">{</span>translate(tf_model, s)<span class="sc">!r}</span><span class="ss">"</span>)</span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> text, lp <span class="kw">in</span> beam_search(tf_model, s, k<span class="op">=</span><span class="dv">4</span>)[:<span class="dv">2</span>]:</span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(<span class="ss">f"   beam: </span><span class="sc">{</span>text<span class="sc">!r}</span><span class="ss">   p = </span><span class="sc">{</span>torch<span class="sc">.</span>tensor(lp)<span class="sc">.</span>exp()<span class="sc">:.2f}</span><span class="ss">"</span>)</span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>'10/09/1976'   greedy: '1976-10-09'
+   beam: '1976-10-09'   p = 0.62
+   beam: '1976-09-10'   p = 0.33
+
+'07/07/2022'   greedy: '2022-07-07'
+   beam: '2022-07-07'   p = 0.96
+   beam: '2022-07-05'   p = 0.01
+
+'01/07/1978'   greedy: '1978-01-07'
+   beam: '1978-01-07'   p = 0.71
+   beam: '1978-07-01'   p = 0.23
+
+'09/01/1965'   greedy: '1965-09-10'
+   beam: '1965-01-09'   p = 0.45
+   beam: '1965-09-10'   p = 0.41
+</code></pre>
+</div>
+</div>
+<p>Read those pairs of hypotheses. The two beam candidates are the two <em>readings</em> — month/day and day/month — and their probabilities sit near the 70/30 convention split the data was generated with: the model has learned not just to translate but to represent its own uncertainty, and beam search is the tool that lets you <em>see</em> it. When the two readings coincide, as in <code>07/07/2022</code>, the top candidate absorbs nearly all the mass — the ambiguity was never real for that date, and the beam says so. Best of all, watch for a greedy line that <em>fumbles</em> one of these: starting down one reading, switching midway, emitting a date that is neither, while the beam’s top candidate stays coherent. Myopia, caught in the wild.</p>
+<p>Honesty requires the other half of the report:</p>
+<div id="beam-vs-greedy-stat" class="cell" data-execution_count="8">
+<details class="code-fold">
+<summary>Code: how often beam actually changes the answer</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>sub <span class="op">=</span> random.Random(<span class="dv">0</span>).sample(test_pairs, <span class="dv">200</span>)</span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>n_diff <span class="op">=</span> <span class="bu">sum</span>(beam_search(tf_model, s, k<span class="op">=</span><span class="dv">5</span>)[<span class="dv">0</span>][<span class="dv">0</span>] <span class="op">!=</span> translate(tf_model, s)</span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>             <span class="cf">for</span> s, _ <span class="kw">in</span> sub)</span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"beam-5 disagrees with greedy on </span><span class="sc">{</span>n_diff<span class="sc">}</span><span class="ss"> of </span><span class="sc">{</span><span class="bu">len</span>(sub)<span class="sc">}</span><span class="ss"> test dates"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>beam-5 disagrees with greedy on 1 of 200 test dates</code></pre>
+</div>
+</div>
+<p>On this small, well-trained model, beam search changes almost nothing. Beam search earns its keep at the margins — but real translation, with vocabularies of tens of thousands and long sentences, lives entirely at those margins, which is why every production decoder of the seq2seq era ran a beam.</p>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Note</span>Length normalization
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>Summed log-probabilities shrink as sequences grow <span class="math inline">\(\rightarrow\)</span> a raw beam quietly favors short outputs. The standard correction divides the score by <span class="math inline">\(L^{\alpha}\)</span> with <span class="math inline">\(\alpha \approx 0.6\)</span>–<span class="math inline">\(0.75\)</span>. Our dates all have the same length, so the bias is invisible here (Exercise 4 makes you verify that, and why); in free-length generation it matters enormously.</p>
+</div>
+</div>
+<div class="callout callout-style-default callout-caution callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Caution</span>GPU run pending
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p><strong>Planned:</strong> the real thing — English→French seq2seq on a full parallel corpus, with the course’s <code>train_seq2seq.py</code> pipeline (two-layer LSTMs, dropout, sequence bucketing for throughput, BLEU evaluation), comparing greedy vs.&nbsp;beam widths. <strong>Meanwhile:</strong> the date laboratory above demonstrates every mechanism at CPU scale.</p>
+</div>
+</div>
+</section>
+<section id="the-vector-in-the-middle" class="level2" data-number="11.5">
+<h2 data-number="11.5" class="anchored" data-anchor-id="the-vector-in-the-middle"><span class="header-section-number">11.5</span> The vector in the middle</h2>
+<p>Time to stare at the handoff. Every property of the source that the decoder will ever use crossed one bridge: a 128-number state. Our task fits — a date is three facts — and still the fingerprints of strain show. The residual errors are order-slips and inventions (<code>1956-02-31</code>), the signature of a decoder reconstructing from a compressed summary rather than consulting the source. Now scale the ambition: a forty-word sentence, clause structure, names, negations — all crammed through the same fixed pipe, <em>regardless of length</em>. Chapter 10 called this the price of the Markov claim; here the bill arrives itemized.</p>
+<p>And notice what the architecture throws away: the encoder <em>had</em> a state at every step — a whole trajectory of summaries, one per source position — and we kept only the last. The fix that defines Part IV is almost embarrassingly direct: keep them all, and let the decoder <em>look back</em> at whichever ones matter for the token it is writing right now. Choosing where to look, by similarity, on the fly — you have owned the primitive since Chapter 1’s dot product, and Chapter 2 promised you the “soft lookup” that makes it differentiable. <a href="../part4/12-kernel-regression.html" class="quarto-xref"><span>Chapter 12</span></a> builds the classical version; <a href="../part4/13-attention.html" class="quarto-xref"><span>Chapter 13</span></a> makes it learnable and comes back for this very date task with an alignment map to show where the decoder looks.</p>
+</section>
+<section id="okay-so" class="level2" data-number="11.6">
+<h2 data-number="11.6" class="anchored" data-anchor-id="okay-so"><span class="header-section-number">11.6</span> Okay, so —</h2>
+<ol type="1">
+<li><strong>Encoder–decoder = two RNNs and a handoff</strong>: read the source into a final state, hand it over, generate from it. <code>&lt;bos&gt;</code> starts the decoder, <code>&lt;eos&gt;</code> lets it choose its length, embeddings replace one-hots (hard address, learned content).</li>
+<li><strong>Padding poisons twice</strong>: the loss (<code>ignore_index</code>) and the encoder (<code>pack_padded_sequence</code>). Same model, same budget: 39.8% naive versus 98.5% packed. Audit bookkeeping before architecture.</li>
+<li><strong>Teacher forcing</strong> trains the decoder on the gold rail: one parallel pass, stable early learning — at the cost of <strong>exposure bias</strong>, the train/inference mismatch that free-running avoids by paying with speed and early instability. Scheduled sampling anneals between them, flipping per token.</li>
+<li><strong>Decoding is search.</strong> Greedy maximizes steps, not sequences; beam search carries <span class="math inline">\(k\)</span> rails for <span class="math inline">\(O(k V T)\)</span> and surfaces the model’s genuine uncertainty — our ambiguous dates come back as two readings at roughly the 70/30 training split. Length normalization (<span class="math inline">\(L^{\alpha}\)</span>) keeps long outputs competitive.</li>
+<li><strong>The bottleneck is now the story.</strong> One fixed vector between reader and writer, regardless of input length; errors that look like invention, not lookup. The encoder’s per-step states were there all along — Part IV is what happens when we stop throwing them away.</li>
+</ol>
+</section>
+<section id="exercises" class="level2 unnumbered">
+<h2 class="unnumbered anchored" data-anchor-id="exercises">Exercises</h2>
+<ol type="1">
+<li><strong>(Pencil.)</strong> Count this chapter’s parameters: two embeddings, two LSTMs, one output layer (<span class="math inline">\(V_{\text{src}} = 37\)</span>, <span class="math inline">\(V_{\text{tgt}} = 14\)</span>, embed 32, hidden 128; an LSTM holds <span class="math inline">\(4\left[(e + h)h + 2h\right]\)</span> — derive that first). Where do most parameters live, and why is the answer different from Chapter 8’s LeNet audit?</li>
+<li><strong>(Pencil.)</strong> With vocabulary <span class="math inline">\(10^4\)</span> and output length 10, compare the number of sequences examined by exhaustive search, greedy, and beam-5. Then explain why beam search with <span class="math inline">\(k = V^{T}\)</span> is exact and with <span class="math inline">\(k = 1\)</span> is greedy — and why neither endpoint is usable.</li>
+<li><strong>(Code.)</strong> Implement scheduled sampling: per token, use the gold input with probability <span class="math inline">\(\epsilon\)</span>, the model’s own prediction otherwise, annealing <span class="math inline">\(\epsilon\)</span> linearly <span class="math inline">\(1 \to 0\)</span> over 25 epochs. Compare its learning curve with both curves in <a href="#fig-tf-vs-fr" class="quarto-xref">Figure&nbsp;<span>11.1</span></a>. Does it inherit teacher forcing’s fast start <em>and</em> free-running’s finish?</li>
+<li><strong>(Code.)</strong> Add length normalization (<span class="math inline">\(/L^{\alpha}\)</span>) to <code>beam_search</code> and sweep <span class="math inline">\(\alpha \in \{0, 0.7, 1\}\)</span> on the date task. Nothing should change — explain precisely why, and design the smallest change to the <em>task</em> that would make <span class="math inline">\(\alpha\)</span> matter.</li>
+<li><strong>(Code.)</strong> Sutskever et al.&nbsp;(2014) famously improved translation by feeding the source sentence <em>reversed</em>. Try it here. Whatever you observe, explain it with this chapter’s tools: which source-target dependencies does reversal shorten in their setting, and which does it shorten — or lengthen — for dates, where the year sits at the end of the source but the start of the target?</li>
+</ol>
 
 
+</section>
 
 </main> <!-- /main -->
 <script id="quarto-html-after-body" type="application/javascript">
@@ -824,7 +1275,7 @@ transcripts:
 </div>   
     <div class="nav-footer-center">
       &nbsp;
-    <div class="toc-actions"><ul><li><a href="https://github.com/Shakeri-Lab/dl-book/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
+    <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/Shakeri-Lab/dl-book/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
 <p>Companion to <a href="https://shakeri-lab.github.io/dl-course-site/">DS 6050 Deep Learning</a></p>
 </div>
