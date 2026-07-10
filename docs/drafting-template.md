@@ -59,7 +59,9 @@ course-companion book for DS 6050 (UVA), written in Professor Heman Shakeri's vo
   sentences that a later chapter can call back to (precedents: "a dot product is a
   similarity score" and "prediction as a weighted combination of training targets" in
   Chapter 1, both harvested by Chapter 12). Check the target chapter's stub abstract for
-  the seeds it expects.
+  the seeds it expects. **The authoritative seed/harvest contract is
+  `docs/arc-seeds.md`** — consult it before drafting (harvest every due seed by
+  name, plant contracted ones) and update it after shipping.
 
 ---
 

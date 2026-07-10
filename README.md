@@ -42,6 +42,12 @@ lecture transcripts, and his roadmap essay — see `docs/drafting-template.md` a
 quality gates, failure modes) is in [CLAUDE.md](CLAUDE.md) — it is auto-loaded by Claude
 Code sessions working in this repo.
 
+**Continuing or contributing?** Start with [docs/CONTINUING.md](docs/CONTINUING.md)
+(project status, working protocol, standing author rules, roadmap for the remaining
+chapters) and [docs/arc-seeds.md](docs/arc-seeds.md) (the cross-chapter seed/harvest
+ledger every new chapter must respect). These documents are the project's persistent
+memory and are updated after every shipped chapter.
+
 ## License
 
 - **Text and figures:** [CC BY-NC-SA 4.0](LICENSE-text.md)

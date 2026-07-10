@@ -5,6 +5,12 @@ DS 6050 (Heman Shakeri, UVA). This file is the operating manual for working on i
 Claude Code. Read `docs/style-guide.md` before writing any prose — every chapter must
 read like his lectures.
 
+**Continuing the project (fresh session/account): read `docs/CONTINUING.md`** —
+project status, the refined working protocol (pre-testing!), all standing author
+rules, honesty-gate case law, and the remaining-chapter roadmap. Then
+`docs/arc-seeds.md` — the seed/harvest ledger and reading-order toolbox that every
+chapter must respect. Those two files replace any account-local memory.
+
 ## Non-negotiables
 
 - **Voice**: chapters are drafted from HIS materials (LaTeX seeds + lecture transcripts)
@@ -13,8 +19,11 @@ read like his lectures.
 - **No d2l.ai content, ever** — no `import d2l`, no copied prose/code. The local copy at
   `../Box-Box/Teaching/6050/Resources/D2L/` is reference-only (CC-BY-SA would contaminate
   our CC BY-NC-SA license).
-- **Every cell runs**: CPU-only, seeded (`torch.manual_seed(6050)`), whole chapter < 60 s.
-  Tiny/synthetic data only; nothing downloads at render time.
+- **Every cell runs**: CPU-only, seeded (`torch.manual_seed(6050)`). Tiny/synthetic
+  or committed data only; nothing downloads at render time. Single cell ≤ ~5 min;
+  training-heavy chapters may take 5–15 min total to execute (one-time local — CI
+  uses the committed freeze). **Pre-test every experiment regime in a scratch
+  script before writing prose** (see `docs/CONTINUING.md` §2 and §5).
 - **Numbers must match prose.** If a cell's printed output contradicts the surrounding
   narrative, fix the experiment or the narrative (see Chapter 1's ridge/lasso regime,
   tuned to n=25 so OLS genuinely overfits).
@@ -79,9 +88,12 @@ compositions for figures. Full guide: `docs/dl-course-code.md`.
    Reusable course SVGs are in `figures/static/`.
 7. **Execute + render** (this refreshes the committed freeze cache — CI never executes):
    ```bash
-   QUARTO_PYTHON=.venv/bin/python quarto render chapters/partN/XX-*.qmd --to html
+   QUARTO_PYTHON=.venv/bin/python quarto render chapters/partN/XX-*.qmd  # NO --to flag!
    QUARTO_PYTHON=.venv/bin/python quarto render        # full book, HTML + PDF
    ```
+   An `--to html` single-file render leaves the PDF freeze (`tex.json`) stale → the
+   book PDF ships without your changes. Any later prose edit invalidates the freeze
+   and re-executes the whole chapter — batch fixes before re-rendering.
 8. **Verify before pushing**: grep the built HTML for the cells' printed numbers and
    confirm they support the prose; check the PDF built; skim for unrendered math.
 9. **Commit `_freeze/` together with the chapter.** Push; then confirm CI:
@@ -112,6 +124,14 @@ Available: `\vect{}`, `\matr{}`, `\E`, `\Ex`, `\var`, `\cov`, `\norm{}`, `\argma
 | Equations unrendered / red on the site | a macro exists in `tex/macros.tex` but not `mathjax-config.html` |
 | Render hangs or times out | you're probably in Box; work in `~/dl-book` |
 | Subagents unavailable (spend limit) | draft inline: read seed + transcripts fully first, then write; audit-by-construction and verify code by executing |
+| Book PDF missing latest chapter edits | stale `tex.json` from an `--to html` render — re-render the chapter with no `--to` flag, then full render |
+| seq2seq/RNN mysteriously stuck at 40–60% | padding poisoning — `pack_padded_sequence` the encoder, `ignore_index=PAD` the loss (ch. 11 runs this as an experiment) |
+| RNN/seq2seq training crawls | `clip_grad_norm_` threshold too tight (1.0 throttled ch. 11's task; 5.0 fine) |
+| Eval numbers vary with batch contents | BatchNorm left in train mode — `model.eval()` before eval, `model.train()` in the loop |
+| Live site serves old page for >10 min | Pages build wedged: `gh api repos/Shakeri-Lab/dl-book/pages/builds/latest`; requeue via `gh api -X POST .../pages/builds`; bust CDN with `?v=N` |
+| CI job cancelled with zero steps run | GitHub runner capacity noise — `gh run rerun <id> --failed` |
+
+More case law: `docs/CONTINUING.md` §5.
 
 ## Backlog
 
