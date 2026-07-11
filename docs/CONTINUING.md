@@ -1,7 +1,7 @@
 # Continuing the Book — Handoff & Roadmap
 
-*Written 2026-07-09 after Chapter 11 shipped; updated 2026-07-11 after the full
-Chapters 1–11 repair and course-site integration shipped. This is the master handoff document:
+*Written 2026-07-09 after Chapter 11 shipped; updated 2026-07-11 after Chapter 12
+shipped. This is the master handoff document:
 everything a fresh collaborator (human or Claude session, on any account) needs to
 continue the project without the original conversation history. Read `CLAUDE.md`
 (repo root) first for environment setup; read this second; read
@@ -19,21 +19,24 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 | I · From Lines to Networks | 1–6 | **Shipped; repair pass complete and verified** (July 11, 2026) |
 | II · Vision | 7–9 | **Shipped; repair pass complete and verified** (July 11, 2026) |
 | III · Sequences | 10–11 | **Shipped; repair pass complete and verified** (July 11, 2026) |
-| IV · Attention | 12–16 | Stubs with contracts — **12 is next** |
+| IV · Attention | 12–16 | **12 shipped and two-format verified; 13 is next** |
 | V · Pretrained Era | 17–19 | Stubs with contracts |
 | Appendices | a1–a4 | Stubs (a4 floating-point queued in backlog) |
 
 **Milestone 1** (Part I complete + skeleton) is met. The July 11 quantitative,
 mathematical, licensing, evaluation-hygiene, and two-format repair pass over Chapters
 1–11 is complete and shipped: every HTML/TeX freeze is newer than its source, key outputs
-match across formats, and selected figures were visually verified. The author's own edit
-pass remains a separate gate rather than a condition of this repair release.
+match across formats, and selected figures were visually verified. Chapter 12 is also
+complete, with its fixed-kernel experiments pre-tested, frozen in both formats, and
+verified in the full-book PDF. The author's own edit pass remains a separate gate rather
+than a condition of either release.
 
 **Decisions still gated on the author:**
-- The author's own edit pass over Chapters 1–11 remains pending.
+- The author's own edit pass over the shipped Chapters 1–12 remains pending.
 - Course-site integration was approved, implemented, and shipped July 11, 2026. It uses
   a plural `bookChapters` field because modules and chapters do not map one-to-one;
   only reviewed, substantive chapters are linked. The production build passes.
+  Chapter 12's course-site link waits for the author's edit pass.
 - "Deeper dive" collapsed sections: piloted in ch. 6; his verdict pending ("let us
   get back to deeper dive later"). Do not retrofit chs. 1/5.
 - GPU experiments remain backlog-only until access is available. Do not publish
@@ -195,28 +198,32 @@ These are precedents; when a new experiment misbehaves, check here first.
 
 ## 7. Roadmap: the remaining chapters
 
-Work order: 12 → 13 → 14 → 15 → 16 → 17 → 18 → 19, appendices opportunistically.
+Work order: 13 → 14 → 15 → 16 → 17 → 18 → 19, appendices opportunistically.
 Each stub carries its contract; specifics accumulated so far:
 
-### Ch. 12 — Kernel Regression: Attention Before It Was Learnable (NEXT)
+### Ch. 12 — Kernel Regression: Attention Before It Was Learnable (SHIPPED)
 - **Seeds**: `sources/8.1-Attention.tex` (the "Kernel Regression: The Conceptual
   Bridge" section — his signature move), plus the now-snapshotted
   `sources/Bridge_to_attention.tex`.
 - **Transcripts**: `m08_lecture-8-attention-mechanism-part-1_8WBIyiaW7Cc.txt`.
-- **Content**: Nadaraya–Watson estimator; kernels as similarity weights; softmax over
-  **log-kernel scores** = attention weights with *no learned parameters*; the
-  query/key/value language previewed on fixed data. Keep the distinction that OLS
+- **Content shipped**: Nadaraya–Watson estimator; kernels as similarity weights;
+  softmax over **log-kernel scores** = fixed attention weights with no learned
+  similarity function; the query/key/value language previewed on fixed data. The
+  chapter keeps the distinction that OLS
   prediction weights may be signed, whereas NW's positive weights form a convex
   average. For the Gaussian score $-\|q-k\|^2/(2h^2)$, bandwidth maps to temperature
   through $2h^2$. A dot product is pure angular similarity only when norms are
   controlled.
-- **Harvests due**: ch. 1's "weighted combination of targets" seed and
-  "dot product as similarity"; ch. 2's "scores → weights" softmax framing.
-- **Experiments to pre-test**: 1-D Nadaraya–Watson on a synthetic function
-  (bandwidth sweep = the attention-temperature dial); visualize the weight matrix
-  as the first "attention map" of the book; maybe k-NN → kernel smoothing →
-  parametric bridge. All CPU-trivial.
-- **Plants**: the "make the kernel learnable" cliffhanger into ch. 13 (mirror
+- **Harvests completed**: ch. 1's "weighted combination of targets" and
+  "dot product as similarity" seeds; ch. 2's "scores → weights" softmax framing;
+  the finite-state bottleneck is partially relieved by retaining a memory bank.
+- **Pinned experiment**: 60 fixed keys, 241 off-key queries, and 1,000 redraws of
+  Gaussian response noise. On the predeclared bandwidth grid, $h=0.18$
+  ($\tau=0.0648$) minimizes MSE at $0.0236$; variance falls from $0.0343$ to
+  $0.0022$ across the grid. The rendered 31-by-60 fixed attention matrix has maximum
+  row-sum error $2.22\times10^{-16}$, and stable log-score softmax survives the
+  deliberately underflowing far-query case.
+- **Plant completed**: the "make the similarity learnable" cliffhanger into ch. 13 (mirror
   ch. 7 → ch. 8's structure — this is the book's thesis rhyme: Part II pivot
   repeated in Part IV).
 

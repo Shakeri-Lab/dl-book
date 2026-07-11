@@ -8,15 +8,15 @@ new rows here. The pedagogical-efficiency rule (drafting-template) depends on
 this file: a concept with no payoff chapter listed here should be an exercise or
 a cut.*
 
-*Updated: 2026-07-11, after the Chapters 1–11 repair pass.*
+*Updated: 2026-07-11, after Chapter 12 shipped.*
 
 ## 1. Seeds planted and their harvest contracts
 
 | Seed (phrase as planted) | Planted | Harvest | Status |
 |---|---|---|---|
-| Dot product = similarity score against a template | ch. 1 | ch. 7 (sliding template), ch. 12 (kernel similarity), ch. 13 (QK scores) | ch. 7 ✓; 12–13 due |
-| Prediction = weighted combination of training targets | ch. 1 | ch. 12 (Nadaraya–Watson IS this, made explicit) | due |
-| Softmax = the scores→weights machine | ch. 2 | ch. 12 (kernel weights), ch. 13 (attention weights) | due |
+| Dot product = similarity score against a template | ch. 1 | ch. 7 (sliding template), ch. 12 (kernel similarity), ch. 13 (QK scores) | chs. 7/12 ✓; 13 due |
+| Prediction = weighted combination of training targets | ch. 1 | ch. 12 (Nadaraya–Watson IS this, made explicit) | done |
+| Softmax = the scores→weights machine | ch. 2 | ch. 12 (kernel weights), ch. 13 (attention weights) | ch. 12 ✓; 13 due |
 | "Softening the hard" / differentiable lookup ("A differentiable lookup, it turns out, is precisely attention") | ch. 2 | ch. 13 — harvest by name | due |
 | Temperature dial between hard max and uniform | ch. 2 | ch. 10 ✓ (sampling); ch. 13 (√d as temperature) | partly |
 | Compositional hierarchy: features of features | ch. 3 | ch. 8 ✓ (receptive fields make it architectural) | done |
@@ -34,7 +34,8 @@ a cut.*
 | LayerNorm: "same equation, different axis — remember @eq-batchnorm when you meet it" | ch. 9 | ch. 14 | due |
 | Transfer decision rule (labels scarce ∧ task feature-hungry ∧ coverage at matched scale) | ch. 9 | ch. 15 (BERT = the regime where it pays), ch. 17 | due |
 | Third weight sharing (examples → space → time) | ch. 10 | ch. 14 (self-attention shares across *pairs*? decide framing when drafting) | open |
-| Finite-state bottleneck; "the book ends Part III when we refuse to pay that price" | ch. 10–11 | ch. 12–13 | due |
+| Finite-state bottleneck; "the book ends Part III when we refuse to pay that price" | ch. 10–11 | ch. 12 (retain the memory bank), ch. 13 (learn the access rule) | ch. 12 partial ✓; 13 due |
+| Fixed attention matrix; "what if the similarity itself were learnable?" | ch. 12 | ch. 13 (learned compatibility and the date-task rematch) | due |
 | "Hard address, learned content" (embeddings); soften the address too | ch. 11 | ch. 13 — harvest the phrase | due |
 | Masking = "which positions it may not look at"; causal mask preview | ch. 11 | ch. 14 (causal mask turns transformer into LM) | due |
 | Date-normalization benchmark (leak-free packed seq2seq: 53.8% @ epoch 6, 95.0% @ 12 on 400 unambiguous validation sources; 93.1% on the final 437-source unambiguous test; alignment invisible) | ch. 11 | ch. 13 — MUST re-run with attention: alignment heatmap + convergence comparison (contract in stub) | due |
@@ -84,7 +85,7 @@ optimizers or `backward()` before Chapter 5.
 | 9 | BatchNorm (+train/eval modes), conv-BN-ReLU atom, 1×1 convs, GAP (`nn.AdaptiveAvgPool2d`), residual blocks, `weight_decay`, transfer mechanics (`requires_grad=False`, param groups/two LRs), `F.interpolate`, torchvision model loading from committed weights |
 | 10 | `nn.RNN`/`nn.LSTM` (+GRU eqs), BPTT, truncated chunks, `clip_grad_norm_`, `F.one_hot` (in models), sampling with temperature, `torch.multinomial` |
 | 11 | encoder–decoder, `nn.Embedding`, PAD/BOS/EOS, `pad_sequence`, `pack_padded_sequence`, `ignore_index`, teacher forcing/free-running, exposure bias, scheduled sampling (concept), greedy/beam search, length normalization |
-| 12 (planned) | kernels/bandwidth, Nadaraya–Watson, attention-weight matrices (fixed) |
+| 12 | kernels/bandwidth, Nadaraya–Watson, queries/keys/values, row-softmax over log-kernel scores, attention-weight matrices (fixed) |
 | 13 (planned) | learned Q/K/V, scaled dot-product, additive attention, attention in seq2seq, alignment heatmaps |
 | 14 (planned) | self-attention, multi-head, LayerNorm, positional encodings, causal masks, the transformer block |
 
