@@ -424,11 +424,12 @@ window.Quarto = {
   <li><a href="#one-neuron-one-chain" id="toc-one-neuron-one-chain" class="nav-link active" data-scroll-target="#one-neuron-one-chain"><span class="header-section-number">5.1</span> One neuron, one chain</a></li>
   <li><a href="#the-game-of-blame" id="toc-the-game-of-blame" class="nav-link" data-scroll-target="#the-game-of-blame"><span class="header-section-number">5.2</span> The game of blame</a></li>
   <li><a href="#build-it-then-check-it-against-autograd" id="toc-build-it-then-check-it-against-autograd" class="nav-link" data-scroll-target="#build-it-then-check-it-against-autograd"><span class="header-section-number">5.3</span> Build it, then check it against autograd</a></li>
-  <li><a href="#a-60-line-autograd-engine" id="toc-a-60-line-autograd-engine" class="nav-link" data-scroll-target="#a-60-line-autograd-engine"><span class="header-section-number">5.4</span> A 60-line autograd engine</a></li>
+  <li><a href="#a-tiny-scalar-autograd-engine" id="toc-a-tiny-scalar-autograd-engine" class="nav-link" data-scroll-target="#a-tiny-scalar-autograd-engine"><span class="header-section-number">5.4</span> A tiny scalar autograd engine</a></li>
   <li><a href="#torch.autograd-in-practice-five-rules" id="toc-torch.autograd-in-practice-five-rules" class="nav-link" data-scroll-target="#torch.autograd-in-practice-five-rules"><span class="header-section-number">5.5</span> <code>torch.autograd</code> in practice: five rules</a></li>
   <li><a href="#the-gate-and-the-problem-with-deep-chains" id="toc-the-gate-and-the-problem-with-deep-chains" class="nav-link" data-scroll-target="#the-gate-and-the-problem-with-deep-chains"><span class="header-section-number">5.6</span> The gate, and the problem with deep chains</a></li>
   <li><a href="#initialization-setting-the-signals-energy" id="toc-initialization-setting-the-signals-energy" class="nav-link" data-scroll-target="#initialization-setting-the-signals-energy"><span class="header-section-number">5.7</span> Initialization: setting the signal’s energy</a></li>
   <li><a href="#okay-so-the-chain-rule-organized" id="toc-okay-so-the-chain-rule-organized" class="nav-link" data-scroll-target="#okay-so-the-chain-rule-organized"><span class="header-section-number">5.8</span> Okay, so — the chain rule, organized</a></li>
+  <li><a href="#sources-and-further-reading" id="toc-sources-and-further-reading" class="nav-link" data-scroll-target="#sources-and-further-reading">Sources and further reading</a></li>
   <li><a href="#exercises" id="toc-exercises" class="nav-link" data-scroll-target="#exercises">Exercises</a></li>
   </ul>
 <div class="toc-actions"><ul><li><a href="https://github.com/Shakeri-Lab/dl-book/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></nav>
@@ -461,7 +462,7 @@ window.Quarto = {
      seeds: sources/2-1-backprop.tex, sources/2-2_Autodiff.tex,
             code/notebooks/source/m02-03-shared.ipynb (autograd rules, cell 5) -->
 <p>Recall the update rule that ended <a href="01-linear-regression.html" class="quarto-xref"><span>Chapter 1</span></a>: new parameters come from old parameters by stepping against the gradient, <span class="math inline">\(\vect{w}^{(t+1)} = \vect{w}^{(t)} - \eta\,\nabla_{\vect{w}}\loss\)</span>. For linear regression we could write that gradient down by hand. But a modern network has millions, sometimes billions, of knobs, tangled through layer after layer of composed functions <span class="math inline">\(\rightarrow\)</span> computing each partial derivative naively, one at a time, is hopeless.</p>
-<p>Backpropagation is the algorithm that computes <em>all</em> of them, exactly, in one backward sweep whose cost is linear in the number of parameters. It is not a new kind of calculus. It is the chain rule, <em>organized</em>. By the end of this chapter you will have derived it, implemented it by hand, rebuilt it as a 60-line autograd engine, and then checked that <code>torch.autograd</code> agrees with you to machine precision.</p>
+<p>Backpropagation is the algorithm that computes <em>all</em> of them, exactly, in one backward sweep whose cost is a small constant multiple of the graph’s elementary operations. It is not a new kind of calculus. It is the chain rule, <em>organized</em>. By the end of this chapter you will have derived it, implemented it by hand, rebuilt it as a tiny scalar autograd engine, and then checked that <code>torch.autograd</code> agrees with you to machine precision.</p>
 <section id="one-neuron-one-chain" class="level2" data-number="5.1">
 <h2 data-number="5.1" class="anchored" data-anchor-id="one-neuron-one-chain"><span class="header-section-number">5.1</span> One neuron, one chain</h2>
 <p>Start with the smallest possible case: one neuron on one training example. The previous activation <span class="math inline">\(a^{(l-1)}\)</span> is multiplied by a weight <span class="math inline">\(w\)</span>, giving the pre-activation <span class="math inline">\(z = w\,a^{(l-1)} + b\)</span>; the activation function produces <span class="math inline">\(a = \sigma(z)\)</span>; and <span class="math inline">\(a\)</span> feeds a loss <span class="math inline">\(L\)</span>.</p>
@@ -541,7 +542,7 @@ Figure&nbsp;5.1: Computation as a graph: the forward pass (top, blue) computes a
 <p><span id="eq-bp1"><span class="math display">\[
 \delta^{(L)} = \frac{\partial L}{\partial \vect{a}^{(L)}} \odot \sigma'(\vect{z}^{(L)}) .
 \tag{5.2}\]</span></span></p>
-<p>For squared error, <span class="math inline">\(\partial L / \partial \vect{a}^{(L)}\)</span> is literally the prediction error <span class="math inline">\(\vect{a}^{(L)} - \vect{y}\)</span>: the error, scaled by how sensitive the activation was to its input.</p>
+<p>For the half-squared-error convention <span class="math inline">\(L=\tfrac12\|\vect{a}^{(L)}-\vect{y}\|^2\)</span>, <span class="math inline">\(\partial L / \partial \vect{a}^{(L)}\)</span> is exactly the prediction error <span class="math inline">\(\vect{a}^{(L)} - \vect{y}\)</span>. Other conventions contribute a known scale: mean squared error, for example, contributes <span class="math inline">\(2/n\)</span> for <span class="math inline">\(n\)</span> scalar outputs. In every case the output error is then gated by how sensitive the activation was to its input.</p>
 <p><strong>2. Propagate blame one layer back:</strong></p>
 <p><span id="eq-bp2"><span class="math display">\[
 \delta^{(l)} = \Bigl( (\matr{W}^{(l+1)})^\top \delta^{(l+1)} \Bigr) \odot \sigma'(\vect{z}^{(l)}) .
@@ -615,7 +616,7 @@ Figure&nbsp;5.2: Equations 1 and 2 in action on a real network (sizes 3–4–4�
 <p><span id="eq-bp4"><span class="math display">\[
 \frac{\partial L}{\partial \vect{b}^{(l)}} = \delta^{(l)} .
 \tag{5.5}\]</span></span></p>
-<p>Equation <a href="#eq-bp3" class="quarto-xref">Equation&nbsp;<span>5.4</span></a> deserves a pause, because its shapes tell the story. With <span class="math inline">\(m\)</span> neurons in layer <span class="math inline">\(l\)</span> and <span class="math inline">\(n\)</span> in layer <span class="math inline">\(l-1\)</span>: <span class="math inline">\(\delta^{(l)}\)</span> is <span class="math inline">\((m \times 1)\)</span>, and <span class="math inline">\((\vect{a}^{(l-1)})^\top\)</span> is <span class="math inline">\((1 \times n)\)</span>. Their <strong>outer product</strong> is an <span class="math inline">\(m \times n\)</span> matrix, exactly the shape of <span class="math inline">\(\matr{W}^{(l)}\)</span>, and entry <span class="math inline">\((i,j)\)</span> is the blame of neuron <span class="math inline">\(i\)</span> times the activation of neuron <span class="math inline">\(j\)</span> that fed it. The update for a weight is <em>blame out times signal in</em>:</p>
+<p><a href="#eq-bp3" class="quarto-xref">Equation&nbsp;<span>5.4</span></a> deserves a pause, because its shapes tell the story. With <span class="math inline">\(m\)</span> neurons in layer <span class="math inline">\(l\)</span> and <span class="math inline">\(n\)</span> in layer <span class="math inline">\(l-1\)</span>: <span class="math inline">\(\delta^{(l)}\)</span> is <span class="math inline">\((m \times 1)\)</span>, and <span class="math inline">\((\vect{a}^{(l-1)})^\top\)</span> is <span class="math inline">\((1 \times n)\)</span>. Their <strong>outer product</strong> is an <span class="math inline">\(m \times n\)</span> matrix, exactly the shape of <span class="math inline">\(\matr{W}^{(l)}\)</span>, and entry <span class="math inline">\((i,j)\)</span> is the blame of neuron <span class="math inline">\(i\)</span> times the activation of neuron <span class="math inline">\(j\)</span> that fed it. The update for a weight is <em>blame out times signal in</em>:</p>
 <div id="cell-fig-outer-product" class="cell" data-execution_count="3">
 <details class="code-fold">
 <summary>Code: draw the outer product</summary>
@@ -653,52 +654,49 @@ Figure&nbsp;5.3: Equation 3, pictured with the blame and activations from the ne
 <section id="build-it-then-check-it-against-autograd" class="level2" data-number="5.3">
 <h2 data-number="5.3" class="anchored" data-anchor-id="build-it-then-check-it-against-autograd"><span class="header-section-number">5.3</span> Build it, then check it against autograd</h2>
 <p>Let us implement the four equations on a two-layer network, with no autograd anywhere, and then ask <code>torch.autograd</code> to differentiate the same network. If our blame algebra is right, the two answers must agree to machine precision.</p>
-<div id="cell-setup" class="cell" data-execution_count="4">
+<div id="setup" class="cell" data-execution_count="4">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
 <span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>torch.manual_seed(<span class="dv">6050</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>_ <span class="op">=</span> torch.manual_seed(<span class="dv">6050</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
-<div id="setup" class="cell-output cell-output-display" data-execution_count="4">
-<pre><code>&lt;torch._C.Generator at 0x123ccf970&gt;</code></pre>
-</div>
 </div>
 <div id="backprop-by-hand" class="cell" data-execution_count="5">
 <details class="code-fold">
 <summary>Code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>n, d, h <span class="op">=</span> <span class="dv">32</span>, <span class="dv">5</span>, <span class="dv">8</span>                            <span class="co"># batch, input dim, hidden dim</span></span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>X <span class="op">=</span> torch.randn(n, d)</span>
-<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>y <span class="op">=</span> torch.randn(n)</span>
-<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>W1, b1 <span class="op">=</span> torch.randn(h, d) <span class="op">*</span> <span class="fl">0.3</span>, torch.zeros(h)</span>
-<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>W2, b2 <span class="op">=</span> torch.randn(<span class="dv">1</span>, h) <span class="op">*</span> <span class="fl">0.3</span>, torch.zeros(<span class="dv">1</span>)</span>
-<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a><span class="co"># forward pass -- cache everything the backward pass will need</span></span>
-<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>Z1 <span class="op">=</span> X <span class="op">@</span> W1.T <span class="op">+</span> b1                            <span class="co"># (n, h)</span></span>
-<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>A1 <span class="op">=</span> torch.sigmoid(Z1)                        <span class="co"># (n, h)</span></span>
-<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>Z2 <span class="op">=</span> A1 <span class="op">@</span> W2.T <span class="op">+</span> b2                           <span class="co"># (n, 1)</span></span>
-<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>L <span class="op">=</span> ((Z2.squeeze() <span class="op">-</span> y) <span class="op">**</span> <span class="dv">2</span>).mean()</span>
-<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a><span class="co"># backward pass -- the four equations (batch-averaged)</span></span>
-<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a>sig_prime <span class="op">=</span> A1 <span class="op">*</span> (<span class="dv">1</span> <span class="op">-</span> A1)                     <span class="co"># sigma'(z) = sigma(z)(1 - sigma(z))</span></span>
-<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a>delta2 <span class="op">=</span> <span class="dv">2</span> <span class="op">*</span> (Z2.squeeze() <span class="op">-</span> y)[:, <span class="va">None</span>] <span class="op">/</span> n  <span class="co"># eq. 1 (identity output: no gate)</span></span>
-<span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a>delta1 <span class="op">=</span> (delta2 <span class="op">@</span> W2) <span class="op">*</span> sig_prime            <span class="co"># eq. 2: blame through W^T, gated</span></span>
-<span id="cb6-18"><a href="#cb6-18" aria-hidden="true" tabindex="-1"></a>grads <span class="op">=</span> {                                     <span class="co"># eqs. 3 &amp; 4: blame out x signal in</span></span>
-<span id="cb6-19"><a href="#cb6-19" aria-hidden="true" tabindex="-1"></a>    <span class="st">"W2"</span>: delta2.T <span class="op">@</span> A1, <span class="st">"b2"</span>: delta2.<span class="bu">sum</span>(<span class="dv">0</span>),</span>
-<span id="cb6-20"><a href="#cb6-20" aria-hidden="true" tabindex="-1"></a>    <span class="st">"W1"</span>: delta1.T <span class="op">@</span> X,  <span class="st">"b1"</span>: delta1.<span class="bu">sum</span>(<span class="dv">0</span>),</span>
-<span id="cb6-21"><a href="#cb6-21" aria-hidden="true" tabindex="-1"></a>}</span>
-<span id="cb6-22"><a href="#cb6-22" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-23"><a href="#cb6-23" aria-hidden="true" tabindex="-1"></a><span class="co"># same network, autograd's turn</span></span>
-<span id="cb6-24"><a href="#cb6-24" aria-hidden="true" tabindex="-1"></a>params <span class="op">=</span> {k: v.clone().requires_grad_(<span class="va">True</span>) <span class="cf">for</span> k, v <span class="kw">in</span></span>
-<span id="cb6-25"><a href="#cb6-25" aria-hidden="true" tabindex="-1"></a>          {<span class="st">"W1"</span>: W1, <span class="st">"b1"</span>: b1, <span class="st">"W2"</span>: W2, <span class="st">"b2"</span>: b2}.items()}</span>
-<span id="cb6-26"><a href="#cb6-26" aria-hidden="true" tabindex="-1"></a>A1_ <span class="op">=</span> torch.sigmoid(X <span class="op">@</span> params[<span class="st">"W1"</span>].T <span class="op">+</span> params[<span class="st">"b1"</span>])</span>
-<span id="cb6-27"><a href="#cb6-27" aria-hidden="true" tabindex="-1"></a>L_ <span class="op">=</span> (((A1_ <span class="op">@</span> params[<span class="st">"W2"</span>].T <span class="op">+</span> params[<span class="st">"b2"</span>]).squeeze() <span class="op">-</span> y) <span class="op">**</span> <span class="dv">2</span>).mean()</span>
-<span id="cb6-28"><a href="#cb6-28" aria-hidden="true" tabindex="-1"></a>L_.backward()</span>
-<span id="cb6-29"><a href="#cb6-29" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-30"><a href="#cb6-30" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> k <span class="kw">in</span> grads:</span>
-<span id="cb6-31"><a href="#cb6-31" aria-hidden="true" tabindex="-1"></a>    gap <span class="op">=</span> (grads[k] <span class="op">-</span> params[k].grad).<span class="bu">abs</span>().<span class="bu">max</span>()</span>
-<span id="cb6-32"><a href="#cb6-32" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"</span><span class="sc">{</span>k<span class="sc">}</span><span class="ss">: max |ours - autograd| = </span><span class="sc">{</span>gap<span class="sc">:.2e}</span><span class="ss">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>n, d, h <span class="op">=</span> <span class="dv">32</span>, <span class="dv">5</span>, <span class="dv">8</span>                            <span class="co"># batch, input dim, hidden dim</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>X <span class="op">=</span> torch.randn(n, d)</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>y <span class="op">=</span> torch.randn(n)</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>W1, b1 <span class="op">=</span> torch.randn(h, d) <span class="op">*</span> <span class="fl">0.3</span>, torch.zeros(h)</span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>W2, b2 <span class="op">=</span> torch.randn(<span class="dv">1</span>, h) <span class="op">*</span> <span class="fl">0.3</span>, torch.zeros(<span class="dv">1</span>)</span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a><span class="co"># forward pass -- cache everything the backward pass will need</span></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>Z1 <span class="op">=</span> X <span class="op">@</span> W1.T <span class="op">+</span> b1                            <span class="co"># (n, h)</span></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>A1 <span class="op">=</span> torch.sigmoid(Z1)                        <span class="co"># (n, h)</span></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>Z2 <span class="op">=</span> A1 <span class="op">@</span> W2.T <span class="op">+</span> b2                           <span class="co"># (n, 1)</span></span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>L <span class="op">=</span> ((Z2.squeeze() <span class="op">-</span> y) <span class="op">**</span> <span class="dv">2</span>).mean()</span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a><span class="co"># backward pass -- the four equations (batch-averaged)</span></span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>sig_prime <span class="op">=</span> A1 <span class="op">*</span> (<span class="dv">1</span> <span class="op">-</span> A1)                     <span class="co"># sigma'(z) = sigma(z)(1 - sigma(z))</span></span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>delta2 <span class="op">=</span> <span class="dv">2</span> <span class="op">*</span> (Z2.squeeze() <span class="op">-</span> y)[:, <span class="va">None</span>] <span class="op">/</span> n  <span class="co"># eq. 1 (identity output: no gate)</span></span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>delta1 <span class="op">=</span> (delta2 <span class="op">@</span> W2) <span class="op">*</span> sig_prime            <span class="co"># eq. 2: blame through W^T, gated</span></span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>grads <span class="op">=</span> {                                     <span class="co"># eqs. 3 &amp; 4: blame out x signal in</span></span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a>    <span class="st">"W2"</span>: delta2.T <span class="op">@</span> A1, <span class="st">"b2"</span>: delta2.<span class="bu">sum</span>(<span class="dv">0</span>),</span>
+<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a>    <span class="st">"W1"</span>: delta1.T <span class="op">@</span> X,  <span class="st">"b1"</span>: delta1.<span class="bu">sum</span>(<span class="dv">0</span>),</span>
+<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a><span class="co"># same network, autograd's turn</span></span>
+<span id="cb5-24"><a href="#cb5-24" aria-hidden="true" tabindex="-1"></a>params <span class="op">=</span> {k: v.clone().requires_grad_(<span class="va">True</span>) <span class="cf">for</span> k, v <span class="kw">in</span></span>
+<span id="cb5-25"><a href="#cb5-25" aria-hidden="true" tabindex="-1"></a>          {<span class="st">"W1"</span>: W1, <span class="st">"b1"</span>: b1, <span class="st">"W2"</span>: W2, <span class="st">"b2"</span>: b2}.items()}</span>
+<span id="cb5-26"><a href="#cb5-26" aria-hidden="true" tabindex="-1"></a>A1_ <span class="op">=</span> torch.sigmoid(X <span class="op">@</span> params[<span class="st">"W1"</span>].T <span class="op">+</span> params[<span class="st">"b1"</span>])</span>
+<span id="cb5-27"><a href="#cb5-27" aria-hidden="true" tabindex="-1"></a>L_ <span class="op">=</span> (((A1_ <span class="op">@</span> params[<span class="st">"W2"</span>].T <span class="op">+</span> params[<span class="st">"b2"</span>]).squeeze() <span class="op">-</span> y) <span class="op">**</span> <span class="dv">2</span>).mean()</span>
+<span id="cb5-28"><a href="#cb5-28" aria-hidden="true" tabindex="-1"></a>L_.backward()</span>
+<span id="cb5-29"><a href="#cb5-29" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-30"><a href="#cb5-30" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> k <span class="kw">in</span> grads:</span>
+<span id="cb5-31"><a href="#cb5-31" aria-hidden="true" tabindex="-1"></a>    gap <span class="op">=</span> (grads[k] <span class="op">-</span> params[k].grad).<span class="bu">abs</span>().<span class="bu">max</span>()</span>
+<span id="cb5-32"><a href="#cb5-32" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"</span><span class="sc">{</span>k<span class="sc">}</span><span class="ss">: max |ours - autograd| = </span><span class="sc">{</span>gap<span class="sc">:.2e}</span><span class="ss">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
 <pre><code>W2: max |ours - autograd| = 0.00e+00
@@ -707,101 +705,102 @@ W1: max |ours - autograd| = 3.73e-09
 b1: max |ours - autograd| = 1.86e-09</code></pre>
 </div>
 </div>
-<p>Zeros, to floating-point precision. The blame equations <em>are</em> what autograd computes; the framework simply builds the computation graph for us as we go and then walks it backward, caching and reusing exactly as we did.</p>
+<p>The largest discrepancy is <span class="math inline">\(3.73\times10^{-9}\)</span>, consistent with float32 rounding. The blame equations <em>are</em> what autograd computes; the framework simply builds the computation graph for us as we go and then walks it backward, caching and reusing exactly as we did.</p>
 </section>
-<section id="a-60-line-autograd-engine" class="level2" data-number="5.4">
-<h2 data-number="5.4" class="anchored" data-anchor-id="a-60-line-autograd-engine"><span class="header-section-number">5.4</span> A 60-line autograd engine</h2>
+<section id="a-tiny-scalar-autograd-engine" class="level2" data-number="5.4">
+<h2 data-number="5.4" class="anchored" data-anchor-id="a-tiny-scalar-autograd-engine"><span class="header-section-number">5.4</span> A tiny scalar autograd engine</h2>
 <p>To remove the last trace of magic, let us build the graph ourselves. Each <code>Value</code> node remembers how it was made (its parents and the local derivative rule); calling <code>backward()</code> walks the graph in reverse topological order, accumulating blame into every node’s <code>grad</code>.</p>
+<p>This teaching implementation is adapted from Andrej Karpathy’s <a href="https://github.com/karpathy/micrograd">micrograd</a>, released under the MIT License. We use only the scalar reverse-mode pattern needed for this derivation; the upstream copyright and license notice are preserved in the repository’s <a href="https://github.com/Shakeri-Lab/dl-book/blob/main/THIRD_PARTY_NOTICES.md">third-party notices</a>.</p>
 <div id="micro-autograd" class="cell" data-execution_count="6">
 <details open="" class="code-fold">
 <summary>Code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Value:</span>
-<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""A scalar that remembers its history -- a node in the computation graph."""</span></span>
-<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, data: <span class="bu">float</span>, parents<span class="op">=</span>(), backward_rule<span class="op">=</span><span class="kw">lambda</span>: <span class="va">None</span>):</span>
-<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.data <span class="op">=</span> data</span>
-<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.grad <span class="op">=</span> <span class="fl">0.0</span></span>
-<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>._parents <span class="op">=</span> parents</span>
-<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>._backward_rule <span class="op">=</span> backward_rule</span>
-<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__add__</span>(<span class="va">self</span>, other):</span>
-<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a>        other <span class="op">=</span> other <span class="cf">if</span> <span class="bu">isinstance</span>(other, Value) <span class="cf">else</span> Value(other)</span>
-<span id="cb8-12"><a href="#cb8-12" aria-hidden="true" tabindex="-1"></a>        out <span class="op">=</span> Value(<span class="va">self</span>.data <span class="op">+</span> other.data, (<span class="va">self</span>, other))</span>
-<span id="cb8-13"><a href="#cb8-13" aria-hidden="true" tabindex="-1"></a>        <span class="kw">def</span> rule():                      <span class="co"># d(out)/d(self) = d(out)/d(other) = 1</span></span>
-<span id="cb8-14"><a href="#cb8-14" aria-hidden="true" tabindex="-1"></a>            <span class="va">self</span>.grad <span class="op">+=</span> out.grad</span>
-<span id="cb8-15"><a href="#cb8-15" aria-hidden="true" tabindex="-1"></a>            other.grad <span class="op">+=</span> out.grad</span>
-<span id="cb8-16"><a href="#cb8-16" aria-hidden="true" tabindex="-1"></a>        out._backward_rule <span class="op">=</span> rule</span>
-<span id="cb8-17"><a href="#cb8-17" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> out</span>
-<span id="cb8-18"><a href="#cb8-18" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-19"><a href="#cb8-19" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__mul__</span>(<span class="va">self</span>, other):</span>
-<span id="cb8-20"><a href="#cb8-20" aria-hidden="true" tabindex="-1"></a>        other <span class="op">=</span> other <span class="cf">if</span> <span class="bu">isinstance</span>(other, Value) <span class="cf">else</span> Value(other)</span>
-<span id="cb8-21"><a href="#cb8-21" aria-hidden="true" tabindex="-1"></a>        out <span class="op">=</span> Value(<span class="va">self</span>.data <span class="op">*</span> other.data, (<span class="va">self</span>, other))</span>
-<span id="cb8-22"><a href="#cb8-22" aria-hidden="true" tabindex="-1"></a>        <span class="kw">def</span> rule():                      <span class="co"># product rule, one side at a time</span></span>
-<span id="cb8-23"><a href="#cb8-23" aria-hidden="true" tabindex="-1"></a>            <span class="va">self</span>.grad <span class="op">+=</span> other.data <span class="op">*</span> out.grad</span>
-<span id="cb8-24"><a href="#cb8-24" aria-hidden="true" tabindex="-1"></a>            other.grad <span class="op">+=</span> <span class="va">self</span>.data <span class="op">*</span> out.grad</span>
-<span id="cb8-25"><a href="#cb8-25" aria-hidden="true" tabindex="-1"></a>        out._backward_rule <span class="op">=</span> rule</span>
-<span id="cb8-26"><a href="#cb8-26" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> out</span>
-<span id="cb8-27"><a href="#cb8-27" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-28"><a href="#cb8-28" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> sigmoid(<span class="va">self</span>):</span>
-<span id="cb8-29"><a href="#cb8-29" aria-hidden="true" tabindex="-1"></a>        s <span class="op">=</span> <span class="dv">1</span> <span class="op">/</span> (<span class="dv">1</span> <span class="op">+</span> <span class="fl">2.718281828459045</span> <span class="op">**</span> (<span class="op">-</span><span class="va">self</span>.data))</span>
-<span id="cb8-30"><a href="#cb8-30" aria-hidden="true" tabindex="-1"></a>        out <span class="op">=</span> Value(s, (<span class="va">self</span>,))</span>
-<span id="cb8-31"><a href="#cb8-31" aria-hidden="true" tabindex="-1"></a>        <span class="kw">def</span> rule():                      <span class="co"># sigma' = s (1 - s), the gate</span></span>
-<span id="cb8-32"><a href="#cb8-32" aria-hidden="true" tabindex="-1"></a>            <span class="va">self</span>.grad <span class="op">+=</span> s <span class="op">*</span> (<span class="dv">1</span> <span class="op">-</span> s) <span class="op">*</span> out.grad</span>
-<span id="cb8-33"><a href="#cb8-33" aria-hidden="true" tabindex="-1"></a>        out._backward_rule <span class="op">=</span> rule</span>
-<span id="cb8-34"><a href="#cb8-34" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> out</span>
-<span id="cb8-35"><a href="#cb8-35" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-36"><a href="#cb8-36" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> backward(<span class="va">self</span>):</span>
-<span id="cb8-37"><a href="#cb8-37" aria-hidden="true" tabindex="-1"></a>        order, seen <span class="op">=</span> [], <span class="bu">set</span>()</span>
-<span id="cb8-38"><a href="#cb8-38" aria-hidden="true" tabindex="-1"></a>        <span class="kw">def</span> topo(v):                     <span class="co"># children before parents</span></span>
-<span id="cb8-39"><a href="#cb8-39" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> v <span class="kw">not</span> <span class="kw">in</span> seen:</span>
-<span id="cb8-40"><a href="#cb8-40" aria-hidden="true" tabindex="-1"></a>                seen.add(v)</span>
-<span id="cb8-41"><a href="#cb8-41" aria-hidden="true" tabindex="-1"></a>                <span class="cf">for</span> p <span class="kw">in</span> v._parents:</span>
-<span id="cb8-42"><a href="#cb8-42" aria-hidden="true" tabindex="-1"></a>                    topo(p)</span>
-<span id="cb8-43"><a href="#cb8-43" aria-hidden="true" tabindex="-1"></a>                order.append(v)</span>
-<span id="cb8-44"><a href="#cb8-44" aria-hidden="true" tabindex="-1"></a>        topo(<span class="va">self</span>)</span>
-<span id="cb8-45"><a href="#cb8-45" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.grad <span class="op">=</span> <span class="fl">1.0</span>                  <span class="co"># dL/dL = 1: blame starts here</span></span>
-<span id="cb8-46"><a href="#cb8-46" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> v <span class="kw">in</span> <span class="bu">reversed</span>(order):</span>
-<span id="cb8-47"><a href="#cb8-47" aria-hidden="true" tabindex="-1"></a>            v._backward_rule()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Value:</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""A scalar that remembers its history -- a node in the computation graph."""</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, data: <span class="bu">float</span>, parents<span class="op">=</span>(), backward_rule<span class="op">=</span><span class="kw">lambda</span>: <span class="va">None</span>):</span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.data <span class="op">=</span> data</span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.grad <span class="op">=</span> <span class="fl">0.0</span></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>._parents <span class="op">=</span> parents</span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>._backward_rule <span class="op">=</span> backward_rule</span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__add__</span>(<span class="va">self</span>, other: <span class="st">"Value | float"</span>) <span class="op">-&gt;</span> <span class="st">"Value"</span>:</span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>        other <span class="op">=</span> other <span class="cf">if</span> <span class="bu">isinstance</span>(other, Value) <span class="cf">else</span> Value(other)</span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>        out <span class="op">=</span> Value(<span class="va">self</span>.data <span class="op">+</span> other.data, (<span class="va">self</span>, other))</span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a>        <span class="kw">def</span> rule():                      <span class="co"># d(out)/d(self) = d(out)/d(other) = 1</span></span>
+<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a>            <span class="va">self</span>.grad <span class="op">+=</span> out.grad</span>
+<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a>            other.grad <span class="op">+=</span> out.grad</span>
+<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a>        out._backward_rule <span class="op">=</span> rule</span>
+<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> out</span>
+<span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-19"><a href="#cb7-19" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__mul__</span>(<span class="va">self</span>, other: <span class="st">"Value | float"</span>) <span class="op">-&gt;</span> <span class="st">"Value"</span>:</span>
+<span id="cb7-20"><a href="#cb7-20" aria-hidden="true" tabindex="-1"></a>        other <span class="op">=</span> other <span class="cf">if</span> <span class="bu">isinstance</span>(other, Value) <span class="cf">else</span> Value(other)</span>
+<span id="cb7-21"><a href="#cb7-21" aria-hidden="true" tabindex="-1"></a>        out <span class="op">=</span> Value(<span class="va">self</span>.data <span class="op">*</span> other.data, (<span class="va">self</span>, other))</span>
+<span id="cb7-22"><a href="#cb7-22" aria-hidden="true" tabindex="-1"></a>        <span class="kw">def</span> rule():                      <span class="co"># product rule, one side at a time</span></span>
+<span id="cb7-23"><a href="#cb7-23" aria-hidden="true" tabindex="-1"></a>            <span class="va">self</span>.grad <span class="op">+=</span> other.data <span class="op">*</span> out.grad</span>
+<span id="cb7-24"><a href="#cb7-24" aria-hidden="true" tabindex="-1"></a>            other.grad <span class="op">+=</span> <span class="va">self</span>.data <span class="op">*</span> out.grad</span>
+<span id="cb7-25"><a href="#cb7-25" aria-hidden="true" tabindex="-1"></a>        out._backward_rule <span class="op">=</span> rule</span>
+<span id="cb7-26"><a href="#cb7-26" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> out</span>
+<span id="cb7-27"><a href="#cb7-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-28"><a href="#cb7-28" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> sigmoid(<span class="va">self</span>) <span class="op">-&gt;</span> <span class="st">"Value"</span>:</span>
+<span id="cb7-29"><a href="#cb7-29" aria-hidden="true" tabindex="-1"></a>        s <span class="op">=</span> <span class="dv">1</span> <span class="op">/</span> (<span class="dv">1</span> <span class="op">+</span> <span class="fl">2.718281828459045</span> <span class="op">**</span> (<span class="op">-</span><span class="va">self</span>.data))</span>
+<span id="cb7-30"><a href="#cb7-30" aria-hidden="true" tabindex="-1"></a>        out <span class="op">=</span> Value(s, (<span class="va">self</span>,))</span>
+<span id="cb7-31"><a href="#cb7-31" aria-hidden="true" tabindex="-1"></a>        <span class="kw">def</span> rule():                      <span class="co"># sigma' = s (1 - s), the gate</span></span>
+<span id="cb7-32"><a href="#cb7-32" aria-hidden="true" tabindex="-1"></a>            <span class="va">self</span>.grad <span class="op">+=</span> s <span class="op">*</span> (<span class="dv">1</span> <span class="op">-</span> s) <span class="op">*</span> out.grad</span>
+<span id="cb7-33"><a href="#cb7-33" aria-hidden="true" tabindex="-1"></a>        out._backward_rule <span class="op">=</span> rule</span>
+<span id="cb7-34"><a href="#cb7-34" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> out</span>
+<span id="cb7-35"><a href="#cb7-35" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-36"><a href="#cb7-36" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> backward(<span class="va">self</span>) <span class="op">-&gt;</span> <span class="va">None</span>:</span>
+<span id="cb7-37"><a href="#cb7-37" aria-hidden="true" tabindex="-1"></a>        order, seen <span class="op">=</span> [], <span class="bu">set</span>()</span>
+<span id="cb7-38"><a href="#cb7-38" aria-hidden="true" tabindex="-1"></a>        <span class="kw">def</span> topo(v):                     <span class="co"># children before parents</span></span>
+<span id="cb7-39"><a href="#cb7-39" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> v <span class="kw">not</span> <span class="kw">in</span> seen:</span>
+<span id="cb7-40"><a href="#cb7-40" aria-hidden="true" tabindex="-1"></a>                seen.add(v)</span>
+<span id="cb7-41"><a href="#cb7-41" aria-hidden="true" tabindex="-1"></a>                <span class="cf">for</span> p <span class="kw">in</span> v._parents:</span>
+<span id="cb7-42"><a href="#cb7-42" aria-hidden="true" tabindex="-1"></a>                    topo(p)</span>
+<span id="cb7-43"><a href="#cb7-43" aria-hidden="true" tabindex="-1"></a>                order.append(v)</span>
+<span id="cb7-44"><a href="#cb7-44" aria-hidden="true" tabindex="-1"></a>        topo(<span class="va">self</span>)</span>
+<span id="cb7-45"><a href="#cb7-45" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.grad <span class="op">=</span> <span class="fl">1.0</span>                  <span class="co"># dL/dL = 1: blame starts here</span></span>
+<span id="cb7-46"><a href="#cb7-46" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> v <span class="kw">in</span> <span class="bu">reversed</span>(order):</span>
+<span id="cb7-47"><a href="#cb7-47" aria-hidden="true" tabindex="-1"></a>            v._backward_rule()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 </div>
 <div id="micro-autograd-check" class="cell" data-execution_count="7">
 <details class="code-fold">
 <summary>Code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>w, x, b <span class="op">=</span> Value(<span class="fl">0.7</span>), Value(<span class="fl">2.0</span>), Value(<span class="op">-</span><span class="fl">0.5</span>)</span>
-<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> ((w <span class="op">*</span> x) <span class="op">+</span> b).sigmoid()             <span class="co"># one neuron, forward</span></span>
-<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>loss <span class="op">=</span> (a <span class="op">+</span> (<span class="op">-</span><span class="fl">0.3</span>)) <span class="op">*</span> (a <span class="op">+</span> (<span class="op">-</span><span class="fl">0.3</span>))      <span class="co"># squared error vs target 0.3</span></span>
-<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>loss.backward()</span>
-<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a><span class="co"># analytic check: dL/dw = 2(a - y) * sigma'(z) * x</span></span>
-<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>z <span class="op">=</span> <span class="fl">0.7</span> <span class="op">*</span> <span class="fl">2.0</span> <span class="op">-</span> <span class="fl">0.5</span></span>
-<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>s <span class="op">=</span> <span class="dv">1</span> <span class="op">/</span> (<span class="dv">1</span> <span class="op">+</span> <span class="fl">2.718281828459045</span> <span class="op">**</span> (<span class="op">-</span>z))</span>
-<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"micro-autograd: dL/dw = </span><span class="sc">{</span>w<span class="sc">.</span>grad<span class="sc">:.6f}</span><span class="ss">"</span>)</span>
-<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"by hand:        dL/dw = </span><span class="sc">{</span><span class="dv">2</span> <span class="op">*</span> (s <span class="op">-</span> <span class="fl">0.3</span>) <span class="op">*</span> s <span class="op">*</span> (<span class="dv">1</span> <span class="op">-</span> s) <span class="op">*</span> <span class="fl">2.0</span><span class="sc">:.6f}</span><span class="ss">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>w, x, b <span class="op">=</span> Value(<span class="fl">0.7</span>), Value(<span class="fl">2.0</span>), Value(<span class="op">-</span><span class="fl">0.5</span>)</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> ((w <span class="op">*</span> x) <span class="op">+</span> b).sigmoid()             <span class="co"># one neuron, forward</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>loss <span class="op">=</span> (a <span class="op">+</span> (<span class="op">-</span><span class="fl">0.3</span>)) <span class="op">*</span> (a <span class="op">+</span> (<span class="op">-</span><span class="fl">0.3</span>))      <span class="co"># squared error vs target 0.3</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>loss.backward()</span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a><span class="co"># analytic check: dL/dw = 2(a - y) * sigma'(z) * x</span></span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>z <span class="op">=</span> <span class="fl">0.7</span> <span class="op">*</span> <span class="fl">2.0</span> <span class="op">-</span> <span class="fl">0.5</span></span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>s <span class="op">=</span> <span class="dv">1</span> <span class="op">/</span> (<span class="dv">1</span> <span class="op">+</span> <span class="fl">2.718281828459045</span> <span class="op">**</span> (<span class="op">-</span>z))</span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"micro-autograd: dL/dw = </span><span class="sc">{</span>w<span class="sc">.</span>grad<span class="sc">:.6f}</span><span class="ss">"</span>)</span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"by hand:        dL/dw = </span><span class="sc">{</span><span class="dv">2</span> <span class="op">*</span> (s <span class="op">-</span> <span class="fl">0.3</span>) <span class="op">*</span> s <span class="op">*</span> (<span class="dv">1</span> <span class="op">-</span> s) <span class="op">*</span> <span class="fl">2.0</span><span class="sc">:.6f}</span><span class="ss">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
 <pre><code>micro-autograd: dL/dw = 0.337801
 by hand:        dL/dw = 0.337801</code></pre>
 </div>
 </div>
-<p>Sixty lines, and it is the real thing: PyTorch’s autograd is this idea with tensors instead of scalars, a compiled graph walker, and thousands of derivative rules.</p>
+<p>In a few dozen lines, it is the real thing: PyTorch’s autograd is this idea with tensors instead of scalars, a compiled graph walker, and thousands of derivative rules.</p>
 </section>
 <section id="torch.autograd-in-practice-five-rules" class="level2" data-number="5.5">
 <h2 data-number="5.5" class="anchored" data-anchor-id="torch.autograd-in-practice-five-rules"><span class="header-section-number">5.5</span> <code>torch.autograd</code> in practice: five rules</h2>
 <p>Autograd is doing exactly what we just built by hand, and knowing that mechanics tells you why each of its rules exists. These five cover nearly every autograd bug you will meet; the live-session notebook walks through each in more depth.</p>
-<p><strong>Rule 1 — only leaf tensors collect gradients.</strong> A <em>leaf</em> is a tensor you created directly (your parameters); a <em>non-leaf</em> is the result of an operation (activations, losses). After <code>backward()</code>, only leaves have <code>.grad</code> populated <span class="math inline">\(\rightarrow\)</span> intermediate blame is used and discarded, exactly as our <code>Value</code> engine used parents’ rules and moved on.</p>
+<p><strong>Rule 1 — by default, only leaf tensors retain gradients.</strong> A <em>leaf</em> is a tensor you created directly (your parameters); a <em>non-leaf</em> is the result of an operation (activations, losses). After <code>backward()</code>, leaves have <code>.grad</code> populated while intermediate blame is used and released. Call <code>.retain_grad()</code> on a non-leaf before <code>backward()</code> only when you explicitly need its gradient for inspection.</p>
 <p><strong>Rule 2 — gradients accumulate.</strong> <code>backward()</code> <em>adds</em> into <code>.grad</code>. Zero them before each step (<code>optimizer.zero_grad()</code>), or every update uses the sum of all past gradients.</p>
 <div id="autograd-rules-demo" class="cell" data-execution_count="8">
 <details class="code-fold">
 <summary>Code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>w <span class="op">=</span> torch.randn(<span class="dv">3</span>, requires_grad<span class="op">=</span><span class="va">True</span>)      <span class="co"># leaf: our parameter</span></span>
-<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>y_hat <span class="op">=</span> (w <span class="op">*</span> <span class="dv">2</span>).<span class="bu">sum</span>()                       <span class="co"># non-leaf: result of an operation</span></span>
-<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>y_hat.backward()</span>
-<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"leaf grad:      </span><span class="sc">{</span>w<span class="sc">.</span>grad<span class="sc">.</span>tolist()<span class="sc">}</span><span class="ss">"</span>)            <span class="co"># populated</span></span>
-<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"non-leaf grad:  </span><span class="sc">{</span>y_hat<span class="sc">.</span>grad<span class="sc">}</span><span class="ss">"</span>)                 <span class="co"># None -- rule 1</span></span>
-<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>(w <span class="op">*</span> <span class="dv">2</span>).<span class="bu">sum</span>().backward()                    <span class="co"># backward again, WITHOUT zeroing</span></span>
-<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"after 2nd pass: </span><span class="sc">{</span>w<span class="sc">.</span>grad<span class="sc">.</span>tolist()<span class="sc">}</span><span class="ss">"</span>)            <span class="co"># doubled -- rule 2</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>w <span class="op">=</span> torch.randn(<span class="dv">3</span>, requires_grad<span class="op">=</span><span class="va">True</span>)      <span class="co"># leaf: our parameter</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>y_hat <span class="op">=</span> (w <span class="op">*</span> <span class="dv">2</span>).<span class="bu">sum</span>()                       <span class="co"># non-leaf: result of an operation</span></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>y_hat.backward()</span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"leaf grad:      </span><span class="sc">{</span>w<span class="sc">.</span>grad<span class="sc">.</span>tolist()<span class="sc">}</span><span class="ss">"</span>)            <span class="co"># populated</span></span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"non-leaf grad:  </span><span class="sc">{</span>y_hat<span class="sc">.</span>grad<span class="sc">}</span><span class="ss">"</span>)                 <span class="co"># None -- rule 1</span></span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>(w <span class="op">*</span> <span class="dv">2</span>).<span class="bu">sum</span>().backward()                    <span class="co"># backward again, WITHOUT zeroing</span></span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"after 2nd pass: </span><span class="sc">{</span>w<span class="sc">.</span>grad<span class="sc">.</span>tolist()<span class="sc">}</span><span class="ss">"</span>)            <span class="co"># doubled -- rule 2</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
 <pre><code>leaf grad:      [2.0, 2.0, 2.0]
@@ -809,9 +808,9 @@ non-leaf grad:  None
 after 2nd pass: [4.0, 4.0, 4.0]</code></pre>
 </div>
 </div>
-<p><strong>Rule 3 — parameter updates happen outside the graph.</strong> If the update <code>w = w - lr * w.grad</code> runs <em>inside</em> autograd’s view, two things go wrong: the update itself gets recorded (memory grows with every step, gradient-of-gradients), and worse, <code>w</code> silently becomes a <em>non-leaf</em> <span class="math inline">\(\rightarrow\)</span> by rule 1 it stops receiving gradients at all. The idiom from the live session:</p>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> torch.no_grad():                <span class="co"># temporarily stop recording</span></span>
-<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>    w <span class="op">-=</span> lr <span class="op">*</span> w.grad                 <span class="co"># update in place; w stays a leaf</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p><strong>Rule 3 — parameter updates happen outside the graph.</strong> For a raw leaf tensor, the update <code>w = w - lr * w.grad</code> inside autograd’s view records the update and rebinds <code>w</code> to a non-leaf, so its <code>.grad</code> will not be retained by default on the next pass. Assigning a plain tensor over a registered <code>nn.Parameter</code> may instead fail loudly. The safe idiom from the live session covers both cases:</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> torch.no_grad():                <span class="co"># temporarily stop recording</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>    w <span class="op">-=</span> lr <span class="op">*</span> w.grad                 <span class="co"># update in place; w stays a leaf</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p><strong>Rule 4 — in-place operations can corrupt the tape.</strong> Methods ending in <code>_</code> (<code>add_</code>, <code>relu_</code>) overwrite values that the backward pass may still need from the forward cache. Inside <code>no_grad()</code> parameter updates they are safe; anywhere else, prefer creating a new tensor.</p>
 <p><strong>Rule 5 — the graph lives until you let it go.</strong> Every forward pass builds a fresh graph, freed after <code>backward()</code>. But any tensor you keep (say, appending <code>loss</code> to a list for plotting) keeps its whole graph alive with it. Store <code>loss.item()</code> (a plain float) or <code>loss.detach()</code> instead: <code>detach()</code> returns the same value with the history cut.</p>
 <div class="callout callout-style-default callout-warning callout-titled">
@@ -820,11 +819,11 @@ after 2nd pass: [4.0, 4.0, 4.0]</code></pre>
 <i class="callout-icon"></i>
 </div>
 <div class="callout-title-container flex-fill">
-<span class="screen-reader-only">Warning</span>The one that silently ruins training
+<span class="screen-reader-only">Warning</span>Keep updates outside the graph
 </div>
 </div>
 <div class="callout-body-container callout-body">
-<p>Rules 1 and 3 combine into the classic bug: writing <code>self.w = self.w - lr * self.w.grad</code> creates a <strong>new non-leaf</strong> <code>w</code>. No error is raised; <code>.grad</code> simply comes back <code>None</code> on the next step, and the model never learns again. If a parameter’s gradient is mysteriously <code>None</code>, you almost certainly rebuilt it inside the graph.</p>
+<p>Rules 1 and 3 combine into a classic raw-tensor bug: rebinding <code>w = w - lr * w.grad</code> creates a <strong>new non-leaf</strong>. Its <code>.grad</code> then comes back <code>None</code> by default on the next pass. A registered <code>nn.Parameter</code> assignment can raise an error instead. In either case, update the existing parameter under <code>torch.no_grad()</code>.</p>
 </div>
 </div>
 </section>
@@ -835,18 +834,18 @@ after 2nd pass: [4.0, 4.0, 4.0]</code></pre>
 <div id="cell-fig-gates" class="cell" data-execution_count="9">
 <details class="code-fold">
 <summary>Code: plot the two gates</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
-<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>z <span class="op">=</span> torch.linspace(<span class="op">-</span><span class="dv">6</span>, <span class="dv">6</span>, <span class="dv">300</span>)</span>
-<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>sig <span class="op">=</span> torch.sigmoid(z)</span>
-<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>fig, axes <span class="op">=</span> plt.subplots(<span class="dv">1</span>, <span class="dv">2</span>, figsize<span class="op">=</span>(<span class="fl">7.4</span>, <span class="fl">2.9</span>), sharey<span class="op">=</span><span class="va">True</span>)</span>
-<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].plot(z, sig <span class="op">*</span> (<span class="dv">1</span> <span class="op">-</span> sig), color<span class="op">=</span><span class="st">"#232D4B"</span>)</span>
-<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].axhline(<span class="fl">0.25</span>, ls<span class="op">=</span><span class="st">"--"</span>, color<span class="op">=</span><span class="st">"#E57200"</span>, lw<span class="op">=</span><span class="dv">1</span>)</span>
-<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].text(<span class="fl">2.1</span>, <span class="fl">0.26</span>, <span class="st">"ceiling: 0.25"</span>, color<span class="op">=</span><span class="st">"#E57200"</span>, fontsize<span class="op">=</span><span class="dv">9</span>)</span>
-<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].set_title(<span class="vs">r"sigmoid gate </span><span class="dv">$\s</span><span class="vs">igma'</span><span class="kw">(</span><span class="vs">z</span><span class="kw">)</span><span class="dv">$</span><span class="vs">"</span>)<span class="op">;</span> axes[<span class="dv">0</span>].set_xlabel(<span class="st">"$z$"</span>)</span>
-<span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].plot(z, (z <span class="op">&gt;</span> <span class="dv">0</span>).<span class="bu">float</span>(), color<span class="op">=</span><span class="st">"#232D4B"</span>)</span>
-<span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].set_title(<span class="vs">r"ReLU gate"</span>)<span class="op">;</span> axes[<span class="dv">1</span>].set_xlabel(<span class="st">"$z$"</span>)</span>
-<span id="cb14-12"><a href="#cb14-12" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()<span class="op">;</span> plt.show()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>z <span class="op">=</span> torch.linspace(<span class="op">-</span><span class="dv">6</span>, <span class="dv">6</span>, <span class="dv">300</span>)</span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>sig <span class="op">=</span> torch.sigmoid(z)</span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>fig, axes <span class="op">=</span> plt.subplots(<span class="dv">1</span>, <span class="dv">2</span>, figsize<span class="op">=</span>(<span class="fl">7.4</span>, <span class="fl">2.9</span>), sharey<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].plot(z, sig <span class="op">*</span> (<span class="dv">1</span> <span class="op">-</span> sig), color<span class="op">=</span><span class="st">"#232D4B"</span>)</span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].axhline(<span class="fl">0.25</span>, ls<span class="op">=</span><span class="st">"--"</span>, color<span class="op">=</span><span class="st">"#E57200"</span>, lw<span class="op">=</span><span class="dv">1</span>)</span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].text(<span class="fl">2.1</span>, <span class="fl">0.26</span>, <span class="st">"ceiling: 0.25"</span>, color<span class="op">=</span><span class="st">"#E57200"</span>, fontsize<span class="op">=</span><span class="dv">9</span>)</span>
+<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].set_title(<span class="vs">r"sigmoid gate </span><span class="dv">$\s</span><span class="vs">igma'</span><span class="kw">(</span><span class="vs">z</span><span class="kw">)</span><span class="dv">$</span><span class="vs">"</span>)<span class="op">;</span> axes[<span class="dv">0</span>].set_xlabel(<span class="st">"$z$"</span>)</span>
+<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].plot(z, (z <span class="op">&gt;</span> <span class="dv">0</span>).<span class="bu">float</span>(), color<span class="op">=</span><span class="st">"#232D4B"</span>)</span>
+<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].set_title(<span class="vs">r"ReLU gate"</span>)<span class="op">;</span> axes[<span class="dv">1</span>].set_xlabel(<span class="st">"$z$"</span>)</span>
+<span id="cb13-12"><a href="#cb13-12" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()<span class="op">;</span> plt.show()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-display">
 <div id="fig-gates" class="quarto-float quarto-figure quarto-figure-center anchored">
@@ -861,31 +860,57 @@ Figure&nbsp;5.4: Two gates. The sigmoid’s derivative never exceeds 0.25 and va
 </div>
 </div>
 </div>
-<p>Here is the consequence, and it is the single most important failure mode in deep learning. The chain rule <em>multiplies</em> gates across layers <span class="math inline">\(\rightarrow\)</span> with sigmoid activations the backward signal shrinks by a factor of at most <span class="math inline">\(0.25\)</span> per layer, so after <span class="math inline">\(k\)</span> layers it is bounded by <span class="math inline">\(0.25^k\)</span>. Ten layers in, the ceiling is below one in a million. The blame reaching the early layers is too weak to update them: the <strong>vanishing gradient</strong> problem.</p>
-<p>The fix is almost embarrassingly simple. <span class="math inline">\(\mathrm{ReLU}(z) = \max(0, z)\)</span> has derivative <span class="math inline">\(1\)</span> for <span class="math inline">\(z &gt; 0\)</span> and <span class="math inline">\(0\)</span> otherwise (the kink at exactly zero never matters in floating point). The gate is either fully open or fully closed. For every neuron that was active in the forward pass, blame passes through <em>unchanged</em>: a <strong>gradient superhighway</strong> through the network. This, more than anything, is why ReLU and its variants are the default in deep networks.</p>
-<p>Do not take the argument on faith; measure it. We build the same 30-layer network twice (sigmoid vs.&nbsp;ReLU), push one batch through, and record how much gradient reaches each layer:</p>
+<p>Here is the consequence, and it is one of deep learning’s most important failure modes. The chain rule <em>multiplies</em> local Jacobians across layers. The activation-derivative part of a sigmoid path contributes at most <span class="math inline">\(0.25\)</span> per layer, so that part is bounded by <span class="math inline">\(0.25^k\)</span> after <span class="math inline">\(k\)</span> gates. Ten gates in, its ceiling is below one in a million. The weight matrices and branching paths also scale the full network Jacobian, so <span class="math inline">\(0.25^k\)</span> is not a bound on the complete gradient. It isolates why repeated sigmoid gates strongly favor vanishing signals.</p>
+<p>The fix is almost embarrassingly simple. <span class="math inline">\(\mathrm{ReLU}(z) = \max(0, z)\)</span> has derivative <span class="math inline">\(1\)</span> for <span class="math inline">\(z &gt; 0\)</span> and <span class="math inline">\(0\)</span> for <span class="math inline">\(z &lt; 0\)</span>. At the kink <span class="math inline">\(z=0\)</span>, PyTorch uses derivative <span class="math inline">\(0\)</span>; exact zeros can occur with zero biases or sparse activations. The gate is either fully open or fully closed. For every neuron that was active in the forward pass, the activation derivative contributes a factor of exactly one. The surrounding weight matrices can still scale the full signal, but the active ReLU does not shrink it: a <strong>gradient superhighway</strong> through the network. This, more than anything, is why ReLU and its variants are the default in deep networks.</p>
+<p>Do not take the argument on faith; measure it. We build the same 30-layer network twice (sigmoid versus ReLU), give both copies the same He-scaled weights and input batch, and record how much gradient reaches each layer. We compute the diagnostic in float64 so the norm itself does not underflow; then we ask the practical float32 question: would a learning-rate-<span class="math inline">\(0.1\)</span> update actually change the first layer’s stored weights?</p>
 <div id="cell-fig-vanishing" class="cell" data-execution_count="10">
 <details class="code-fold">
 <summary>Code: the depth experiment</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> torch <span class="im">import</span> nn</span>
-<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> grad_by_layer(activation: <span class="bu">type</span>[nn.Module], depth: <span class="bu">int</span> <span class="op">=</span> <span class="dv">30</span>, width: <span class="bu">int</span> <span class="op">=</span> <span class="dv">64</span>):</span>
-<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>    layers <span class="op">=</span> []</span>
-<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(depth):</span>
-<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a>        layers <span class="op">+=</span> [nn.Linear(width, width), activation()]</span>
-<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a>    net <span class="op">=</span> nn.Sequential(<span class="op">*</span>layers, nn.Linear(width, <span class="dv">1</span>))</span>
-<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a>    out <span class="op">=</span> net(torch.randn(<span class="dv">128</span>, width)).mean()</span>
-<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a>    out.backward()</span>
-<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> [lin.weight.grad.norm().item()</span>
-<span id="cb15-11"><a href="#cb15-11" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> lin <span class="kw">in</span> net <span class="cf">if</span> <span class="bu">isinstance</span>(lin, nn.Linear)][:<span class="op">-</span><span class="dv">1</span>]</span>
-<span id="cb15-12"><a href="#cb15-12" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-13"><a href="#cb15-13" aria-hidden="true" tabindex="-1"></a>torch.manual_seed(<span class="dv">6050</span>)</span>
-<span id="cb15-14"><a href="#cb15-14" aria-hidden="true" tabindex="-1"></a>plt.figure(figsize<span class="op">=</span>(<span class="fl">6.2</span>, <span class="fl">3.4</span>))</span>
-<span id="cb15-15"><a href="#cb15-15" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> act, color <span class="kw">in</span> [(nn.Sigmoid, <span class="st">"#232D4B"</span>), (nn.ReLU, <span class="st">"#E57200"</span>)]:</span>
-<span id="cb15-16"><a href="#cb15-16" aria-hidden="true" tabindex="-1"></a>    plt.semilogy(grad_by_layer(act), <span class="st">"o-"</span>, ms<span class="op">=</span><span class="dv">3</span>, color<span class="op">=</span>color, label<span class="op">=</span>act.<span class="va">__name__</span>)</span>
-<span id="cb15-17"><a href="#cb15-17" aria-hidden="true" tabindex="-1"></a>plt.xlabel(<span class="st">"layer (0 = closest to input)"</span>)</span>
-<span id="cb15-18"><a href="#cb15-18" aria-hidden="true" tabindex="-1"></a>plt.ylabel(<span class="vs">r"</span><span class="dv">$</span><span class="ch">\|</span><span class="er">\</span><span class="vs">partial L / </span><span class="er">\</span><span class="vs">partial W</span><span class="dv">^</span><span class="vs">{</span><span class="kw">(</span><span class="vs">l</span><span class="kw">)</span><span class="vs">}</span><span class="ch">\|</span><span class="dv">$</span><span class="vs">"</span>)</span>
-<span id="cb15-19"><a href="#cb15-19" aria-hidden="true" tabindex="-1"></a>plt.legend()<span class="op">;</span> plt.tight_layout()<span class="op">;</span> plt.show()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> torch <span class="im">import</span> nn</span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> gradient_diagnostic(</span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>    activation: <span class="bu">type</span>[nn.Module], depth: <span class="bu">int</span> <span class="op">=</span> <span class="dv">30</span>, width: <span class="bu">int</span> <span class="op">=</span> <span class="dv">64</span></span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>) <span class="op">-&gt;</span> <span class="bu">dict</span>[<span class="bu">str</span>, <span class="bu">object</span>]:</span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>    torch.manual_seed(<span class="dv">6050</span>)</span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a>    layers <span class="op">=</span> []</span>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(depth):</span>
+<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a>        layers <span class="op">+=</span> [nn.Linear(width, width), activation()]</span>
+<span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a>    net <span class="op">=</span> nn.Sequential(<span class="op">*</span>layers, nn.Linear(width, <span class="dv">1</span>)).double()</span>
+<span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">with</span> torch.no_grad():</span>
+<span id="cb14-12"><a href="#cb14-12" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> layer <span class="kw">in</span> net:</span>
+<span id="cb14-13"><a href="#cb14-13" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> <span class="bu">isinstance</span>(layer, nn.Linear):</span>
+<span id="cb14-14"><a href="#cb14-14" aria-hidden="true" tabindex="-1"></a>                nn.init.normal_(layer.weight, std<span class="op">=</span>(<span class="dv">2</span> <span class="op">/</span> layer.in_features) <span class="op">**</span> <span class="fl">0.5</span>)</span>
+<span id="cb14-15"><a href="#cb14-15" aria-hidden="true" tabindex="-1"></a>                nn.init.zeros_(layer.bias)</span>
+<span id="cb14-16"><a href="#cb14-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-17"><a href="#cb14-17" aria-hidden="true" tabindex="-1"></a>    out <span class="op">=</span> net(torch.randn(<span class="dv">128</span>, width, dtype<span class="op">=</span>torch.float64)).mean()</span>
+<span id="cb14-18"><a href="#cb14-18" aria-hidden="true" tabindex="-1"></a>    out.backward()</span>
+<span id="cb14-19"><a href="#cb14-19" aria-hidden="true" tabindex="-1"></a>    linears <span class="op">=</span> [layer <span class="cf">for</span> layer <span class="kw">in</span> net <span class="cf">if</span> <span class="bu">isinstance</span>(layer, nn.Linear)][:<span class="op">-</span><span class="dv">1</span>]</span>
+<span id="cb14-20"><a href="#cb14-20" aria-hidden="true" tabindex="-1"></a>    first <span class="op">=</span> linears[<span class="dv">0</span>]</span>
+<span id="cb14-21"><a href="#cb14-21" aria-hidden="true" tabindex="-1"></a>    grad32 <span class="op">=</span> first.weight.grad.<span class="bu">float</span>()</span>
+<span id="cb14-22"><a href="#cb14-22" aria-hidden="true" tabindex="-1"></a>    weight32 <span class="op">=</span> first.weight.detach().<span class="bu">float</span>()</span>
+<span id="cb14-23"><a href="#cb14-23" aria-hidden="true" tabindex="-1"></a>    changed <span class="op">=</span> ((weight32 <span class="op">-</span> <span class="fl">0.1</span> <span class="op">*</span> grad32) <span class="op">!=</span> weight32).<span class="bu">sum</span>().item()</span>
+<span id="cb14-24"><a href="#cb14-24" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> {</span>
+<span id="cb14-25"><a href="#cb14-25" aria-hidden="true" tabindex="-1"></a>        <span class="st">"norms"</span>: [layer.weight.grad.norm().item() <span class="cf">for</span> layer <span class="kw">in</span> linears],</span>
+<span id="cb14-26"><a href="#cb14-26" aria-hidden="true" tabindex="-1"></a>        <span class="st">"first_max"</span>: first.weight.grad.<span class="bu">abs</span>().<span class="bu">max</span>().item(),</span>
+<span id="cb14-27"><a href="#cb14-27" aria-hidden="true" tabindex="-1"></a>        <span class="st">"first_nonzero"</span>: grad32.count_nonzero().item(),</span>
+<span id="cb14-28"><a href="#cb14-28" aria-hidden="true" tabindex="-1"></a>        <span class="st">"first_changed"</span>: changed,</span>
+<span id="cb14-29"><a href="#cb14-29" aria-hidden="true" tabindex="-1"></a>        <span class="st">"first_size"</span>: grad32.numel(),</span>
+<span id="cb14-30"><a href="#cb14-30" aria-hidden="true" tabindex="-1"></a>    }</span>
+<span id="cb14-31"><a href="#cb14-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-32"><a href="#cb14-32" aria-hidden="true" tabindex="-1"></a>diagnostics <span class="op">=</span> {}</span>
+<span id="cb14-33"><a href="#cb14-33" aria-hidden="true" tabindex="-1"></a>plt.figure(figsize<span class="op">=</span>(<span class="fl">6.2</span>, <span class="fl">3.4</span>))</span>
+<span id="cb14-34"><a href="#cb14-34" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> act, color <span class="kw">in</span> [(nn.Sigmoid, <span class="st">"#232D4B"</span>), (nn.ReLU, <span class="st">"#E57200"</span>)]:</span>
+<span id="cb14-35"><a href="#cb14-35" aria-hidden="true" tabindex="-1"></a>    diagnostics[act.<span class="va">__name__</span>] <span class="op">=</span> gradient_diagnostic(act)</span>
+<span id="cb14-36"><a href="#cb14-36" aria-hidden="true" tabindex="-1"></a>    plt.semilogy(diagnostics[act.<span class="va">__name__</span>][<span class="st">"norms"</span>], <span class="st">"o-"</span>, ms<span class="op">=</span><span class="dv">3</span>,</span>
+<span id="cb14-37"><a href="#cb14-37" aria-hidden="true" tabindex="-1"></a>                 color<span class="op">=</span>color, label<span class="op">=</span>act.<span class="va">__name__</span>)</span>
+<span id="cb14-38"><a href="#cb14-38" aria-hidden="true" tabindex="-1"></a>plt.xlabel(<span class="st">"layer (0 = closest to input)"</span>)</span>
+<span id="cb14-39"><a href="#cb14-39" aria-hidden="true" tabindex="-1"></a>plt.ylabel(<span class="vs">r"</span><span class="dv">$</span><span class="ch">\|</span><span class="er">\</span><span class="vs">partial L / </span><span class="er">\</span><span class="vs">partial W</span><span class="dv">^</span><span class="vs">{</span><span class="kw">(</span><span class="vs">l</span><span class="kw">)</span><span class="vs">}</span><span class="ch">\|</span><span class="dv">$</span><span class="vs">"</span>)</span>
+<span id="cb14-40"><a href="#cb14-40" aria-hidden="true" tabindex="-1"></a>plt.legend()<span class="op">;</span> plt.tight_layout()<span class="op">;</span> plt.show()</span>
+<span id="cb14-41"><a href="#cb14-41" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-42"><a href="#cb14-42" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> name, result <span class="kw">in</span> diagnostics.items():</span>
+<span id="cb14-43"><a href="#cb14-43" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"</span><span class="sc">{</span>name<span class="sc">:7s}</span><span class="ss">: max|g0|=</span><span class="sc">{</span>result[<span class="st">'first_max'</span>]<span class="sc">:.2e}</span><span class="ss">; "</span></span>
+<span id="cb14-44"><a href="#cb14-44" aria-hidden="true" tabindex="-1"></a>          <span class="ss">f"nonzero=</span><span class="sc">{</span>result[<span class="st">'first_nonzero'</span>]<span class="sc">}</span><span class="ss">/</span><span class="sc">{</span>result[<span class="st">'first_size'</span>]<span class="sc">}</span><span class="ss">; "</span></span>
+<span id="cb14-45"><a href="#cb14-45" aria-hidden="true" tabindex="-1"></a>          <span class="ss">f"changed=</span><span class="sc">{</span>result[<span class="st">'first_changed'</span>]<span class="sc">}</span><span class="ss">/</span><span class="sc">{</span>result[<span class="st">'first_size'</span>]<span class="sc">}</span><span class="ss">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-display">
 <div id="fig-vanishing" class="quarto-float quarto-figure quarto-figure-center anchored">
@@ -894,13 +919,17 @@ Figure&nbsp;5.4: Two gates. The sigmoid’s derivative never exceeds 0.25 and va
 <img src="05-backpropagation_files/figure-html/fig-vanishing-output-1.png" width="585" height="316" class="figure-img">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-vanishing-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;5.5: Gradient reaching each layer of a 30-layer MLP (log scale). Depth attenuates both, but the sigmoid gates compound the decay so violently that below layer 5 the gradient falls beneath floating-point precision entirely, while ReLU’s per-layer decay stays gentle enough for usable signal to reach the input.
+Figure&nbsp;5.5: Gradient reaching each layer of two matched 30-layer MLPs (float64 norm, log scale). With the same He-scaled weights and inputs, repeated sigmoid gates leave a nonzero but unusably small first-layer signal; ReLU preserves enough signal for a float32 update to change every first-layer weight.
 </figcaption>
 </figure>
 </div>
 </div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Sigmoid: max|g0|=9.47e-17; nonzero=4096/4096; changed=0/4096
+ReLU   : max|g0|=2.54e-02; nonzero=4096/4096; changed=4096/4096</code></pre>
 </div>
-<p>Read the slopes: every step backward through a sigmoid layer multiplies the signal by its nearly-closed gate, and the compounding is so violent that by five layers from the input the gradient is numerically <em>zero</em> — those layers will never learn. ReLU is not magic (depth still attenuates the signal), but its open gates make the per-layer decay orders of magnitude gentler, and usable blame reaches all the way down. When we build deep MLPs for real in <a href="03-nonlinearity-mlp.html" class="quarto-xref"><span>Chapter 3</span></a>, this plot is the reason they train at all.</p>
+</div>
+<p>Read the slopes, then read the update audit. The sigmoid first-layer entries are not mathematically or representationally zero: all 4,096 survive the float32 cast. They are so small, however, that subtracting <span class="math inline">\(0.1g\)</span> changes none of the stored float32 weights. The ReLU copy changes all 4,096. That distinction matters: a displayed float32 norm can underflow while individual entries remain nonzero, and nonzero gradients can still be too small to move a parameter at its current magnitude. ReLU is not magic, but its open gates make the signal usable in this matched experiment.</p>
 </section>
 <section id="initialization-setting-the-signals-energy" class="level2" data-number="5.7">
 <h2 data-number="5.7" class="anchored" data-anchor-id="initialization-setting-the-signals-energy"><span class="header-section-number">5.7</span> Initialization: setting the signal’s energy</h2>
@@ -914,26 +943,31 @@ Figure&nbsp;5.5: Gradient reaching each layer of a 30-layer MLP (log scale). Dep
 <div id="cell-fig-init" class="cell" data-execution_count="11">
 <details class="code-fold">
 <summary>Code: signal energy vs depth</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> signal_std(scale_fn, depth: <span class="bu">int</span> <span class="op">=</span> <span class="dv">40</span>, width: <span class="bu">int</span> <span class="op">=</span> <span class="dv">256</span>):</span>
-<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>    x <span class="op">=</span> torch.randn(<span class="dv">512</span>, width)</span>
-<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>    stds <span class="op">=</span> []</span>
-<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(depth):</span>
-<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>        W <span class="op">=</span> scale_fn(torch.randn(width, width), width)</span>
-<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>        x <span class="op">=</span> torch.relu(x <span class="op">@</span> W)</span>
-<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>        stds.append(x.std().item())</span>
-<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> stds</span>
-<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a>torch.manual_seed(<span class="dv">6050</span>)</span>
-<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a>schemes <span class="op">=</span> {</span>
-<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a>    <span class="st">"naive  (std = 0.05)"</span>: <span class="kw">lambda</span> W, n: W <span class="op">*</span> <span class="fl">0.05</span>,</span>
-<span id="cb16-13"><a href="#cb16-13" aria-hidden="true" tabindex="-1"></a>    <span class="st">"naive  (std = 0.12)"</span>: <span class="kw">lambda</span> W, n: W <span class="op">*</span> <span class="fl">0.12</span>,</span>
-<span id="cb16-14"><a href="#cb16-14" aria-hidden="true" tabindex="-1"></a>    <span class="st">"He  (std = sqrt(2/n))"</span>: <span class="kw">lambda</span> W, n: W <span class="op">*</span> (<span class="dv">2</span> <span class="op">/</span> n) <span class="op">**</span> <span class="fl">0.5</span>,</span>
-<span id="cb16-15"><a href="#cb16-15" aria-hidden="true" tabindex="-1"></a>}</span>
-<span id="cb16-16"><a href="#cb16-16" aria-hidden="true" tabindex="-1"></a>plt.figure(figsize<span class="op">=</span>(<span class="fl">6.2</span>, <span class="fl">3.4</span>))</span>
-<span id="cb16-17"><a href="#cb16-17" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (name, fn), color <span class="kw">in</span> <span class="bu">zip</span>(schemes.items(), [<span class="st">"#5379AA"</span>, <span class="st">"#722F37"</span>, <span class="st">"#E57200"</span>]):</span>
-<span id="cb16-18"><a href="#cb16-18" aria-hidden="true" tabindex="-1"></a>    plt.semilogy(signal_std(fn), color<span class="op">=</span>color, label<span class="op">=</span>name)</span>
-<span id="cb16-19"><a href="#cb16-19" aria-hidden="true" tabindex="-1"></a>plt.xlabel(<span class="st">"layer"</span>)<span class="op">;</span> plt.ylabel(<span class="st">"std of activations"</span>)</span>
-<span id="cb16-20"><a href="#cb16-20" aria-hidden="true" tabindex="-1"></a>plt.legend()<span class="op">;</span> plt.tight_layout()<span class="op">;</span> plt.show()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> collections.abc <span class="im">import</span> Callable</span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> signal_std(</span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>    scale_fn: Callable[[torch.Tensor, <span class="bu">int</span>], torch.Tensor],</span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>    depth: <span class="bu">int</span> <span class="op">=</span> <span class="dv">40</span>, width: <span class="bu">int</span> <span class="op">=</span> <span class="dv">256</span></span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>) <span class="op">-&gt;</span> <span class="bu">list</span>[<span class="bu">float</span>]:</span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>    x <span class="op">=</span> torch.randn(<span class="dv">512</span>, width)</span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a>    stds <span class="op">=</span> []</span>
+<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(depth):</span>
+<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a>        W <span class="op">=</span> scale_fn(torch.randn(width, width), width)</span>
+<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a>        x <span class="op">=</span> torch.relu(x <span class="op">@</span> W)</span>
+<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a>        stds.append(x.std().item())</span>
+<span id="cb16-13"><a href="#cb16-13" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> stds</span>
+<span id="cb16-14"><a href="#cb16-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-15"><a href="#cb16-15" aria-hidden="true" tabindex="-1"></a>torch.manual_seed(<span class="dv">6050</span>)</span>
+<span id="cb16-16"><a href="#cb16-16" aria-hidden="true" tabindex="-1"></a>schemes <span class="op">=</span> {</span>
+<span id="cb16-17"><a href="#cb16-17" aria-hidden="true" tabindex="-1"></a>    <span class="st">"naive  (std = 0.05)"</span>: <span class="kw">lambda</span> W, n: W <span class="op">*</span> <span class="fl">0.05</span>,</span>
+<span id="cb16-18"><a href="#cb16-18" aria-hidden="true" tabindex="-1"></a>    <span class="st">"naive  (std = 0.12)"</span>: <span class="kw">lambda</span> W, n: W <span class="op">*</span> <span class="fl">0.12</span>,</span>
+<span id="cb16-19"><a href="#cb16-19" aria-hidden="true" tabindex="-1"></a>    <span class="st">"He  (std = sqrt(2/n))"</span>: <span class="kw">lambda</span> W, n: W <span class="op">*</span> (<span class="dv">2</span> <span class="op">/</span> n) <span class="op">**</span> <span class="fl">0.5</span>,</span>
+<span id="cb16-20"><a href="#cb16-20" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb16-21"><a href="#cb16-21" aria-hidden="true" tabindex="-1"></a>plt.figure(figsize<span class="op">=</span>(<span class="fl">6.2</span>, <span class="fl">3.4</span>))</span>
+<span id="cb16-22"><a href="#cb16-22" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (name, fn), color <span class="kw">in</span> <span class="bu">zip</span>(schemes.items(), [<span class="st">"#5379AA"</span>, <span class="st">"#722F37"</span>, <span class="st">"#E57200"</span>]):</span>
+<span id="cb16-23"><a href="#cb16-23" aria-hidden="true" tabindex="-1"></a>    plt.semilogy(signal_std(fn), color<span class="op">=</span>color, label<span class="op">=</span>name)</span>
+<span id="cb16-24"><a href="#cb16-24" aria-hidden="true" tabindex="-1"></a>plt.xlabel(<span class="st">"layer"</span>)<span class="op">;</span> plt.ylabel(<span class="st">"std of activations"</span>)</span>
+<span id="cb16-25"><a href="#cb16-25" aria-hidden="true" tabindex="-1"></a>plt.legend()<span class="op">;</span> plt.tight_layout()<span class="op">;</span> plt.show()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-display">
 <div id="fig-init" class="quarto-float quarto-figure quarto-figure-center anchored">
@@ -948,17 +982,26 @@ Figure&nbsp;5.6: Signal energy through 40 ReLU layers. Careless scales lose or a
 </div>
 </div>
 </div>
-<p>Initialization gives a stable <em>start</em>. Keeping the signal stable <em>during</em> training, as the weights move, is the job of normalization layers; and for very deep networks even that is not enough, and gradients get an architectural bypass: skip connections that add a block’s input straight to its output. Both belong to later chapters (normalization with training practice in <a href="04-training-loss-sgd.html" class="quarto-xref"><span>Chapter 4</span></a> and <a href="../part2/09-modern-cnns-transfer.html" class="quarto-xref"><span>Chapter 9</span></a>; the residual idea in <a href="../part2/09-modern-cnns-transfer.html" class="quarto-xref"><span>Chapter 9</span></a>, and layer normalization where it becomes essential, inside the Transformer of <a href="../part4/14-self-attention-transformer.html" class="quarto-xref"><span>Chapter 14</span></a>). What you should carry from here is the invariant they all serve: <em>keep the signal, forward and backward, at constant energy</em>.</p>
+<p>Initialization gives a stable <em>start</em>. Keeping the signal stable <em>during</em> training, as the weights move, is the job of normalization layers; and for very deep networks even that is not enough, and gradients get an architectural bypass: skip connections that add a block’s input straight to its output. Both belong to later chapters (normalization and the residual idea in <a href="../part2/09-modern-cnns-transfer.html" class="quarto-xref"><span>Chapter 9</span></a>, and layer normalization where it becomes essential, inside the Transformer of <a href="../part4/14-self-attention-transformer.html" class="quarto-xref"><span>Chapter 14</span></a>). What you should carry from here is the invariant they all serve: <em>keep the signal, forward and backward, at constant energy</em>.</p>
 </section>
 <section id="okay-so-the-chain-rule-organized" class="level2" data-number="5.8">
 <h2 data-number="5.8" class="anchored" data-anchor-id="okay-so-the-chain-rule-organized"><span class="header-section-number">5.8</span> Okay, so — the chain rule, organized</h2>
 <ol type="1">
 <li><strong>The graph.</strong> Any network is a computation graph; the forward pass computes and caches, the backward pass multiplies local derivatives in reverse.</li>
-<li><strong>The blame signal.</strong> <span class="math inline">\(\delta^{(l)} = \partial L / \partial \vect{z}^{(l)}\)</span> turns the tangle into four equations: start at the output (<a href="#eq-bp1" class="quarto-xref">Equation&nbsp;<span>5.2</span></a>), propagate through <span class="math inline">\(\matr{W}^\top\)</span> and the gate (<a href="#eq-bp2" class="quarto-xref">Equation&nbsp;<span>5.3</span></a>), then read off weight and bias gradients (<a href="#eq-bp3" class="quarto-xref">Equation&nbsp;<span>5.4</span></a>, <a href="#eq-bp4" class="quarto-xref">Equation&nbsp;<span>5.5</span></a>). Cost: one extra forward pass, for <em>every</em> gradient at once.</li>
-<li><strong>We verified it</strong>: our hand-built equations match <code>torch.autograd</code> to <span class="math inline">\(10^{-8}\)</span>, and a 60-line <code>Value</code> class reproduces the machinery end to end.</li>
-<li><strong>The gate rules the depth.</strong> Multiplied sigmoid gates vanish like <span class="math inline">\(0.25^k\)</span>; ReLU’s open gate is a gradient superhighway. Initialization sets the signal’s energy so neither direction explodes or dies at the start.</li>
+<li><strong>The blame signal.</strong> <span class="math inline">\(\delta^{(l)} = \partial L / \partial \vect{z}^{(l)}\)</span> turns the tangle into four equations: start at the output (<a href="#eq-bp1" class="quarto-xref">Equation&nbsp;<span>5.2</span></a>), propagate through <span class="math inline">\(\matr{W}^\top\)</span> and the gate (<a href="#eq-bp2" class="quarto-xref">Equation&nbsp;<span>5.3</span></a>), then read off weight and bias gradients (<a href="#eq-bp3" class="quarto-xref">Equation&nbsp;<span>5.4</span></a>, <a href="#eq-bp4" class="quarto-xref">Equation&nbsp;<span>5.5</span></a>). The backward sweep costs a small constant multiple of the forward graph’s operations, for <em>every</em> gradient at once.</li>
+<li><strong>We verified it</strong>: our hand-built equations match <code>torch.autograd</code> to <span class="math inline">\(10^{-8}\)</span>, and a tiny scalar <code>Value</code> class reproduces the machinery end to end.</li>
+<li><strong>The gate rules the depth.</strong> The sigmoid-derivative product along a path is bounded above by <span class="math inline">\(0.25^k\)</span> after <span class="math inline">\(k\)</span> gates; ReLU’s open gate is a gradient superhighway. Initialization sets the signal’s energy so neither direction explodes or dies at the start.</li>
 </ol>
 <p>Backpropagation is the engine under every remaining chapter. The next time a deep model fails to learn, your first questions now have names: <em>is the gradient reaching the early layers? what is gating it? what is its energy?</em></p>
+</section>
+<section id="sources-and-further-reading" class="level2 unnumbered">
+<h2 class="unnumbered anchored" data-anchor-id="sources-and-further-reading">Sources and further reading</h2>
+<ul>
+<li>Rumelhart, Hinton, and Williams, <a href="https://doi.org/10.1038/323533a0">“Learning representations by back-propagating errors”</a> (1986): the landmark short account of learning internal representations by reverse error propagation.</li>
+<li>Baydin et al., <a href="https://jmlr.org/papers/v18/17-468.html">“Automatic Differentiation in Machine Learning: a Survey”</a> (2018): separates reverse-mode automatic differentiation from symbolic and numerical differentiation.</li>
+<li>Glorot and Bengio, <a href="https://proceedings.mlr.press/v9/glorot10a.html">“Understanding the difficulty of training deep feedforward neural networks”</a> (2010): the variance argument behind Xavier initialization.</li>
+<li>He et al., <a href="https://openaccess.thecvf.com/content_iccv_2015/html/He_Delving_Deep_into_ICCV_2015_paper.html">“Delving Deep into Rectifiers”</a> (2015): derives the rectifier-aware initialization used in the matched depth experiment.</li>
+</ul>
 </section>
 <section id="exercises" class="level2 unnumbered">
 <h2 class="unnumbered anchored" data-anchor-id="exercises">Exercises</h2>

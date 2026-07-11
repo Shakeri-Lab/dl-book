@@ -430,6 +430,7 @@ window.Quarto = {
   <li><a href="#the-matrix-view-a-structured-weight-shared-linear-map" id="toc-the-matrix-view-a-structured-weight-shared-linear-map" class="nav-link" data-scroll-target="#the-matrix-view-a-structured-weight-shared-linear-map"><span class="header-section-number">7.7</span> The matrix view: a structured, weight-shared linear map</a></li>
   <li><a href="#the-bottleneck-someone-has-to-design-the-kernel" id="toc-the-bottleneck-someone-has-to-design-the-kernel" class="nav-link" data-scroll-target="#the-bottleneck-someone-has-to-design-the-kernel"><span class="header-section-number">7.8</span> The bottleneck: someone has to design the kernel</a></li>
   <li><a href="#okay-so-the-machine-before-the-learning" id="toc-okay-so-the-machine-before-the-learning" class="nav-link" data-scroll-target="#okay-so-the-machine-before-the-learning"><span class="header-section-number">7.9</span> Okay, so — the machine before the learning</a></li>
+  <li><a href="#sources-and-further-reading" id="toc-sources-and-further-reading" class="nav-link" data-scroll-target="#sources-and-further-reading">Sources and further reading</a></li>
   <li><a href="#exercises" id="toc-exercises" class="nav-link" data-scroll-target="#exercises">Exercises</a></li>
   </ul>
 <div class="toc-actions"><ul><li><a href="https://github.com/Shakeri-Lab/dl-book/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></nav>
@@ -461,10 +462,10 @@ window.Quarto = {
             §Cross-Correlation, §Limitations of Hand-Crafted Kernels) -->
 <p>Part I ended with a diagnosis and a prescription. The diagnosis: our MLP’s templates span the whole frame, so they are blind to adjacency and brittle to position (<a href="../part1/06-generalization-inductive-bias.html" class="quarto-xref"><span>Chapter 6</span></a>). The prescription, in one sentence: <em>make the template local, and slide it.</em></p>
 <p>This chapter builds that machine with our bare hands — no learning anywhere. It is a piece of classical engineering, decades older than deep learning, and computer-vision experts spent careers designing its templates manually. Understanding the machine in its fixed, hand-crafted form is the whole point of the chapter, because Part II’s revolution (<a href="08-cnn.html" class="quarto-xref"><span>Chapter 8</span></a>) will consist of exactly one change to it.</p>
-<p>Recall the primitive from <a href="../part1/01-linear-regression.html" class="quarto-xref"><span>Chapter 1</span></a>: a dot product is a similarity score against a template. Everything below is that one primitive, applied locally, everywhere.</p>
+<p>Recall the primitive from <a href="../part1/01-linear-regression.html" class="quarto-xref"><span>Chapter 1</span></a>: a dot product scores an input against a template. When their norms are controlled, its angle component measures similarity. Everything below is that one primitive, applied locally, everywhere.</p>
 <section id="two-principles-one-strategy" class="level2" data-number="7.1">
 <h2 data-number="7.1" class="anchored" data-anchor-id="two-principles-one-strategy"><span class="header-section-number">7.1</span> Two principles, one strategy</h2>
-<p>The failures of Chapter 6 tell us what knowledge to build in — the two principles from the lecture:</p>
+<p>The failures of Chapter 6 tell us what knowledge to build in, the two principles from the lecture:</p>
 <ol type="1">
 <li><strong>Spatial locality.</strong> Nearby pixels are more related than distant ones. Edges, textures, and patterns emerge from <em>local neighborhoods</em>, not global pixel arrangements.</li>
 <li><strong>Translation equivariance.</strong> The same feature detector should work regardless of position — a cat’s ear is a cat’s ear whether it appears top-left or bottom-right.</li>
@@ -473,7 +474,7 @@ window.Quarto = {
 </section>
 <section id="start-in-1d-the-moving-average" class="level2" data-number="7.2">
 <h2 data-number="7.2" class="anchored" data-anchor-id="start-in-1d-the-moving-average"><span class="header-section-number">7.2</span> Start in 1D: the moving average</h2>
-<p>The core operation appears in its friendliest form when smoothing a noisy signal. A moving average replaces each point by the mean of its neighborhood — locality, with <em>uniform</em> weights:</p>
+<p>The core operation appears in its friendliest form when smoothing a noisy signal. A moving average replaces each point by the mean of its neighborhood: locality, with <em>uniform</em> weights:</p>
 <div id="cell-fig-moving-average" class="cell" data-execution_count="1">
 <details class="code-fold">
 <summary>Code: 1D moving average</summary>
@@ -513,31 +514,28 @@ Figure&nbsp;7.1: A window of uniform weights, slid along a noisy signal, averagi
 <ol type="1">
 <li>Define a small window of weights, the <strong>kernel</strong> (for a blur: all positive, summing to 1).</li>
 <li>Place the kernel over a patch of the image.</li>
-<li>Multiply elementwise — kernel weights against the pixels underneath.</li>
+<li>Multiply elementwise: kernel weights against the pixels underneath.</li>
 <li>Sum the products into a single output pixel. <em>(Steps 3–4 are one dot product: the patch, scored against a small template.)</em></li>
 <li><strong>Slide the window</strong> to the next location and repeat, producing a new image.</li>
 </ol>
-<p>Let us implement the recipe literally, and then check it against the framework’s version — the build-then-verify habit of this book:</p>
+<p>Let us expose every sliding patch at once, multiply each by the kernel, and sum. Then we check the result against the framework’s version, following the build-then-verify habit of this book:</p>
 <div id="manual-conv" class="cell" data-execution_count="2">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> manual_conv2d(x: torch.Tensor, k: torch.Tensor) <span class="op">-&gt;</span> torch.Tensor:</span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""The five-step recipe, verbatim: slide, multiply, sum."""</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""Cross-correlate one 2-D image and kernel via a view of sliding patches."""</span></span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    kh, kw <span class="op">=</span> k.shape</span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    H <span class="op">=</span> torch.zeros(x.shape[<span class="dv">0</span>] <span class="op">-</span> kh <span class="op">+</span> <span class="dv">1</span>, x.shape[<span class="dv">1</span>] <span class="op">-</span> kw <span class="op">+</span> <span class="dv">1</span>)</span>
-<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(H.shape[<span class="dv">0</span>]):</span>
-<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> j <span class="kw">in</span> <span class="bu">range</span>(H.shape[<span class="dv">1</span>]):</span>
-<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>            H[i, j] <span class="op">=</span> (x[i:i <span class="op">+</span> kh, j:j <span class="op">+</span> kw] <span class="op">*</span> k).<span class="bu">sum</span>()   <span class="co"># one dot product</span></span>
-<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> H</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    patches <span class="op">=</span> x.unfold(<span class="dv">0</span>, kh, <span class="dv">1</span>).unfold(<span class="dv">1</span>, kw, <span class="dv">1</span>)          <span class="co"># (Hout, Wout, kh, kw)</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> (patches <span class="op">*</span> k).<span class="bu">sum</span>(dim<span class="op">=</span>(<span class="op">-</span><span class="dv">1</span>, <span class="op">-</span><span class="dv">2</span>))                 <span class="co"># one score per patch</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> conv2d(x: torch.Tensor, k: torch.Tensor) <span class="op">-&gt;</span> torch.Tensor:</span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> F.conv2d(x[<span class="va">None</span>, <span class="va">None</span>], k[<span class="va">None</span>, <span class="va">None</span>]).squeeze()</span>
 <span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> conv2d(x, k):                                          <span class="co"># the fast version</span></span>
-<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> F.conv2d(x[<span class="va">None</span>, <span class="va">None</span>], k[<span class="va">None</span>, <span class="va">None</span>]).squeeze()</span>
-<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>torch.manual_seed(<span class="dv">6050</span>)</span>
-<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>x_test <span class="op">=</span> torch.rand(<span class="dv">10</span>, <span class="dv">12</span>)</span>
-<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>k_test <span class="op">=</span> torch.randn(<span class="dv">3</span>, <span class="dv">3</span>)</span>
-<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>gap <span class="op">=</span> (manual_conv2d(x_test, k_test) <span class="op">-</span> conv2d(x_test, k_test)).<span class="bu">abs</span>().<span class="bu">max</span>()</span>
-<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"recipe vs. torch.conv2d: max |diff| = </span><span class="sc">{</span>gap<span class="sc">:.1e}</span><span class="ss">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>torch.manual_seed(<span class="dv">6050</span>)</span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>x_test <span class="op">=</span> torch.rand(<span class="dv">10</span>, <span class="dv">12</span>)</span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>k_test <span class="op">=</span> torch.randn(<span class="dv">3</span>, <span class="dv">3</span>)</span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>gap <span class="op">=</span> (manual_conv2d(x_test, k_test) <span class="op">-</span> conv2d(x_test, k_test)).<span class="bu">abs</span>().<span class="bu">max</span>()</span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"recipe vs. torch.conv2d: max |diff| = </span><span class="sc">{</span>gap<span class="sc">:.1e}</span><span class="ss">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
 <pre><code>recipe vs. torch.conv2d: max |diff| = 4.8e-07</code></pre>
@@ -548,9 +546,9 @@ Figure&nbsp;7.1: A window of uniform weights, slid along a noisy signal, averagi
 </section>
 <section id="the-filter-zoo" class="level2" data-number="7.4">
 <h2 data-number="7.4" class="anchored" data-anchor-id="the-filter-zoo"><span class="header-section-number">7.4</span> The filter zoo</h2>
-<p>Here is the remarkable part: the recipe never changes — <em>only the numbers in the kernel do</em> — and different numbers produce completely different specialists. Three classics, applied to a synthetic test scene and to a boot from our Fashion-MNIST subset:</p>
+<p>Here is the remarkable part: the recipe never changes — <em>only the numbers in the kernel do</em>. Different numbers produce completely different specialists. Three classics, applied to a synthetic test scene and to a boot from our Fashion-MNIST subset:</p>
 <ul>
-<li><strong>Blur</strong>: uniform positive weights summing to 1 — the 2-D moving average.</li>
+<li><strong>Blur</strong>: uniform positive weights summing to 1, the 2-D moving average.</li>
 <li><strong>Sharpen</strong>: amplify each pixel’s difference from its neighbors.</li>
 <li><strong>Edge detection</strong> (Sobel): positive and negative weights summing to <em>zero</em> — over any flat region the products cancel and the output is silent; over an edge, a sharp change in values, the sum swings large. A detector that answers one question: <em>does intensity change here, in my direction?</em></li>
 </ul>
@@ -566,8 +564,8 @@ Figure&nbsp;7.1: A window of uniform weights, slid along a noisy signal, averagi
 <span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>    img[<span class="dv">8</span>:<span class="dv">56</span>, <span class="dv">40</span>:<span class="dv">60</span>] <span class="op">=</span> stripes[<span class="dv">8</span>:<span class="dv">56</span>, <span class="dv">40</span>:<span class="dv">60</span>]                  <span class="co"># diagonal stripes</span></span>
 <span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> img</span>
 <span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>test <span class="op">=</span> torch.load(<span class="st">"../../data/fashion-test.pt"</span>)</span>
-<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>boot <span class="op">=</span> test[<span class="st">"X"</span>][(test[<span class="st">"y"</span>] <span class="op">==</span> <span class="dv">9</span>).nonzero()[<span class="dv">0</span>, <span class="dv">0</span>]].<span class="bu">float</span>() <span class="op">/</span> <span class="fl">255.0</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>development <span class="op">=</span> torch.load(<span class="st">"../../data/fashion-train.pt"</span>)</span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>boot <span class="op">=</span> development[<span class="st">"X"</span>][(development[<span class="st">"y"</span>] <span class="op">==</span> <span class="dv">9</span>).nonzero()[<span class="dv">0</span>, <span class="dv">0</span>]].<span class="bu">float</span>() <span class="op">/</span> <span class="fl">255.0</span></span>
 <span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>kernels <span class="op">=</span> {</span>
 <span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>    <span class="st">"original"</span>: torch.tensor([[<span class="fl">0.</span>, <span class="fl">0.</span>, <span class="fl">0.</span>], [<span class="fl">0.</span>, <span class="fl">1.</span>, <span class="fl">0.</span>], [<span class="fl">0.</span>, <span class="fl">0.</span>, <span class="fl">0.</span>]]),</span>
@@ -594,7 +592,7 @@ Figure&nbsp;7.1: A window of uniform weights, slid along a noisy signal, averagi
 <img src="07-filters-convolution_files/figure-html/fig-filter-zoo-output-1.png" width="739" height="312" class="figure-img">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-filter-zoo-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;7.2: One recipe, four specialists. Each column applies a different 3×3 kernel to the same inputs: identity, blur (local average), sharpen, and the two Sobel edge detectors — the vertical-edge kernel fires on vertical boundaries, the horizontal one on horizontal boundaries. The kernel’s numbers are the entire difference.
+Figure&nbsp;7.2: One recipe, five kernels. Each column applies a different 3×3 kernel to the same inputs: identity, blur (local average), sharpen, and two Sobel edge detectors. The vertical-edge kernel fires on vertical boundaries; the horizontal one fires on horizontal boundaries.
 </figcaption>
 </figure>
 </div>
@@ -624,7 +622,7 @@ Figure&nbsp;7.2: One recipe, four specialists. Each column applies a different 3
 </section>
 <section id="the-property-we-paid-for-equivariance" class="level2" data-number="7.6">
 <h2 data-number="7.6" class="anchored" data-anchor-id="the-property-we-paid-for-equivariance"><span class="header-section-number">7.6</span> The property we paid for: equivariance</h2>
-<p>Now collect the reward that Chapter 6’s MLP could never have. Slide-and-score treats every position identically <span class="math inline">\(\rightarrow\)</span> if the input shifts, the output shifts <em>with it</em>, unchanged in content. That is <strong>translation equivariance</strong>, and it need not be taken on faith:</p>
+<p>Now collect the reward that Chapter 6’s MLP could never have. Away from boundaries, slide-and-score treats every position identically <span class="math inline">\(\rightarrow\)</span> if the input shifts, the output shifts <em>with it</em>, unchanged in content. That is <strong>translation equivariance</strong>, and it need not be taken on faith:</p>
 <div id="equivariance" class="cell" data-execution_count="4">
 <details class="code-fold">
 <summary>Code</summary>
@@ -647,13 +645,52 @@ Figure&nbsp;7.2: One recipe, four specialists. Each column applies a different 3
 <pre><code>filter(shift(x)) vs shift(filter(x)): max |diff| = 0.0</code></pre>
 </div>
 </div>
-<p>Exactly zero. The detector’s report moves with the garment; nothing is <em>lost</em> by translation. Contrast Chapter 6: the MLP’s global templates degraded under a 2-pixel shift because position was baked into every weight. Here, position is structurally incapable of mattering to <em>what</em> is detected — only to <em>where</em> the detection lands.</p>
-<p>One precision worth keeping sharp, because the two words will both matter: <strong>equivariant</strong> means the output moves along with the input (what convolution gives us); <strong>invariant</strong> means the output does not change at all (what a classifier ultimately wants — “boot”, regardless of position). Equivariance is the raw material; in <a href="08-cnn.html" class="quarto-xref"><span>Chapter 8</span></a>, pooling will spend it to buy invariance.</p>
+<p>Exactly zero on the compared interior. The detector’s report moves with the garment. Contrast Chapter 6: the MLP’s global templates degraded under a 2-pixel shift because position was baked into every weight. Here, position cannot matter to <em>what</em> is detected on the interior, only to <em>where</em> the detection lands. At the frame boundary, cropping, padding, or fill rules can break exact equality; that is why the code excludes the blank-border region.</p>
+<p>One precision worth keeping sharp, because the two words will both matter: <strong>equivariant</strong> means the output moves along with the input (what convolution gives us); <strong>invariant</strong> means the output does not change at all (what a classifier ultimately wants — “boot”, regardless of position). Equivariance is the raw material; in <a href="08-cnn.html" class="quarto-xref"><span>Chapter 8</span></a>, pooling will spend some position information to buy local shift tolerance. Exact invariance is a stronger property and must be tested, not presumed.</p>
 </section>
 <section id="the-matrix-view-a-structured-weight-shared-linear-map" class="level2" data-number="7.7">
 <h2 data-number="7.7" class="anchored" data-anchor-id="the-matrix-view-a-structured-weight-shared-linear-map"><span class="header-section-number">7.7</span> The matrix view: a structured, weight-shared linear map</h2>
 <p>One more pair of glasses, from the lecture’s preview box. Every output pixel is a dot product <span class="math inline">\(\rightarrow\)</span> the whole operation is <em>linear</em> <span class="math inline">\(\rightarrow\)</span> cross-correlation could be written as one enormous matrix multiplying the flattened image. But it is a matrix with a rigid structure: almost everywhere zero (locality: each row touches only one patch), and the same nine numbers repeating along its diagonals (sharing: every row is the same template, relocated).</p>
 <p>That view makes the economics explicit. A dense layer from our 28×28 images to an equal-sized output would own <span class="math inline">\(784 \times 784 \approx 615{,}000\)</span> weights. The Sobel detector owns <strong>nine</strong> — reused at every position. This is Chapter 6’s constraints-are-knowledge callout made concrete: locality zeroes out most of the matrix, equivariance ties the survivors together, and what remains is a linear map with almost nothing left to specify.</p>
+<div id="cell-fig-shared-matrix" class="cell" data-execution_count="5">
+<details class="code-fold">
+<summary>Code: draw the sparse weight-shared matrix</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> matplotlib.colors <span class="im">import</span> ListedColormap</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>weight_ids <span class="op">=</span> torch.zeros(<span class="dv">4</span>, <span class="dv">6</span>)</span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> row <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">4</span>):</span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>    weight_ids[row, row:row <span class="op">+</span> <span class="dv">3</span>] <span class="op">=</span> torch.tensor([<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">3</span>])</span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>fig, ax <span class="op">=</span> plt.subplots(figsize<span class="op">=</span>(<span class="fl">5.7</span>, <span class="fl">2.8</span>))</span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>ax.imshow(weight_ids, cmap<span class="op">=</span>ListedColormap([<span class="st">"white"</span>, <span class="st">"#DCE6F2"</span>, <span class="st">"#F8D9B0"</span>, <span class="st">"#E7D4E8"</span>]),</span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>          vmin<span class="op">=</span><span class="dv">0</span>, vmax<span class="op">=</span><span class="dv">3</span>)</span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>symbols <span class="op">=</span> {<span class="dv">1</span>: <span class="vs">r"</span><span class="dv">$</span><span class="vs">v_1</span><span class="dv">$</span><span class="vs">"</span>, <span class="dv">2</span>: <span class="vs">r"</span><span class="dv">$</span><span class="vs">v_2</span><span class="dv">$</span><span class="vs">"</span>, <span class="dv">3</span>: <span class="vs">r"</span><span class="dv">$</span><span class="vs">v_3</span><span class="dv">$</span><span class="vs">"</span>}</span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(weight_ids.shape[<span class="dv">0</span>]):</span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> j <span class="kw">in</span> <span class="bu">range</span>(weight_ids.shape[<span class="dv">1</span>]):</span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a>        value <span class="op">=</span> <span class="bu">int</span>(weight_ids[i, j])</span>
+<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a>        ax.text(j, i, symbols.get(value, <span class="st">"0"</span>), ha<span class="op">=</span><span class="st">"center"</span>, va<span class="op">=</span><span class="st">"center"</span>)</span>
+<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a>ax.set_xticks(<span class="bu">range</span>(<span class="dv">6</span>), [<span class="vs">rf"</span><span class="dv">$</span><span class="vs">x_</span><span class="sc">{</span>j <span class="op">+</span> <span class="dv">1</span><span class="sc">}</span><span class="dv">$</span><span class="vs">"</span> <span class="cf">for</span> j <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">6</span>)])</span>
+<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a>ax.set_yticks(<span class="bu">range</span>(<span class="dv">4</span>), [<span class="vs">rf"</span><span class="dv">$</span><span class="vs">h_</span><span class="sc">{</span>i <span class="op">+</span> <span class="dv">1</span><span class="sc">}</span><span class="dv">$</span><span class="vs">"</span> <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">4</span>)])</span>
+<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a>ax.set_xticks(torch.arange(<span class="op">-</span><span class="fl">0.5</span>, <span class="dv">6</span>, <span class="dv">1</span>), minor<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a>ax.set_yticks(torch.arange(<span class="op">-</span><span class="fl">0.5</span>, <span class="dv">4</span>, <span class="dv">1</span>), minor<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb7-19"><a href="#cb7-19" aria-hidden="true" tabindex="-1"></a>ax.grid(which<span class="op">=</span><span class="st">"minor"</span>, color<span class="op">=</span><span class="st">"#B8B8A8"</span>, linewidth<span class="op">=</span><span class="fl">0.8</span>)</span>
+<span id="cb7-20"><a href="#cb7-20" aria-hidden="true" tabindex="-1"></a>ax.tick_params(which<span class="op">=</span><span class="st">"minor"</span>, bottom<span class="op">=</span><span class="va">False</span>, left<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb7-21"><a href="#cb7-21" aria-hidden="true" tabindex="-1"></a>ax.set_title(<span class="vs">r"</span><span class="dv">$\m</span><span class="vs">athbf{h}=</span><span class="dv">\m</span><span class="vs">athbf{T}</span><span class="kw">(</span><span class="dv">\m</span><span class="vs">athbf{v}</span><span class="kw">)</span><span class="dv">\m</span><span class="vs">athbf{x}</span><span class="dv">$</span><span class="vs">: local and weight-shared"</span>)</span>
+<span id="cb7-22"><a href="#cb7-22" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()<span class="op">;</span> plt.show()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-display">
+<div id="fig-shared-matrix" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-shared-matrix-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="07-filters-convolution_files/figure-html/fig-shared-matrix-output-1.png" width="338" height="259" class="figure-img">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-shared-matrix-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;7.3: The 1-D version of convolution as a structured matrix (shown in 1-D only so the pattern is visible). Each output row touches one local three-value window, so most entries are zero. The same three kernel weights repeat along diagonals: locality creates sparsity; sharing ties the nonzero entries together. A 2-D image produces the analogous block-structured matrix.
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
 </section>
 <section id="the-bottleneck-someone-has-to-design-the-kernel" class="level2" data-number="7.8">
 <h2 data-number="7.8" class="anchored" data-anchor-id="the-bottleneck-someone-has-to-design-the-kernel"><span class="header-section-number">7.8</span> The bottleneck: someone has to design the kernel</h2>
@@ -672,16 +709,24 @@ Figure&nbsp;7.2: One recipe, four specialists. Each column applies a different 3
 <ol type="1">
 <li><strong>One operation, many specialists</strong>: slide a small template, take a dot product at every position (<a href="#eq-crosscorr" class="quarto-xref">Equation&nbsp;<span>7.1</span></a>). Blur, sharpen, and edge detection differ only in the kernel’s numbers.</li>
 <li><strong>Locality and sharing are built in</strong>: as a matrix, convolution is almost-all-zero with nine numbers repeating — 615,000 weights collapsed to 9.</li>
-<li><strong>Equivariance is exact</strong>, not approximate: filter-then-shift equals shift-then-filter, to the last bit. Invariance will be purchased from it in the next chapter.</li>
+<li><strong>Equivariance is exact on the interior</strong>, not approximate: filter-then-shift equals shift-then-filter wherever both operations see the same pixels. Boundary handling must be specified separately. The next chapter asks how much local shift tolerance pooling can purchase from that equivariance.</li>
 <li><strong>Hand-crafting is the bottleneck</strong> — expressiveness, engineering cost, no adaptation — and it is exactly the kind of bottleneck this book knows how to break.</li>
 </ol>
+</section>
+<section id="sources-and-further-reading" class="level2 unnumbered">
+<h2 class="unnumbered anchored" data-anchor-id="sources-and-further-reading">Sources and further reading</h2>
+<ul>
+<li>Fukushima, <a href="https://doi.org/10.1007/BF00344251">“Neocognitron: A Self-organizing Neural Network Model”</a> (1980): an early hierarchy of local, shift-tolerant feature detectors.</li>
+<li>LeCun et al., <a href="http://yann.lecun.com/exdb/publis/pdf/lecun-98.pdf">“Gradient-Based Learning Applied to Document Recognition”</a> (1998): connects shared local kernels to the trainable CNN built next.</li>
+<li>Dumoulin and Visin, <a href="https://arxiv.org/abs/1603.07285">“A Guide to Convolution Arithmetic for Deep Learning”</a> (2016): a visual reference for padding, stride, and output-shape arithmetic.</li>
+</ul>
 </section>
 <section id="exercises" class="level2 unnumbered">
 <h2 class="unnumbered anchored" data-anchor-id="exercises">Exercises</h2>
 <ol type="1">
 <li><strong>(Pencil.)</strong> Compute by hand the full output of cross-correlating this <span class="math inline">\(4\times4\)</span> image with the vertical Sobel kernel: rows <span class="math inline">\((0,0,1,1)\)</span>, <span class="math inline">\((0,0,1,1)\)</span>, <span class="math inline">\((0,0,1,1)\)</span>, <span class="math inline">\((0,0,1,1)\)</span>. Before computing: where should the detector fire?</li>
 <li><strong>(Pencil + code.)</strong> Design a <span class="math inline">\(3\times3\)</span> kernel that detects <em>diagonal</em> edges (bottom-left to top-right). State your design rule (what must the weights sum to, and why?), then run it on <code>make_shapes()</code> and check it fires on the stripes.</li>
-<li><strong>(Pencil.)</strong> Prove translation equivariance from <a href="#eq-crosscorr" class="quarto-xref">Equation&nbsp;<span>7.1</span></a>: substitute the shifted image <span class="math inline">\(X'_{i,j} = X_{i-s,j}\)</span> and show <span class="math inline">\(H'_{i,j} = H_{i-s,j}\)</span>. Why does the same argument fail for the MLP of Chapter 6?</li>
+<li><strong>(Pencil.)</strong> Prove translation equivariance from <a href="#eq-crosscorr" class="quarto-xref">Equation&nbsp;<span>7.1</span></a>: substitute the shifted image <span class="math inline">\(X'_{i,j} = X_{i-s,j}\)</span> and show <span class="math inline">\(H'_{i,j} = H_{i-s,j}\)</span>. Why does the same argument fail for the MLP of Chapter 6? State where the proof applies at a finite image boundary.</li>
 <li><strong>(Code.)</strong> True convolution flips the kernel: run <code>conv2d</code> with <code>k</code> and with <code>k.flip(0, 1)</code> for the blur and for Sobel. Which outputs differ, which do not, and what property of the kernel decides it?</li>
 <li><strong>(Code.)</strong> The box blur is <em>separable</em>: show that convolving with the <span class="math inline">\(3\times3\)</span> uniform kernel equals convolving with a <span class="math inline">\(3\times1\)</span> column of <span class="math inline">\(\tfrac13\)</span>s and then a <span class="math inline">\(1\times3\)</span> row of <span class="math inline">\(\tfrac13\)</span>s. Count multiplications per output pixel for each route — this trick mattered enormously in the hand-crafted era.</li>
 </ol>
