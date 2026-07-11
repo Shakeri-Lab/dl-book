@@ -18,11 +18,12 @@ one piece at a time, they stop whenever they please, and their meaning lives in 
 *order* of the pieces.
 
 Order deserves a moment, because the book has been here before with the opposite
-verdict. Chapter 6 shuffled every pixel of every garment with one fixed permutation
-and the MLP did not care — same accuracy, because a bag of pixel intensities was all
-it ever saw, and a bag survives shuffling. Now shuffle the words of *this sentence*
-and read it back. For sequences, order is not structure a lazy model can ignore; it
-is most of the signal. We need models that cannot help but care.
+verdict. Chapter 6 shuffled every pixel with one fixed permutation and retrained the
+MLP to the same accuracy: because that coordinate map was invertible, the first-layer
+weights could absorb it. The trained MLP was still position-specific; it was not a bag
+model. Now shuffle the words of *this sentence* and read it back. For sequences, no
+single compensating remap preserves arbitrary order — order is most of the signal. We
+need models whose computation represents it explicitly.
 
 ## Stretching the old toolkit
 
@@ -131,20 +132,27 @@ tied. Hold that thought; it is about to matter enormously.
 
 Tied depth means Chapter 5's rules apply verbatim. To train on a sequence, run the
 loop forward, collect losses at the readouts, and backpropagate through the
-*unrolled* network — **backpropagation through time** (BPTT). Blame that lands on
+*unrolled* network, a procedure called **backpropagation through time** (BPTT). Blame that lands on
 $\vect{h}_T$ must travel back through every application of @eq-rnn-cell to reach an
-early input, and each hop multiplies by the same pair of factors:
+early input. Define
+$\matr{D}_t = \mathrm{diag}\!\left(\tanh'(\cdot)\right)$ at step $t$. The
+forward Jacobian for one hop is $\matr{D}_t\matr{W}_{hh}$, so the full Jacobian is
 
 $$
 \frac{\partial \vect{h}_T}{\partial \vect{h}_1}
-= \prod_{t=2}^{T} \underbrace{\mathrm{diag}\!\left(\tanh'(\cdot)\right)}_{\le 1
-\text{ elementwise}} \; \matr{W}_{hh}^{\!\top} .
+= (\matr{D}_T\matr{W}_{hh})\cdots
+  (\matr{D}_2\matr{W}_{hh}),
+\qquad
+\vect{g}_{t-1}=\matr{W}_{hh}^{\!\top}\matr{D}_t\vect{g}_t .
 $$ {#eq-bptt}
 
-A product of $T$ near-identical matrices. Chapter 5 taught you to fear exactly this
-shape: if the factors shrink the signal, the product dies exponentially; if they
-grow it, it explodes exponentially — and since $\tanh' \le 1$ always, with
-$\matr{W}_{hh}$ fixed across steps, one of the two is essentially always in play.
+A product of $T$ near-identical matrices. The second expression shows the reverse-mode
+order explicitly: the derivative gate acts on incoming blame, then
+$\matr{W}_{hh}^{\top}$ carries it to the previous state. Chapter 5 taught you to fear
+this shape. If the factors shrink the signal, the product dies exponentially; if they
+grow it, it explodes exponentially. Since $\tanh' \le 1$ and
+$\matr{W}_{hh}$ repeats at every step, keeping every relevant direction near unit
+gain over a long sequence is a fragile special case.
 Depth was measured in layers there; here it is measured in *time*, and a paragraph
 of text is a hundred layers deep. Watch the collapse, in the spirit of Chapter 5's
 depth experiment:
@@ -153,10 +161,12 @@ depth experiment:
 #| label: fig-vanishing-time
 #| fig-cap: "How much a freshly initialized vanilla RNN's output can blame its first input, as the lag between them grows. Fifteen orders of magnitude gone by sixty steps: the same exponential decay Chapter 5 measured down a deep network, now measured across time — because an unrolled RNN *is* a deep network with tied weights."
 #| code-summary: "Code: gradient reaching the first input vs. lag"
-def grad_at_first_input(rec, lags, vocab=4):
+def grad_at_first_input(rec: nn.Module, lags: list[int],
+                        vocab: int = 4) -> list[float]:
     norms = []
     for T in lags:
-        x = torch.randn(8, T, vocab, requires_grad=True)
+        generator = torch.Generator().manual_seed(100 + T)
+        x = torch.randn(8, T, vocab, generator=generator, requires_grad=True)
         o, _ = rec(x)
         o[:, -1].sum().backward()
         norms.append(x.grad[:, 0].norm().item())    # blame on input #1
@@ -176,10 +186,12 @@ plt.ylabel(r"$\|\partial L / \partial \mathbf{x}_1\|$")
 plt.legend(); plt.tight_layout(); plt.show()
 ```
 
-By lag 60 the gradient reaching the first input is $10^{-15}$: whatever happened
-at the start of the paragraph, the model *cannot learn* that it mattered. The
+By lag 60 the gradient reaching the first input is $10^{-15}$: at initialization,
+whatever happened at the start supplies almost no usable learning signal. That makes
+success fragile rather than mathematically impossible — a later experiment catches
+one lucky seed. The
 mirror-image failure, explosion, is just as real — one large spike in @eq-bptt's
-product and the update destroys the weights.
+product can make an update destabilize training.
 
 ::: {.callout-warning}
 ## Gradient clipping is a seatbelt, not a cure
@@ -192,19 +204,22 @@ at the cost of damping legitimately large steps — and it does *nothing* for
 vanishing. You cannot clip your way to a longer memory.
 :::
 
-### Training in chunks
+### Training with a finite horizon
 
 BPTT has a second, blunter problem: unrolling a book-length sequence costs
 book-length memory and compute per step. The standard fix leans on the Markov claim
-from the callout above. If $\vect{h}$ truly carries what matters, we may chop the
-sequence into fixed-size chunks, run the loop on a chunk, update, and move on —
-**truncated BPTT**. The lecture's practical recipe, used verbatim in this
-chapter's final experiment: fixed chunks (around 20–50 steps; 35 is a norm for
-character models), $\vect{h}_0 = \vect{0}$, and clipping on. Truncation is honest
-about its limit — no gradient crosses a chunk boundary, so nothing longer than a
-chunk is ever *learned* — but @fig-vanishing-time just showed the vanilla RNN
-forgets on that horizon anyway; past 20–50 steps there was little gradient left to
-truncate.
+from the callout above. In **truncated BPTT**, contiguous chunks carry the recurrent
+state forward but detach it at each boundary. The values cross the boundary; the
+gradient graph does not. This bounds memory while preserving running context.
+
+The final experiment below uses a simpler finite-horizon recipe: it samples random
+100-character windows and starts each from zero state. That is **fixed-window
+training**, not truncated BPTT, because no state is carried between windows. It is
+cheap and appropriate for this small demonstration, but the model can neither see nor
+learn dependencies beyond 100 characters. In production character models, contiguous
+chunks of roughly 20–50 steps with carried-and-detached state are common. In either
+recipe, clipping handles spikes; neither creates gradients beyond the truncation
+horizon.
 
 ## Engineering a memory: the LSTM
 
@@ -247,6 +262,64 @@ $$
 \end{aligned}
 $$ {#eq-lstm}
 
+```{python}
+#| label: fig-lstm-conveyor
+#| fig-cap: "The LSTM cell as a conveyor belt with valves. The forget gate $f_t$ controls how much old cell state continues; the input gate $i_t$ controls how much candidate content is added; the output gate $o_t$ controls what becomes visible as $h_t$. The upper additive route is the long-memory highway."
+#| code-summary: "Code: draw the LSTM conveyor belt and its three gates"
+from matplotlib.patches import FancyBboxPatch, Circle
+
+fig, ax = plt.subplots(figsize=(7.4, 3.3))
+ax.set_xlim(0, 11); ax.set_ylim(0, 5); ax.axis("off")
+
+def gate_box(x: float, y: float, label: str,
+             color: str = "#F9DCBF") -> None:
+    patch = FancyBboxPatch((x - 0.42, y - 0.32), 0.84, 0.64,
+                           boxstyle="round,pad=0.06", facecolor=color,
+                           edgecolor="#232D4B", linewidth=1.2)
+    ax.add_patch(patch)
+    ax.text(x, y, label, ha="center", va="center", fontsize=10)
+
+def operation(x: float, y: float, symbol: str) -> None:
+    patch = Circle((x, y), 0.25, facecolor="white",
+                   edgecolor="#E57200", linewidth=1.5)
+    ax.add_patch(patch)
+    ax.text(x, y, symbol, ha="center", va="center", fontsize=12)
+
+ax.text(0.45, 3.6, "$c_{t-1}$", ha="center", fontsize=11)
+gate_box(2.1, 3.6, "$f_t$")
+operation(3.2, 3.6, r"$\times$")
+operation(6.8, 3.6, "+")
+ax.text(10.45, 3.6, "$c_t$", ha="center", fontsize=11)
+ax.annotate("", (1.62, 3.6), (0.85, 3.6), arrowprops=dict(arrowstyle="->", lw=2, color="#E57200"))
+ax.annotate("", (2.95, 3.6), (2.52, 3.6), arrowprops=dict(arrowstyle="->", lw=2, color="#E57200"))
+ax.annotate("", (6.55, 3.6), (3.45, 3.6), arrowprops=dict(arrowstyle="->", lw=2, color="#E57200"))
+ax.annotate("", (10.05, 3.6), (7.05, 3.6), arrowprops=dict(arrowstyle="->", lw=2, color="#E57200"))
+
+ax.text(0.9, 1.0, "$[h_{t-1},x_t]$", ha="center", fontsize=10)
+gate_box(3.0, 1.55, "$i_t$")
+gate_box(3.0, 0.55, r"$\tilde{c}_t$", "#E8F0F8")
+operation(4.35, 1.05, r"$\times$")
+ax.annotate("", (2.55, 1.55), (1.45, 1.12), arrowprops=dict(arrowstyle="->", lw=1.3, color="#232D4B"))
+ax.annotate("", (2.55, 0.55), (1.45, 0.92), arrowprops=dict(arrowstyle="->", lw=1.3, color="#232D4B"))
+ax.annotate("", (4.1, 1.15), (3.45, 1.55), arrowprops=dict(arrowstyle="->", lw=1.3, color="#232D4B"))
+ax.annotate("", (4.1, 0.95), (3.45, 0.55), arrowprops=dict(arrowstyle="->", lw=1.3, color="#232D4B"))
+ax.plot([4.6, 6.8, 6.8], [1.05, 1.05, 3.35], color="#232D4B", lw=1.5)
+ax.annotate("", (6.8, 3.35), (6.8, 2.65), arrowprops=dict(arrowstyle="->", lw=1.5, color="#232D4B"))
+
+gate_box(8.55, 1.45, "$o_t$")
+gate_box(8.55, 2.45, r"$\tanh$", "#E8F0F8")
+operation(9.65, 1.95, r"$\times$")
+ax.plot([8.15, 7.8, 7.8, 8.1], [2.45, 2.45, 3.6, 3.6], color="#232D4B", lw=1.3)
+ax.annotate("", (8.1, 2.45), (7.8, 2.45), arrowprops=dict(arrowstyle="->", lw=1.3, color="#232D4B"))
+ax.annotate("", (9.4, 2.05), (9.0, 2.45), arrowprops=dict(arrowstyle="->", lw=1.3, color="#232D4B"))
+ax.annotate("", (9.4, 1.85), (9.0, 1.45), arrowprops=dict(arrowstyle="->", lw=1.3, color="#232D4B"))
+ax.annotate("", (10.45, 1.95), (9.9, 1.95), arrowprops=dict(arrowstyle="->", lw=1.5, color="#232D4B"))
+ax.text(10.65, 1.95, "$h_t$", ha="left", va="center", fontsize=11)
+ax.text(5.2, 4.25, "additive cell-state highway", color="#B45309",
+        ha="center", fontsize=10)
+plt.tight_layout(); plt.show()
+```
+
 Two states now travel: the cell state $\vect{c}_t$ (long-term memory, the conveyor
 belt) and the hidden state $\vect{h}_t$ (working memory, playing the vanilla RNN's
 old role). The line that changes everything is the $\vect{c}_t$ update — read its
@@ -265,19 +338,21 @@ open, the LSTM's lane has a valve the network controls: hold $\vect{f}_j$ near 1
 and gradients ride the conveyor belt across dozens of steps; drop it toward 0 and
 the memory (deliberately) expires. The practical corollary, straight from the
 lecture notes: *initialize the forget-gate bias positive* (say $+1$), so the cell
-starts life remembering by default. Watch what that buys, on the same axes as
-before:
+starts life remembering by default. PyTorch stores separate input-hidden and
+hidden-hidden bias vectors, then adds them. The code sets their **sum** to $+1$;
+setting both slices to $+1$ would silently create an effective bias of $+2$.
+Watch what that buys, on the same axes as before:
 
 ```{python}
 #| label: fig-highway-time
-#| fig-cap: "The gradient-vs-lag experiment, rerun with an LSTM whose forget-gate bias is initialized to +1. The vanilla RNN's blame signal dies its exponential death; the LSTM's rides the cell-state conveyor belt and arrives at lag 60 attenuated but alive — thirteen orders of magnitude stronger. Chapter 9 built this highway across layers; the LSTM builds it across time, with a learned valve on the on-ramp."
+#| fig-cap: "The gradient-vs-lag experiment, rerun with an LSTM whose effective forget-gate bias is initialized to +1. The vanilla RNN's blame signal dies exponentially; the LSTM's rides the cell-state conveyor belt and arrives at lag 60 attenuated but alive, about ten orders of magnitude stronger. Chapter 9 built this highway across layers; the LSTM builds it across time, with a learned valve on the on-ramp."
 #| code-summary: "Code: gradient vs. lag, vanilla RNN against LSTM"
 torch.manual_seed(0)
 lstm = nn.LSTM(4, 32, batch_first=True)
-for name, p in lstm.named_parameters():          # forget-gate bias -> +1
-    if "bias" in name:
-        n = p.shape[0] // 4
-        p.data[n:2 * n] = 1.0
+with torch.no_grad():
+    n = lstm.bias_ih_l0.shape[0] // 4
+    lstm.bias_ih_l0[n:2 * n].fill_(1.0)
+    lstm.bias_hh_l0[n:2 * n].zero_()             # the two bias slices sum to +1
 g_lstm = grad_at_first_input(lstm, lags)
 
 plt.figure(figsize=(6.2, 3.2))
@@ -303,7 +378,8 @@ lecture's remember-by-default initialization.
 ```{python}
 #| label: recall-task
 #| code-summary: "Code: recall-the-first-token at lag 80, three configurations"
-def make_recall(n, T, vocab=4, seed=0):
+def make_recall(n: int, T: int, vocab: int = 4,
+                seed: int = 0) -> tuple[torch.Tensor, torch.Tensor]:
     g = torch.Generator().manual_seed(seed)
     X = torch.randint(0, vocab, (n, T), generator=g)
     return F.one_hot(X, vocab).float(), X[:, 0]     # label = first token
@@ -314,16 +390,17 @@ class SeqClassifier(nn.Module):
         self.rec = {"rnn": nn.RNN, "lstm": nn.LSTM}[cell](vocab, hidden,
                                                           batch_first=True)
         if forget_bias is not None:
-            for name, p in self.rec.named_parameters():
-                if "bias" in name:
-                    n = p.shape[0] // 4
-                    p.data[n:2 * n] = forget_bias
+            with torch.no_grad():
+                n = self.rec.bias_ih_l0.shape[0] // 4
+                self.rec.bias_ih_l0[n:2 * n].fill_(forget_bias)
+                self.rec.bias_hh_l0[n:2 * n].zero_()
         self.out = nn.Linear(hidden, vocab)
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         o, _ = self.rec(x)
         return self.out(o[:, -1])                    # read out at the END only
 
-def train_recall(cell, T, seed, forget_bias=None, epochs=80):
+def train_recall(cell: str, T: int, seed: int, forget_bias: float | None = None,
+                 epochs: int = 80) -> float:
     torch.manual_seed(seed)
     net = SeqClassifier(cell, forget_bias=forget_bias)
     X_tr, y_tr = make_recall(2000, T, seed=1)
@@ -385,15 +462,23 @@ $$ {#eq-gru}
 
 Two gates instead of three, one state instead of two, comparable performance in
 most settings. The lecture explicitly skips the derivation, and the book follows
-suit — with the equations on record and Exercise 3 waiting, you can build one
+suit. With the equations on record and Exercise 3 waiting, you can build one
 yourself and let it compete on the memory test.
+
+One convention matters before you compare code. @eq-gru applies the reset gate to
+$\vect{h}_{t-1}$ **before** the candidate's hidden-state linear map. PyTorch's
+`nn.GRU` uses a reset-after form,
+$\tanh(W_{in}x+b_{in}+r\odot(W_{hn}h+b_{hn}))$, for implementation efficiency.
+The gates serve the same purpose, but the two cells are not algebraically identical
+for the same weights. An exact manual-loop verification must implement PyTorch's
+ordering rather than @eq-gru's.
 
 ## The book reads itself
 
-Time to put the whole recipe — truncated chunks, clipping, gates, Chapter 2's
-softmax over a vocabulary — to work on real text. In keeping with a book whose
+Time to put fixed windows, clipping, gates, and Chapter 2's softmax over a
+vocabulary to work on real text. In keeping with a book whose
 every experiment runs on its own pages, the training corpus is *the nine chapters
-you have already read*: their prose, stripped of code cells, about 130,000
+you have already read*: their prose, stripped of code cells, more than 130,000
 characters. The task is the oldest one in language modeling: read a character,
 predict the next.
 
@@ -412,8 +497,10 @@ for f in files:
 chars = sorted(set(text))
 stoi = {c: i for i, c in enumerate(chars)}
 data = torch.tensor([stoi[c] for c in text])
-print(f"corpus: {len(files)} chapters, {len(text):,} characters, "
-      f"vocab {len(chars)}")
+split = int(0.9 * len(data))
+train_data, valid_data = data[:split], data[split:]
+print(f"corpus: {len(files)} chapters, {len(text):,} characters, vocab {len(chars)}")
+print(f"deterministic split: {len(train_data):,} train / {len(valid_data):,} held out")
 
 class CharLSTM(nn.Module):
     def __init__(self, vocab: int, hidden: int = 128):
@@ -421,18 +508,21 @@ class CharLSTM(nn.Module):
         self.vocab = vocab
         self.lstm = nn.LSTM(vocab, hidden, batch_first=True)
         self.out = nn.Linear(hidden, vocab)
-    def forward(self, x, state=None):
+    def forward(
+        self, x: torch.Tensor,
+        state: tuple[torch.Tensor, torch.Tensor] | None = None,
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
         o, state = self.lstm(F.one_hot(x, self.vocab).float(), state)
         return self.out(o), state                      # logits at EVERY step
 
 torch.manual_seed(6050)
 model = CharLSTM(len(chars))
 opt = torch.optim.Adam(model.parameters(), lr=2e-3)
-chunk, batch = 100, 64                                 # truncated BPTT
+chunk, batch = 100, 64                                 # random fixed-context windows
 for step in range(2501):
-    s = torch.randint(0, len(data) - chunk - 1, (batch,))
-    xb = torch.stack([data[j:j + chunk] for j in s])
-    yb = torch.stack([data[j + 1:j + chunk + 1] for j in s])
+    s = torch.randint(0, len(train_data) - chunk - 1, (batch,))
+    xb = torch.stack([train_data[j:j + chunk] for j in s])
+    yb = torch.stack([train_data[j + 1:j + chunk + 1] for j in s])
     logits, _ = model(xb)
     loss = F.cross_entropy(logits.reshape(-1, len(chars)), yb.reshape(-1))
     opt.zero_grad(); loss.backward()
@@ -440,28 +530,48 @@ for step in range(2501):
     opt.step()
     if step % 500 == 0:
         print(f"step {step:4d}   loss {loss.item():.2f}")
+
+@torch.no_grad()
+def fixed_window_loss(net: nn.Module, sequence: torch.Tensor,
+                      window: int = 100) -> float:
+    net.eval()
+    total_loss, n_tokens = 0.0, 0
+    for start in range(0, len(sequence) - 1, window):
+        stop = min(start + window, len(sequence) - 1)
+        xb = sequence[start:stop].unsqueeze(0)
+        yb = sequence[start + 1:stop + 1]
+        logits, _ = net(xb)                         # state resets at each window
+        total_loss += F.cross_entropy(
+            logits.reshape(-1, len(chars)), yb, reduction="sum").item()
+        n_tokens += yb.numel()
+    return total_loss / n_tokens
+
+print(f"held-out fixed-window loss {fixed_window_loss(model, valid_data):.2f}")
 ```
 
-The loss falls from $\ln(101) \approx 4.6$ (uniform guessing over the vocabulary)
-to about 1.5 — the model has learned a great deal about what this book's next
-character tends to be. To *hear* what it learned, generate: feed a prompt, sample
+The loss falls from $\ln(V) \approx 4.6$ for the printed vocabulary size (uniform guessing)
+to 1.42 on the last sampled training minibatch. The deterministic held-out
+tail is harder, at 1.89, but both are far below uniform guessing. The model has
+learned a great deal about what this book's next character tends to be. To *hear*
+what it learned, generate: feed a prompt, sample
 the next character from the softmax (divided by a **temperature** that sharpens or
-flattens it — Chapter 2's dial between hard max and uniform), feed that character
+flattens it, Chapter 2's dial between hard max and uniform), feed that character
 back in, repeat. The hidden state streams; nothing is recomputed.
 
 ```{python}
 #| label: char-lm-sample
 #| code-summary: "Code: sampling from the model, one character at a time"
 @torch.no_grad()
-def sample(prompt: str, n: int = 300, temp: float = 0.8):
+def sample(prompt: str, n: int = 300, temp: float = 0.8) -> str:
+    model.eval()
     idx = torch.tensor([[stoi.get(c, 0) for c in prompt]])
-    _, state = model(idx)
-    out, nxt = prompt, idx[:, -1:]
+    logits, state = model(idx)
+    out = prompt
     for _ in range(n):
-        logits, state = model(nxt, state)              # one step, state carried
         p = F.softmax(logits[0, -1] / temp, -1)
         nxt = torch.multinomial(p, 1)[None]
         out += chars[nxt.item()]
+        logits, state = model(nxt, state)              # consume each sample once
     return out
 
 print(sample("The gradient ", n=300))
@@ -469,65 +579,67 @@ print(sample("The gradient ", n=300))
 
 Read the output honestly, because both halves of the verdict teach. What it *got*:
 words, spacing, sentence rhythm, markdown furniture (asterisks, pipes, colons),
-and the book's working vocabulary — training, batch, layer, convolution in various
-misspellings — all learned from raw characters by a one-layer recurrence reading
+and the book's working vocabulary (training, batch, layer, convolution in various
+misspellings), all learned from raw characters by a one-layer recurrence reading
 100-character chunks. What it
 *lacks*: meaning. Clauses trail off; equations open and never close; the prose has
 the book's accent with none of its intent. Some of that is scale (a 130k-character
 corpus and 128 hidden units is a *tiny* language model), and some of it is the
-finite state: by the end of a sentence, the beginning has been squeezed through a
-128-number bottleneck. Both diagnoses point down the road this part of the book is
+finite state. By the end of a sentence, the beginning has been squeezed through
+the LSTM's two 128-dimensional states, $(\vect{h}, \vect{c})$: 256 scalars in all.
+Both diagnoses point down the road this part of the book is
 traveling.
 
-::: {.callout-caution}
-## GPU run pending
-**Planned:** scale this experiment — word-level tokens, stacked LSTM layers, a real
-corpus, GPU training — and watch the samples cross from book-flavored babble
-toward grammatical prose, tracking loss per character against model size.
-**Meanwhile:** the tiny model above is the honest CPU-scale result.
-:::
-
-## What one vector cannot hold
+## What a fixed-size state cannot hold
 
 The lecture closes with the bridge this part of the book now crosses. If a
 recurrent cell can read a sequence into a state, then two of them can translate:
 an **encoder** reads the source sentence into its final state, a **decoder** spins
-that state back out as words in another language. That architecture — plus its
-training tricks — is @sec-11-encoder-decoder. But notice what the design asks of
-one poor vector: the *entire sentence*, crammed into a single fixed-size state, no
+that state back out as words in another language. That architecture, plus its
+training tricks, is @sec-11-encoder-decoder. But notice what the design asks of
+one fixed-size state: the *entire sentence*, compressed into $(\vect{h},\vect{c})$, no
 matter how long the sentence runs. The char-LM's trailing clauses were this
 bottleneck in miniature. The honest fix is not a bigger vector; it is admitting
 that the decoder should be allowed to *look back at all of the encoder's states*,
-not just the last — and choosing where to look, on the fly, is a similarity
+not just the last. Choosing where to look, on the fly, is a similarity
 computation you have been prepared for since Chapter 1's dot products. That is
 attention (@sec-12-kernel-regression, @sec-13-attention), and it is two chapters
 away.
 
 ## Okay, so —
 
-1. **Order is the signal.** Chapter 6's MLP shrugged at shuffled pixels; shuffle a
-   sentence and its meaning dies. Sequences add variable length and streaming, and
-   the fixed-size toolkit of Parts I–II has no honest answer.
+1. **Order is the signal.** Chapter 6's MLP could absorb one fixed pixel permutation
+   when retrained; shuffle a sentence into arbitrary orders and its meaning changes.
+   Sequences add variable length and streaming, and the fixed-size toolkit of Parts
+   I–II has no honest answer.
 2. **The third weight sharing**: one function $f$, applied at every timestep,
-   carrying a hidden state (@eq-recurrence, @eq-rnn-cell) — stationarity as
+   carrying a hidden state (@eq-recurrence, @eq-rnn-cell). This is stationarity as
    inductive bias, exactly as sharing across space was in Part II. The unrolled
    RNN is a deep network with tied weights.
 3. **Tied depth in time = Chapter 5's nightmare**: BPTT multiplies $T$
    near-identical Jacobians (@eq-bptt) $\rightarrow$ vanishing or exploding,
-   almost surely. Clipping belts in the explosions; truncation caps the cost;
-   neither lengthens memory (about 20–50 steps is the vanilla ceiling).
-4. **The LSTM engineers the memory**: an additive cell-state conveyor belt —
-   Chapter 9's residual highway laid across time — with three sigmoid valves
+   unless their gains are carefully controlled. Clipping belts in the explosions;
+   truncation caps the cost, but neither lengthens memory. Windows of roughly 20–50
+   steps are a common practical horizon, not a universal vanilla-RNN ceiling.
+4. **The LSTM engineers the memory**: an additive cell-state conveyor belt,
+   Chapter 9's residual highway laid across time, with three sigmoid valves
    (forget, input, output; @eq-lstm). Its gradient rides a product of *gates*, not
    weights (@eq-lstm-highway).
 5. **Architecture proposes, initialization disposes**: at lag 80 the default LSTM
    scores chance ($\sigma(0)^{80} \approx 10^{-24}$); set the forget bias to $+1$
    and the task is solved on every seed. GRU packs the same ideas into two gates
    and one state (@eq-gru).
-6. **A one-layer character LSTM learns this book's accent** — words, rhythm,
-   LaTeX tics — but not its meaning: part scale, part the finite-state
-   bottleneck. Cramming a whole sequence into one vector is the debt Part III
+6. **A one-layer character LSTM learns this book's accent** (words, rhythm,
+   LaTeX tics) but not its meaning: part scale, part the finite-state
+   bottleneck. Cramming a whole sequence into 256 recurrent-state scalars is the debt Part III
    carries forward, and attention is how the book repays it.
+
+## Sources and further reading {.unnumbered}
+
+- [Elman, *Finding Structure in Time*](https://doi.org/10.1207/s15516709cog1402_1): the classic simple recurrent network and its view of hidden state as temporal context.
+- [Hochreiter & Schmidhuber, *Long Short-Term Memory*](https://doi.org/10.1162/neco.1997.9.8.1735): the original gated-memory architecture and constant-error pathway.
+- [Cho et al., *Learning Phrase Representations using RNN Encoder–Decoder for Statistical Machine Translation*](https://aclanthology.org/D14-1179/): introduces the gated recurrent unit in its encoder–decoder setting.
+- [Pascanu, Mikolov, & Bengio, *On the Difficulty of Training Recurrent Neural Networks*](https://proceedings.mlr.press/v28/pascanu13.html): geometric analysis of vanishing/exploding gradients and gradient clipping.
 
 ## Exercises {.unnumbered}
 
@@ -540,10 +652,10 @@ away.
    ($\tanh' \approx 1$), the gradient norm grows or decays like the spectral
    radius of $\matr{W}_{hh}$ raised to $T$. What does $\tanh'(0) = 1$ say about
    the moment right after initialization, when $\vect{h} \approx \vect{0}$?
-3. **(Code.)** Implement a GRU cell from @eq-gru as a manual loop, verify it
-   against `nn.GRU` the way this chapter verified the vanilla cell, then enter it
-   in the lag-80 memory test. Does it need an initialization trick the way the
-   LSTM did — and which bias would you set?
+3. **(Code.)** Implement the reset-before GRU in @eq-gru as a manual loop and enter
+   it in the lag-80 memory test. Then change only the candidate update to PyTorch's
+   reset-after convention and verify that version against `nn.GRU`. Does either
+   need an initialization trick, and which bias would you set?
 4. **(Code.)** The chapter starts every sequence with $\vect{h}_0 = \vect{0}$.
    Make $\vect{h}_0$ a learned `nn.Parameter` in the recall task and retrain.
    Where does its gradient come from, and when could a learned start plausibly

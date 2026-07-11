@@ -16,9 +16,10 @@ chapter must respect. Those two files replace any account-local memory.
 - **Voice**: chapters are drafted from HIS materials (LaTeX seeds + lecture transcripts)
   per `docs/drafting-template.md`, never from generic textbook knowledge. Reuse his
   analogies (style guide §3); flag genuinely new material with `<!-- NOVEL: needs sign-off -->`.
-- **No d2l.ai content, ever** — no `import d2l`, no copied prose/code. The local copy at
-  `../Box-Box/Teaching/6050/Resources/D2L/` is reference-only (CC-BY-SA would contaminate
-  our CC BY-NC-SA license).
+- **No d2l.ai content, ever** — no `import d2l`, no copied prose/code. D2L book prose is
+  CC BY-SA 4.0 and its sample/reference code uses a modified MIT license, but this
+  project applies one stricter independent-provenance boundary to both. The local copy
+  at `../Box-Box/Teaching/6050/Resources/D2L/` is reference-only.
 - **Every cell runs**: CPU-only, seeded (`torch.manual_seed(6050)`). Tiny/synthetic
   or committed data only; nothing downloads at render time. Single cell ≤ ~5 min;
   training-heavy chapters may take 5–15 min total to execute (one-time local — CI
@@ -66,11 +67,14 @@ compositions for figures. Full guide: `docs/dl-course-code.md`.
 
 ## Writing a chapter, end to end
 
-1. **Pick the chapter.** Its stub in `chapters/partN/XX-*.qmd` lists the seed files and
-   transcripts (the `draft-sources` comment). Part I order: 1 ✓ → 5 → 4 → 3 → 2 → 6
-   (ch. 6 is the signature chapter — outline with the author first).
-2. **Snapshot seeds** from Box into `sources/` (spaces → underscores):
-   `cp "../…/LaTeX/Module 2-Backprop/2-1-backprop.tex" sources/2-1-backprop.tex`
+1. **Pick the chapter.** For Chapters 12–19, follow the roadmap and status table in
+   `docs/CONTINUING.md`; the stub in `chapters/partN/XX-*.qmd` lists its seed files and
+   transcripts in the `draft-sources` comment. Chapters 1–11 are shipped and should
+   be changed only through an explicit review or correction pass.
+2. **Snapshot seeds** from Box into `sources/` (spaces → underscores), then apply the
+   licensing boundary in `sources/README.md`: remove explicitly third-party-derived
+   blocks with an honest omission marker rather than publishing or silently rewriting
+   them. Never restore a D2L excerpt from a machine-local source.
 3. **Mechanical conversion** (also extracts TikZ blocks into `figures/tikz-src/`):
    ```bash
    QUARTO_BIN=$HOME/.local/bin/quarto ./scripts/tex2qmd.sh sources/<seed>.tex drafts/partN/XX-raw.md
@@ -125,6 +129,7 @@ Available: `\vect{}`, `\matr{}`, `\E`, `\Ex`, `\var`, `\cov`, `\norm{}`, `\argma
 | Render hangs or times out | you're probably in Box; work in `~/dl-book` |
 | Subagents unavailable (spend limit) | draft inline: read seed + transcripts fully first, then write; audit-by-construction and verify code by executing |
 | Book PDF missing latest chapter edits | stale `tex.json` from an `--to html` render — re-render the chapter with no `--to` flag, then full render |
+| PDF chapter links all print as “Chapter 1” | chapter-level `sec-*` references were resolved in a chapter-local PDF pass — keep `filters/pdf-chapter-xrefs.lua` enabled and never begin an indented continuation line with `@sec-*` (Pandoc reads it as an example-list marker) |
 | seq2seq/RNN mysteriously stuck at 40–60% | padding poisoning — `pack_padded_sequence` the encoder, `ignore_index=PAD` the loss (ch. 11 runs this as an experiment) |
 | RNN/seq2seq training crawls | `clip_grad_norm_` threshold too tight (1.0 throttled ch. 11's task; 5.0 fine) |
 | Eval numbers vary with batch contents | BatchNorm left in train mode — `model.eval()` before eval, `model.train()` in the loop |
@@ -139,9 +144,10 @@ Author-requested future work lives in `docs/backlog.md` (floating-point appendix
 at a4; per-chapter collapsed "Deeper dive" sections with further-reading papers; ch. 6
 3Blue1Brown-inspired pacing). Check it before proposing new structural ideas.
 
-## Related, but out of scope here
+## Course website integration
 
-The course website (`…/6050/dl-course-site`, separate repo) will link mature chapters as
-each module's canonical reading via a `bookChapter` field in `lib/module-extras.ts`,
-demoting D2L to "alternative reading" — **only after the author has edited those
-chapters**. Don't wire this up unilaterally.
+The course website (`…/6050/dl-course-site`, separate repo) links mature chapters as
+primary readings via a `bookChapters` array in `lib/module-extras.ts`; one course
+module can map to several book chapters. D2L remains an alternative reading. Add only
+chapters that have completed the author's review pass, and verify the site build after
+changing the mapping.

@@ -1,0 +1,93 @@
+# Third-party notices
+
+The book text is CC BY-NC-SA 4.0 and its original code is MIT licensed. The artifacts
+and upstream-derived material below retain their own licenses and are not relicensed by
+this repository.
+
+## Fashion-MNIST
+
+The fixed subsets in `data/fashion-train.pt` and `data/fashion-test.pt` come from
+[Fashion-MNIST](https://github.com/zalandoresearch/fashion-mnist).
+
+> The MIT License (MIT)
+>
+> Copyright © 2017 Zalando SE, https://tech.zalando.com
+>
+> Permission is hereby granted, free of charge, to any person obtaining a copy of this
+> software and associated documentation files (the "Software"), to deal in the
+> Software without restriction, including without limitation the rights to use, copy,
+> modify, merge, publish, distribute, sublicense, and/or sell copies of the Software,
+> and to permit persons to whom the Software is furnished to do so, subject to the
+> following conditions:
+>
+> The above copyright notice and this permission notice shall be included in all copies
+> or substantial portions of the Software.
+>
+> THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+> INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+> PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+> HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
+> CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
+> OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+## Torchvision and the SqueezeNet checkpoint
+
+`data/squeezenet1_1-imagenet.pt` is the state dictionary distributed by torchvision as
+`SqueezeNet1_1_Weights.IMAGENET1K_V1`. Torchvision is BSD-3-Clause licensed. Its project
+also warns that pretrained weights may carry separate terms inherited from their
+training datasets; users are responsible for checking those terms.
+
+> BSD 3-Clause License
+>
+> Copyright (c) Soumith Chintala 2016, All rights reserved.
+>
+> Redistribution and use in source and binary forms, with or without modification, are
+> permitted provided that the following conditions are met:
+>
+> 1. Redistributions of source code must retain the above copyright notice, this list
+>    of conditions and the following disclaimer.
+> 2. Redistributions in binary form must reproduce the above copyright notice, this
+>    list of conditions and the following disclaimer in the documentation and/or other
+>    materials provided with the distribution.
+> 3. Neither the name of the copyright holder nor the names of its contributors may be
+>    used to endorse or promote products derived from this software without specific
+>    prior written permission.
+>
+> THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY
+> EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+> OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT
+> SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+> INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED
+> TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
+> BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+> CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+> ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
+> DAMAGE.
+
+## micrograd
+
+The course seed `sources/2-1-backprop.tex` includes a small scalar reverse-mode engine
+whose structure follows Andrej Karpathy's educational
+[micrograd](https://github.com/karpathy/micrograd) project. The book chapter identifies
+that lineage where the example is taught.
+
+> The MIT License (MIT)
+>
+> Copyright (c) 2020 Andrej Karpathy
+>
+> Permission is hereby granted, free of charge, to any person obtaining a copy of this
+> software and associated documentation files (the "Software"), to deal in the
+> Software without restriction, including without limitation the rights to use, copy,
+> modify, merge, publish, distribute, sublicense, and/or sell copies of the Software,
+> and to permit persons to whom the Software is furnished to do so, subject to the
+> following conditions:
+>
+> The above copyright notice and this permission notice shall be included in all copies
+> or substantial portions of the Software.
+>
+> THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+> INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+> PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+> HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
+> CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
+> OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.

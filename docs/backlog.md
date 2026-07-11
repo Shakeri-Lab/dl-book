@@ -6,8 +6,8 @@ them or a chapter naturally touches them.
 ## 1. Appendix: floating point and machine precision
 
 Stub exists (`chapters/appendices/a4-floating-point.qmd`). Motivating hooks already in
-the book: Chapter 5's depth experiment (sigmoid gradients fall "beneath floating-point
-precision" — that phrase deserves a real explanation), `torch.linalg.solve` vs explicit
+the book: Chapter 5's depth experiment (sigmoid gradients remain nonzero in float64,
+yet the corresponding float32 parameter updates can round away), `torch.linalg.solve` vs explicit
 inverse in Chapter 1, and forward: fp16/bf16/quantization in Chapter 17. Content sketch:
 what a float is (sign/exponent/mantissa), machine epsilon, why $0.1 + 0.2 \neq 0.3$,
 catastrophic cancellation, log-sum-exp as the fix pattern (ties to softmax in Ch. 2),
@@ -50,16 +50,22 @@ chapter stub's draft-sources; revisit during the planned outline session with th
 
 - Run `scripts/fetch_notebooks.py` for the remaining Colab notebooks (m02-03 fetched
   2026-07-07; others pending) — provenance for later chapters' code.
-- Course-site integration (`bookChapter` field) once the author blesses Part I chapters.
+- Extend course-site `bookChapters` mappings as Chapters 12–19 become substantive.
 
-## 5. GPU experiment queue (author rule, July 2026)
+## 5. GPU experiment queue (backlog-only; revised July 11, 2026)
 
-Experiments that need full-dataset/GPU scale carry a standardized in-chapter
-placeholder (`::: {.callout-caution}` titled "GPU run pending" — grep for it) and are
-queued here. Run on Rivanna/Colab, then fold real numbers back into the chapter.
+Do not place project-management placeholders in the published chapters. Keep these
+experiments here until GPU access is available; then run them on Rivanna/Colab, pin the
+numbers, and fold only completed results back into the relevant chapter.
 
 - **Ch. 9 scorecard, full scale**: LeNet / VGG / NiN / deep ResNet on all 60k
   Fashion-MNIST images — reproduce the lecture frontier (≈89% / >90% / ≈90% @ 30k
   params / higher).
 - **Ch. 9 transfer, full scale**: ImageNet ResNet-18 on full FashionMNIST at 224px —
   linear probe (≈93%) vs last-block fine-tune (≈94%) vs scratch baseline.
+- **Ch. 10 language model, full scale**: word-level tokens, stacked LSTM layers, a
+  larger licensed corpus, and a held-out loss comparison across model sizes; inspect
+  when samples move beyond book-flavored character babble.
+- **Ch. 11 translation, full scale**: English→French with an independently written,
+  packed encoder–decoder pipeline, bucketing, BLEU, and greedy-versus-beam decoding.
+  Do not use the course's D2L-derived `rnn_data_prep.py`.

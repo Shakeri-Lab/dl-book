@@ -447,7 +447,9 @@ and the decoder uses \((\bm{s}_t,\bm{c}_t)\) to predict the next token.
   \item \(\boxed{W_q}\) and \(\boxed{W_k}\) are \textbf{learned projections} that map queries (\(\bm{s}_t\)) and keys (\(\bm{h}_i\)) into a \emph{common alignment space} of dimension \(d_h\).
   \begin{itemize}
     \item This lets the model \(\rightarrow\) (i) compare objects of \emph{different} sizes (\(d_{\text{dec}}\neq d_{\text{enc}}\)), (ii) learn feature re-weightings and cross-dimensional mixes before comparing.
-    \item Pedagogical picture: they rotate/scale both \(\bm{s}_t\) and \(\bm{h}_i\) so that ``semantically matching'' components line up in the same coordinates.
+    \item Pedagogical picture: they linearly transform both \(\bm{s}_t\) and
+    \(\bm{h}_i\) so that useful components line up for comparison. A learned linear
+    map may rotate, scale, shear, or project.
   \end{itemize}
   \item \(\boxed{\tanh(\cdot)}\) injects a \textbf{nonlinear interaction} between the projected vectors, enabling richer, non-bilinear matching (beyond a cosine/dot).
   \item \(\boxed{\bm{v}_a}\) is a \textbf{feature selector} in alignment space: after computing the \(d_h\)-dimensional match features, the scalar score \(e_{t,i}\) is the projection onto direction \(\bm{v}_a\).
@@ -569,7 +571,9 @@ There are two beautiful ways to understand how we get from distance-based kernel
 
 \subsubsection{View 1: The Kernel Trick (Feature Space Perspective)}
 
-A fundamental theorem in kernel methods (Mercer's theorem) states that any valid kernel can be written as an inner product in some feature space:
+For a symmetric positive-semidefinite kernel satisfying the usual regularity
+conditions, Mercer's theorem gives an inner-product representation in a feature
+space:
 
 \begin{equation}
 K(q, k) = \langle \phi(q), \phi(k) \rangle_{\mathcal{H}}
@@ -584,7 +588,7 @@ where $\phi: \mathbb{R}^d \rightarrow \mathcal{H}$ maps inputs to a (possibly in
     K(q, k) = \langle \phi(q), \phi(k) \rangle \quad \text{($\phi$ is implicit and fixed)}
     \end{equation}
     
-    \item \textbf{Attention mechanisms}: Use learned, explicit feature maps
+    \item \textbf{Attention scores}: Use two learned, explicit projections
     \begin{align}
     \phi_Q(q) &= W_Q q \quad \text{(Query projection)} \\
     \phi_K(k) &= W_K k \quad \text{(Key projection)} \\
@@ -592,7 +596,10 @@ where $\phi: \mathbb{R}^d \rightarrow \mathcal{H}$ maps inputs to a (possibly in
     \end{align}
 \end{itemize}
 
-Both compute inner products in feature spaces. The difference: attention \textbf{learns} the projections $W_Q$ and $W_K$ from data via gradient descent.
+This is a useful analogy, not a claim that every attention score is a Mercer kernel.
+When $W_Q\ne W_K$, the score can be asymmetric and need not be positive
+semidefinite. Attention \textbf{learns} this task-specific bilinear similarity from
+data rather than requiring the classical kernel conditions.
 \end{tcolorbox}
 
 Why is this powerful?
@@ -600,23 +607,32 @@ Why is this powerful?
     \item \textbf{Asymmetry}: Separate $W_Q$ and $W_K$ allow different projections. The query asks ``what am I looking for?'' while the key answers ``what do I offer?''
     \item \textbf{Finite dimensions}: Unlike infinite-dimensional kernel spaces, we use tractable projections
     \item \textbf{Task adaptation}: $W_Q, W_K$ adapt through backpropagation, discovering the most useful notion of similarity
-    \item \textbf{Computational efficiency}: The formulation reduces to highly optimized matrix multiplications (GEMMs), perfectly utilizing GPU/TPU capabilities
+    \item \textbf{Computational efficiency}: The formulation reduces to highly optimized matrix multiplications (GEMMs), which map well to GPU/TPU hardware
 \end{enumerate}
 
 \paragraph{The Critical Question: Where Does Non-linearity Come From?}
 
-The mechanism described so far seems limited. The projections $W_Q$ and $W_K$ are purely \emph{linear}. A stack of linear operations remains linear. How can this capture the complex, non-linear relationships that traditional kernels (like Gaussian) or additive attention (with its $\tanh$ activation) capture?
+The projections $W_Q$ and $W_K$ are linear, but attention as a whole is not merely a
+stack of linear maps: the scores pass through a softmax and create input-dependent
+mixing weights. Surrounding recurrent cells, normalization, gating, and feed-forward
+networks add further nonlinear transformations.
 
 The answer is that the attention mechanism does not operate in isolation; it relies on the \textit{surrounding architecture} to provide the non-linearity.
 
 \begin{itemize}
     \item In the \textbf{RNN Seq2Seq} model (our current context), the inputs ($s_t$ and $h_i$) are outputs of deep LSTMs or GRUs, which have already performed complex, nonlinear transformations on the sequence.
-    \item In the \textbf{Transformer} architecture (next lecture), this role is explicitly handled by the \textbf{Positionwise Feed-Forward Network (FFN)}.
+    \item In the \textbf{Transformer} architecture (next lecture), nonlinear behavior
+    comes from the attention softmax and from the surrounding block, including the
+    positionwise feed-forward network (FFN), normalization, and any gates or activations.
 \end{itemize}
 
-\begin{tcolorbox}[colback=blue!5!white, colframe=blue!75!black, title=Attention as a Deep Kernel Machine: The Role of the FFN]
+\begin{tcolorbox}[colback=blue!5!white, colframe=blue!75!black, title=A Kernel Analogy: The Role of the FFN]
 
-In the ``kernel trick'' narrative, attention uses \emph{linear} functionals (inner products) on a \emph{nonlinearly} encoded space. The \textbf{positionwise FFN} (applied independently to each token) is the mechanism that builds those rich, nonlinear features. Once the FFN has lifted tokens into a high-dimensional, expressive manifold, the learned query/key projections can act as (almost) \emph{linear rotations} within that space to implement powerful, task-adapted kernels.
+In the ``kernel trick'' analogy, attention compares nonlinearly encoded token
+representations with a learned bilinear score. The \textbf{positionwise FFN} is one
+important source of tokenwise nonlinear features; it is not the only nonlinearity in
+the block. The query/key matrices are general linear projections---not necessarily
+rotations---and their asymmetric score is best called a task-adapted similarity.
 
 Let $z_i^{(\ell)}\in\mathbb{R}^{d_{\mathrm{model}}}$ be the token representation at layer $\ell$.
 A Transformer block can be abstracted as
@@ -647,26 +663,37 @@ a^{(\ell)}(q,k)
 =
 \frac{\big(W_Q^{(\ell)}\,\phi^{(\ell)}(q)\big)^T \big(W_K^{(\ell)}\,\phi^{(\ell)}(k)\big)}{\sqrt{d_k}},
 \qquad
-K^{(\ell)}(q,k)=\exp\big(a^{(\ell)}(q,k)\big).
+\tilde{w}^{(\ell)}(q,k)=\exp\big(a^{(\ell)}(q,k)\big).
 \end{equation}
 
-\textbf{Kernel view:}
-The FFN supplies the \emph{nonlinear lift} $\phi^{(\ell)}$ (the ``implicit feature map''), while $W_Q^{(\ell)}, W_K^{(\ell)}$ are linear maps that \emph{rotate/scale} those features to implement a task-adapted kernel:
+\textbf{Kernel analogy:}
+The FFN contributes a \emph{nonlinear lift} $\phi^{(\ell)}$, while
+$W_Q^{(\ell)}, W_K^{(\ell)}$ are general linear maps that project those features for a
+task-adapted similarity:
 \begin{equation}
-K^{(\ell)}(q,k)
+\tilde{w}^{(\ell)}(q,k)
 \approx
 \exp\Big(\langle U\,\phi^{(\ell)}(q), V\,\phi^{(\ell)}(k)\rangle\Big),
 \quad
 U=W_Q^{(\ell)}, V=W_K^{(\ell)}.
 \end{equation}
 
-Without the FFN (and layerwise nonlinearity), stacking linear projections would leave the per-token map essentially linear; the only nonlinearity would come from the softmax's \emph{across-token} normalization. The FFN restores \emph{per-token} universal approximation power, enabling attention to behave like a \textbf{deep kernel machine}: a nonlinear feature builder ($\phi^{(\ell)}$) followed by a simple bilinear similarity.
+Without an FFN, the attention softmax still supplies nonlinear, across-token,
+input-dependent mixing. The FFN adds flexible tokenwise nonlinear transformation;
+together they support the analogy of a nonlinear feature builder followed by a simple
+bilinear comparison, without implying that the resulting score is a classical kernel.
 
-\textbf{Why a linear rotation suffices after the FFN:}
+\textbf{Why a linear projection is useful after the FFN:}
 \begin{itemize}
-  \item \textbf{Expressive features:} Two-layer MLPs with standard activations are universal approximators on compact sets. Thus $\phi^{(\ell)}$ can approximate the feature map of a wide family of target kernels.
-  \item \textbf{Separation of concerns:} FFN (nonlinear, tokenwise) crafts features; attention (linear in $Q,K$) performs content-based mixing via inner products. The linear maps $W_Q, W_K$ only need to steer within the rich $\phi^{(\ell)}$-space.
-  \item \textbf{Efficiency:} Keeping the similarity step bilinear preserves GEMM-friendliness, while the heavy lifting of nonlinearity is confined to positionwise MLPs (also GEMM-friendly via batched matmuls).
+  \item \textbf{Expressive features:} Two-layer MLPs with standard activations are
+  universal approximators on compact sets. This gives the block rich tokenwise feature
+  transformations; it does not make an asymmetric score a Mercer kernel.
+  \item \textbf{Separation of concerns:} FFNs contribute nonlinear tokenwise features;
+  attention scores and mixes content across tokens. The maps $W_Q, W_K$ select
+  comparison subspaces within the current representations.
+  \item \textbf{Efficiency:} Keeping the comparison step bilinear preserves
+  GEMM-friendliness, while FFNs add tokenwise nonlinear capacity with more batched
+  matrix multiplications.
 \end{itemize}
 \end{tcolorbox}
 
@@ -674,8 +701,13 @@ Without the FFN (and layerwise nonlinearity), stacking linear projections would 
 
 The FFN also shapes the \emph{statistics} of features that feed the softmax:
 \begin{itemize}
-  \item \textbf{Norm/variance control:} With Layer Normalization and width expansion ($d_{\mathrm{hid}}\approx 4 d_{\mathrm{model}}$), FFN regulates feature norms and spectra, mitigating softmax saturation and improving gradient flow.
-  \item \textbf{Gating helps conditioning:} GLU-style gating realizes elementwise products that approximate second-order interactions, improving conditioning for the subsequent bilinear test and often stabilizing mixed-precision training.
+  \item \textbf{Norm/variance context:} Layer normalization standardizes each token
+  before a sublayer (up to its learned affine transform). The FFN then reshapes those
+  features; neither width expansion nor LayerNorm guarantees equal projected norms or
+  prevents softmax saturation.
+  \item \textbf{Gating adds interactions:} GLU-style gating supplies elementwise
+  products and changes the block's tokenwise function class. Any conditioning or
+  mixed-precision benefit is empirical and implementation-dependent.
 \end{itemize}
 
 \paragraph{Takeaway: Separation of Concerns}
@@ -683,11 +715,16 @@ The FFN also shapes the \emph{statistics} of features that feed the softmax:
 This architecture implements a powerful separation of concerns, which explains its effectiveness and efficiency:
 
 \begin{itemize}
-    \item \textbf{Nonlinear Feature Extraction (FFN/RNN):} Handles the heavy lifting of crafting complex features. Since MLPs (FFNs) are universal approximators, $\phi^{(\ell)}$ can approximate the feature map of a wide family of kernels.
+    \item \textbf{Nonlinear Feature Transformation (FFN/RNN):} Crafts complex
+    tokenwise representations; the attention softmax contributes additional
+    across-token nonlinearity.
     \item \textbf{Content-Based Mixing (Attention):} Performs comparison and pooling using efficient inner products (bilinear operations) in the learned feature space.
 \end{itemize}
 
-In the ``kernel trick'' narrative, the FFN $\phi^{(\ell)}$ is the trainable, nonlinear \emph{feature map}; attention then measures (and mixes by) \emph{linear} similarities in that space. This is why emphasizing the positionwise FFN is essential: it is what makes a simple linear rotation in Hilbert space richly expressive in practice.
+In the ``kernel trick'' analogy, the FFN contributes a trainable nonlinear feature
+map and attention measures and mixes by learned bilinear similarities. The analogy is
+useful for intuition, provided we do not mistake a general asymmetric attention score
+for a symmetric positive-semidefinite kernel.
 
 \subsubsection{View 2: Expanding the Distance (A Geometric Intuition)}
 
@@ -718,7 +755,11 @@ Let us examine the terms:
 \item The Key Norm term, $-\frac{\|k_i\|^2}{2h^2}$, does vary across different keys.
 \end{itemize}
 
-If we assume that all our key vectors have roughly the same magnitude (e.g., if we applied L2 normalization or Layer Normalization, which is common in modern architectures), then this term also becomes approximately constant and cancels out.
+If we explicitly L2-normalize the key vectors, they have the same magnitude and this
+term becomes constant across keys. Layer Normalization is not the same guarantee: it
+standardizes each token before its learned affine transform, and the affine parameters
+can change the resulting norms. Treat equal key norms as a separate simplifying
+assumption, not as an automatic consequence of LayerNorm.
 
 Under these assumptions (shift-invariance and normalized inputs), the Euclidean distance score simplifies to the dot product score:
 \begin{equation}
@@ -1388,7 +1429,7 @@ This is the foundation of the Transformer architecture, which has revolutionized
     \item How do we prevent the decoder from ``cheating'' by looking at future tokens?
     \item Can a model with no recurrence and no convolution really work?
     \item What enables Transformers to scale to billions of parameters?
-    \item How does self-attention enable perfect parallelization during training?
+    \item How does self-attention enable parallel computation across sequence positions within a training layer?
 \end{enumerate}
 
 \begin{tcolorbox}[colback=green!5!white, colframe=green!50!black, title=The Cliffhanger]
@@ -1404,7 +1445,7 @@ Next lecture: \textbf{Self-Attention and the Transformer Revolution}.
     
     \item \textbf{Architecture Understanding}: Draw a diagram showing the flow of information in an attention-augmented RNN decoder for one decoding step. Clearly indicate where the RNN cell is, where cross-attention happens, and how they interact.
     
-    \item \textbf{Derivation}: Starting from the Gaussian kernel $K(q, k) = \exp(-\|q - k\|^2 / 2h^2)$, carefully derive the equation $a(q, k) = q^T k - \frac{1}{2}\|q\|^2 - \frac{1}{2}\|k\|^2$. Explain in your own words why the norm terms cancel in softmax.
+    \item \textbf{Derivation}: Starting from the Gaussian kernel $K(q, k) = \exp(-\|q - k\|^2 / 2h^2)$, carefully derive the equation $a(q, k) = q^T k - \frac{1}{2}\|q\|^2 - \frac{1}{2}\|k\|^2$ (taking $h=1$). Explain why the query-norm term cancels by softmax shift-invariance, and state the additional equal-key-norm assumption needed for the key-norm term to cancel.
     
     \item \textbf{Variance Analysis}: Generate random vectors $q, k \in \mathbb{R}^{d_k}$ with i.i.d. components from $\mathcal{N}(0, 1)$ for $d_k = 16, 64, 256$. Empirically verify that $\text{Var}(q^T k) = d_k$ and $\text{Var}(q^T k / \sqrt{d_k}) = 1$.
     

@@ -8,7 +8,8 @@
            @sec-09-modern-cnns-transfer material and is not used here. -->
 
 Chapter 7 closed on a question it had spent a whole chapter earning: we built a machine
-that is local, weight-shared, and exactly equivariant — with nine hand-picked numbers
+that is local, weight-shared, and translation-equivariant away from boundaries, with
+nine hand-picked numbers
 sitting inside it. Nine numbers $\rightarrow$ nine knobs $\rightarrow$ we have spent
 half a book tuning knobs against a loss.
 
@@ -28,11 +29,17 @@ import torch.nn.functional as F
 import matplotlib.pyplot as plt
 
 torch.manual_seed(6050)
-train = torch.load("../../data/fashion-train.pt")
-test = torch.load("../../data/fashion-test.pt")
-X_tr = train["X"].float().unsqueeze(1) / 255.0    # (1200, 1, 28, 28)
-X_te = test["X"].float().unsqueeze(1) / 255.0     # (600, 1, 28, 28)
-y_tr, y_te, classes = train["y"], test["y"], train["classes"]
+development = torch.load("../../data/fashion-train.pt")
+holdout = torch.load("../../data/fashion-test.pt")
+X_dev = development["X"].float().unsqueeze(1) / 255.0  # (1200, 1, 28, 28)
+y_dev, classes = development["y"], development["classes"]
+X_test = holdout["X"].float().unsqueeze(1) / 255.0     # (600, 1, 28, 28)
+y_test = holdout["y"]
+
+split = torch.randperm(len(X_dev), generator=torch.Generator().manual_seed(6050))
+fit_idx, val_idx = split[:1000], split[1000:]
+X_tr, y_tr = X_dev[fit_idx], y_dev[fit_idx]             # (1000, 1, 28, 28), (1000,)
+X_val, y_val = X_dev[val_idx], y_dev[val_idx]           # (200, 1, 28, 28), (200,)
 ```
 
 Note the shapes. In Part I we flattened every image into a 784-vector before the model
@@ -40,11 +47,13 @@ ever saw it. That stops now: the images stay rectangular, and they pick up a *ch
 dimension, for reasons that will occupy us shortly.
 
 ::: {.callout-warning}
-## Four dimensions, always
+## The book's batch convention: NCHW
 
-PyTorch's convolution machinery expects every image batch in **NCHW** order: (batch,
-channels, height, width) — even a single grayscale image must be shaped `(1, 1, 28,
-28)`. The kernels of a conv layer live in a 4-D tensor too: (out-channels,
+Throughout this book, every image **batch** uses PyTorch's **NCHW** order: (batch,
+channels, height, width). A single grayscale batch is therefore shaped `(1, 1, 28,
+28)`. `Conv2d` can also accept an unbatched `(C, H, W)` input, but keeping the batch
+dimension explicit makes downstream shapes predictable. The kernels of a conv layer
+live in a 4-D tensor too: (out-channels,
 in-channels, height, width). This bookkeeping is the single most common source of
 errors in convolutional code: when a shape error greets you, count dimensions before
 touching anything else. Chapter 7's `conv2d` helper hid this with `x[None, None]`;
@@ -137,10 +146,11 @@ something no one has named.
 
 One backpropagation detail deserves a sentence, because it is the same fan-out rule we
 met in @sec-05-backpropagation. The *same* nine numbers are used at every position of
-the slide $\rightarrow$ every position sends blame $\rightarrow$ the kernel's gradient
-is the **sum over all positions**. Weight sharing is not just a parameter economy; at
-training time it means every patch of every image is a lesson for the one shared
-template.
+the slide $\rightarrow$ every position contributes blame to the shared kernel. Those
+contributions accumulate, then the loss reduction supplies its scale; `F.mse_loss`
+with the default `reduction="mean"` averages over batch, channel, and spatial elements.
+Weight sharing is not just a parameter economy. At training time every patch of every
+image teaches the one shared template.
 
 ## From one detector to a layer of detectives
 
@@ -277,17 +287,18 @@ for p, s in [(0, 1), (1, 1), (1, 2)]:
     print(f"n=8, k=3, p={p}, s={s}:  formula {n_out}  torch {tuple(out.shape[2:])}")
 ```
 
-## Pooling: spending equivariance to buy invariance
+## Pooling: trading exact location for local tolerance
 
 Now for the deepest design decision in the network, and it starts from the asset
-Chapter 7 banked. Convolution is exactly equivariant: shift the garment, and every
-feature map shifts in lockstep. The detective's map of clues faithfully tracks the
-scene. But the network's final job is not mapping clues — it is a verdict. *Is this a
+Chapter 7 banked. Under matched boundary rules, convolution is equivariant on the
+interior: shift the garment, and every feature map shifts in lockstep. The detective's
+map of clues faithfully tracks the scene. But the network's final job is not mapping
+clues; it is a verdict. *Is this a
 trouser?* The answer must not depend on where the trouser stands. The feature-finding
 stage wants **equivariance** (where things are matters); the decision stage wants
 **invariance** (only what was found matters). Equivariance is what we have; invariance
-is what the classifier head needs $\rightarrow$ something must convert one into the
-other.
+is what the classifier head needs $\rightarrow$ something must reduce sensitivity to
+location.
 
 That converter is **pooling**. Slide a window over each feature map (no parameters
 this time) and summarize each neighborhood by one number:
@@ -311,11 +322,12 @@ non-overlapping, halving each spatial dimension. Max is the default choice in
 practice, precisely because feature detection is about the strongest evidence, not the
 committee average.
 
-Why does this buy invariance? Watch a shift become invisible:
+How can this buy local tolerance? Start with a deliberately clean construction in
+which a shift becomes invisible:
 
 ```{python}
 #| label: pool-invariance
-#| code-summary: "Code: a one-pixel shift that pooling cannot see"
+#| code-summary: "Code: one constructed shift that pooling cannot see"
 scene = torch.zeros(1, 1, 4, 4)
 scene[0, 0, 1, 0] = 9.0        # a strong clue, upper-left region
 scene[0, 0, 2, 2] = 3.0        # a weaker clue, lower-right region
@@ -328,18 +340,17 @@ print(f"pooled original: {F.max_pool2d(scene,   2).squeeze().tolist()}")
 print(f"pooled shifted:  {F.max_pool2d(shifted, 2).squeeze().tolist()}")
 ```
 
-Both clues moved, yet the pooled maps are *identical*: each clue stayed inside its
-$2 \times 2$ window, and max pooling reports what it found, not where in the window it
-found it. The invariance is real but local — a shift that crosses a window boundary
-does change the output. One pooling stage buys tolerance to jitter of a pixel or so;
-stacking a second stage on the already-halved map compounds the tolerance. How far
-that compounding actually gets us is an empirical question, and the end of this
-chapter measures it.
+Both clues moved, yet these particular pooled maps are *identical*: each isolated
+maximum stayed inside its $2 \times 2$ window. That equality belongs to this
+construction, not to max pooling in general. A shift can change which values share a
+window, which maximum wins, or what crosses the boundary. Pooling can therefore buy
+local tolerance to jitter, but the amount depends on the activations and alignment;
+the end of this chapter measures it rather than assuming it.
 
 ::: {.callout-warning}
-## Invariance has a price tag
+## Tolerance has a price tag
 
-Pooling buys invariance by *throwing away position*. After two rounds, the network
+Pooling can buy tolerance by *throwing away position*. After two rounds, the network
 knows a strong vertical edge exists in a region; it no longer knows exactly where.
 For classification this is the right trade — but it is a trade, and it will come due
 twice in this book. Deeper in Part II, tasks that need precise locations will have to
@@ -373,7 +384,7 @@ in every direction, from nothing but $5 \times 5$ looks.
 import matplotlib.patches as mpatches
 
 fig, ax = plt.subplots(figsize=(4.2, 3.6))
-ax.imshow(X_te[1, 0], cmap="gray")
+ax.imshow(X_val[1, 0], cmap="gray")
 for size, color, lab in [(5, "#E57200", "conv1: 5×5"),
                          (14, "#5379AA", "conv2: 14×14"),
                          (16, "#DDA0DD", "pool2: 16×16")]:
@@ -385,13 +396,13 @@ ax.axis("off")
 plt.tight_layout(); plt.show()
 ```
 
-This is the compositional hierarchy of @sec-03-nonlinearity-mlp finally given a
-reason to exist. The MLP *could* represent features-of-features but nothing encouraged
-it to; here the architecture leaves no alternative. Early layers, small fields, simple
-patterns: edges, gradients. Middle layers, wider fields, compositions: corners,
-textures. Late layers, fields spanning the object: parts. The CNN buys global sight
-gradually, paying for it with depth; hold that thought until Part IV, where attention
-will buy global sight in a single step and pay for it differently
+This is the compositional hierarchy of @sec-03-nonlinearity-mlp given a strong
+architectural invitation. The MLP *could* represent features-of-features but nothing
+encouraged it to; locality and growing receptive fields encourage later layers to
+compose earlier responses. Learned channels often progress from edge-like patterns to
+textures and parts, but the architecture does not force those human labels. The CNN
+buys global sight gradually, paying for it with depth; hold that thought until Part IV,
+where attention will buy global sight in a single step and pay for it differently
 (@sec-13-attention).
 
 ## LeNet: the whole machine
@@ -409,19 +420,19 @@ while feature depth grows (1 $\rightarrow$ 6 $\rightarrow$ 16): the network trad
 class LeNet(nn.Module):
     def __init__(self):
         super().__init__()
-        self.conv1 = nn.Conv2d(1, 6, 5, padding=2)   # (1,28,28) -> (6,28,28)
-        self.conv2 = nn.Conv2d(6, 16, 5)             # (6,14,14) -> (16,10,10)
+        self.conv1 = nn.Conv2d(1, 6, 5, padding=2)   # (N,1,28,28) -> (N,6,28,28)
+        self.conv2 = nn.Conv2d(6, 16, 5)             # (N,6,14,14) -> (N,16,10,10)
         self.fc1 = nn.Linear(16 * 5 * 5, 120)
         self.fc2 = nn.Linear(120, 84)
         self.fc3 = nn.Linear(84, 10)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = F.max_pool2d(F.relu(self.conv1(x)), 2)   # -> (6,14,14)
-        x = F.max_pool2d(F.relu(self.conv2(x)), 2)   # -> (16,5,5)
-        x = x.flatten(1)                             # -> (400,)
+        x = F.max_pool2d(F.relu(self.conv1(x)), 2)   # -> (N, 6, 14, 14)
+        x = F.max_pool2d(F.relu(self.conv2(x)), 2)   # -> (N, 16, 5, 5)
+        x = x.flatten(1)                             # -> (N, 400)
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
-        return self.fc3(x)                           # logits, (10,)
+        return self.fc3(x)                           # logits, (N, 10)
 ```
 
 Every line is a tool we already own: @eq-conv-layer twice, @eq-outsize silently fixing
@@ -450,7 +461,7 @@ Before training, the parameter audit — because parameter *economy* was half of
 ```{python}
 #| label: params
 #| code-summary: "Code: parameter audit, LeNet vs. Chapter 6's MLP"
-def make_mlp():
+def make_mlp() -> nn.Sequential:
     return nn.Sequential(nn.Flatten(),
                          nn.Linear(784, 256), nn.ReLU(), nn.Linear(256, 10))
 
@@ -472,61 +483,64 @@ own 2,572 parameters (about 4%) while the dense head hoards the rest. That imbal
 is a design smell we will fix in @sec-09-modern-cnns-transfer, where modern
 architectures go deeper in convolution and lighter in the head.
 
-Now train both models under one shared recipe (same data, same optimizer, same
-budget) $\rightarrow$ the only difference left is architecture. This time we use
-*minibatches*
-(@sec-04-training-loss-sgd's stochastic regime, batch size 128) rather than Chapter
-6's full-batch loop, since the conv net needs more steps to converge:
+Now train both models under one shared optimization recipe: same fitting split,
+optimizer, minibatch size, number of epochs, and therefore number of parameter updates.
+The comparison does **not** match parameter count or floating-point work; a convolution
+and a dense layer spend different computation per update. Architecture is the intended
+difference, compute is not controlled:
 
 ```{python}
 #| label: train-both
 #| code-summary: "Code: one recipe, two architectures"
-def train_model(model_fn, epochs: int = 150, batch: int = 128, seed: int = 6050):
+def train_model(
+    model_fn, X_fit: torch.Tensor = X_tr, y_fit: torch.Tensor = y_tr,
+    epochs: int = 150, batch: int = 128, seed: int = 6050
+) -> nn.Module:
     torch.manual_seed(seed)
     model = model_fn()
     opt = torch.optim.Adam(model.parameters(), lr=1e-3)
-    n = len(X_tr)
+    n = len(X_fit)
     for _ in range(epochs):
         perm = torch.randperm(n)
         for i in range(0, n, batch):
             idx = perm[i:i + batch]
-            loss = F.cross_entropy(model(X_tr[idx]), y_tr[idx])
+            loss = F.cross_entropy(model(X_fit[idx]), y_fit[idx])
             opt.zero_grad(); loss.backward(); opt.step()
     return model
 
 @torch.no_grad()
-def accuracy(model, X, y):
+def accuracy(model: nn.Module, X: torch.Tensor, y: torch.Tensor) -> float:
+    model.eval()
     return (model(X).argmax(1) == y).float().mean().item()
 
 mlp = train_model(make_mlp)
 lenet = train_model(LeNet)
 for name, model in [("MLP  ", mlp), ("LeNet", lenet)]:
     print(f"{name}  train {accuracy(model, X_tr, y_tr):.1%}   "
-          f"test {accuracy(model, X_te, y_te):.1%}")
+          f"validation {accuracy(model, X_val, y_val):.1%}")
 ```
 
-Read the clean-test column honestly: a near-tie. LeNet edges ahead, but within seed
-noise — this is *not* the landslide the architecture's press clippings promise. It
-shouldn't be, and Chapter 6 already told us why: on 1,200 centered garments, capacity
-was never the bottleneck. The MLP has parameters to spare and memorizes its way to the
-same score (both models sit at essentially 100% train accuracy). On the full
-60,000-image dataset the gap opens decisively — the lecture's live session watches the
-CNN pull ahead early and stay ahead — but our small-data regime makes a sharper point:
-LeNet *matches* the MLP with a third of the parameters, and, as we are about to see,
-what it learned is a different kind of knowledge altogether.
+Read the clean-validation column honestly: the MLP scores 75.5% and LeNet 74.5% in this
+single seeded run. A one-point difference is descriptive, not an uncertainty estimate,
+so it does not establish which architecture has higher expected clean accuracy. Chapter
+6 already told us why a landslide is unlikely here: centered garments do not expose the
+MLP's main weakness. Both models nearly interpolate the fitting split. Our small-data
+regime makes a narrower point: LeNet reaches comparable clean accuracy with less than a
+third of the parameters. The shift experiment now asks whether it learned a different
+kind of representation.
 
 ## The rematch
 
-Chapter 6 convicted our MLP with one experiment: shift every test garment two pixels
+Chapter 6 convicted our MLP with one experiment: shift every validation garment two pixels
 right, and accuracy fell off a cliff — the full-frame templates kept scoring sleeves
 against background. We then promised that an architecture built on locality and weight
 sharing would face the same trial. The rematch:
 
 ```{python}
 #| label: fig-cliff-rematch
-#| fig-cap: "The rematch. Chapter 6's experiment, run on both architectures trained under the identical recipe. The MLP repeats its cliff: half its accuracy gone by two pixels. LeNet degrades gracefully — the same two-pixel shift costs it a quarter. The dotted line is chance."
+#| fig-cap: "The validation rematch. Both architectures use the same optimizer schedule, though not matched compute. At two pixels the MLP falls from 75.5% to 42.0%, while LeNet falls from 74.5% to 57.5%. The dotted line is chance."
 #| code-summary: "Code: accuracy vs. shift, both models"
-def shift_right(X, px: int):
+def shift_right(X: torch.Tensor, px: int) -> torch.Tensor:
     out = torch.zeros_like(X)
     if px == 0:
         return X.clone()
@@ -534,8 +548,8 @@ def shift_right(X, px: int):
     return out
 
 shifts = list(range(5))
-acc_mlp = [accuracy(mlp, shift_right(X_te, s), y_te) for s in shifts]
-acc_cnn = [accuracy(lenet, shift_right(X_te, s), y_te) for s in shifts]
+acc_mlp = [accuracy(mlp, shift_right(X_val, s), y_val) for s in shifts]
+acc_cnn = [accuracy(lenet, shift_right(X_val, s), y_val) for s in shifts]
 for s in shifts:
     print(f"shift {s}px:   MLP {acc_mlp[s]:.1%}   LeNet {acc_cnn[s]:.1%}")
 
@@ -543,18 +557,17 @@ plt.figure(figsize=(5.5, 3.2))
 plt.plot(shifts, acc_mlp, "o-", color="#E57200", lw=2, ms=7, label="MLP (Ch. 6)")
 plt.plot(shifts, acc_cnn, "s-", color="#232D4B", lw=2, ms=7, label="LeNet")
 plt.axhline(0.1, ls=":", color="#B8B8A8")
-plt.xlabel("shift (pixels right)"); plt.ylabel("test accuracy")
+plt.xlabel("shift (pixels right)"); plt.ylabel("validation accuracy")
 plt.ylim(0, 0.9); plt.xticks(shifts); plt.legend()
 plt.tight_layout(); plt.show()
 ```
 
-There is the payoff, and it is worth stating precisely. At two pixels the MLP is down
-to 41.8% — the same collapse as Chapter 6, reproduced under the new recipe — while
-LeNet holds 62.3%. At one pixel, LeNet gives up half as much as the MLP does (7.7
-points against 15). The mechanism is everything this
-chapter built: the kernels travel with the garment (equivariance), so the *features
-are still found*; pooling forgives the sub-window jitter (local invariance); only the
-coarse layout entering the head changes at all.
+There is the payoff, and it is worth stating precisely. At two pixels the MLP falls
+from 75.5% to 42.0%, while LeNet falls from 74.5% to 57.5%. That is one deterministic
+validation split, not a sampling distribution, but the within-run contrast is large.
+The mechanism is everything this chapter built: the kernels travel with the garment
+(equivariance), so the *features are still found*; pooling forgives some sub-window
+jitter (local insensitivity); only the coarse layout entering the head changes at all.
 
 And yet the navy curve falls too. Also worth stating precisely, because it teaches the
 architecture's fine print. Two rounds of 2× pooling buy tolerance measured in a few
@@ -562,9 +575,8 @@ pixels, not unlimited; and after `flatten(1)`, the dense head reads the final $5
 \times 5$ grid *positionally* — a four-pixel input shift moves features roughly one
 full cell in that grid, and the head is as brittle to cell-level shifts as Chapter 6's
 MLP was to pixel-level ones. The inductive bias did not abolish the cliff; it moved it
-outward and flattened it into a slope. Getting rid of the rest is a solved problem,
-and the solutions are next chapter's business (going deeper; pooling *globally* — and
-exercise 5 lets you preview the idea today).
+outward and flattened it into a slope. Reducing the remaining sensitivity is the next
+chapter's business, where we revisit depth and the position-sensitive head.
 
 One last look inside, because Chapter 6 also showed us what the MLP's first layer
 *looked like* — global, smeared, garment-shaped templates
@@ -572,9 +584,9 @@ One last look inside, because Chapter 6 also showed us what the MLP's first laye
 
 ```{python}
 #| label: fig-learned-filters
-#| fig-cap: "What LeNet learned to look for. Top: the six first-layer 5×5 kernels (red positive, blue negative). Bottom: each kernel's feature map on a test trouser — different detectives report left leg edges, right edges, interior fill. Trained on only 1,200 images the kernels are grainier than their full-dataset cousins, but the division of labor is unmistakable. Compare Chapter 6's full-frame templates: same job, opposite philosophy."
+#| fig-cap: "What LeNet learned to look for. Top: six first-layer 5×5 kernels (red positive, blue negative). Bottom: their feature maps on one validation garment. The maps respond differently, but at this toy scale several kernels are diffuse and their semantics should not be over-interpreted. Compare their local support with Chapter 6's full-frame templates."
 #| code-summary: "Code: first-layer kernels and their feature maps"
-img = X_te[1:2]                                     # the trouser from earlier
+img = X_val[1:2]                                    # one validation garment
 with torch.no_grad():
     fmaps = F.relu(lenet.conv1(img)).squeeze(0)     # (6, 28, 28)
 kernels = lenet.conv1.weight.detach().squeeze(1)    # (6, 5, 5)
@@ -588,10 +600,31 @@ for i in range(6):
 plt.tight_layout(); plt.show()
 ```
 
-Six small, local, oriented detectors, each lighting up a different aspect of the same
-trouser. Nobody designed them. The classification loss, pulling blame backward through
-@eq-conv-layer for fifteen hundred gradient steps, decided that *this* is what the
-first layer of garment-reading should look for.
+Six small, local kernels produce distinct response maps on the same garment. Some show
+directional structure; others remain noisy enough that naming a detector would tell
+more story than this one run supports. Nobody designed them. The classification loss,
+pulling blame backward through @eq-conv-layer for roughly 1,200 optimizer steps, chose
+these local measurements.
+
+## One sealed test check
+
+We have now fixed both architectures, the optimizer schedule, the shift size, and the
+two reported metrics. We refit each model on all 1,200 development images, then open the
+600-image test set once:
+
+```{python}
+#| label: final-holdout
+#| code-summary: "Code: one final test-set check"
+mlp_final = train_model(make_mlp, X_dev, y_dev)
+lenet_final = train_model(LeNet, X_dev, y_dev)
+for name, model in [("MLP  ", mlp_final), ("LeNet", lenet_final)]:
+    print(f"{name}  clean {accuracy(model, X_test, y_test):.1%}   "
+          f"shift-2 {accuracy(model, shift_right(X_test, 2), y_test):.1%}")
+```
+
+The sealed check confirms the validation diagnosis. Clean accuracy is 82.2% for the
+MLP and 82.5% for LeNet, a descriptive 0.3-point gap from one seed. Under the
+predeclared two-pixel shift, the gap becomes 41.8% versus 62.3%.
 
 ## Okay, so —
 
@@ -605,15 +638,34 @@ first layer of garment-reading should look for.
 3. **Padding and stride are the shape budget**: $n_{\text{out}} = \lfloor (n + 2p -
    k)/s \rfloor + 1$ (@eq-outsize). Padding lets networks go deep without shrinking to
    nothing; stride shrinks on purpose.
-4. **Pooling converts equivariance into (local) invariance** — the strongest clue per
-   window, position discarded. It is a purchase, and position is the currency.
+4. **Pooling can turn equivariance into local shift tolerance** — the strongest clue
+   per window, some position discarded. It is a purchase, and position is the currency.
 5. **Receptive fields grow with depth**: $5 \rightarrow 6 \rightarrow 14 \rightarrow
    16$ in our LeNet. Local wiring earns global sight gradually; the hierarchy Chapter
-   3 could only hope for is here enforced by architecture.
-6. **The verdict**: on our small dataset LeNet ties the MLP's clean accuracy with a
-   third of the parameters — and where the MLP cliff-dives under a two-pixel shift
-   (41.8%), LeNet degrades gracefully (62.3%). The bias did not add capacity; it added
-   the *right constraints*, exactly Chapter 6's prescription.
+   3 could only hope for is now encouraged by architecture.
+6. **The verdict**: on the sealed test set, one seed puts clean accuracy at 82.2% for
+   the MLP and 82.5% for LeNet; this does not establish an expected clean-accuracy
+   difference. Under the predeclared two-pixel shift, the same models score 41.8% and
+   62.3%. The bias did not add capacity; it added the *right constraints*, exactly
+   Chapter 6's prescription.
+
+## Sources and further reading {.unnumbered}
+
+- LeCun et al.,
+  ["Gradient-Based Learning Applied to Document Recognition"](http://yann.lecun.com/exdb/publis/pdf/lecun-98.pdf)
+  (1998): the primary LeNet account, including the architecture's document-recognition
+  setting.
+- Fukushima,
+  ["Neocognitron: A Self-organizing Neural Network Model"](https://doi.org/10.1007/BF00344251)
+  (1980): historical context for alternating feature extraction and spatial tolerance.
+- Zeiler and Fergus,
+  ["Visualizing and Understanding Convolutional Networks"](https://arxiv.org/abs/1311.2901)
+  (2014): methods and evidence for inspecting learned convolutional features without
+  over-reading a single filter image.
+- Dumoulin and Visin,
+  ["A Guide to Convolution Arithmetic for Deep Learning"](https://arxiv.org/abs/1603.07285)
+  (2016): a compact companion for checking convolution, pooling, and receptive-field
+  shapes.
 
 ## Exercises {.unnumbered}
 
@@ -632,8 +684,7 @@ first layer of garment-reading should look for.
 4. **(Code.)** Swap LeNet's max pooling for average pooling and retrain. Compare
    clean accuracy and the shift curve. Which changes more, and does the result match
    the "strongest clue vs. general vibe" story?
-5. **(Code.)** Make the head positionless: replace `flatten` and the three dense
-   layers with a *global* average pool over each of the 16 final feature maps,
-   feeding `nn.Linear(16, 10)`. Retrain and re-plot the shift curve. What happened to
-   the cliff — and what did the clean accuracy pay for it? Explain both effects in
-   terms of what the head can no longer see.
+5. **(Pencil.)** The final dense head receives 25 spatial positions per feature map.
+   Explain why this can reintroduce shift sensitivity after equivariant convolutions.
+   Describe what information a position-insensitive head would keep and discard; we
+   will build one in @sec-09-modern-cnns-transfer.

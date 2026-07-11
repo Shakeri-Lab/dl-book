@@ -14,10 +14,11 @@ sometimes billions, of knobs, tangled through layer after layer of composed func
 $\rightarrow$ computing each partial derivative naively, one at a time, is hopeless.
 
 Backpropagation is the algorithm that computes *all* of them, exactly, in one backward
-sweep whose cost is linear in the number of parameters. It is not a new kind of
-calculus. It is the chain rule, *organized*. By the end of this chapter you will have
-derived it, implemented it by hand, rebuilt it as a 60-line autograd engine, and then
-checked that `torch.autograd` agrees with you to machine precision.
+sweep whose cost is a small constant multiple of the graph's elementary operations.
+It is not a new kind of calculus. It is the chain rule, *organized*. By the end of this
+chapter you will have derived it, implemented it by hand, rebuilt it as a tiny scalar
+autograd engine, and then checked that `torch.autograd` agrees with you to machine
+precision.
 
 ## One neuron, one chain
 
@@ -103,9 +104,12 @@ $$
 \delta^{(L)} = \frac{\partial L}{\partial \vect{a}^{(L)}} \odot \sigma'(\vect{z}^{(L)}) .
 $$ {#eq-bp1}
 
-For squared error, $\partial L / \partial \vect{a}^{(L)}$ is literally the prediction
-error $\vect{a}^{(L)} - \vect{y}$: the error, scaled by how sensitive the activation
-was to its input.
+For the half-squared-error convention
+$L=\tfrac12\|\vect{a}^{(L)}-\vect{y}\|^2$,
+$\partial L / \partial \vect{a}^{(L)}$ is exactly the prediction error
+$\vect{a}^{(L)} - \vect{y}$. Other conventions contribute a known scale: mean squared
+error, for example, contributes $2/n$ for $n$ scalar outputs. In every case the output
+error is then gated by how sensitive the activation was to its input.
 
 **2. Propagate blame one layer back:**
 
@@ -178,7 +182,7 @@ $$
 \frac{\partial L}{\partial \vect{b}^{(l)}} = \delta^{(l)} .
 $$ {#eq-bp4}
 
-Equation @eq-bp3 deserves a pause, because its shapes tell the story. With $m$ neurons
+@eq-bp3 deserves a pause, because its shapes tell the story. With $m$ neurons
 in layer $l$ and $n$ in layer $l-1$: $\delta^{(l)}$ is $(m \times 1)$, and
 $(\vect{a}^{(l-1)})^\top$ is $(1 \times n)$. Their **outer product** is an $m \times n$
 matrix, exactly the shape of $\matr{W}^{(l)}$, and entry $(i,j)$ is the blame of neuron
@@ -220,7 +224,7 @@ right, the two answers must agree to machine precision.
 #| label: setup
 import torch
 
-torch.manual_seed(6050)
+_ = torch.manual_seed(6050)
 ```
 
 ```{python}
@@ -259,16 +263,23 @@ for k in grads:
     print(f"{k}: max |ours - autograd| = {gap:.2e}")
 ```
 
-Zeros, to floating-point precision. The blame equations *are* what autograd computes;
-the framework simply builds the computation graph for us as we go and then walks it
-backward, caching and reusing exactly as we did.
+The largest discrepancy is $3.73\times10^{-9}$, consistent with float32 rounding. The
+blame equations *are* what autograd computes; the framework simply builds the
+computation graph for us as we go and then walks it backward, caching and reusing
+exactly as we did.
 
-## A 60-line autograd engine
+## A tiny scalar autograd engine
 
 To remove the last trace of magic, let us build the graph ourselves. Each `Value` node
 remembers how it was made (its parents and the local derivative rule); calling
 `backward()` walks the graph in reverse topological order, accumulating blame into every
 node's `grad`.
+
+This teaching implementation is adapted from Andrej Karpathy's
+[micrograd](https://github.com/karpathy/micrograd), released under the MIT License. We
+use only the scalar reverse-mode pattern needed for this derivation; the upstream
+copyright and license notice are preserved in the repository's
+[third-party notices](https://github.com/Shakeri-Lab/dl-book/blob/main/THIRD_PARTY_NOTICES.md).
 
 ```{python}
 #| label: micro-autograd
@@ -282,7 +293,7 @@ class Value:
         self._parents = parents
         self._backward_rule = backward_rule
 
-    def __add__(self, other):
+    def __add__(self, other: "Value | float") -> "Value":
         other = other if isinstance(other, Value) else Value(other)
         out = Value(self.data + other.data, (self, other))
         def rule():                      # d(out)/d(self) = d(out)/d(other) = 1
@@ -291,7 +302,7 @@ class Value:
         out._backward_rule = rule
         return out
 
-    def __mul__(self, other):
+    def __mul__(self, other: "Value | float") -> "Value":
         other = other if isinstance(other, Value) else Value(other)
         out = Value(self.data * other.data, (self, other))
         def rule():                      # product rule, one side at a time
@@ -300,7 +311,7 @@ class Value:
         out._backward_rule = rule
         return out
 
-    def sigmoid(self):
+    def sigmoid(self) -> "Value":
         s = 1 / (1 + 2.718281828459045 ** (-self.data))
         out = Value(s, (self,))
         def rule():                      # sigma' = s (1 - s), the gate
@@ -308,7 +319,7 @@ class Value:
         out._backward_rule = rule
         return out
 
-    def backward(self):
+    def backward(self) -> None:
         order, seen = [], set()
         def topo(v):                     # children before parents
             if v not in seen:
@@ -336,7 +347,7 @@ print(f"micro-autograd: dL/dw = {w.grad:.6f}")
 print(f"by hand:        dL/dw = {2 * (s - 0.3) * s * (1 - s) * 2.0:.6f}")
 ```
 
-Sixty lines, and it is the real thing: PyTorch's autograd is this idea with tensors
+In a few dozen lines, it is the real thing: PyTorch's autograd is this idea with tensors
 instead of scalars, a compiled graph walker, and thousands of derivative rules.
 
 ## `torch.autograd` in practice: five rules
@@ -345,11 +356,11 @@ Autograd is doing exactly what we just built by hand, and knowing that mechanics
 you why each of its rules exists. These five cover nearly every autograd bug you will
 meet; the live-session notebook walks through each in more depth.
 
-**Rule 1 — only leaf tensors collect gradients.** A *leaf* is a tensor you created
-directly (your parameters); a *non-leaf* is the result of an operation (activations,
-losses). After `backward()`, only leaves have `.grad` populated $\rightarrow$
-intermediate blame is used and discarded, exactly as our `Value` engine used parents'
-rules and moved on.
+**Rule 1 — by default, only leaf tensors retain gradients.** A *leaf* is a tensor you
+created directly (your parameters); a *non-leaf* is the result of an operation
+(activations, losses). After `backward()`, leaves have `.grad` populated while
+intermediate blame is used and released. Call `.retain_grad()` on a non-leaf before
+`backward()` only when you explicitly need its gradient for inspection.
 
 **Rule 2 — gradients accumulate.** `backward()` *adds* into `.grad`. Zero them before
 each step (`optimizer.zero_grad()`), or every update uses the sum of all past
@@ -368,11 +379,11 @@ print(f"non-leaf grad:  {y_hat.grad}")                 # None -- rule 1
 print(f"after 2nd pass: {w.grad.tolist()}")            # doubled -- rule 2
 ```
 
-**Rule 3 — parameter updates happen outside the graph.** If the update
-`w = w - lr * w.grad` runs *inside* autograd's view, two things go wrong: the update
-itself gets recorded (memory grows with every step, gradient-of-gradients), and worse,
-`w` silently becomes a *non-leaf* $\rightarrow$ by rule 1 it stops receiving gradients
-at all. The idiom from the live session:
+**Rule 3 — parameter updates happen outside the graph.** For a raw leaf tensor, the
+update `w = w - lr * w.grad` inside autograd's view records the update and rebinds `w`
+to a non-leaf, so its `.grad` will not be retained by default on the next pass.
+Assigning a plain tensor over a registered `nn.Parameter` may instead fail loudly. The
+safe idiom from the live session covers both cases:
 
 ```python
 with torch.no_grad():                # temporarily stop recording
@@ -391,12 +402,12 @@ float) or `loss.detach()` instead: `detach()` returns the same value with the hi
 cut.
 
 ::: {.callout-warning}
-## The one that silently ruins training
+## Keep updates outside the graph
 
-Rules 1 and 3 combine into the classic bug: writing `self.w = self.w - lr * self.w.grad`
-creates a **new non-leaf** `w`. No error is raised; `.grad` simply comes back `None` on
-the next step, and the model never learns again. If a parameter's gradient is
-mysteriously `None`, you almost certainly rebuilt it inside the graph.
+Rules 1 and 3 combine into a classic raw-tensor bug: rebinding
+`w = w - lr * w.grad` creates a **new non-leaf**. Its `.grad` then comes back `None` by
+default on the next pass. A registered `nn.Parameter` assignment can raise an error
+instead. In either case, update the existing parameter under `torch.no_grad()`.
 :::
 
 ## The gate, and the problem with deep chains
@@ -427,56 +438,87 @@ axes[1].set_title(r"ReLU gate"); axes[1].set_xlabel("$z$")
 plt.tight_layout(); plt.show()
 ```
 
-Here is the consequence, and it is the single most important failure mode in deep
-learning. The chain rule *multiplies* gates across layers $\rightarrow$ with sigmoid
-activations the backward signal shrinks by a factor of at most $0.25$ per layer, so
-after $k$ layers it is bounded by $0.25^k$. Ten layers in, the ceiling is below one in a
-million. The blame reaching the early layers is too weak to update them: the
-**vanishing gradient** problem.
+Here is the consequence, and it is one of deep learning's most important failure modes.
+The chain rule *multiplies* local Jacobians across layers. The activation-derivative
+part of a sigmoid path contributes at most $0.25$ per layer, so that part is bounded by
+$0.25^k$ after $k$ gates. Ten gates in, its ceiling is below one in a million. The
+weight matrices and branching paths also scale the full network Jacobian, so
+$0.25^k$ is not a bound on the complete gradient. It isolates why repeated sigmoid
+gates strongly favor vanishing signals.
 
 The fix is almost embarrassingly simple. $\mathrm{ReLU}(z) = \max(0, z)$ has derivative
-$1$ for $z > 0$ and $0$ otherwise (the kink at exactly zero never matters in floating
-point). The gate is either fully open or fully closed. For every neuron that was active
-in the forward pass, blame passes through *unchanged*: a **gradient superhighway**
-through the network. This, more than anything, is why ReLU and its variants are the
-default in deep networks.
+$1$ for $z > 0$ and $0$ for $z < 0$. At the kink $z=0$, PyTorch uses derivative $0$;
+exact zeros can occur with zero biases or sparse activations. The gate is either fully
+open or fully closed. For every neuron that was active
+in the forward pass, the activation derivative contributes a factor of exactly one.
+The surrounding weight matrices can still scale the full signal, but the active ReLU
+does not shrink it: a **gradient superhighway** through the network. This, more than
+anything, is why ReLU and its variants are the default in deep networks.
 
 Do not take the argument on faith; measure it. We build the same 30-layer network twice
-(sigmoid vs. ReLU), push one batch through, and record how much gradient reaches each
-layer:
+(sigmoid versus ReLU), give both copies the same He-scaled weights and input batch, and
+record how much gradient reaches each layer. We compute the diagnostic in float64 so
+the norm itself does not underflow; then we ask the practical float32 question: would a
+learning-rate-$0.1$ update actually change the first layer's stored weights?
 
 ```{python}
 #| label: fig-vanishing
-#| fig-cap: "Gradient reaching each layer of a 30-layer MLP (log scale). Depth attenuates both, but the sigmoid gates compound the decay so violently that below layer 5 the gradient falls beneath floating-point precision entirely, while ReLU's per-layer decay stays gentle enough for usable signal to reach the input."
+#| fig-cap: "Gradient reaching each layer of two matched 30-layer MLPs (float64 norm, log scale). With the same He-scaled weights and inputs, repeated sigmoid gates leave a nonzero but unusably small first-layer signal; ReLU preserves enough signal for a float32 update to change every first-layer weight."
 #| code-summary: "Code: the depth experiment"
 from torch import nn
 
-def grad_by_layer(activation: type[nn.Module], depth: int = 30, width: int = 64):
+def gradient_diagnostic(
+    activation: type[nn.Module], depth: int = 30, width: int = 64
+) -> dict[str, object]:
+    torch.manual_seed(6050)
     layers = []
     for _ in range(depth):
         layers += [nn.Linear(width, width), activation()]
-    net = nn.Sequential(*layers, nn.Linear(width, 1))
-    out = net(torch.randn(128, width)).mean()
-    out.backward()
-    return [lin.weight.grad.norm().item()
-            for lin in net if isinstance(lin, nn.Linear)][:-1]
+    net = nn.Sequential(*layers, nn.Linear(width, 1)).double()
+    with torch.no_grad():
+        for layer in net:
+            if isinstance(layer, nn.Linear):
+                nn.init.normal_(layer.weight, std=(2 / layer.in_features) ** 0.5)
+                nn.init.zeros_(layer.bias)
 
-torch.manual_seed(6050)
+    out = net(torch.randn(128, width, dtype=torch.float64)).mean()
+    out.backward()
+    linears = [layer for layer in net if isinstance(layer, nn.Linear)][:-1]
+    first = linears[0]
+    grad32 = first.weight.grad.float()
+    weight32 = first.weight.detach().float()
+    changed = ((weight32 - 0.1 * grad32) != weight32).sum().item()
+    return {
+        "norms": [layer.weight.grad.norm().item() for layer in linears],
+        "first_max": first.weight.grad.abs().max().item(),
+        "first_nonzero": grad32.count_nonzero().item(),
+        "first_changed": changed,
+        "first_size": grad32.numel(),
+    }
+
+diagnostics = {}
 plt.figure(figsize=(6.2, 3.4))
 for act, color in [(nn.Sigmoid, "#232D4B"), (nn.ReLU, "#E57200")]:
-    plt.semilogy(grad_by_layer(act), "o-", ms=3, color=color, label=act.__name__)
+    diagnostics[act.__name__] = gradient_diagnostic(act)
+    plt.semilogy(diagnostics[act.__name__]["norms"], "o-", ms=3,
+                 color=color, label=act.__name__)
 plt.xlabel("layer (0 = closest to input)")
 plt.ylabel(r"$\|\partial L / \partial W^{(l)}\|$")
 plt.legend(); plt.tight_layout(); plt.show()
+
+for name, result in diagnostics.items():
+    print(f"{name:7s}: max|g0|={result['first_max']:.2e}; "
+          f"nonzero={result['first_nonzero']}/{result['first_size']}; "
+          f"changed={result['first_changed']}/{result['first_size']}")
 ```
 
-Read the slopes: every step backward through a sigmoid layer multiplies the signal by
-its nearly-closed gate, and the compounding is so violent that by five layers from the
-input the gradient is numerically *zero* — those layers will never learn. ReLU is not
-magic (depth still attenuates the signal), but its open gates make the per-layer decay
-orders of magnitude gentler, and usable blame reaches all the way down. When we build
-deep MLPs for real in @sec-03-nonlinearity-mlp, this plot is the reason they train at
-all.
+Read the slopes, then read the update audit. The sigmoid first-layer entries are not
+mathematically or representationally zero: all 4,096 survive the float32 cast. They are
+so small, however, that subtracting $0.1g$ changes none of the stored float32 weights.
+The ReLU copy changes all 4,096. That distinction matters: a displayed float32 norm can
+underflow while individual entries remain nonzero, and nonzero gradients can still be
+too small to move a parameter at its current magnitude. ReLU is not magic, but its open
+gates make the signal usable in this matched experiment.
 
 ## Initialization: setting the signal's energy
 
@@ -506,7 +548,12 @@ network:
 #| label: fig-init
 #| fig-cap: "Signal energy through 40 ReLU layers. Careless scales lose or amplify the signal exponentially; He initialization holds it steady."
 #| code-summary: "Code: signal energy vs depth"
-def signal_std(scale_fn, depth: int = 40, width: int = 256):
+from collections.abc import Callable
+
+def signal_std(
+    scale_fn: Callable[[torch.Tensor, int], torch.Tensor],
+    depth: int = 40, width: int = 256
+) -> list[float]:
     x = torch.randn(512, width)
     stds = []
     for _ in range(depth):
@@ -532,8 +579,7 @@ Initialization gives a stable *start*. Keeping the signal stable *during* traini
 the weights move, is the job of normalization layers; and for very deep networks even
 that is not enough, and gradients get an architectural bypass: skip connections that add
 a block's input straight to its output. Both belong to later chapters
-(normalization with training practice in @sec-04-training-loss-sgd and
-@sec-09-modern-cnns-transfer; the residual idea in @sec-09-modern-cnns-transfer, and
+(normalization and the residual idea in @sec-09-modern-cnns-transfer, and
 layer normalization where it becomes essential, inside the Transformer of
 @sec-14-self-attention-transformer). What you should carry from here is the invariant
 they all serve: *keep the signal, forward and backward, at constant energy*.
@@ -545,16 +591,36 @@ they all serve: *keep the signal, forward and backward, at constant energy*.
 2. **The blame signal.** $\delta^{(l)} = \partial L / \partial \vect{z}^{(l)}$ turns
    the tangle into four equations: start at the output (@eq-bp1), propagate through
    $\matr{W}^\top$ and the gate (@eq-bp2), then read off weight and bias gradients
-   (@eq-bp3, @eq-bp4). Cost: one extra forward pass, for *every* gradient at once.
+   (@eq-bp3, @eq-bp4). The backward sweep costs a small constant multiple of the
+   forward graph's operations, for *every* gradient at once.
 3. **We verified it**: our hand-built equations match `torch.autograd` to
-   $10^{-8}$, and a 60-line `Value` class reproduces the machinery end to end.
-4. **The gate rules the depth.** Multiplied sigmoid gates vanish like $0.25^k$;
+   $10^{-8}$, and a tiny scalar `Value` class reproduces the machinery end to end.
+4. **The gate rules the depth.** The sigmoid-derivative product along a path is bounded
+   above by $0.25^k$ after $k$ gates;
    ReLU's open gate is a gradient superhighway. Initialization sets the signal's
    energy so neither direction explodes or dies at the start.
 
 Backpropagation is the engine under every remaining chapter. The next time a deep model
 fails to learn, your first questions now have names: *is the gradient reaching the early
 layers? what is gating it? what is its energy?*
+
+## Sources and further reading {.unnumbered}
+
+- Rumelhart, Hinton, and Williams,
+  ["Learning representations by back-propagating errors"](https://doi.org/10.1038/323533a0)
+  (1986): the landmark short account of learning internal representations by reverse
+  error propagation.
+- Baydin et al.,
+  ["Automatic Differentiation in Machine Learning: a Survey"](https://jmlr.org/papers/v18/17-468.html)
+  (2018): separates reverse-mode automatic differentiation from symbolic and numerical
+  differentiation.
+- Glorot and Bengio,
+  ["Understanding the difficulty of training deep feedforward neural networks"](https://proceedings.mlr.press/v9/glorot10a.html)
+  (2010): the variance argument behind Xavier initialization.
+- He et al.,
+  ["Delving Deep into Rectifiers"](https://openaccess.thecvf.com/content_iccv_2015/html/He_Delving_Deep_into_ICCV_2015_paper.html)
+  (2015): derives the rectifier-aware initialization used in the matched depth
+  experiment.
 
 ## Exercises {.unnumbered}
 

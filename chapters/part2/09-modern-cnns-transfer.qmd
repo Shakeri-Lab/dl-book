@@ -7,8 +7,10 @@
             4- Lecture CNN/assignment/cnn_assignment.py (course assignment, referenced)
      note: sources/4.3-NextGenCNN.tex (EfficientNet/ConvNeXt scaling) deferred to
            @sec-16-vit-scaling.
-     data: data/squeezenet1_1-imagenet.pt — torchvision SqueezeNet 1.1 ImageNet weights
-           (BSD-3), committed so rendering never downloads. -->
+     data: data/squeezenet1_1-imagenet.pt: SqueezeNet 1.1 ImageNet weights distributed
+           by torchvision, committed so rendering never downloads; provenance,
+           checksum, torchvision license, and pretrained-weight caveat are recorded in
+           data/README.md and THIRD_PARTY_NOTICES.md. -->
 
 Chapter 8 ended with a working machine and a report card. LeNet reads garments at
 82.5% with 61,706 parameters; graceful under shift where the MLP cliff-dived. But the
@@ -24,13 +26,13 @@ will let them drive:
 1. **Why $5 \times 5$?** Could smaller filters do the same job with fewer parameters?
 2. **How do we go deeper** without gradients dying on the way down?
 3. **Where do the parameters actually live**, and how do we evict them?
-4. **Can we design reusable blocks** — optimized layer-combinations we stack, keeping
+4. **Can we design reusable blocks**: optimized layer-combinations we stack, keeping
    a bird's-eye view instead of re-designing what already works?
 
 Each question has a famous answer (VGG, ResNet, NiN's $1\times1$ + global pooling,
 and the block habit itself), and each answer is a constraint-shaped idea we can test
-on our own data. At the end, the practical superpower the lecture builds to —
-reusing a pretrained backbone — gets the most honest experiment in this book.
+on our own data. At the end, the practical superpower the lecture builds to,
+reusing a pretrained backbone, gets the most honest experiment in this book.
 
 ```{python}
 #| label: setup
@@ -39,6 +41,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
+from collections.abc import Callable
 
 torch.manual_seed(6050)
 train = torch.load("../../data/fashion-train.pt")
@@ -47,11 +50,11 @@ X_tr = train["X"].float().unsqueeze(1) / 255.0    # (1200, 1, 28, 28)
 X_te = test["X"].float().unsqueeze(1) / 255.0     # (600, 1, 28, 28)
 y_tr, y_te, classes = train["y"], test["y"], train["classes"]
 
-def train_model(model_fn, epochs: int, batch: int = 128, seed: int = 6050,
-                lr: float = 1e-3, data=None):
-    torch.manual_seed(seed)
-    model = model_fn()
-    opt = torch.optim.Adam(model.parameters(), lr=lr)
+def train_existing(
+    model: nn.Module, opt: torch.optim.Optimizer, epochs: int,
+    batch: int = 128,
+    data: tuple[torch.Tensor, torch.Tensor] | None = None,
+) -> nn.Module:
     X, y = data if data is not None else (X_tr, y_tr)
     n = len(X)
     for _ in range(epochs):
@@ -64,13 +67,28 @@ def train_model(model_fn, epochs: int, batch: int = 128, seed: int = 6050,
     model.eval()
     return model
 
+def train_model(model_fn: Callable[[], nn.Module], epochs: int,
+                batch: int = 128, seed: int = 6050, lr: float = 1e-3,
+                data: tuple[torch.Tensor, torch.Tensor] | None = None) -> nn.Module:
+    torch.manual_seed(seed)
+    model = model_fn()
+    opt = torch.optim.Adam(model.parameters(), lr=lr)
+    return train_existing(model, opt, epochs, batch, data)
+
 @torch.no_grad()
-def accuracy(model, X, y):
+def accuracy(model: nn.Module, X: torch.Tensor, y: torch.Tensor) -> float:
     model.eval()
     return (model(X).argmax(1) == y).float().mean().item()
 
-count = lambda m: sum(p.numel() for p in m.parameters())
+def count(model: nn.Module) -> int:
+    return sum(p.numel() for p in model.parameters())
 ```
+
+One evaluation label needs an honesty note. Chapter 8 already opened the 600-image
+holdout, and this chapter queries it repeatedly while comparing architectures. We
+keep the familiar `X_te` name, but treat it as the book's fixed **benchmark**. These
+comparisons are descriptive, not an unbiased estimate after model selection; a final
+claim would require a fresh, untouched test set.
 
 Two small novelties in the recipe, both because this chapter's networks contain batch
 normalization: `model.train()` before each step and `model.eval()` before each
@@ -80,7 +98,7 @@ evaluation. Why that matters is the subject of the second section.
 
 VGG's answer (Simonyan & Zisserman, 2014) is the cleanest idea in this chapter. Recall
 the receptive-field ledger of @sec-08-cnn: stacking grows the field. Two stacked
-$3 \times 3$ convolutions let the second layer see $5 \times 5$ of the input — the
+$3 \times 3$ convolutions let the second layer see $5 \times 5$ of the input, the
 *same* receptive field as one $5 \times 5$ kernel. But compare the bills, for a layer
 with $C$ channels in and $C$ out:
 
@@ -90,7 +108,7 @@ $$
 \underbrace{2 \times 9\,C^2 = 18\,C^2}_{\text{two } 3\times3\text{s}},
 $$
 
-a 28% saving — and the stacked pair fires a ReLU *twice* where the big kernel fires
+a 28% saving. The stacked pair also fires a ReLU *twice* where the big kernel fires
 once. Same sight, fewer parameters, more nonlinearity. Three $3\times3$s reach a
 $7\times7$ field for $27C^2$ against $49C^2$: the deeper you take the idea, the
 better the deal gets.
@@ -110,7 +128,7 @@ One honest caveat before you re-derive the field equations of vision from this: 
 $18C^2 < 25C^2$ arithmetic assumes the channel width stays $C$ through the stack.
 When a layer *grows* channels (as LeNet's $6 \rightarrow 16$ did), splitting it into
 two growing $3\times3$s can cost more, not less. VGG's design sidesteps this by
-keeping width constant inside each block and changing it only between blocks — which
+keeping width constant inside each block and changing it only between blocks, which
 is exactly the shape our code will take. (Exercise 1 makes you find the break-even
 point.)
 
@@ -123,7 +141,7 @@ activations as a signal crosses twelve freshly initialized $3\times3$ conv layer
 ```{python}
 #| label: bn-drift
 #| code-summary: "Code: activation scale through 12 conv layers, with and without BN"
-def stack12(with_bn: bool, ch: int = 16):
+def stack12(with_bn: bool, ch: int = 16) -> nn.Sequential:
     layers = [nn.Conv2d(1, ch, 3, padding=1)]
     for _ in range(11):
         if with_bn:
@@ -133,26 +151,33 @@ def stack12(with_bn: bool, ch: int = 16):
 
 torch.manual_seed(0)
 x = X_tr[:256]
-for with_bn in [False, True]:
+plain_stack = stack12(False)
+bn_stack = stack12(True)
+plain_convs = [m for m in plain_stack if isinstance(m, nn.Conv2d)]
+bn_convs = [m for m in bn_stack if isinstance(m, nn.Conv2d)]
+for source, target in zip(plain_convs, bn_convs):
+    target.load_state_dict(source.state_dict())       # identical convolution weights
+
+for tag, network in [("without BN", plain_stack), ("with BN   ", bn_stack)]:
     h, stds = x, []
     with torch.no_grad():
-        for layer in stack12(with_bn):
+        for layer in network:
             h = layer(h)
             if isinstance(layer, nn.Conv2d):
                 stds.append(h.std().item())
-    tag = "with BN   " if with_bn else "without BN"
     print(f"{tag} layer stds: " + "  ".join(f"{s:.3f}" for s in stds[::2]))
 ```
 
 Without normalization the signal's spread collapses by an order of magnitude within a
-few layers and keeps sagging; recall from @sec-05-backpropagation that whatever
-happens to signals forward happens to gradients backward $\rightarrow$ layers deep in
-the stack learn at a completely different rate than shallow ones, if at all.
+few layers and keeps sagging. Forward activation scales and backward gradients are not
+the same quantity, but both are shaped by the stack's weights and nonlinearities;
+poorly scaled activations are therefore a warning to inspect gradient flow directly,
+as we do below.
 
-**Batch normalization** (Ioffe & Szegedy, 2015) re-standardizes at every layer: for
-each channel, compute the mean and standard deviation *across the current minibatch*,
-normalize the activations to zero mean and unit spread, then let the layer undo it if
-it wants to via two learnable knobs per channel:
+**Batch normalization** (Ioffe & Szegedy, 2015) re-standardizes at every layer. For
+each channel of an NCHW tensor, `BatchNorm2d` computes the mean and variance across
+the current minibatch **and both spatial axes** ($N$, $H$, and $W$), normalizes the
+activations, then lets the layer undo that transformation through two learnable knobs:
 
 $$
 \hat{x} = \frac{x - \mu_{\text{batch}}}{\sqrt{\sigma^2_{\text{batch}} + \epsilon}},
@@ -161,7 +186,7 @@ y = \gamma\,\hat{x} + \beta .
 $$ {#eq-batchnorm}
 
 The $\gamma, \beta$ pair matters: normalization is a *reset to a healthy scale*, not a
-straitjacket — the network can learn to restore any mean and spread that helps, but
+straitjacket. The network can learn to restore any mean and spread that helps, but
 it starts every layer from sane numbers. In the printout above, the BN column holds
 near a constant spread through all twelve layers: every layer trains from day one.
 The standard placement, which the live session uses and we adopt, is
@@ -169,14 +194,14 @@ conv $\rightarrow$ BN $\rightarrow$ ReLU, with `bias=False` on the convolution, 
 $\beta$ already provides the shift.
 
 ::: {.callout-warning}
-## BN is two different machines — tell PyTorch which one you're running
+## BN is two different machines: tell PyTorch which one you're running
 
 At training time BN normalizes by the *current batch's* statistics. At evaluation
 time there may be no batch (one image!), so it uses running averages collected during
 training. `model.train()` and `model.eval()` switch between the two. Forgetting the
 switch is the classic BN bug: evaluate in train mode and your predictions depend on
 whatever else happens to be in the batch; train in eval mode and BN never learns its
-statistics. Our `train_model` recipe flips the switch in both directions — look for
+statistics. Our `train_model` recipe flips the switch in both directions; look for
 it. Corollary: BN needs real batches to estimate statistics, so it gets unreliable at
 tiny batch sizes.
 :::
@@ -188,7 +213,7 @@ Batch statistics are one choice among several. When we build transformers
 (@sec-14-self-attention-transformer), batches of variable-length sequences will make
 per-batch statistics awkward, and the same standardize-then-rescale idea will reappear
 computed per *token* instead: **layer normalization**. Same equation, different
-axis — remember @eq-batchnorm when you meet it.
+axis. Remember @eq-batchnorm when you meet it.
 :::
 
 ## Building with blocks: a small VGG
@@ -201,7 +226,7 @@ and start repeating.
 ```{python}
 #| label: vgg-small
 #| code-summary: "Code: VGGSmall — two blocks of stacked 3×3 atoms"
-def atom(c_in: int, c_out: int):
+def atom(c_in: int, c_out: int) -> list[nn.Module]:
     return [nn.Conv2d(c_in, c_out, 3, padding=1, bias=False),
             nn.BatchNorm2d(c_out), nn.ReLU()]
 
@@ -215,7 +240,7 @@ class VGGSmall(nn.Module):
         self.head = nn.Sequential(nn.Flatten(),
                                   nn.Linear(32 * 7 * 7, 128), nn.ReLU(),
                                   nn.Linear(128, 10))
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.head(self.features(x))
 
 vgg = train_model(VGGSmall, epochs=60)
@@ -225,9 +250,11 @@ print(f"VGGSmall: {count(vgg):,} parameters ({n_head:,} in the head, "
 print(f"test accuracy {accuracy(vgg, X_te, y_te):.1%}")
 ```
 
-Two readings again. The good: 86.7%, four points above LeNet — depth with small
-kernels genuinely sees better, and BN let sixty epochs suffice for a deeper network.
-The bad: 218,586 parameters, *triple* LeNet's total, and the head's share got worse —
+Two readings again. The good: this VGG-style recipe reaches 86.7%, four points above
+LeNet in this run. Because depth, width, normalization, kernel sizes, parameter count,
+and training duration all changed together, this comparison does not isolate which
+ingredient earned the gain. The bad: 218,586 parameters, *triple* LeNet's total, and
+the head's share got worse —
 92% of the network is a dense layer reading a flattened grid. The convolutional
 diet succeeded and the total got fatter anyway. Which forces the lecture's third
 question: where do the parameters live, and — his phrasing — where can we do the
@@ -258,9 +285,9 @@ $1\times1$s (per-pixel channel mixing). And the classifier becomes:
 3. One small linear layer to the logits.
 
 ```{python}
-#| label: nin-small
-#| code-summary: "Code: NINSmall — 1×1 mixing and a global-average-pool head"
-def nin_block(c_in: int, c_out: int):
+#| label: nin-small-stage1
+#| code-summary: "Code: NINSmall — architecture and first 75 epochs"
+def nin_block(c_in: int, c_out: int) -> list[nn.Module]:
     return [nn.Conv2d(c_in, c_out, 3, padding=1, bias=False),
             nn.BatchNorm2d(c_out), nn.ReLU(),
             nn.Conv2d(c_out, c_out, 1), nn.ReLU(),
@@ -276,25 +303,34 @@ class NINSmall(nn.Module):
         )
         self.head = nn.Sequential(nn.AdaptiveAvgPool2d(1), nn.Flatten(),
                                   nn.Linear(64, 10))
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.head(self.features(x))
 
-nin = train_model(NINSmall, epochs=150)
+torch.manual_seed(6050)
+nin = NINSmall()
+nin_opt = torch.optim.Adam(nin.parameters(), lr=1e-3)
+nin = train_existing(nin, nin_opt, epochs=75)
+```
+
+```{python}
+#| label: nin-small-stage2
+#| code-summary: "Code: NINSmall — continue the same optimizer through epoch 150"
+nin = train_existing(nin, nin_opt, epochs=75)
 print(f"NINSmall: {count(nin):,} parameters "
       f"(head: {count(nin.head):,})")
 print(f"test accuracy {accuracy(nin, X_te, y_te):.1%}")
 ```
 
 The parameter story is a rout: 35,034 total, a 650-parameter head, six times smaller
-than VGGSmall. The accuracy is 76.2% — and that dip is worth more attention than the
+than VGGSmall. The accuracy is 76.2%, and that dip is worth more attention than the
 win, so let us not rush past it. First, though, collect the promised payoff. Chapter
 8 said the remaining shift-cliff was the flatten head's fault: it reads the final
-grid *positionally*. GAP averages over positions — there is nothing positional left
-to disturb. The rematch of the rematch:
+grid *positionally*. GAP averages over positions, so the head no longer assigns a
+different weight to every location. The rematch of the rematch:
 
 ```{python}
 #| label: fig-cliff-gap
-#| fig-cap: "Chapter 8's experiment, third round. LeNet's flatten head still slides below 30% by four pixels of shift. NINSmall with its global-average-pool head barely tilts: what the head reads — per-channel averages — is almost unchanged when features move. The remaining droop is content clipped at the image edge, not position sensitivity."
+#| fig-cap: "Chapter 8's experiment, third round. LeNet's flatten head still slides below 30% by four pixels of shift. NINSmall with its global-average-pool head barely tilts: per-channel averages change much less when features move. GAP removes position-specific weights from the head, but padding, stride, pooling, and content clipped at the image edge keep the complete network from being exactly shift-invariant."
 #| code-summary: "Code: shift curves, flatten head vs GAP head"
 class LeNet(nn.Module):
     def __init__(self):
@@ -304,7 +340,7 @@ class LeNet(nn.Module):
         self.fc1 = nn.Linear(400, 120)
         self.fc2 = nn.Linear(120, 84)
         self.fc3 = nn.Linear(84, 10)
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = F.max_pool2d(F.relu(self.conv1(x)), 2)
         x = F.max_pool2d(F.relu(self.conv2(x)), 2)
         x = x.flatten(1)
@@ -314,7 +350,7 @@ class LeNet(nn.Module):
 
 lenet = train_model(LeNet, epochs=150)          # Chapter 8's model, same recipe
 
-def shift_right(X, px: int):
+def shift_right(X: torch.Tensor, px: int) -> torch.Tensor:
     if px == 0:
         return X.clone()
     out = torch.zeros_like(X)
@@ -337,17 +373,19 @@ plt.tight_layout(); plt.show()
 ```
 
 The curve that fell from 82% to 27% across this book's Part II is now a gentle slope
-from 76% to 67%. Position sensitivity, hunted since Chapter 6, is finally gone from
-the head.
+from 76% to 67%. Position-specific weights are gone from NINSmall's head, and the
+result is consistent with the promised robustness benefit. It is not a matched-head
+ablation: the trunks and training recipes differ too. The complete CNN is only
+approximately shift-tolerant; boundaries, strides, and pooling can still change its
+features.
 
-Now the dip. On clean, centered test garments NINSmall trails LeNet by six points,
-and this is Chapter 8's warning callout collecting its debt with the sign flipped:
-**on centered data, position *is* information**, and GAP threw it away. A sleeve's
-location helps when every garment is framed identically; averaging it out costs
-accuracy exactly there. With the full 60,000-image dataset the gap closes — the
-lecture's NiN reaches about 90%, near its LeNet — because more data teaches richer
-channel features that compensate. At our scale you see the trade nakedly:
-invariance is bought with information, in both directions.
+Now the dip. On clean, centered test garments NINSmall trails LeNet by six points.
+That result is *consistent with* Chapter 8's warning: on centered data, position can
+carry information, and a GAP head cannot assign separate weights to separate
+locations. But GAP is not the only changed ingredient, so this run does not prove it
+caused the gap. With the full 60,000-image dataset the lecture's NiN reaches about 90%,
+near its LeNet. At our scale the comparison exposes a hypothesis worth testing with a
+matched-head ablation: shift tolerance may be bought with positional information.
 
 ::: {.callout-note}
 ## Question 4's other famous block: Inception, in one breath
@@ -370,8 +408,8 @@ VGG says depth is the direction. So push it: stack twenty of our two-conv blocks
 compare against the *identical* stack with one change we'll reveal after the numbers.
 
 ```{python}
-#| label: deep-nets
-#| code-summary: "Code: a 20-block network, plain vs. one architectural change"
+#| label: deep-nets-plain
+#| code-summary: "Code: train the plain 20-block network"
 class Block(nn.Module):
     def __init__(self, ch: int, residual: bool):
         super().__init__()
@@ -380,7 +418,7 @@ class Block(nn.Module):
         self.c2 = nn.Conv2d(ch, ch, 3, padding=1, bias=False)
         self.b2 = nn.BatchNorm2d(ch)
         self.residual = residual
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         y = self.b2(self.c2(F.relu(self.b1(self.c1(x)))))
         return F.relu(y + x) if self.residual else F.relu(y)
 
@@ -393,28 +431,33 @@ class DeepNet(nn.Module):
                                       for _ in range(nblocks)])
         self.head = nn.Sequential(nn.AdaptiveAvgPool2d(1), nn.Flatten(),
                                   nn.Linear(ch, 10))
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.head(self.blocks(self.pool(F.relu(self.stem(x)))))
 
 plain = train_model(lambda: DeepNet(20, residual=False), epochs=30)
+print(f"plain-20     train {accuracy(plain, X_tr, y_tr):.1%}   "
+      f"test {accuracy(plain, X_te, y_te):.1%}")
+```
+
+```{python}
+#| label: deep-nets-residual
+#| code-summary: "Code: train the matched residual 20-block network"
 resid = train_model(lambda: DeepNet(20, residual=True), epochs=30)
-for name, m in [("plain-20   ", plain), ("residual-20", resid)]:
-    print(f"{name}  train {accuracy(m, X_tr, y_tr):.1%}   "
-          f"test {accuracy(m, X_te, y_te):.1%}")
+print(f"residual-20  train {accuracy(resid, X_tr, y_tr):.1%}   "
+      f"test {accuracy(resid, X_te, y_te):.1%}")
 ```
 
 Look at the *training* column first, because it carries the whole lesson. The plain
-40-conv-layer network cannot even fit the 1,200 images it stares at every epoch —
-61% train accuracy — while its twin memorizes them completely and generalizes
-twenty-seven points better. This is the **degradation problem** exactly as He et al.
-reported it in 2015 (their 56-layer plain net trained *worse* than their 20-layer
-one): not overfitting, not vanishing capacity, but an *optimization* failure. The
-deep plain network is theoretically strictly more expressive — it could set twenty
-blocks to imitate the shallow net and coast — yet gradient descent cannot find even
-that.
+40-conv-layer network cannot even fit the 1,200 images it sees every epoch: 61% train
+accuracy, while its residual twin memorizes them and generalizes twenty-seven points
+better. This is an **optimization failure** in the same family as the degradation
+problem He et al. reported in 2015, where their 56-layer plain net trained worse than
+their 20-layer one. Our experiment isolates the residual rescue at one depth; a strict
+demonstration that adding depth degrades a plain network would also require a shallower
+plain control.
 
 The one change: each block computes $F(x)$ and outputs $F(x) + x$. A **residual
-connection** — the input skips over the block and is added back.
+connection** lets the input skip over the block and adds it back.
 
 $$
 H(x) = F(x) + x
@@ -423,22 +466,65 @@ H(x) = F(x) + x
 = \frac{\partial L}{\partial H}\left(\frac{\partial F}{\partial x} + I\right).
 $$ {#eq-residual}
 
+```{python}
+#| label: fig-residual-stream
+#| fig-cap: "A residual block has two routes. The learned branch computes a correction $F(x)$; the identity branch carries $x$ unchanged to the addition. Even when the learned branch has a difficult Jacobian, the shortcut leaves a direct route for activations and gradients."
+#| code-summary: "Code: draw the residual stream and identity shortcut"
+from matplotlib.patches import FancyBboxPatch, Circle
+
+fig, ax = plt.subplots(figsize=(7.2, 2.5))
+ax.set_xlim(0, 10); ax.set_ylim(0, 4); ax.axis("off")
+
+def box(x: float, label: str, color: str) -> None:
+    patch = FancyBboxPatch((x, 1.25), 1.65, 1.0,
+                           boxstyle="round,pad=0.08", facecolor=color,
+                           edgecolor="#232D4B", linewidth=1.3)
+    ax.add_patch(patch)
+    ax.text(x + 0.825, 1.75, label, ha="center", va="center", fontsize=9)
+
+ax.text(0.35, 1.75, "$x$", ha="center", va="center", fontsize=12)
+box(1.2, "conv–BN–ReLU", "#E8F0F8")
+box(3.55, "conv–BN", "#E8F0F8")
+add = Circle((6.45, 1.75), 0.28, facecolor="#F9DCBF",
+             edgecolor="#E57200", linewidth=1.5)
+ax.add_patch(add); ax.text(6.45, 1.75, "+", ha="center", va="center", fontsize=14)
+box(7.25, "ReLU", "#F4F4EF")
+ax.text(9.55, 1.75, "$H(x)$", ha="center", va="center", fontsize=12)
+
+for start, end in [((0.55, 1.75), (1.2, 1.75)),
+                   ((2.85, 1.75), (3.55, 1.75)),
+                   ((5.2, 1.75), (6.15, 1.75)),
+                   ((6.73, 1.75), (7.25, 1.75)),
+                   ((8.9, 1.75), (9.3, 1.75))]:
+    ax.annotate("", xy=end, xytext=start,
+                arrowprops=dict(arrowstyle="->", color="#232D4B", lw=1.5))
+ax.plot([0.55, 0.8, 0.8, 6.45, 6.45], [1.75, 1.75, 3.2, 3.2, 2.05],
+        color="#E57200", lw=2)
+ax.annotate("", xy=(6.45, 2.05), xytext=(6.45, 2.55),
+            arrowprops=dict(arrowstyle="->", color="#E57200", lw=2))
+ax.text(3.65, 3.45, "identity shortcut: $x$", color="#B45309",
+        ha="center", fontsize=10)
+ax.text(4.35, 0.75, "learned correction $F(x)$", color="#232D4B",
+        ha="center", fontsize=10)
+plt.tight_layout(); plt.show()
+```
+
 Read the right-hand side with Chapter 5 eyes. Blame arriving at a block's output
-reaches its input through two routes: through the block's layers ($\partial F /
-\partial x$, which may mangle it), and through the identity $I$ — untouched,
-unshrunk, unexploded, no matter what the block does. Chapter 5 called ReLU's open
-gate a *gradient superhighway* through a single unit; the skip connection is the same
-highway built as civic infrastructure, one lane per block, spanning the entire
-network. The block only needs to learn the *residual* — the correction on top of
-"pass it through" — and doing nothing is now the easiest thing in the world to
-learn: $F = 0$.
+reaches its input through two additive terms: the learned branch $\partial F /\partial
+x$ and the identity $I$. The identity contribution gives gradient flow a direct route
+that does not itself multiply by the learned weights. It is powerful, not magical:
+the learned Jacobian can still reinforce, distort, or even partly cancel that term.
+Chapter 5 called ReLU's open gate a *gradient superhighway* through a single unit; a
+skip connection builds a direct lane into every block. The block only needs to learn
+the *residual*, the correction on top of "pass it through," and doing nothing is easy
+to represent: $F = 0$.
 
 Here is the highway visible at initialization, extending Chapter 5's depth experiment
 from dense layers to conv stacks:
 
 ```{python}
 #| label: fig-gradient-highway
-#| fig-cap: "Gradient magnitude reaching the stem (first layer) at initialization, versus depth, for three designs. Without BN the gradient underflows to *exactly zero* by 48 layers (annotated point): Chapter 5's float-precision death, now caused by nothing but depth. BN alone fixes the vanishing but overshoots — in plain stacks the gradient *grows* with depth, an instability of its own. Residual blocks hold the gradient within one order of magnitude at every depth: the highway delivers."
+#| fig-cap: "Gradient magnitude reaching the stem (first layer) at initialization, versus depth, for three designs. In the 48-layer no-BN stack, the true norm is 2.2e-23; a float32 norm calculation reports zero because squaring these nonzero components underflows. BN fixes the vanishing but overshoots: in plain stacks the gradient grows with depth. Residual blocks keep the gradient within one order of magnitude across these depths."
 #| code-summary: "Code: gradient at the stem vs. depth, three designs"
 class PlainNoBN(nn.Module):
     def __init__(self, nconvs: int, ch: int = 12):
@@ -450,34 +536,36 @@ class PlainNoBN(nn.Module):
                                                 nn.ReLU())])
         self.head = nn.Sequential(nn.AdaptiveAvgPool2d(1), nn.Flatten(),
                                   nn.Linear(ch, 10))
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.head(self.layers(self.pool(F.relu(self.stem(x)))))
 
-def stem_grad(make_net):
+def stem_grad(make_net: Callable[[], nn.Module]) -> tuple[float, float, int, int]:
     torch.manual_seed(0)
     net = make_net()
     F.cross_entropy(net(X_tr[:128]), y_tr[:128]).backward()
-    return net.stem.weight.grad.norm().item()
+    grad = net.stem.weight.grad
+    return (grad.double().norm().item(), grad.abs().max().item(),
+            torch.count_nonzero(grad).item(), grad.numel())
 
 depths = [4, 12, 24]                                  # blocks (2 convs each)
-curves = {
+diagnostics = {
     "plain, no BN": [stem_grad(lambda d=d: PlainNoBN(2 * d)) for d in depths],
     "plain + BN": [stem_grad(lambda d=d: DeepNet(d, False)) for d in depths],
     "residual + BN": [stem_grad(lambda d=d: DeepNet(d, True)) for d in depths],
 }
+curves = {name: [row[0] for row in rows]
+          for name, rows in diagnostics.items()}
 for name, ys in curves.items():
     print(f"{name:14s}: " + "   ".join(f"{v:.1e}" for v in ys))
+norm64, maxabs, nonzero, total = diagnostics["plain, no BN"][-1]
+print(f"48-layer no-BN check: max |component| {maxabs:.1e}; "
+      f"nonzero {nonzero}/{total}; float64 norm {norm64:.1e}")
 
 plt.figure(figsize=(6.2, 3.4))
 for (name, ys), color in zip(curves.items(),
                              ["#B8B8A8", "#E57200", "#232D4B"]):
     xs = [2 * d for d in depths]
-    shown = [y if y > 0 else 1e-24 for y in ys]       # exact 0 -> sentinel to plot it
-    plt.semilogy(xs, shown, "o-", ms=5, color=color, label=name)
-    for x, y in zip(xs, ys):
-        if y == 0:
-            plt.annotate("exact 0 (underflow)", (x, 1e-24), fontsize=8,
-                         color=color, textcoords="offset points", xytext=(-88, 4))
+    plt.semilogy(xs, ys, "o-", ms=5, color=color, label=name)
 plt.xlabel("conv layers"); plt.ylabel(r"$\|\partial L / \partial W^{(\mathrm{stem})}\|$")
 plt.legend(); plt.tight_layout(); plt.show()
 ```
@@ -485,25 +573,26 @@ plt.legend(); plt.tight_layout(); plt.show()
 ::: {.callout-tip}
 ## The most important seed this chapter plants
 
-Residual connections are not a CNN trick. They are *the* enabling device of every
-large model you have heard of: when we assemble a transformer in
+Residual connections are not only a CNN trick. They became a central design device in
+many deep architectures; when we assemble a transformer in
 @sec-14-self-attention-transformer, every attention layer and every feed-forward
 layer will be wrapped as $x + F(x)$, and the freshly-met layer normalization will sit
-beside each skip. The picture to carry forward: a *residual stream* flowing
-unimpeded through the network, with each block reading from it and writing small
-corrections back. Attention will be one kind of correction. You now own both parts
-of that skeleton.
+beside each skip. The picture to carry forward: a *residual stream* with direct
+additive routes through the network, each block reading from it and writing a
+correction back. Those routes improve conditioning without making the stream immune
+to learned-branch interactions. Attention will be one kind of correction. You now own
+both parts of that skeleton.
 :::
 
 ## The scorecard: what a decade of design bought
 
-The lecture closes its architecture tour with a scatter worth reproducing — every
+The lecture closes its architecture tour with a scatter worth reproducing: every
 model of Part II on one canvas, accuracy against parameters, each trained to
 convergence under our shared recipe:
 
 ```{python}
 #| label: fig-scorecard
-#| fig-cap: "Part II's models on one canvas (our 1,200-image subset; each model trained to convergence with the shared Adam recipe). VGG-style depth buys accuracy but hoards parameters in its flatten head; NiN+GAP evicts the head at a visible cost in clean accuracy at this data scale; residual blocks let a 47k-parameter network go 40 layers deep. The frontier the lecture reports on the full dataset — everything above 89% — needs data our subset does not have; the *shape* of the trade-offs is already exactly right."
+#| fig-cap: "Part II's models on one canvas (our 1,200-image subset; each model trained to convergence with the shared Adam recipe). VGG-style depth buys accuracy but hoards parameters in its flatten head; NiN+GAP evicts the head at a visible cost in clean accuracy at this data scale; residual blocks let a 53,050-parameter network go 40 layers deep. The lecture's full-data frontier, where the models exceed 89%, needs data our subset does not have; the shape of the trade-offs is already visible."
 #| code-summary: "Code: accuracy vs. parameters scatter"
 models_ = {
     "LeNet": (lenet, "#B8B8A8"),
@@ -523,14 +612,6 @@ plt.xlabel("parameters (log scale)"); plt.ylabel("test accuracy")
 plt.ylim(0.45, 0.95)
 plt.tight_layout(); plt.show()
 ```
-
-::: {.callout-caution}
-## GPU run pending
-**Planned:** the full-dataset version of this scorecard — LeNet, VGG, NiN, and a
-deep ResNet trained on all 60,000 Fashion-MNIST images — to reproduce the lecture's
-frontier (LeNet ≈ 89%, VGG > 90%, NiN ≈ 90% at 30k parameters, ResNet higher
-still). **Meanwhile:** the lecture's numbers are quoted in the caption above.
-:::
 
 ## Transfer learning: the mechanics, and an honest experiment
 
@@ -585,7 +666,7 @@ class Trunk(nn.Module):
             *atom(16, 32), *atom(32, 32), nn.MaxPool2d(2), *atom(32, 64))
         self.head = nn.Sequential(nn.AdaptiveAvgPool2d(1), nn.Flatten(),
                                   nn.Linear(64, n_classes))
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.head(self.features(x))
 
 own_trunk = train_model(lambda: Trunk(7), epochs=100, data=(X_src, y_src))
@@ -605,17 +686,18 @@ IMNET_MEAN = torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1)
 IMNET_STD = torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1)
 
 @torch.no_grad()
-def squeeze_features(X):                       # (N,1,28,28) -> (N,512)
+def squeeze_features(X: torch.Tensor) -> torch.Tensor:  # (N,1,28,28) -> (N,512)
     x = X.repeat(1, 3, 1, 1)
     x = F.interpolate(x, size=96, mode="bilinear", align_corners=False)
     f = sq.features((x - IMNET_MEAN) / IMNET_STD)
     return F.adaptive_avg_pool2d(f, 1).flatten(1)
 
 @torch.no_grad()
-def own_features(X):                           # (N,1,28,28) -> (N,64)
+def own_features(X: torch.Tensor) -> torch.Tensor:      # (N,1,28,28) -> (N,64)
     return F.adaptive_avg_pool2d(own_trunk.features(X), 1).flatten(1)
 
-def linear_probe(Z_tr, y_f, Z_te, seed):
+def linear_probe(Z_tr: torch.Tensor, y_f: torch.Tensor,
+                 Z_te: torch.Tensor, seed: int) -> float:
     torch.manual_seed(seed)
     head = nn.Linear(Z_tr.shape[1], 3)
     opt = torch.optim.Adam(head.parameters(), lr=1e-2,
@@ -698,7 +780,7 @@ recipe (fresh head fast, pretrained layers slow):
 ```{python}
 #| label: fine-tune
 #| code-summary: "Code: fine-tuning — unfreeze the last block, two learning rates"
-def prep(X):
+def prep(X: torch.Tensor) -> torch.Tensor:
     x = X.repeat(1, 3, 1, 1)
     x = F.interpolate(x, size=96, mode="bilinear", align_corners=False)
     return (x - IMNET_MEAN) / IMNET_STD
@@ -735,21 +817,14 @@ with torch.no_grad():
 ```
 
 Fine-tuning edges the frozen probe on this seed and lands in the same tie with
-scratch — consistent with the regime analysis above: adaptation helps at the margin,
+scratch. This is consistent with the regime analysis above: adaptation helps at the margin,
 but no amount of it makes a small target task need imported features.
 
-::: {.callout-caution}
-## GPU run pending
-**Planned:** the lecture's full-scale experiment — ImageNet ResNet-18 on the complete
-FashionMNIST task at 224 pixels: linear probe (expect ≈ 93%), last-block fine-tune
-(≈ 94%), against a from-scratch baseline — the regime where all three transfer
-conditions hold. **Meanwhile:** the lecture's numbers are quoted in the analysis
-above.
-::: Keep the pattern,
-though: *this* loop, scaled to real backbones and feature-hungry tasks, is how most
+Keep the pattern, though: *this* loop, scaled to real backbones and feature-hungry
+tasks, is how most
 of applied deep learning ships today. It is also this book's destination: Part V is
 what happened when the field noticed that "pretrain big, adapt cheaply" was not a
-vision trick but *the* recipe — for language too. The BERT moment
+vision trick but *the* recipe for language too. The BERT moment
 (@sec-15-bert-pretraining) is this section's idea, taken seriously at scale.
 
 ## Okay, so —
@@ -757,25 +832,34 @@ vision trick but *the* recipe — for language too. The BERT moment
 1. **Small kernels, stacked**: two $3\times3$s see what a $5\times5$ sees, for
    $18C^2$ against $25C^2$, with twice the nonlinearity — provided width holds
    constant through the stack. Design in blocks, repeat the block.
-2. **BatchNorm** re-standardizes every channel over the minibatch and hands back two
+2. **BatchNorm** re-standardizes every channel over the batch and spatial axes, then hands back two
    knobs ($\gamma, \beta$); conv→BN→ReLU with `bias=False`; *train and eval are
-   different machines* — flip the switch. Its per-token cousin, LayerNorm, awaits in
-   @sec-14-self-attention-transformer.
+   different machines*, so flip the switch. Its per-token cousin, LayerNorm,
+   awaits in @sec-14-self-attention-transformer.
 3. **$1\times1$ convolutions** run Chapter 1's linear model across channels at every
    pixel: summarize channels, don't discard them. With **global average pooling**
-   they fire the flatten head — parameters collapse (218k $\rightarrow$ 35k) and
-   position sensitivity leaves the network for good, at a clean-accuracy price our
-   small dataset makes visible.
-4. **Depth hits an optimization wall, not a capacity wall**: our plain 40-layer net
+   they fire the flatten head: parameters collapse (218k $\rightarrow$ 35k) and
+   position-specific weights leave the head, at a clean-accuracy price our small
+   dataset makes visible. Boundaries and downsampling still prevent exact invariance.
+4. **Depth can hit an optimization wall**: our plain 40-layer net
    couldn't fit its own training set. The residual connection $H(x) = F(x) + x$ adds
-   an identity lane to the Jacobian — Chapter 5's gradient superhighway as
-   infrastructure — and the same-depth twin trains to 100%. Transformers will be
-   built from nothing but such blocks.
+   an identity lane to the Jacobian, Chapter 5's gradient superhighway as
+   infrastructure, and the same-depth twin trains to 100%. Transformer stacks will
+   reuse this residual pattern around each attention and feed-forward sublayer.
 5. **Transfer learning** = freeze + probe, or gently fine-tune. Our honest experiment
-   found scratch unbeatable at 28-pixel scale — pretraining is curriculum, gaps are
-   taxed, and small targets don't need imports — while the lecture's full-scale runs
-   (93–94% via ImageNet ResNet-18) show the regime where transfer rules. Diagnosing
+   found scratch and the ImageNet probe in a near tie across three seeds at 28-pixel
+   scale. Pretraining is curriculum, gaps are taxed, and small targets may leave
+   little room for imports. The lecture's full-scale runs
+   (93–94% via ImageNet ResNet-18) illustrate a richer regime where transfer pays. Diagnosing
    the regime is the skill.
+
+## Sources and further reading {.unnumbered}
+
+- [Simonyan & Zisserman, *Very Deep Convolutional Networks for Large-Scale Image Recognition*](https://arxiv.org/abs/1409.1556): the small-kernel, repeated-block argument behind VGG.
+- [Lin, Chen, & Yan, *Network In Network*](https://arxiv.org/abs/1312.4400): introduces the $1\times1$ channel mixer and global-average-pooling classifier.
+- [Ioffe & Szegedy, *Batch Normalization*](https://proceedings.mlr.press/v37/ioffe15.html): the original normalization method and its train/evaluation distinction.
+- [He et al., *Deep Residual Learning for Image Recognition*](https://openaccess.thecvf.com/content_cvpr_2016/html/He_Deep_Residual_Learning_CVPR_2016_paper.html): the degradation experiment and residual-block solution.
+- [Yosinski et al., *How Transferable Are Features in Deep Neural Networks?*](https://proceedings.neurips.cc/paper/2014/hash/375c71349b295fbe2dcdca9206f20a06-Abstract.html): a careful empirical account of when transferred features remain useful.
 
 ## Exercises {.unnumbered}
 
@@ -791,11 +875,11 @@ vision trick but *the* recipe — for language too. The BERT moment
 3. **(Code.)** Make VGGSmall's blocks *depthwise separable*: replace each $3\times3$
    conv with a per-channel $3\times3$ (`groups=c_in`) followed by a $1\times1$ mixer.
    Count parameters, retrain, and report the accuracy-per-parameter ratio against
-   the original. (This is MobileNet's trick for phones — the lecture's fifth
+   the original. (This is MobileNet's trick for phones, the lecture's fifth
    principle.)
 4. **(Code.)** Ablate BatchNorm: retrain VGGSmall with the BN layers removed, same
    budget. Compare final accuracy *and* the first ten epochs' training accuracy.
-   Then repeat the `bn-drift` cell's measurement on both trained networks — does
+   Then repeat the `bn-drift` cell's measurement on both trained networks. Does
    training itself fix the activation scales?
 5. **(Code.)** Data augmentation as a third road: on the 30-image shoe task, train
    from scratch with random horizontal flips and ±3-pixel shifts (Chapter 6's

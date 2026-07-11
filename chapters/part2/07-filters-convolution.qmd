@@ -15,13 +15,13 @@ experts spent careers designing its templates manually. Understanding the machin
 its fixed, hand-crafted form is the whole point of the chapter, because Part II's
 revolution (@sec-08-cnn) will consist of exactly one change to it.
 
-Recall the primitive from @sec-01-linear-regression: a dot product is a similarity
-score against a template. Everything below is that one primitive, applied locally,
-everywhere.
+Recall the primitive from @sec-01-linear-regression: a dot product scores an input
+against a template. When their norms are controlled, its angle component measures
+similarity. Everything below is that one primitive, applied locally, everywhere.
 
 ## Two principles, one strategy
 
-The failures of Chapter 6 tell us what knowledge to build in — the two principles from
+The failures of Chapter 6 tell us what knowledge to build in, the two principles from
 the lecture:
 
 1. **Spatial locality.** Nearby pixels are more related than distant ones. Edges,
@@ -38,7 +38,7 @@ first look at how vision experts used to design them by hand.
 ## Start in 1D: the moving average
 
 The core operation appears in its friendliest form when smoothing a noisy signal. A
-moving average replaces each point by the mean of its neighborhood — locality, with
+moving average replaces each point by the mean of its neighborhood: locality, with
 *uniform* weights:
 
 ```{python}
@@ -70,26 +70,24 @@ the five-step recipe from the lecture:
 1. Define a small window of weights, the **kernel** (for a blur: all positive, summing
    to 1).
 2. Place the kernel over a patch of the image.
-3. Multiply elementwise — kernel weights against the pixels underneath.
+3. Multiply elementwise: kernel weights against the pixels underneath.
 4. Sum the products into a single output pixel. *(Steps 3–4 are one dot product: the
    patch, scored against a small template.)*
 5. **Slide the window** to the next location and repeat, producing a new image.
 
-Let us implement the recipe literally, and then check it against the framework's
-version — the build-then-verify habit of this book:
+Let us expose every sliding patch at once, multiply each by the kernel, and sum. Then we
+check the result against the framework's version, following the build-then-verify habit
+of this book:
 
 ```{python}
 #| label: manual-conv
 def manual_conv2d(x: torch.Tensor, k: torch.Tensor) -> torch.Tensor:
-    """The five-step recipe, verbatim: slide, multiply, sum."""
+    """Cross-correlate one 2-D image and kernel via a view of sliding patches."""
     kh, kw = k.shape
-    H = torch.zeros(x.shape[0] - kh + 1, x.shape[1] - kw + 1)
-    for i in range(H.shape[0]):
-        for j in range(H.shape[1]):
-            H[i, j] = (x[i:i + kh, j:j + kw] * k).sum()   # one dot product
-    return H
+    patches = x.unfold(0, kh, 1).unfold(1, kw, 1)          # (Hout, Wout, kh, kw)
+    return (patches * k).sum(dim=(-1, -2))                 # one score per patch
 
-def conv2d(x, k):                                          # the fast version
+def conv2d(x: torch.Tensor, k: torch.Tensor) -> torch.Tensor:
     return F.conv2d(x[None, None], k[None, None]).squeeze()
 
 torch.manual_seed(6050)
@@ -107,11 +105,11 @@ about sliding in bigger steps) is @sec-08-cnn's business.
 ## The filter zoo
 
 Here is the remarkable part: the recipe never changes — *only the numbers in the
-kernel do* — and different numbers produce completely different specialists. Three
+kernel do*. Different numbers produce completely different specialists. Three
 classics, applied to a synthetic test scene and to a boot from our Fashion-MNIST
 subset:
 
-- **Blur**: uniform positive weights summing to 1 — the 2-D moving average.
+- **Blur**: uniform positive weights summing to 1, the 2-D moving average.
 - **Sharpen**: amplify each pixel's difference from its neighbors.
 - **Edge detection** (Sobel): positive and negative weights summing to *zero* — over
   any flat region the products cancel and the output is silent; over an edge, a sharp
@@ -120,7 +118,7 @@ subset:
 
 ```{python}
 #| label: fig-filter-zoo
-#| fig-cap: "One recipe, four specialists. Each column applies a different 3×3 kernel to the same inputs: identity, blur (local average), sharpen, and the two Sobel edge detectors — the vertical-edge kernel fires on vertical boundaries, the horizontal one on horizontal boundaries. The kernel's numbers are the entire difference."
+#| fig-cap: "One recipe, five kernels. Each column applies a different 3×3 kernel to the same inputs: identity, blur (local average), sharpen, and two Sobel edge detectors. The vertical-edge kernel fires on vertical boundaries; the horizontal one fires on horizontal boundaries."
 #| code-summary: "Code: the zoo"
 def make_shapes(n: int = 64) -> torch.Tensor:
     img = torch.zeros(n, n)
@@ -131,8 +129,8 @@ def make_shapes(n: int = 64) -> torch.Tensor:
     img[8:56, 40:60] = stripes[8:56, 40:60]                  # diagonal stripes
     return img
 
-test = torch.load("../../data/fashion-test.pt")
-boot = test["X"][(test["y"] == 9).nonzero()[0, 0]].float() / 255.0
+development = torch.load("../../data/fashion-train.pt")
+boot = development["X"][(development["y"] == 9).nonzero()[0, 0]].float() / 255.0
 
 kernels = {
     "original": torch.tensor([[0., 0., 0.], [0., 1., 0.], [0., 0., 0.]]),
@@ -179,10 +177,10 @@ the distinction is inconsequential in practice (Exercise 4 makes you confirm thi
 
 ## The property we paid for: equivariance
 
-Now collect the reward that Chapter 6's MLP could never have. Slide-and-score treats
-every position identically $\rightarrow$ if the input shifts, the output shifts *with
-it*, unchanged in content. That is **translation equivariance**, and it need not be
-taken on faith:
+Now collect the reward that Chapter 6's MLP could never have. Away from boundaries,
+slide-and-score treats every position identically $\rightarrow$ if the input shifts,
+the output shifts *with it*, unchanged in content. That is **translation equivariance**,
+and it need not be taken on faith:
 
 ```{python}
 #| label: equivariance
@@ -202,16 +200,19 @@ interior = (A - B_shifted)[:, s + 2:]         # compare away from the blank bord
 print(f"filter(shift(x)) vs shift(filter(x)): max |diff| = {interior.abs().max():.1f}")
 ```
 
-Exactly zero. The detector's report moves with the garment; nothing is *lost* by
-translation. Contrast Chapter 6: the MLP's global templates degraded under a 2-pixel
-shift because position was baked into every weight. Here, position is structurally
-incapable of mattering to *what* is detected — only to *where* the detection lands.
+Exactly zero on the compared interior. The detector's report moves with the garment.
+Contrast Chapter 6: the MLP's global templates degraded under a 2-pixel shift because
+position was baked into every weight. Here, position cannot matter to *what* is detected
+on the interior, only to *where* the detection lands. At the frame boundary, cropping,
+padding, or fill rules can break exact equality; that is why the code excludes the
+blank-border region.
 
 One precision worth keeping sharp, because the two words will both matter:
 **equivariant** means the output moves along with the input (what convolution gives
 us); **invariant** means the output does not change at all (what a classifier
 ultimately wants — "boot", regardless of position). Equivariance is the raw material;
-in @sec-08-cnn, pooling will spend it to buy invariance.
+in @sec-08-cnn, pooling will spend some position information to buy local shift
+tolerance. Exact invariance is a stronger property and must be tested, not presumed.
 
 ## The matrix view: a structured, weight-shared linear map
 
@@ -228,6 +229,34 @@ detector owns **nine** — reused at every position. This is Chapter 6's
 constraints-are-knowledge callout made concrete: locality zeroes out most of the
 matrix, equivariance ties the survivors together, and what remains is a linear map
 with almost nothing left to specify.
+
+```{python}
+#| label: fig-shared-matrix
+#| fig-cap: "The 1-D version of convolution as a structured matrix (shown in 1-D only so the pattern is visible). Each output row touches one local three-value window, so most entries are zero. The same three kernel weights repeat along diagonals: locality creates sparsity; sharing ties the nonzero entries together. A 2-D image produces the analogous block-structured matrix."
+#| code-summary: "Code: draw the sparse weight-shared matrix"
+from matplotlib.colors import ListedColormap
+
+weight_ids = torch.zeros(4, 6)
+for row in range(4):
+    weight_ids[row, row:row + 3] = torch.tensor([1, 2, 3])
+
+fig, ax = plt.subplots(figsize=(5.7, 2.8))
+ax.imshow(weight_ids, cmap=ListedColormap(["white", "#DCE6F2", "#F8D9B0", "#E7D4E8"]),
+          vmin=0, vmax=3)
+symbols = {1: r"$v_1$", 2: r"$v_2$", 3: r"$v_3$"}
+for i in range(weight_ids.shape[0]):
+    for j in range(weight_ids.shape[1]):
+        value = int(weight_ids[i, j])
+        ax.text(j, i, symbols.get(value, "0"), ha="center", va="center")
+ax.set_xticks(range(6), [rf"$x_{j + 1}$" for j in range(6)])
+ax.set_yticks(range(4), [rf"$h_{i + 1}$" for i in range(4)])
+ax.set_xticks(torch.arange(-0.5, 6, 1), minor=True)
+ax.set_yticks(torch.arange(-0.5, 4, 1), minor=True)
+ax.grid(which="minor", color="#B8B8A8", linewidth=0.8)
+ax.tick_params(which="minor", bottom=False, left=False)
+ax.set_title(r"$\mathbf{h}=\mathbf{T}(\mathbf{v})\mathbf{x}$: local and weight-shared")
+plt.tight_layout(); plt.show()
+```
 
 ## The bottleneck: someone has to design the kernel
 
@@ -261,11 +290,24 @@ has a name you already know.
    the kernel's numbers.
 2. **Locality and sharing are built in**: as a matrix, convolution is almost-all-zero
    with nine numbers repeating — 615,000 weights collapsed to 9.
-3. **Equivariance is exact**, not approximate: filter-then-shift equals
-   shift-then-filter, to the last bit. Invariance will be purchased from it in the
-   next chapter.
+3. **Equivariance is exact on the interior**, not approximate: filter-then-shift equals
+   shift-then-filter wherever both operations see the same pixels. Boundary handling
+   must be specified separately. The next chapter asks how much local shift tolerance
+   pooling can purchase from that equivariance.
 4. **Hand-crafting is the bottleneck** — expressiveness, engineering cost, no
    adaptation — and it is exactly the kind of bottleneck this book knows how to break.
+
+## Sources and further reading {.unnumbered}
+
+- Fukushima,
+  ["Neocognitron: A Self-organizing Neural Network Model"](https://doi.org/10.1007/BF00344251)
+  (1980): an early hierarchy of local, shift-tolerant feature detectors.
+- LeCun et al.,
+  ["Gradient-Based Learning Applied to Document Recognition"](http://yann.lecun.com/exdb/publis/pdf/lecun-98.pdf)
+  (1998): connects shared local kernels to the trainable CNN built next.
+- Dumoulin and Visin,
+  ["A Guide to Convolution Arithmetic for Deep Learning"](https://arxiv.org/abs/1603.07285)
+  (2016): a visual reference for padding, stride, and output-shape arithmetic.
 
 ## Exercises {.unnumbered}
 
@@ -278,7 +320,8 @@ has a name you already know.
    and why?), then run it on `make_shapes()` and check it fires on the stripes.
 3. **(Pencil.)** Prove translation equivariance from @eq-crosscorr: substitute the
    shifted image $X'_{i,j} = X_{i-s,j}$ and show $H'_{i,j} = H_{i-s,j}$. Why does the
-   same argument fail for the MLP of Chapter 6?
+   same argument fail for the MLP of Chapter 6? State where the proof applies at a
+   finite image boundary.
 4. **(Code.)** True convolution flips the kernel: run `conv2d` with `k` and with
    `k.flip(0, 1)` for the blur and for Sobel. Which outputs differ, which do not,
    and what property of the kernel decides it?

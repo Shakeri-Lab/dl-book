@@ -1,6 +1,7 @@
 # Continuing the Book — Handoff & Roadmap
 
-*Written 2026-07-09, after Chapter 11 shipped. This is the master handoff document:
+*Written 2026-07-09 after Chapter 11 shipped; updated 2026-07-11 after the full
+Chapters 1–11 repair and course-site integration shipped. This is the master handoff document:
 everything a fresh collaborator (human or Claude session, on any account) needs to
 continue the project without the original conversation history. Read `CLAUDE.md`
 (repo root) first for environment setup; read this second; read
@@ -15,25 +16,29 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 
 | Part | Chapters | Status |
 |---|---|---|
-| I · From Lines to Networks | 1–6 | **Written, executed, deployed** (July 7–8, 2026) |
-| II · Vision | 7–9 | **Written, executed, deployed** (July 8) |
-| III · Sequences | 10–11 | **Written, executed, deployed** (July 8–9) |
+| I · From Lines to Networks | 1–6 | **Shipped; repair pass complete and verified** (July 11, 2026) |
+| II · Vision | 7–9 | **Shipped; repair pass complete and verified** (July 11, 2026) |
+| III · Sequences | 10–11 | **Shipped; repair pass complete and verified** (July 11, 2026) |
 | IV · Attention | 12–16 | Stubs with contracts — **12 is next** |
 | V · Pretrained Era | 17–19 | Stubs with contracts |
 | Appendices | a1–a4 | Stubs (a4 floating-point queued in backlog) |
 
-**Milestone 1** (Part I complete + skeleton) is met **except the author's edit pass**
-— Heman has not yet reviewed chapters 3–11 (chs. 1, 2, 5 got review passes; his
-feedback became standing rules, §4 below). Do not treat any chapter as final until
-he has edited it.
+**Milestone 1** (Part I complete + skeleton) is met. The July 11 quantitative,
+mathematical, licensing, evaluation-hygiene, and two-format repair pass over Chapters
+1–11 is complete and shipped: every HTML/TeX freeze is newer than its source, key outputs
+match across formats, and selected figures were visually verified. The author's own edit
+pass remains a separate gate rather than a condition of this repair release.
 
-**Gated work — do not start without his go-ahead:**
-- Course-site integration (`dl-course-site` repo, `bookChapter` field): only after
-  he blesses chapters.
+**Decisions still gated on the author:**
+- The author's own edit pass over Chapters 1–11 remains pending.
+- Course-site integration was approved, implemented, and shipped July 11, 2026. It uses
+  a plural `bookChapters` field because modules and chapters do not map one-to-one;
+  only reviewed, substantive chapters are linked. The production build passes.
 - "Deeper dive" collapsed sections: piloted in ch. 6; his verdict pending ("let us
   get back to deeper dive later"). Do not retrofit chs. 1/5.
-- GPU experiment queue (`docs/backlog.md` §5): runs he'll execute on
-  Rivanna/Colab; fold results back into the flagged chapters.
+- GPU experiments remain backlog-only until access is available. Do not publish
+  placeholder callouts in chapters; run the queued experiments on Rivanna/Colab and
+  fold real results back into the relevant chapters later.
 
 ## 2. The working protocol (refined over chapters 7–11)
 
@@ -42,7 +47,8 @@ regime before writing a word of prose.** Roughly half of all planned experiments
 failed their first design (see §5 case law). The loop that works:
 
 1. **Sources.** Read the chapter stub's `draft-sources` comment. Snapshot any
-   unsnapshotted seed from Box into `sources/` (Box is not a stable source).
+   unsnapshotted seed from Box into `sources/` (Box is not a stable source), applying
+   the public-snapshot licensing boundary in `sources/README.md` before committing it.
    `git pull` in `~/dl-course-code`, read that module's `MODULE_NOTES.md` (the
    polished lecture spine — the preferred prose source), and read the transcripts
    (`[coding]_` prefix = his live-coding voice, defines code-narration style).
@@ -51,10 +57,9 @@ failed their first design (see §5 case law). The loop that works:
 3. **Pre-test in the scratchpad** (a throwaway script outside the repo, run with
    `.venv/bin/python`): tune regimes until the phenomenon honestly appears; pin
    exact numbers, seeds, and wall-clock times. Iterate here, not in the chapter.
-   If the textbook phenomenon will not appear honestly at CPU scale, either
-   reframe (the honest null result IS often the better lesson — see ch. 9
-   transfer, ch. 10 recall lottery) or use a "GPU run pending" placeholder (§4,
-   rule G).
+   If the textbook phenomenon will not appear honestly at CPU scale, reframe it (the
+   honest null result IS often the better lesson — see ch. 9 transfer and ch. 10
+   recall lottery) and record any full-scale follow-up in `docs/backlog.md`.
 4. **Draft** the full `.qmd` over the stub per `docs/drafting-template.md` +
    `docs/style-guide.md`. Keep the provenance comment. Wire the arc seeds
    (`docs/arc-seeds.md`) — both harvesting due seeds and planting contracted ones.
@@ -114,8 +119,8 @@ C. **Code**: lean, type hints on teaching functions, shape comments, one idea pe
    cell, folded by default with descriptive `#| code-summary`. Never a comment
    that restates the line.
 D. **Callout mapping**: `note` = definitions/context; `tip` = make-it-learnable
-   pivots + practical hygiene; `warning` = pitfalls; `caution` = reserved for
-   "GPU run pending" placeholders (rule G).
+   pivots + practical hygiene; `warning` = pitfalls. Do not use callouts as
+   project-management reminders; those belong in `docs/backlog.md`.
 E. **Pedagogical efficiency** (drafting-template): the destination is
    attention/transformers; every concept names its payoff chapter; no payoff →
    exercise or cut.
@@ -123,11 +128,10 @@ F. **Honesty gate**: printed numbers must support the prose exactly; overclaims
    get toned down, not numbers massaged. When an experiment refuses to show the
    textbook result honestly, the null result with a diagnosis is usually the
    better chapter (precedents in §5).
-G. **GPU placeholders** (his rule, July 8): experiments needing full-dataset/GPU
-   scale get a standardized callout —
-   `::: {.callout-caution}` titled `GPU run pending` with **Planned:** and
-   **Meanwhile:** lines — plus an entry in `docs/backlog.md` §5. Never fake a
-   scaled-down win instead.
+G. **GPU queue** (revised July 11): experiments needing full-dataset/GPU scale get an
+   entry in `docs/backlog.md` §5, not an in-chapter placeholder. Never fake a
+   scaled-down win; publish the honest CPU result and add the scaled result only after
+   it has actually run.
 H. **Licensing**: no d2l.ai text/code ever (his `rnn_data_prep.py` is D2L-derived
    — reference conventions only, never port). Committed third-party assets note
    their license (e.g., `data/squeezenet1_1-imagenet.pt`, torchvision BSD-3).
@@ -156,9 +160,11 @@ These are precedents; when a new experiment misbehaves, check here first.
   recall failure at lag 80 is a *lottery* across seeds, not a wall (ch. 10) —
   and the default-init LSTM fails too until forget bias = +1 ("architecture
   proposes, initialization disposes").
-- **BN gradient explosion:** with BatchNorm, deep *plain* nets' gradients grow
-  with depth (35× at 48 layers) rather than vanish; residual keeps them flat.
-  No-BN nets underflow to exact float zero. All three lines are in ch. 9's figure.
+- **Norm underflow is not a zero gradient:** a float32 sum of squared tiny gradient
+  entries can underflow even when every entry is nonzero; parameter updates can also
+  round away when they are smaller than the local spacing. Diagnose with maximum
+  absolute entries, a float64 norm, and realized parameter changes. Chapters 5 and 9
+  use this distinction; Appendix a4 should gather it.
 - **Transfer at toy scale is a draw** (ch. 9): five designs, one verdict — scratch
   ties ImageNet probes at 28px/30 labels; own-trunk transfer loses ("pretraining
   is curriculum"). Presented honestly with a three-regime decision rule; do not
@@ -182,9 +188,9 @@ These are precedents; when a new experiment misbehaves, check here first.
 
 | File | Contents | Notes |
 |---|---|---|
-| `data/fashion-train.pt` | 1,200 Fashion-MNIST train images + labels + class names | 28×28 uint8; built from the zalandoresearch GitHub mirror (AWS mirror times out) |
-| `data/fashion-test.pt` | 600 test images | same format |
-| `data/squeezenet1_1-imagenet.pt` | torchvision SqueezeNet 1.1 ImageNet weights | BSD-3; 5 MB; load with `squeezenet1_1(weights=None)` + `load_state_dict`; reusable for chs. 15–17 |
+| `data/fashion-train.pt` | 1,200 Fashion-MNIST train images + labels + class names | 28×28 uint8; provenance, license, and checksum in `data/README.md` |
+| `data/fashion-test.pt` | 600 Fashion-MNIST benchmark images | initially held out, then opened for final checks in chs. 6/8 and reused descriptively from ch. 9 onward; not an unbiased post-selection test for later architecture claims |
+| `data/squeezenet1_1-imagenet.pt` | torchvision SqueezeNet 1.1 ImageNet weights | upstream enum, URL, license note, and checksum in `data/README.md` |
 | (ch. 10 corpus) | the book's own chapters 1–9 | not a file — `glob("../part*/0*.qmd")` at render, code cells stripped |
 
 ## 7. Roadmap: the remaining chapters
@@ -194,12 +200,16 @@ Each stub carries its contract; specifics accumulated so far:
 
 ### Ch. 12 — Kernel Regression: Attention Before It Was Learnable (NEXT)
 - **Seeds**: `sources/8.1-Attention.tex` (the "Kernel Regression: The Conceptual
-  Bridge" section — his signature move), plus
-  `Box …/LaTeX/Module 7-RNN/old/Bridge_to_attention.tex` (snapshot it first).
+  Bridge" section — his signature move), plus the now-snapshotted
+  `sources/Bridge_to_attention.tex`.
 - **Transcripts**: `m08_lecture-8-attention-mechanism-part-1_8WBIyiaW7Cc.txt`.
-- **Content**: Nadaraya–Watson estimator; kernels as similarity weights; softmax
-  over distances = attention weights with *no learned parameters*; the
-  query/key/value language previewed on fixed data.
+- **Content**: Nadaraya–Watson estimator; kernels as similarity weights; softmax over
+  **log-kernel scores** = attention weights with *no learned parameters*; the
+  query/key/value language previewed on fixed data. Keep the distinction that OLS
+  prediction weights may be signed, whereas NW's positive weights form a convex
+  average. For the Gaussian score $-\|q-k\|^2/(2h^2)$, bandwidth maps to temperature
+  through $2h^2$. A dot product is pure angular similarity only when norms are
+  controlled.
 - **Harvests due**: ch. 1's "weighted combination of targets" seed and
   "dot product as similarity"; ch. 2's "scores → weights" softmax framing.
 - **Experiments to pre-test**: 1-D Nadaraya–Watson on a synthetic function
@@ -217,8 +227,11 @@ Each stub carries its contract; specifics accumulated so far:
   differentiable-lookup seeds BY NAME; **re-run ch. 11's date-normalization task
   with attention added to the same architecture/budget** — (a) alignment heatmap
   (decoder attending the source's year chars while emitting the year), (b)
-  convergence vs. the packed baseline (40% @ epoch 6, 92% @ 25; attention should
-  be far ahead at 6). Pre-test the rematch before writing.
+  convergence vs. the leak-free packed baseline on the same fixed 400-source
+  unambiguous validation subset (53.8% @ epoch 6, 95.0% @ 12), followed by one final
+  audit on the disjoint 437-source unambiguous test set (baseline 93.1%). Copy the
+  generator, unique-source rejection, and 8,000/500/500 split logic exactly.
+  Pre-test the rematch before writing.
 - Additive vs. scaled dot-product; the √d argument (pre-test the variance demo);
   Bahdanau-style attention in the ch. 11 Seq2Seq class (keep the class's shape).
 
@@ -231,7 +244,8 @@ Each stub carries its contract; specifics accumulated so far:
   paying to get position BACK (ch. 8's pooling warning — attention is
   permutation-equivariant).
 - **Experiments**: tiny transformer LM on the book-corpus (upgrade ch. 10's
-  char-LM finale — same corpus, compare losses/samples at matched budget);
+  char-LM finale — same corpus, deterministic 90/10 split, fixed-window evaluation,
+  and matched budget; the LSTM's held-out baseline is 1.89);
   attention-map visualizations; positional-encoding ablation (pre-test whether
   no-positions actually hurts at this scale — honesty gate!).
 
@@ -239,8 +253,9 @@ Each stub carries its contract; specifics accumulated so far:
 - Seeds per stub (`bert.tex`, `10.2_pretrained.tex` in Box Module 10) + m10
   transcripts. Masked-LM objective demo at tiny scale;
   `squeezenet` precedent says a small committed pretrained artifact is
-  acceptable if a tiny-BERT demo needs one (check size/license; else GPU
-  placeholder). Ties back to ch. 9's transfer decision rule — at THIS scale
+  acceptable if a tiny-BERT demo needs one (check size/license; otherwise keep the
+  scaled experiment in the GPU backlog and publish only an honest CPU-scale result).
+  Ties back to ch. 9's transfer decision rule — at THIS scale
   pretraining pays (the arc's promised resolution).
 
 ### Ch. 16 — ViT & Scaling Laws

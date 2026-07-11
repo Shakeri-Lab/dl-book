@@ -91,14 +91,22 @@ about the algebra changes.
 
 <!-- NOVEL (framing surfaced early from the Module 8 kernel-regression bridge): -->
 There is a second way to read $\vect{w}^\top\vect{x}$, and it may be the most important
-sentence in this chapter: **a dot product is a similarity score.** It is large and
-positive when $\vect{x}$ points along $\vect{w}$, near zero when they are unrelated, and
-negative when they oppose. So a linear model is a *pattern matcher*: $\vect{w}$ is a
-template, and the output measures how well the input matches it. Keep this reading close
-at hand. In Part II, an image filter's response will be this same dot product slid
-across an image; in Part IV, *attention* will be built out of nothing but learned
-similarity scores between queries and keys. Both are this one primitive, asked the
-question we will ask all book long: *what if the template were learnable?*
+sentence in this chapter: **a dot product is a similarity score.** More precisely,
+
+$$
+\vect{w}^\top\vect{x} = \norm{\vect{w}}_2\norm{\vect{x}}_2\cos\theta .
+$$
+
+For normalized vectors it measures directional similarity directly: positive when
+$\vect{x}$ points along $\vect{w}$, zero when they are orthogonal, and negative when
+they oppose. Without normalization, the two norms also control the score, so a large
+dot product can mean strong alignment, large magnitude, or both. A linear model is
+therefore a learned *pattern scorer*: $\vect{w}$ is a template, and its direction and
+scale both matter. Keep this reading close at hand. In Part II, an image filter's
+response will be this same dot product slid across an image; in Part IV, *attention*
+will be built out of learned similarity scores between queries and keys. Both are this
+one primitive, asked the question we will ask all book long: *what if the template were
+learnable?*
 
 ### The augmentation trick
 
@@ -110,8 +118,10 @@ $$
 y = \vect{w}^\top \vect{x} \qquad \text{(bias included)}.
 $$
 
-Whenever you see a linear model written without a bias — here or inside a neural
-network — the bias has not disappeared; it is living inside $\vect{w}$.
+Whenever *we use this augmented notation*, a missing $b$ is living inside
+$\vect{w}$. Do not assume that every bias-free formula or software layer is augmented,
+however: a model can deliberately constrain $b=0$ (for example, PyTorch layers created
+with `bias=False`).
 
 ## The loss: what makes a hyperplane "bad"?
 
@@ -338,6 +348,16 @@ plt.show()
 Finally, the idiom you will use for every model from here on: `nn.Linear` holds the
 knobs, autograd feels the slope for us, and the optimizer takes the step.
 
+::: {.callout-note}
+## A deliberate framework preview
+
+This cell shows the complete PyTorch training loop so you can recognize its shape. We
+use the three framework calls as black boxes here: @sec-03-nonlinearity-mlp introduces
+modules, @sec-04-training-loss-sgd opens the optimizer, and
+@sec-05-backpropagation explains what `backward()` computes. Until then, the manual
+implementation above is the chapter's working toolbox.
+:::
+
 ```{python}
 #| label: nn-linear
 from torch import nn
@@ -361,15 +381,22 @@ Three implementations, one answer:
 
 ```{python}
 #| label: fig-three-fits
-#| fig-cap: "All three methods find the same line (shown against feature $x_1$, second feature at its mean)."
+#| fig-cap: "All three methods find the same line on the slice $x_2 = \\bar{x}_2$. Because this is synthetic data, the points can be adjusted to that same slice using the known true coefficient; line and points now show the same question."
 grid = torch.linspace(X[:, 0].min(), X[:, 0].max(), 50)
-line = lambda w, b: w[0] * grid + w[1] * X[:, 1].mean() + b
+x2_mean = X[:, 1].mean()
+
+def prediction_slice(weights: torch.Tensor, bias: float) -> torch.Tensor:
+    """Predictions along x1 while x2 is held at its sample mean."""
+    return weights[0] * grid + weights[1] * x2_mean + bias
+
+y_on_slice = y - true_w[1] * (X[:, 1] - x2_mean)
 
 plt.figure(figsize=(5.5, 3.6))
-plt.scatter(X[:, 0], y, s=12, alpha=0.4, label="data")
-plt.plot(grid, line(w_ols, w_ols[2]), lw=3, label="closed form")
-plt.plot(grid, line(model.w, model.b.item()), "--", lw=2, label="gradient descent")
-plt.plot(grid, line(w_nn, b_nn), ":", lw=2, label="nn.Linear")
+plt.scatter(X[:, 0], y_on_slice, s=12, alpha=0.4, label="data adjusted to slice")
+plt.plot(grid, prediction_slice(w_ols, float(w_ols[2])), lw=3, label="closed form")
+plt.plot(grid, prediction_slice(model.w, model.b.item()), "--", lw=2,
+         label="gradient descent")
+plt.plot(grid, prediction_slice(w_nn, b_nn), ":", lw=2, label="nn.Linear")
 plt.xlabel("$x_1$"); plt.ylabel("$y$"); plt.legend()
 plt.tight_layout()
 plt.show()
@@ -401,15 +428,21 @@ distribution.
 
 ## A first look at bias and variance
 
-Our learned $\hat{\vect{w}}$ depends on the training data, and the training data is a
-random sample. Collect a fresh dataset and you get a different $\hat{\vect{w}}$. So the
-model's expected error on a new point decomposes into three parts:
+Our learned predictor $\hat f_{\mathcal D}$ depends on the random training set
+$\mathcal D$. Collect a fresh dataset and you get a different prediction at the same
+input $\vect{x}$. Let $f^*(\vect{x}) = \E[Y\mid X=\vect{x}]$ be the noise-free
+regression function. Then the expected squared error on a fresh outcome at this fixed
+input decomposes into three parts:
 
 $$
-\operatorname{Err}
-= \underbrace{\bigl(\E[\hat y] - y\bigr)^2}_{\text{Bias}^2}
-+ \underbrace{\E\bigl[(\hat y - \E[\hat y])^2\bigr]}_{\text{Variance}}
-+ \underbrace{\sigma_\varepsilon^2}_{\text{Irreducible noise}} .
+\E_{\mathcal D,Y}\!\left[(\hat f_{\mathcal D}(\vect{x})-Y)^2
+\mid X=\vect{x}\right]
+= \underbrace{\left(\E_{\mathcal D}[\hat f_{\mathcal D}(\vect{x})]
+-f^*(\vect{x})\right)^2}_{\text{Bias}^2}
++ \underbrace{\E_{\mathcal D}\!\left[
+(\hat f_{\mathcal D}(\vect{x})-\E_{\mathcal D}[\hat f_{\mathcal D}(\vect{x})])^2
+\right]}_{\text{Variance}}
++ \underbrace{\operatorname{Var}(Y\mid X=\vect{x})}_{\text{Irreducible noise}} .
 $$ {#eq-bias-variance}
 
 **Bias** measures how far the *average* prediction is from the truth, because of
@@ -430,11 +463,12 @@ stays untouched until the end.
 
 The textbook picture, validation error falling then rising as complexity grows, is a
 helpful first mental model, and you should have it. But bias and variance are not a
-mechanical see-saw. More data shrinks variance (at a rate of roughly $1/n$, while
-leaving bias untouched); regularization, and inductive biases matched to the task, can
-buy capacity without exploding variance. Modern over-parameterized networks live in
-regimes where this cartoon bends in surprising ways — we will look at those pictures
-properly in @sec-06-generalization-inductive-bias.
+mechanical see-saw. In classical fixed-dimensional, well-specified settings, variance
+often falls roughly like $1/n$ as data grows; that rate is not a universal law for
+modern models. Regularization and inductive biases matched to the task can buy capacity
+without exploding variance. Modern over-parameterized networks live in regimes where
+this cartoon bends in surprising ways; we will look at those pictures properly in
+@sec-06-generalization-inductive-bias.
 :::
 
 ### Regularization, briefly
@@ -446,11 +480,16 @@ $$
 \loss_\lambda(\vect{w}) = \frac{1}{n}\norm{\vect{y} - \matr{X}\vect{w}}_2^2
 + \lambda \norm{\vect{w}}_2^2,
 \qquad
-\hat{\vect{w}}_{\text{ridge}} = (\matr{X}^\top\matr{X} + \lambda I)^{-1}\matr{X}^\top\vect{y},
+\hat{\vect{w}}_{\text{ridge}} = (\matr{X}^\top\matr{X} + n\lambda I)^{-1}
+\matr{X}^\top\vect{y},
 $$
 
 nudging the model toward smaller, more stable weights: a little more bias for a lot
-less variance.
+less variance. The factor $n$ is there because our data-fit term is a *mean*. This
+displayed solution applies when there is no intercept or when features and targets have
+been centered so the intercept is recovered separately. We normally do not penalize
+that intercept. In augmented-matrix notation, replace $I$ by
+$\operatorname{diag}(1,\ldots,1,0)$ so the final bias coordinate remains free.
 
 Let us see that, not just assert it. We build a problem designed to punish an
 unregularized model: 20 features of which only 5 matter, noisy targets, and (the cruel
@@ -465,8 +504,8 @@ w_true[:5] = torch.tensor([3.0, -2.0, 1.5, 2.5, -1.0])   # only 5 real features
 Xh, yh = make_synthetic_data(w_true, bias=0.0, n_samples=n, noise=2.0)
 
 w_ols_h = torch.linalg.solve(Xh.T @ Xh, Xh.T @ yh)        # plain OLS
-lam = 10.0
-w_ridge = torch.linalg.solve(Xh.T @ Xh + lam * torch.eye(d), Xh.T @ yh)
+lam = 0.4
+w_ridge = torch.linalg.solve(Xh.T @ Xh + n * lam * torch.eye(d), Xh.T @ yh)
 
 def report(name: str, w_hat: torch.Tensor) -> None:
     err = ((w_hat - w_true) ** 2).mean()
@@ -479,12 +518,12 @@ report("ridge", w_ridge)
 OLS, with all its freedom and almost no data to discipline it, assigns large, confident,
 *wrong* weights to the 15 noise features — pure variance. Ridge shrinks everything and
 cuts the damage several-fold: a little bias, traded for a lot of variance. (Rerun this
-cell with `n = 100` and watch OLS become respectable again: variance decays like
-$1/n$.) Ridge's $L_1$ cousin, **lasso**, can go further and zero out the irrelevant
-features entirely; we leave it to the exercises, because on the road ahead it is weight
-decay, the $L_2$ idea, that you will meet again and again.
+cell with `n = 100` and watch OLS become more stable, as classical fixed-dimensional
+theory predicts.) Ridge's $L_1$ cousin, **lasso**, can go further and zero out the
+irrelevant features entirely; we leave it to the exercises, because on the road ahead
+it is weight decay, the $L_2$ idea, that you will meet again and again.
 
-![Why the penalties behave differently: minimizing the loss subject to a weight budget. The spherical $L_2$ budget shrinks the solution toward the origin; the diamond-shaped $L_1$ budget has corners on the axes, so the solution tends to land where some coordinates are exactly zero (Exercise 6).](../../figures/generated/1_1_lin_Recap-fig09.svg){#fig-regularization width=55%}
+![Why the penalties behave differently: minimizing the loss subject to a weight budget. The spherical $L_2$ budget shrinks the solution toward the origin; the diamond-shaped $L_1$ budget has corners on the axes, so the solution tends to land where some coordinates are exactly zero (Exercise 5).](../../figures/generated/1_1_lin_Recap-fig09.svg){#fig-regularization width=55%}
 
 ## Okay, so — what did we just build?
 
@@ -512,6 +551,17 @@ First, in @sec-02-logistic-softmax, that squashing function turns our regressor 
 classifier. Then, in @sec-03-nonlinearity-mlp, we stack neurons — and discover why the
 nonlinearity is not optional.
 
+## Sources and further reading {.unnumbered}
+
+- [Hoerl and Kennard, “Ridge Regression: Biased Estimation for Nonorthogonal
+  Problems” (1970)](https://doi.org/10.1080/00401706.1970.10488634) introduces the
+  biased estimator behind this chapter's stability trade-off and regularization
+  geometry.
+- [Belkin et al., “Reconciling Modern Machine-Learning Practice and the Classical
+  Bias–Variance Trade-Off” (2019)](https://doi.org/10.1073/pnas.1903070116) is the
+  promised next picture: why the classical U-curve can become double descent in
+  interpolating models.
+
 ## Exercises {.unnumbered}
 
 1. **(Pencil.)** Derive the normal equations @eq-normal by expanding
@@ -520,8 +570,10 @@ nonlinearity is not optional.
    $\matr{X}^\top\matr{X}$ is invertible enter?
 2. **(Pencil.)** Repeat the derivation with the ridge penalty
    $\lambda\norm{\vect{w}}_2^2$ and show the solution becomes
-   $(\matr{X}^\top\matr{X} + \lambda I)^{-1}\matr{X}^\top\vect{y}$. Why does the
-   $\lambda I$ term guarantee invertibility for any $\lambda > 0$?
+   $(\matr{X}^\top\matr{X} + n\lambda I)^{-1}\matr{X}^\top\vect{y}$ when the data-fit
+   term is the MSE. Why does the $n\lambda I$ term guarantee invertibility for any
+   $\lambda > 0$? If you augment $\matr{X}$ with a bias column, which diagonal entry
+   should be zero so the intercept is not penalized?
 3. **(Code.)** In `make_synthetic_data`, raise `noise` to 1.0 and rerun all three
    implementations 10 times with different seeds. How much do the learned weights vary
    across runs? Which term of @eq-bias-variance are you watching?
@@ -530,9 +582,7 @@ nonlinearity is not optional.
    picture.
 5. **(Code.)** In the ridge experiment, sweep $\lambda \in \{0.01, 0.1, 1, 10, 100\}$
    and plot weight MSE against $\lambda$. Where is the sweet spot, and what happens at
-   the extremes? Connect your answer to bias and variance.
-6. **(Code.)** **Lasso.** Replace the ridge penalty with the $L_1$ norm
-   $\lambda\norm{\vect{w}}_1$. There is no closed form — use
-   `sklearn.linear_model.Lasso(alpha=0.4)` on the same data and count how many weights
-   land *exactly* at zero. Compare with ridge: why can a diamond-shaped penalty zero
-   out coordinates when a spherical one cannot?
+   the extremes? Connect your answer to bias and variance. Then replace ridge with
+   `sklearn.linear_model.Lasso` at the best scale you found and count how many weights
+   land exactly at zero. Why can an $L_1$ diamond zero coordinates when an $L_2$
+   sphere usually only shrinks them?

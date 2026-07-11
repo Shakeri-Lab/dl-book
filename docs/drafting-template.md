@@ -31,16 +31,20 @@ course-companion book for DS 6050 (UVA), written in Professor Heman Shakeri's vo
 - Structure: motivation/problem first (never notation first) → concrete example with
   numbers → formalism → executable code → "make it learnable" pivot where applicable →
   recap → exercises (3–5, mix of pencil and code).
-- Math: KaTeX-compatible; use the book macros (`\vect`, `\matr`, `\E`, `\norm`, …);
+- Math: MathJax-compatible in HTML and LaTeX-compatible in PDF; use the book macros
+  (`\vect`, `\matr`, `\E`, `\norm`, …) and keep `mathjax-config.html` synchronized
+  with `tex/macros.tex`;
   every symbol defined at first use with dimensions stated before matrix products.
-- Code: executable Python cells (```{python}), CPU-only, <60 s total per chapter,
-  seeded (`torch.manual_seed(6050)`), tensor shapes narrated in comments the way the
+- Code: executable Python cells (```{python}), CPU-only, with each cell under about
+  4–5 minutes and training-heavy chapters typically 5–15 minutes total; seeded
+  (`torch.manual_seed(6050)`), tensor shapes narrated in comments the way the
   `[coding]_` transcripts do. From-scratch NumPy before `torch` where the chapter calls
   for it. NO d2l imports, no copied D2L code.
 - Callouts per the style guide mapping (note = definitions, tip = make-it-learnable
   pivots + hygiene, warning = pitfalls he actually flags).
-- Cross-references: `@sec-...` to other chapters; frontmatter must include
-  `lecture-source:` listing the transcript filenames used.
+- Cross-references: `@sec-...` to other chapters; immediately after the title, keep an
+  HTML provenance comment (`<!-- lecture-source: … seeds: … -->`) listing the
+  transcript and seed filenames used.
 - Reuse HIS analogies from the style-guide inventory; do not invent new ones when his
   exist.
 - Figures: matplotlib in-cell for anything data-driven; reference
@@ -55,7 +59,7 @@ course-companion book for DS 6050 (UVA), written in Professor Heman Shakeri's vo
 - **Pedagogical efficiency rule.** The book's destination is attention and
   transformers. Before including any concept, name the later chapter where it pays off;
   if it never recurs on the arc, demote it to an exercise or cut it (precedent: lasso in
-  Chapter 1 became Exercise 6). Conversely, plant forward seeds cheaply — one or two
+  Chapter 1 became an exercise rather than a main section). Conversely, plant forward seeds cheaply — one or two
   sentences that a later chapter can call back to (precedents: "a dot product is a
   similarity score" and "prediction as a weighted combination of training targets" in
   Chapter 1, both harvested by Chapter 12). Check the target chapter's stub abstract for
@@ -75,5 +79,6 @@ Prompt a second, independent session:
 > correctness independently. Check every code cell runs mentally (shapes, imports,
 > seeds). Return the claim table + a fix list.
 
-Then: his edit → `quarto render --to html --to pdf` → cell execution check
-(`quarto render CHAPTER --execute`) → merge.
+Then: his edit → `QUARTO_PYTHON=.venv/bin/python quarto render CHAPTER` (no `--to`
+flag; this refreshes both freezes) → inspect both formats → full `quarto render` →
+merge.

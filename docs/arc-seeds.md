@@ -8,7 +8,7 @@ new rows here. The pedagogical-efficiency rule (drafting-template) depends on
 this file: a concept with no payoff chapter listed here should be an exercise or
 a cut.*
 
-*Updated: 2026-07-09, after Chapter 11.*
+*Updated: 2026-07-11, after the Chapters 1–11 repair pass.*
 
 ## 1. Seeds planted and their harvest contracts
 
@@ -21,12 +21,12 @@ a cut.*
 | Temperature dial between hard max and uniform | ch. 2 | ch. 10 ✓ (sampling); ch. 13 (√d as temperature) | partly |
 | Compositional hierarchy: features of features | ch. 3 | ch. 8 ✓ (receptive fields make it architectural) | done |
 | Gradient superhighway (ReLU's open gate) | ch. 5 | ch. 9 ✓ (residual = the highway as infrastructure), ch. 10 ✓ (cell state = highway through time) | done |
-| Float-precision death (signals hit exact zero) | ch. 5 | ch. 9 ✓ (grad underflow figure), ch. 10 ✓ (σ(0)^80); appendix a4 (gather all three) | a4 due |
+| Float-precision death (tiny signals can become numerically unusable) | ch. 5 | ch. 9 ✓ (norm underflow + update-resolution diagnostic), ch. 10 ✓ (σ(0)^80); appendix a4 (gather all three) | a4 due |
 | Constraints are knowledge / inductive bias prescription | ch. 6 | ch. 7–8 ✓; ch. 16 (ViT trades the bias away — "inductive bias strikes again, this time as a trade") | ch. 16 due |
 | Shift cliff (MLP collapses under 2px shift) | ch. 6 | ch. 8 ✓ (rematch), ch. 9 ✓ (GAP flattens it) — the book's first running benchmark | done |
 | Global templates figure (fig-templates) | ch. 6 | ch. 8 ✓ (learned local kernels vs. global smears) | done |
 | Sliding dot product; "what if the template were learnable?" | ch. 7 | ch. 8 ✓ — the Part II pivot | done |
-| Equivariance banked → invariance purchased | ch. 7 | ch. 8 ✓ (pooling) | done |
+| Equivariance banked → local shift tolerance purchased | ch. 7 | ch. 8 ✓ (pooling, explicitly not exact invariance) | done |
 | Pooling discards *where* → "we will pay to put position back in" | ch. 8 | ch. 14 (positional encodings; self-attention is permutation-equivariant) | due |
 | Head-parameter imbalance (96% in LeNet's head) | ch. 8 | ch. 9 ✓ (1×1 + GAP fire the head) | done |
 | CNN buys global sight through depth; attention buys it in one step | ch. 8 | ch. 13 (@sec-13 named in ch. 8 prose) | due |
@@ -37,27 +37,39 @@ a cut.*
 | Finite-state bottleneck; "the book ends Part III when we refuse to pay that price" | ch. 10–11 | ch. 12–13 | due |
 | "Hard address, learned content" (embeddings); soften the address too | ch. 11 | ch. 13 — harvest the phrase | due |
 | Masking = "which positions it may not look at"; causal mask preview | ch. 11 | ch. 14 (causal mask turns transformer into LM) | due |
-| Date-normalization benchmark (packed seq2seq: 40% @ epoch 6, 92% @ 25; alignment invisible) | ch. 11 | ch. 13 — MUST re-run with attention: alignment heatmap + convergence comparison (contract in stub) | due |
+| Date-normalization benchmark (leak-free packed seq2seq: 53.8% @ epoch 6, 95.0% @ 12 on 400 unambiguous validation sources; 93.1% on the final 437-source unambiguous test; alignment invisible) | ch. 11 | ch. 13 — MUST re-run with attention: alignment heatmap + convergence comparison (contract in stub) | due |
 | Beam search / decoding machinery | ch. 11 | chs. 15/17 (LM decoding reuses it) | ambient |
-| Book-corpus char-LM (loss 1.48, babble) | ch. 10 | ch. 14 (same corpus, tiny transformer, compare) | suggested |
+| Book-corpus char-LM (held-out fixed-window loss 1.89; sampled training minibatch 1.42; babble) | ch. 10 | ch. 14 (same corpus, split, and evaluation; tiny transformer, compare) | suggested |
 | m06 autoencoder spine (PCA = linear AE, bottleneck, manifolds) | (unused by design in ch. 11) | ch. 19 | due |
 
 ## 2. Cross-chapter running benchmarks
 
-1. **The shift cliff** (Fashion subset, `shift_right`): ch. 6 MLP 82→42% @2px →
-   ch. 8 LeNet 82.5→62.3% → ch. 9 NiN+GAP 76→69% (flat). Closed.
-2. **The date task** (synthetic, ch. 11): packed seq2seq baseline pinned
-   (unambiguous exact 98.5%; curve 40%@6 → 92%@25; beam reveals 70/30 dialect
-   split). Ch. 13 owes the attention rematch. Keep the generator function
-   byte-identical when reusing (copy from ch. 11's `date-data` cell; seed 6050).
-3. **The book-corpus LM**: ch. 10 char-LSTM (hidden 128, chunk 100, 2,500 steps,
-   loss 1.48). Natural ch. 14 comparison point. NOTE: the corpus is
+1. **The shift cliff** (Fashion subset, `shift_right`): ch. 6 MLP 80.8→42.0% @2px →
+   ch. 8 LeNet 82.5→62.3% → ch. 9 NiN+GAP 76.2→66.5% from 0→4px (a much gentler
+   slope, not exact invariance). Closed.
+2. **The date task** (synthetic, ch. 11): 9,000 unique source strings split
+   8,000/500/500 for train/validation/test, with zero exact-source overlap between
+   every pair. The packed seq2seq baseline is 53.8% at epoch 6 and 95.0% at epoch 12
+   on a fixed subset of 400 of the 421 unambiguous validation strings. After 25 epochs,
+   the single final audit scores 93.1% on all 437 unambiguous test strings (naive
+   padding: 34.3%; free-running: 99.1%). Ch. 13 owes the attention rematch and
+   alignment heatmap. Keep the generator, unique-source rejection, and three-way split
+   byte-identical (copy the full ch. 11 `date-data` cell; seed 6050).
+3. **The book-corpus LM**: ch. 10 char-LSTM (hidden 128, random fixed windows of
+   100 characters, 2,500 steps). On the deterministic 90/10 contiguous split, the
+   final sampled training minibatch is 1.42 and held-out fixed-window loss is 1.89.
+   The held-out number is the ch. 14 comparison point. NOTE: the corpus is
    `glob("../part*/0*.qmd")` — chapters 1–9 only, code cells stripped; editing
    those chapters changes the corpus only when ch. 10/14 re-render (freeze).
 
 ## 3. Reader's toolbox — what is introduced where (reading-order rule)
 
-Chapter N may only *use* what appears at ≤ N. Introducing a tool = its row here.
+Chapter N may only *use* what appears at ≤ N. Introducing a tool = its row here. A
+deliberately labeled **framework preview** may use a later tool only as a measuring
+instrument after the chapter has built the underlying idea with its current toolbox;
+the preview does not make that tool generally available, and it must point to the
+chapter that opens the black box. Chapters 1, 3, and 4 use this narrow exception for
+optimizers or `backward()` before Chapter 5.
 
 | Ch. | New tools/concepts available afterwards |
 |---|---|

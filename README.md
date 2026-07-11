@@ -27,11 +27,12 @@ replays that one move, in his course's order and voice.
 
 ```bash
 python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
-quarto render            # HTML + PDF (needs `quarto install tinytex` once)
+QUARTO_PYTHON=.venv/bin/python quarto render  # HTML + PDF; install TinyTeX once
 ```
 
 Execution uses Quarto **freeze** — CI never runs cells; refresh a chapter's cache with
-`quarto render chapters/part1/01-linear-regression.qmd --execute` before committing.
+`QUARTO_PYTHON=.venv/bin/python quarto render chapters/part1/01-linear-regression.qmd --execute`
+before committing.
 
 ## Authoring pipeline
 
@@ -52,6 +53,8 @@ memory and are updated after every shipped chapter.
 
 - **Text and figures:** [CC BY-NC-SA 4.0](LICENSE-text.md)
 - **Code** (all code cells and `code/`): [MIT](LICENSE-code)
+- **Third-party data, weights, and attributed teaching fragments:** see
+  [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
 
 No content in this book is derived from *Dive into Deep Learning* (d2l.ai) or any other
 textbook; the exposition and code are original to the course.

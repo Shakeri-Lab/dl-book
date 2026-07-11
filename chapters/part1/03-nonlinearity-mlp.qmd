@@ -40,14 +40,18 @@ function, no matter how it is trained.
 ::: {.callout-note}
 ## A historical scar
 
-This is not a toy observation. The XOR limitation of single-layer perceptrons,
-publicized in 1969, helped freeze neural-network research for years — part of the first
-"AI winter." The thaw came with multi-layer networks and backpropagation
-(@sec-05-backpropagation), which is to say: with the contents of this chapter and the
-next two.
+This is not a toy observation. The limitations of single-layer perceptrons, including
+XOR, were publicized in 1969 and became emblematic of the case against that research
+program. They contributed to reduced enthusiasm and funding, but they were not a
+single-cause explanation for the first "AI winter"; limited compute, data, and unmet
+promises mattered too. Multi-layer networks and practical backpropagation
+(@sec-05-backpropagation) later removed the representational obstacle exposed here.
 :::
 
-Let us confirm the ceiling empirically, with the tools we already have:
+Let us confirm the ceiling empirically. We reuse the framework loop previewed in
+@sec-01-linear-regression as a measuring instrument; @sec-04-training-loss-sgd and
+@sec-05-backpropagation will explain the optimizer and `backward()` rather than asking
+you to treat them as magic.
 
 ```{python}
 #| label: xor-training
@@ -58,7 +62,10 @@ torch.manual_seed(6050)
 X_xor = torch.tensor([[0., 0.], [0., 1.], [1., 0.], [1., 1.]])
 y_xor = torch.tensor([0., 1., 1., 0.])
 
-def train(model, X, y, steps=4000, lr=0.5):
+def train(
+    model: nn.Module, X: torch.Tensor, y: torch.Tensor,
+    steps: int = 4000, lr: float = 0.5
+) -> nn.Module:
     opt = torch.optim.SGD(model.parameters(), lr=lr)
     for _ in range(steps):
         opt.zero_grad()
@@ -71,18 +78,26 @@ linear = train(nn.Linear(2, 1), X_xor, y_xor)
 mlp = train(nn.Sequential(nn.Linear(2, 4), nn.ReLU(), nn.Linear(4, 1)),
             X_xor, y_xor)
 
-for name, model in [("linear", linear), ("MLP (4 hidden)", mlp)]:
-    acc = ((model(X_xor).squeeze(-1) > 0).float() == y_xor).float().mean()
-    print(f"{name:>15}: accuracy {acc:.0%}")
+with torch.no_grad():
+    linear_p = torch.sigmoid(linear(X_xor).squeeze(-1))
+    linear_bce = nn.functional.binary_cross_entropy(linear_p, y_xor)
+    mlp_acc = ((mlp(X_xor).squeeze(-1) > 0).float() == y_xor).float().mean()
+
+print(f"trained linear: probabilities {linear_p.numpy().round(3)}, "
+      f"BCE {linear_bce:.3f}")
+print(f" MLP (4 hidden): accuracy {mlp_acc:.0%}")
 ```
 
-The linear model lands at 25%: *worse than guessing*, because XOR is adversarial to
-lines. The little network with one bend in it is perfect. The rest of the chapter
-explains what that bend actually buys.
+The cross-entropy optimum for this symmetric XOR dataset assigns probability $0.5$ to
+all four points, with loss $\log 2 \approx 0.693$. Turning those exact ties into hard
+labels with a floating-point threshold can report 25%, 50%, or 75% because of tiny
+rounding differences; that number is not evidence about the classifier. The honest
+geometric statement is that a hard linear boundary can classify at most three of the
+four points (75%), while the little network with a bend is perfect.
 
 ```{python}
 #| label: fig-xor
-#| fig-cap: "Left: no line separates XOR — whatever the linear model learns, a diagonal pair is misclassified. Right: the trained 4-hidden-unit MLP carves the plane so that both diagonals get their own region."
+#| fig-cap: "Left: a representative best linear boundary gets three of four XOR points right, but one point must remain on the wrong side. Right: the trained 4-hidden-unit MLP carves separate regions for the two positive corners."
 #| code-summary: "Code: decision regions"
 import numpy as np
 import matplotlib.pyplot as plt
@@ -91,10 +106,13 @@ gx, gy = np.meshgrid(np.linspace(-0.6, 1.6, 220), np.linspace(-0.6, 1.6, 220))
 grid = torch.tensor(np.stack([gx.ravel(), gy.ravel()], 1), dtype=torch.float32)
 
 fig, axes = plt.subplots(1, 2, figsize=(7.4, 3.4), sharey=True)
-for ax, model, title in [(axes[0], linear, "linear model"),
-                         (axes[1], mlp, "MLP with ReLU")]:
+for ax, model, title in [(axes[0], None, "best linear rule (75%)"),
+                         (axes[1], mlp, "trained MLP (100%)")]:
     with torch.no_grad():
-        Z = (model(grid).squeeze(-1) > 0).float().reshape(gx.shape)
+        if model is None:
+            Z = (grid.sum(1) - 0.5 > 0).float().reshape(gx.shape)
+        else:
+            Z = (model(grid).squeeze(-1) > 0).float().reshape(gx.shape)
     ax.contourf(gx, gy, Z, levels=[-0.5, 0.5, 1.5],
                 colors=["#DCE6F2", "#FDE3C8"], alpha=0.9)
     for cls, marker, color in [(0, "o", "#232D4B"), (1, "s", "#E57200")]:
@@ -128,44 +146,50 @@ it draws a line through the plane: an OFF region and an ON region, with $\vect{w
 perpendicular to the boundary. That boundary is the fundamental unit of computation in
 everything that follows.
 
-(What about the sharp corner at $z=0$, where the derivative is undefined? In practice,
-never a problem: libraries assign it 0, and the chance of a floating-point number
-landing exactly on 0 is essentially nil. The gradient story of this choice — why this
-open-or-shut gate is *the* reason deep networks train — is told in
+(What about the sharp corner at $z=0$, where the derivative is undefined? Libraries
+choose a subgradient convention, commonly 0. Exact zeros can occur systematically with
+zero biases, sparse activations, or symmetric inputs, so the convention is not merely
+academic. The gradient story of this open-or-shut gate — including when it helps and
+when a unit goes dead — is told in
 @sec-05-backpropagation.)
 
 ## Layers of hinges: bumps and polytopes
 
 One neuron makes one boundary. A layer of $k$ neurons makes $k$ boundaries, and their
-intersections partition the input space into cells — each cell a **convex polytope**,
-and within each cell the layer computes a plain linear function. With $d$-dimensional
-inputs, $k$ neurons can create on the order of $k^d$ regions.
+intersections partition the input space into convex **polyhedral regions** (bounded
+ones are polytopes), and within each cell the layer computes a plain linear function. For fixed input
+dimension $d$, the maximum region count of one generic hyperplane arrangement grows on
+the order of $k^d$.
 
-The simplest constructive example lives in 1D. Take two hinges and subtract:
+The simplest compact constructive example lives in 1D. Combine three hinges so the
+slopes cancel again after the third breakpoint:
 
 ```{python}
 #| label: fig-hinge-bump
-#| fig-cap: "The lecture's construction, exactly: two hinges ($h_1$, $h_2$) and one subtraction make a bump. Bumps are the brush strokes of function approximation."
-#| code-summary: "Code: hinges into a bump"
+#| fig-cap: "Three hinges make a compact triangular bump: the first starts the rise, the second reverses the slope, and the third cancels it back to zero. Bumps are the brush strokes of function approximation."
+#| code-summary: "Code: three hinges into a compact bump"
 xs = torch.linspace(-3, 5, 400)
-h1 = torch.relu(0.67 * xs + 1)
-h2 = torch.relu(0.8 * xs - 0.4)
-bump = h1 - 1.25 * h2
+h1 = torch.relu(xs + 1.5)
+h2 = torch.relu(xs - 0.5)
+h3 = torch.relu(xs - 2.5)
+bump = h1 - 2 * h2 + h3
 
 fig, axes = plt.subplots(1, 2, figsize=(7.4, 3))
-axes[0].plot(xs, h1, color="#5379AA", label=r"$h_1 = \mathrm{ReLU}(0.67x + 1)$")
-axes[0].plot(xs, h2, color="#6B8E6B", label=r"$h_2 = \mathrm{ReLU}(0.8x - 0.4)$")
-axes[0].set_title("two hidden units"); axes[0].legend(fontsize=8)
-axes[1].plot(xs, bump, color="#E57200", lw=2.5, label=r"$y = h_1 - 1.25\,h_2$")
+axes[0].plot(xs, h1, color="#5379AA", label=r"$h_1 = \mathrm{ReLU}(x + 1.5)$")
+axes[0].plot(xs, h2, color="#6B8E6B", label=r"$h_2 = \mathrm{ReLU}(x - 0.5)$")
+axes[0].plot(xs, h3, color="#722F37", label=r"$h_3 = \mathrm{ReLU}(x - 2.5)$")
+axes[0].set_title("three hidden units"); axes[0].legend(fontsize=7)
+axes[1].plot(xs, bump, color="#E57200", lw=2.5,
+             label=r"$y = h_1 - 2h_2 + h_3$")
 axes[1].set_title("their combination: a bump"); axes[1].legend(fontsize=9)
 for ax in axes: ax.set_xlabel("$x$")
 plt.tight_layout(); plt.show()
 ```
 
-Follow the pieces: before the first hinge, both units are silent and the output is
-zero. Between the hinges, only $h_1$ is on, so the output climbs. After the second
-hinge, $h_2$'s negative contribution takes over and the output descends back to zero.
-Three linear pieces $\rightarrow$ one bump.
+Follow the pieces: before the first hinge, all units are silent and the output is zero.
+After the first breakpoint, $h_1$ starts the climb. The coefficient $-2$ on $h_2$
+reverses the slope at the peak, and $h_3$ cancels that downward slope at the final
+breakpoint. Four linear pieces $\rightarrow$ one compact bump.
 
 ## The universal approximation theorem
 
@@ -180,12 +204,12 @@ Watch the theorem materialize as width grows:
 
 ```{python}
 #| label: fig-uat
-#| fig-cap: "One hidden layer approximating a wiggly target with a jump. Width 2 manages a single hinge-pair; width 8 catches the shape; width 64 traces it closely — except at the discontinuity, which no finite (or infinite) width fully conquers: the theorem promises continuous functions only."
+#| fig-cap: "One hidden ReLU layer approximating a continuous curved target. Width 2 is too rigid; width 8 catches the shape; width 64 follows it closely. Width buys more hinge locations, but the theorem itself does not tell the optimizer where to place them."
 #| code-summary: "Code: the width sweep"
 xs1 = torch.linspace(-3, 3, 200)[:, None]
-target = torch.sin(2 * xs1) + 0.5 * torch.sign(xs1)
+target = torch.sin(1.5 * xs1) + 0.08 * xs1 ** 2
 
-def fit(width: int, steps: int = 3000, lr: float = 0.05):
+def fit(width: int, steps: int = 3000, lr: float = 0.05) -> torch.Tensor:
     torch.manual_seed(6050)
     net = nn.Sequential(nn.Linear(1, width), nn.ReLU(), nn.Linear(width, 1))
     opt = torch.optim.SGD(net.parameters(), lr=lr)
@@ -213,10 +237,14 @@ Now read the theorem's fine print, because it is where beginners over-promise:
    optimizer, and nothing guarantees gradient descent lands on the theorem's solution.
 2. It does not say the network is **small**. Tiling a complicated function with
    one-layer bumps can require astronomically many units.
-3. It speaks of **continuous functions on bounded regions** — note our jump refusing to
-   be captured — and says nothing about how the fit behaves *between* or *beyond* your
-   samples. Approximation is not generalization; that distinction gets its own chapter
-   (@sec-06-generalization-inductive-bias).
+3. In its usual uniform-approximation form, it speaks of **continuous functions on
+   bounded regions** and says nothing about how the fit behaves *between* or *beyond*
+   your samples. A continuous ReLU network cannot uniformly approximate a jump to
+   arbitrary accuracy: near the jump its worst-case error stays at least half the jump
+   size. Under a mean-square ($L_2$) criterion, however, it can squeeze the transition
+   into a narrow interval and make the *average* error arbitrarily small. The norm and
+   the target class matter. Approximation is still not generalization; that distinction
+   gets its own chapter (@sec-06-generalization-inductive-bias).
 :::
 
 ## Why depth: boundaries that bend
@@ -239,20 +267,24 @@ G = torch.tensor(np.stack([gx2.ravel(), gy2.ravel()], 1), dtype=torch.float32)
 with torch.no_grad():
     h1_ = torch.relu(net2[0](G))
     h2_ = torch.relu(net2[2](h1_))
-    pattern = torch.cat([(h1_ > 0), (h2_ > 0)], 1).float()
-    code = (pattern @ (2 ** torch.arange(16).float())).reshape(gx2.shape)
+    pattern = torch.cat([(h1_ > 0), (h2_ > 0)], 1).to(torch.int64)
+    raw_code = pattern @ (2 ** torch.arange(16, dtype=torch.int64))
+    _, region_id = torch.unique(raw_code, return_inverse=True)
+    region_id = region_id.reshape(gx2.shape)
 
 plt.figure(figsize=(5.4, 4.6))
-plt.imshow(code, extent=[-2, 2, -2, 2], origin="lower", cmap="tab20", alpha=0.85)
+plt.imshow(region_id, extent=[-2, 2, -2, 2], origin="lower",
+           cmap="turbo", alpha=0.85)
 plt.xlabel("$x_1$"); plt.ylabel("$x_2$")
 plt.tight_layout(); plt.show()
 ```
 
-This bending compounds: theory shows the number of linear regions grows
-**exponentially with depth but only polynomially with width**. A deep, narrow network
-can carve a partition that a shallow network would need exponentially many units to
-match. That is the economic argument for depth — the same expressive budget, spent far
-more efficiently.
+This bending can compound dramatically. For suitable ReLU constructions at fixed input
+dimension, achievable region counts grow exponentially with depth, while a single
+hidden layer's count grows polynomially with width. This is an existence and
+architecture-dependent comparison, not a promise that every trained deep network
+realizes all those regions. It gives the economic argument for depth: some partitions
+represented by a deep, narrow network require far more units in a shallow one.
 
 ## Your first real MLP
 
@@ -320,10 +352,10 @@ plt.tight_layout(); plt.show()
 ```
 
 One honest footnote on the XOR network: in principle *two* hidden units suffice, but
-such minimal networks are temperamental — across random seeds they frequently get stuck
-at 50% accuracy in poor local minima (you will verify this in Exercise 3, and the noisy
-escape story of @sec-04-training-loss-sgd is part of the cure). A few spare units cost
-little and buy reliability.
+such minimal networks are temperamental; across random seeds they frequently get stuck
+at 50% accuracy with silent units (you will verify this in Exercise 3). A few spare
+units cost little and improve reliability. @sec-04-training-loss-sgd will examine when
+optimization noise helps exploration, without treating it as a guaranteed escape.
 
 ## A cautionary tale, and a look ahead
 
@@ -350,13 +382,31 @@ knowledge into the architecture — is the turn the whole book pivots on.
    line.
 2. **A neuron is a thresholded similarity score**: below the boundary silent, above it
    proportional. One neuron $\rightarrow$ one boundary; a layer $\rightarrow$ a
-   polytope partition; two hinges $\rightarrow$ a bump.
+   polyhedral partition; three hinges $\rightarrow$ a compact bump.
 3. **Bumps tile functions** (universal approximation) — but the theorem promises
    existence, not learnability, economy, or generalization.
-4. **Depth bends boundaries**: regions grow exponentially with depth, polynomially
-   with width. That is why the field is *deep* learning.
+4. **Depth bends boundaries**: suitable deep constructions can create region counts
+   that grow exponentially with depth, yielding large efficiency gaps relative to
+   comparable shallow constructions.
 5. **The MLP is a class now** (`nn.Module`, foundation first), and it separates what
    no line can.
+
+## Sources and further reading {.unnumbered}
+
+- [Cybenko, “Approximation by Superpositions of a Sigmoidal Function”
+  (1989)](https://doi.org/10.1007/BF02551274) gives a foundational uniform universal-
+  approximation result on compact domains.
+- [Hornik, “Approximation Capabilities of Multilayer Feedforward Networks”
+  (1991)](https://doi.org/10.1016/0893-6080(91)90009-T) makes the distinction between
+  uniform and $L_p$ approximation explicit, which is exactly the jump-function nuance
+  in this chapter.
+- [Nair and Hinton, “Rectified Linear Units Improve Restricted Boltzmann Machines”
+  (2010)](https://www.cs.toronto.edu/~hinton/absps/reluICML.pdf) is an early empirical
+  account of rectifiers preserving useful signal through multiple layers.
+- [Montúfar et al., “On the Number of Linear Regions of Deep Neural Networks”
+  (2014)](https://papers.nips.cc/paper_files/paper/2014/hash/fa6f2a469cc4d61a92d96e74617c3d2a-Abstract.html)
+  develops the architecture-dependent region-count argument behind the chapter's case
+  for depth.
 
 ## Exercises {.unnumbered}
 
