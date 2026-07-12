@@ -1,6 +1,6 @@
 # Continuing the Book — Handoff & Roadmap
 
-*Written 2026-07-09 after Chapter 11 shipped; updated 2026-07-11 after Chapter 12
+*Written 2026-07-09 after Chapter 11 shipped; updated 2026-07-12 after Chapter 13
 shipped. This is the master handoff document:
 everything a fresh collaborator (human or Claude session, on any account) needs to
 continue the project without the original conversation history. Read `CLAUDE.md`
@@ -19,7 +19,7 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 | I · From Lines to Networks | 1–6 | **Shipped; repair pass complete and verified** (July 11, 2026) |
 | II · Vision | 7–9 | **Shipped; repair pass complete and verified** (July 11, 2026) |
 | III · Sequences | 10–11 | **Shipped; repair pass complete and verified** (July 11, 2026) |
-| IV · Attention | 12–16 | **12 shipped and two-format verified; 13 is next** |
+| IV · Attention | 12–16 | **12–13 shipped and two-format verified; 14 is next** |
 | V · Pretrained Era | 17–19 | Stubs with contracts |
 | Appendices | a1–a4 | Stubs (a4 floating-point queued in backlog) |
 
@@ -31,19 +31,25 @@ complete, with its fixed-kernel experiments pre-tested, frozen in both formats, 
 verified in the full-book PDF. The author's own edit pass remains a separate gate rather
 than a condition of either release.
 
+Chapter 13 is also complete: additive and scaled dot-product attention are derived,
+source-padding masking is exercised, and the Chapter 11 date benchmark has a
+matched-schedule attention rematch plus a validation-only alignment audit. Its
+implementation was independently derived after D2L-like source-code blocks were
+removed from the public snapshot.
+
 **Decisions still gated on the author:**
-- The author's own edit pass over the shipped Chapters 1–12 remains pending.
+- The author's own edit pass over the shipped Chapters 1–13 remains pending.
 - Course-site integration was approved, implemented, and shipped July 11, 2026. It uses
   a plural `bookChapters` field because modules and chapters do not map one-to-one;
   only reviewed, substantive chapters are linked. The production build passes.
-  Chapter 12's course-site link waits for the author's edit pass.
+  Chapters 12–13's course-site links wait for the author's edit pass.
 - "Deeper dive" collapsed sections: piloted in ch. 6; his verdict pending ("let us
   get back to deeper dive later"). Do not retrofit chs. 1/5.
 - GPU experiments remain backlog-only until access is available. Do not publish
   placeholder callouts in chapters; run the queued experiments on Rivanna/Colab and
   fold real results back into the relevant chapters later.
 
-## 2. The working protocol (refined over chapters 7–11)
+## 2. The working protocol (refined over chapters 7–13)
 
 The single most important lesson of this project: **pre-test every experiment
 regime before writing a word of prose.** Roughly half of all planned experiments
@@ -88,7 +94,7 @@ failed their first design (see §5 case law). The loop that works:
     contract gained specifics.
 
 **Budget expectations** (Apple Silicon, CPU): light chapters execute in ~1 min;
-training-heavy ones (9, 10, 11) run 5–15 min. That is fine — execution is
+training-heavy ones (9, 10, 11, 13) run 5–15 min. That is fine — execution is
 one-time-local (freeze), CI never executes. Keep any *single* cell under ~4–5 min
 and seed everything with `torch.manual_seed(6050)` (data variants may use fixed
 generator seeds 0/1/2/100+L etc. — keep them deterministic).
@@ -186,6 +192,10 @@ These are precedents; when a new experiment misbehaves, check here first.
   quarto-actions/setup for TinyTeX resolution; a Pages build stuck "building" is
   re-queued via `gh api -X POST …/pages/builds`; a cancelled runner job with zero
   steps is capacity noise — rerun it.
+- **One seed does not imply one minibatch order**: constructing models with different
+  parameter counts consumes different random draws before the first `randperm`.
+  Either drive batch order with an explicit generator in a true ablation or report
+  the order mismatch as a caveat (Chapter 13).
 
 ## 6. Data assets (committed; no downloads at render)
 
@@ -198,7 +208,7 @@ These are precedents; when a new experiment misbehaves, check here first.
 
 ## 7. Roadmap: the remaining chapters
 
-Work order: 13 → 14 → 15 → 16 → 17 → 18 → 19, appendices opportunistically.
+Work order: 14 → 15 → 16 → 17 → 18 → 19, appendices opportunistically.
 Each stub carries its contract; specifics accumulated so far:
 
 ### Ch. 12 — Kernel Regression: Attention Before It Was Learnable (SHIPPED)
@@ -227,20 +237,27 @@ Each stub carries its contract; specifics accumulated so far:
   ch. 7 → ch. 8's structure — this is the book's thesis rhyme: Part II pivot
   repeated in Part IV).
 
-### Ch. 13 — Attention: Making the Kernel Learnable
+### Ch. 13 — Attention: Making the Kernel Learnable (SHIPPED)
 - **Seeds**: rest of `8.1-Attention.tex`; transcripts m08 lectures 2–3 +
   `[coding]_m08_…8-3-implementing-attention-in-seq2seq…`.
-- **Contract already wired into the stub**: harvest ch. 2's softening-the-hard /
-  differentiable-lookup seeds BY NAME; **re-run ch. 11's date-normalization task
-  with attention added to the same architecture/budget** — (a) alignment heatmap
-  (decoder attending the source's year chars while emitting the year), (b)
-  convergence vs. the leak-free packed baseline on the same fixed 400-source
-  unambiguous validation subset (53.8% @ epoch 6, 95.0% @ 12), followed by one final
-  audit on the disjoint 437-source unambiguous test set (baseline 93.1%). Copy the
-  generator, unique-source rejection, and 8,000/500/500 split logic exactly.
-  Pre-test the rematch before writing.
-- Additive vs. scaled dot-product; the √d argument (pre-test the variance demo);
-  Bahdanau-style attention in the ch. 11 Seq2Seq class (keep the class's shape).
+- **Content shipped**: additive attention; learned projected Q/K/V; scaled
+  dot-product attention and the $\sqrt{d_k}$ variance argument; source-padding
+  masks; cross-attention inside the packed Chapter 11 LSTM decoder; alignment
+  diagnostics; a compact multi-head preview that leaves the full operator to ch. 14.
+- **Pinned scaling audit**: across $d_k=8,32,128,512$, raw dot-product variance is
+  $8.023,32.142,127.985,510.347$, while scaled variance stays
+  $1.003,1.004,1.000,0.997$. The mean largest 16-key softmax weight rises
+  $0.564\to0.944$ without scaling and remains about $0.24$ with scaling.
+- **Pinned date rematch**: exact ch. 11 generator/split, seed 6050, first 400
+  unambiguous validation sources, and one final 437-source test audit. Attention
+  reaches 93.25% at epoch 6 and 99.75% at epoch 12 (baseline 53.8%/95.0%), then
+  100.0% on test (baseline 93.1%). On validation, the first four decoder rows place
+  97.469% of their mass on contextual states indexed by the source-year region.
+  The attention model has 269,550 parameters vs. 169,326 (+59.2%) and a stepwise
+  decoder; this is schedule-matched, not parameter-, compute-, or batch-order-matched.
+- **Licensing repair**: D2L-like implementation blocks were removed from the public
+  `sources/8.1-Attention.tex` snapshot. The chapter implementation is independently
+  derived from the lecture equations and book-original ch. 11 pipeline.
 
 ### Ch. 14 — Self-Attention and the Transformer
 - **Seeds**: `sources/9.1-self-attention.tex` + positional-encoding/normalization
@@ -249,7 +266,9 @@ Each stub carries its contract; specifics accumulated so far:
   highway; "every block wrapped as x + F(x)"), LayerNorm (ch. 9's BN note:
   "same equation, different axis"), causal masking (ch. 11's masking warning),
   paying to get position BACK (ch. 8's pooling warning — attention is
-  permutation-equivariant).
+  permutation-equivariant), and ch. 13's remaining recurrent bottleneck: the Q/K/V
+  operator does not care where its inputs came from. Derive and implement the
+  multi-head operator that ch. 13 only previewed.
 - **Experiments**: tiny transformer LM on the book-corpus (upgrade ch. 10's
   char-LM finale — same corpus, deterministic 90/10 split, fixed-window evaluation,
   and matched budget; the LSTM's held-out baseline is 1.89);

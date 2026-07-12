@@ -1,3 +1,6 @@
+% Public source snapshot: implementation blocks whose provenance overlaps with
+% Dive into Deep Learning (D2L) have been omitted. See sources/README.md for the
+% project's stricter independent-provenance and licensing boundary.
 \documentclass{article}
 \usepackage{graphicx}
 \usepackage{amsmath}
@@ -516,45 +519,8 @@ We really wish to replace this operation with GEMM-friendly operations (The answ
 
 \subsection{Implementation}
 
-\begin{lstlisting}[language=Python, caption=Additive Attention Implementation]
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-
-class AdditiveAttention(nn.Module):
-    def __init__(self, key_size, query_size, hidden_size, dropout=0.0):
-        super().__init__()
-        self.W_k = nn.Linear(key_size, hidden_size, bias=False)
-        self.W_q = nn.Linear(query_size, hidden_size, bias=False)
-        self.w_v = nn.Linear(hidden_size, 1, bias=False)
-        self.dropout = nn.Dropout(dropout)
-        
-    def forward(self, queries, keys, values, valid_lens=None):
-        """
-        queries: (batch_size, num_queries, query_size)
-        keys: (batch_size, num_keys, key_size)
-        values: (batch_size, num_keys, value_size)
-        valid_lens: (batch_size,) or (batch_size, num_queries)
-        """
-        # Project queries and keys
-        queries = self.W_q(queries)  # (b, num_q, hidden)
-        keys = self.W_k(keys)         # (b, num_k, hidden)
-        
-        # Broadcasting: (b, num_q, 1, h) + (b, 1, num_k, h)
-        # Result: (b, num_q, num_k, h)
-        features = torch.tanh(
-            queries.unsqueeze(2) + keys.unsqueeze(1)
-        )
-        
-        # Compute scores: (b, num_q, num_k, h) -> (b, num_q, num_k)
-        scores = self.w_v(features).squeeze(-1)
-        
-        # Apply masked softmax
-        attention_weights = masked_softmax(scores, valid_lens)
-        
-        # Apply dropout and compute weighted sum
-        return torch.bmm(self.dropout(attention_weights), values)
-\end{lstlisting}
+% Additive-attention implementation omitted from the public snapshot because it
+% mirrored a D2L example. See sources/README.md.
 
 \section{Dot-Product Attention: Learning the Feature Space}
 While additive attention works well, it has a computational cost: we must run a small neural network (the MLP inside the additive function) for every query-key pair. For long sequences, this becomes expensive.
@@ -921,32 +887,8 @@ Key Insight & Learn the similarity function (MLP) & Learn the feature space (pro
 
 \subsection{Implementation}
 
-\begin{lstlisting}[language=Python, caption=Scaled Dot-Product Attention]
-class ScaledDotProductAttention(nn.Module):
-    def __init__(self, dropout=0.0):
-        super().__init__()
-        self.dropout = nn.Dropout(dropout)
-    
-    def forward(self, queries, keys, values, valid_lens=None):
-        """
-        queries: (batch_size, num_queries, d_k)
-        keys: (batch_size, num_keys, d_k)
-        values: (batch_size, num_keys, d_v)
-        """
-        d_k = queries.shape[-1]
-        
-        # Compute scores: (b, num_q, d_k) @ (b, d_k, num_k)
-        # Result: (b, num_q, num_k)
-        scores = torch.bmm(queries, keys.transpose(1, 2)) / math.sqrt(d_k)
-        # ^^ IMPROVEMENT: Use math.sqrt(d_k) instead of creating a tensor
-        
-        # Apply masked softmax
-        attention_weights = masked_softmax(scores, valid_lens)
-        
-        # Weighted sum: (b, num_q, num_k) @ (b, num_k, d_v)
-        # Result: (b, num_q, d_v)
-        return torch.bmm(self.dropout(attention_weights), values)
-\end{lstlisting}
+% Scaled dot-product implementation omitted from the public snapshot because it
+% mirrored a D2L example. See sources/README.md.
 
 \section{Practical Implementation: Batching and Masking}
 
@@ -980,36 +922,8 @@ PyTorch's batch matrix multiplication follows:
 
 Real sequences have different lengths. We pad shorter ones to a common length, but must prevent the model from attending to padding tokens.
 
-\begin{lstlisting}[language=Python, caption=Masked Softmax for Padding]
-def masked_softmax(scores, valid_lens=None):
-    """
-    Apply softmax with optional masking for padding.
-    
-    scores: (batch_size, num_queries, num_keys)
-    valid_lens: (batch_size,) - number of valid encoder positions
-                for each example
-    """
-    if valid_lens is None:
-        return F.softmax(scores, dim=-1)
-    
-    shape = scores.shape
-    # Expand valid_lens to match scores shape
-    if valid_lens.dim() == 1:
-        valid_lens = valid_lens.view(-1, 1, 1)
-        valid_lens = valid_lens.repeat(1, shape[1], 1)
-    else:
-        valid_lens = valid_lens.view(shape[0], shape[1], 1)
-    
-    # Create mask: True for valid positions
-    mask = torch.arange(shape[-1], device=scores.device)
-    mask = mask.view(1, 1, -1).repeat(shape[0], shape[1], 1)
-    mask = mask < valid_lens
-    
-    # Set invalid positions to large negative value
-    scores = scores.masked_fill(~mask, -1e9)
-    
-    return F.softmax(scores, dim=-1)
-\end{lstlisting}
+% Masked-softmax implementation omitted from the public snapshot because it
+% mirrored a D2L example. See sources/README.md.
 
 \begin{tcolorbox}[colback=red!5!white, colframe=red!50!black, title=Important: No Causal Mask in Cross-Attention]
 In decoder \textbf{cross-attention}, we do NOT use a causal mask. The decoder can attend to all encoder positions---there is no notion of ``future'' in the source sentence.
@@ -1070,32 +984,8 @@ Modern frameworks (PyTorch, JAX) handle this automatically when you use their ma
 Use $-10^9$ for FP32 training, and let your framework's masking utilities handle precision-specific values automatically (e.g., PyTorch's \texttt{torch.nn.functional.scaled\_dot\_product\_attention} with \texttt{attn\_mask}).
 \subsection{Complete Cross-Attention Layer}
 
-\begin{lstlisting}[language=Python, caption=Complete Cross-Attention for Decoder]
-class DecoderCrossAttention(nn.Module):
-    def __init__(self, d_dec, d_enc, d_k, d_v, dropout=0.1):
-        super().__init__()
-        self.W_q = nn.Linear(d_dec, d_k, bias=False)
-        self.W_k = nn.Linear(d_enc, d_k, bias=False)
-        self.W_v = nn.Linear(d_enc, d_v, bias=False)
-        self.attention = ScaledDotProductAttention(dropout)
-        
-    def forward(self, decoder_state, encoder_memory, valid_lens=None):
-        """
-        decoder_state: (batch, T_dec, d_dec)
-        encoder_memory: (batch, T_enc, d_enc)
-        valid_lens: (batch,) - valid encoder sequence lengths
-        
-        Returns: (batch, T_dec, d_v)
-        """
-        # Project to query/key/value spaces
-        Q = self.W_q(decoder_state)      # (b, T_dec, d_k)
-        K = self.W_k(encoder_memory)     # (b, T_enc, d_k)
-        V = self.W_v(encoder_memory)     # (b, T_enc, d_v)
-        
-        # Compute attention
-        context = self.attention(Q, K, V, valid_lens)
-        return context  # (b, T_dec, d_v)
-\end{lstlisting}
+% Complete cross-attention implementation omitted from the public snapshot
+% because it mirrored D2L examples. See sources/README.md.
 
 \section{Multi-Head Attention: Multiple Perspectives}
 
@@ -1169,106 +1059,8 @@ If we were to remove the RNN entirely (as we will next lecture), the attention m
 
 % \subsection{Implementation}
 
-% \begin{lstlisting}[language=Python, caption=Multi-Head Cross-Attention]
-% class MultiHeadCrossAttention(nn.Module):
-%     def __init__(self, d_dec, d_enc, d_model, num_heads, dropout=0.1):
-%         super().__init__()
-%         assert d_model % num_heads == 0
-        
-%         self.d_model = d_model
-%         self.num_heads = num_heads
-%         self.d_k = d_model // num_heads
-        
-%         # Projections for all heads (combined)
-%         self.W_q = nn.Linear(d_dec, d_model, bias=False)
-%         self.W_k = nn.Linear(d_enc, d_model, bias=False)
-%         self.W_v = nn.Linear(d_enc, d_model, bias=False)
-%         self.W_o = nn.Linear(d_model, d_model, bias=False)
-        
-%         self.attention = ScaledDotProductAttention(dropout)
-        
-%     def forward(self, decoder_state, encoder_memory, valid_lens=None):
-%         """
-%         decoder_state: (batch, T_dec, d_dec)
-%         encoder_memory: (batch, T_enc, d_enc)
-%         """
-%         batch_size = decoder_state.shape[0]
-        
-%         # Linear projections and split into heads
-%         # (b, T, d_model) -> (b, T, num_heads, d_k) -> (b, num_heads, T, d_k)
-%         Q = self.W_q(decoder_state).view(
-%             batch_size, -1, self.num_heads, self.d_k
-%         ).transpose(1, 2)
-        
-%         K = self.W_k(encoder_memory).view(
-%             batch_size, -1, self.num_heads, self.d_k
-%         ).transpose(1, 2)
-        
-%         V = self.W_v(encoder_memory).view(
-%             batch_size, -1, self.num_heads, self.d_k
-%         ).transpose(1, 2)
-        
-%         # Reshape for batch processing: (b*num_heads, T, d_k)
-%         Q = Q.reshape(batch_size * self.num_heads, -1, self.d_k)
-%         K = K.reshape(batch_size * self.num_heads, -1, self.d_k)
-%         V = V.reshape(batch_size * self.num_heads, -1, self.d_k)
-        
-%         # Repeat valid_lens for each head
-%         if valid_lens is not None:
-%             valid_lens = valid_lens.repeat_interleave(self.num_heads)
-        
-%         # Apply attention
-%         attn_output = self.attention(Q, K, V, valid_lens)
-        
-%         # Reshape and concatenate heads
-%         # (b*num_heads, T_dec, d_k) -> (b, num_heads, T_dec, d_k)
-%         attn_output = attn_output.reshape(
-%             batch_size, self.num_heads, -1, self.d_k
-%         )
-%         # (b, num_heads, T_dec, d_k) -> (b, T_dec, d_model)
-%         attn_output = attn_output.transpose(1, 2).contiguous().reshape(
-%             batch_size, -1, self.d_model
-%         )
-        
-%         # Output projection
-%         return self.W_o(attn_output)
-% \end{lstlisting}
-
-
-% \begin{tcolorbox}[colback=yellow!5!white, colframe=orange!50!black, title=Why .contiguous()?]
-% After \texttt{transpose()}, the tensor's memory layout is no longer contiguous (elements are not stored sequentially in memory). The \texttt{.reshape()} operation requires contiguous memory, so we call \texttt{.contiguous()} to create a contiguous copy. 
-
-% This is a PyTorch implementation detail: operations like \texttt{transpose()} create a view with different strides but don't physically rearrange memory. \texttt{reshape()} needs the data laid out sequentially.
-% \end{tcolorbox}
-
-% \begin{tcolorbox}[colback=blue!5!white, colframe=blue!75!black, title=Connection to PyTorch's Built-in Implementation]
-% PyTorch provides \texttt{nn.MultiheadAttention}, which implements the same mechanism with additional optimizations:
-
-% \begin{lstlisting}[language=Python]
-% mha = nn.MultiheadAttention(
-%     embed_dim=512,    # d_model
-%     num_heads=8,
-%     dropout=0.1,
-%     batch_first=True  # Use (batch, seq, feature) order
-% )
-
-% # For cross-attention:
-% output, attn_weights = mha(
-%     query=decoder_state,      # (batch, T_dec, d_model)
-%     key=encoder_memory,       # (batch, T_enc, d_model)
-%     value=encoder_memory,     # (batch, T_enc, d_model)
-%     key_padding_mask=mask     # (batch, T_enc) - True for padding
-% )
-% \end{lstlisting}
-
-% Our implementation above teaches the concepts. In practice, use PyTorch's optimized version, which includes:
-% \begin{itemize}
-%     \item Fused kernels for better performance
-%     \item Support for key/value caching (important for inference)
-%     \item Optional bias terms
-%     \item Flexible masking options
-% \end{itemize}
-% \end{tcolorbox}
+% Multi-head and built-in-library implementation examples omitted from the public
+% snapshot because they mirrored D2L examples. See sources/README.md.
 
 % \subsection{What Do Different Heads Learn?}
 
@@ -1498,7 +1290,7 @@ Next lecture: \textbf{Self-Attention and the Transformer Revolution}.
 \subsection{Textbooks}
 
 \begin{itemize}
-    \item Zhang, A., et al. (2023). \textit{Dive into Deep Learning}. Chapter 11: Attention Mechanisms and Transformers.
+    % D2L textbook item omitted from the public snapshot. See sources/README.md.
     \item Jurafsky, D., \& Martin, J. H. (2023). \textit{Speech and Language Processing} (3rd ed.). Chapter 10: Transformers and Large Language Models.
 \end{itemize}
 

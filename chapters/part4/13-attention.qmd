@@ -1,29 +1,978 @@
 # Attention: Making the Kernel Learnable {#sec-13-attention}
 
-::: {.callout-warning}
-**Chapter stub.** This chapter is planned but not yet written. The abstract below is its
-contract; drafting sources are listed for provenance.
+<!-- lecture-source:
+     m08_lecture-8-2-attention-mechanism-part-2_oq92FA-_xa4.txt
+     [coding]_m08_lecture-8-3-implementing-attention-in-seq2seq-de_nDcFkXXFzJs.txt
+     (spine via ds6050_08_attention/MODULE_NOTES.md; S04-S08 scene compositions)
+     seeds: sources/8.1-Attention.tex (§Additive Attention through §Where
+            Cross-Attention Fits), sources/Bridge_to_attention.tex (§Part 4,
+            §Alignment Matrix, §Query/Keys/Values)
+     primary sources: Bahdanau et al. 2014/2015; Luong et al. 2015;
+                      Vaswani et al. 2017
+     provenance note: the date generator and split are copied byte-for-byte from
+     the book-original Chapter 11 cell. The attention code is an independent
+     implementation from the lecture equations and Chapter 11 architecture.
+     D2L-like reference implementations in the source snapshot were omitted under
+     sources/README.md and were not used. The coding lecture omitted the
+     source-padding attention mask; this chapter adds it as a correctness repair.
+     Self-attention, causal masking, and the full multi-head implementation wait
+     for Chapter 14. -->
+
+Chapter 12 built the whole attention operator except for one piece. It had a query,
+a bank of keys and values, a score for every query--key pair, softmax weights, and a
+weighted read. But Euclidean distance decided what counted as similar. The task
+could tune the bandwidth; it could not invent a better notion of relevance.
+
+Chapter 11 left us a more pointed promise: **hard address, learned content**. An
+embedding can learn what lives at row 17, but fetching row 17 is still a rigid
+indexing operation. Chapter 2 told us how to soften that hard choice. Replace the
+single address with a differentiable distribution over addresses, let the loss
+send blame through every score, and learn which memory locations deserve weight.
+A differentiable lookup, Chapter 2 promised, is precisely attention. The promise
+comes due here.
+
+<!-- NOVEL: needs sign-off - opening preview of the seeded date-rematch results. -->
+
+The result is visible in the date task before we name all its parts. For the fixed
+validation source
+
+```text
+may 17, 1971  ->  1971-05-17
+```
+
+the trained decoder emits the year first even though those four characters sit at
+the end of the source. Across the fixed 400-example validation audit, its first four
+attention rows place **97.5%** of their mass on the four contextual encoder states
+indexed by the source-year characters. When the example above emits its second
+character, **9**, the largest weight is 0.856 on the state indexed by the source's
+9; when it emits **7**, the largest weight is 0.985 on the state indexed by the 7
+in the year region. Those weights were not supervised as alignments. The date loss
+taught the model where useful information lived.
+
+<!-- /NOVEL -->
+
+## The scores-to-weights machine, one more time
+
+Let the encoder retain its full memory
+
+$$
+\matr{H}=[\vect{h}_1,\ldots,\vect{h}_n]^\top
+\in\mathbb{R}^{n\times d_e}.
+$$
+
+At decoder step $t$, use the previous decoder hidden state
+$\vect{s}_{t-1}\in\mathbb{R}^{d_d}$ as the query. A learned compatibility function
+$a_\theta$ produces one score per source position:
+
+$$
+e_{t,i}=a_\theta(\vect{s}_{t-1},\vect{h}_i).
+$$
+
+For each padded batch item $b$, let $M_{b,i}=0$ at real source positions and
+$M_{b,i}=-\infty$ at padding. Suppress the batch index below. Then
+
+$$
+\alpha_{t,i}
+=\operatorname{softmax}_i(e_{t,i}+M_i),
+\qquad
+\vect{c}_t=\sum_{i=1}^{n}\alpha_{t,i}\vect{h}_i.
+$$ {#eq-learned-cross-attention}
+
+This is Chapter 12's fixed matrix $\matr{A}\matr{V}$ with a learned score. It is
+also Chapter 2's **scores $\rightarrow$ weights** machine in exactly the form that
+chapter advertised. A hard source-position choice would use argmax and one-hot
+indexing. The soft weights move continuously when the scores move, so backpropagation
+can tell the scorer how each valid address affected the loss. We have
+**softened the hard**.
+
+Because the query comes from the decoder and the memory comes from the encoder, this
+is **cross-attention**. It bridges two sequences. The model still initializes the
+decoder from the encoder's final state, but that fixed bridge is no longer the only
+path from source to output: every decoder step receives its own context
+$\vect{c}_t$. Chapters 10 and 11 called the old handoff a **finite-state
+bottleneck**. Chapter 12 kept the memory bank; this chapter completes that relay by
+learning its access rule.
+
+Chapter 8 made one other promise. A CNN buys global sight by stacking local
+operations until its receptive field spans the input. One cross-attention read can
+score every encoder position in a single layer. It buys global access directly,
+paying for all query--key comparisons and, for now, for the RNNs that created those
+states sequentially.
+
+## Additive attention: learn the comparison itself
+
+The most literal answer to "make similarity learnable" is a small neural network.
+Choose an alignment width $d_a$. For one decoder query and one encoder state,
+
+$$
+e_{t,i}
+=\vect{v}_a^\top
+\tanh\!\left(
+  \matr{W}_q\vect{s}_{t-1}
+  +\matr{W}_k\vect{h}_i
+\right),
+$$ {#eq-additive-attention}
+
+where
+
+$$
+\matr{W}_q\in\mathbb{R}^{d_a\times d_d},
+\qquad
+\matr{W}_k\in\mathbb{R}^{d_a\times d_e},
+\qquad
+\vect{v}_a\in\mathbb{R}^{d_a}.
+$$
+
+The two projections put objects of different native sizes into one alignment space.
+The tanh creates match features, and $\vect{v}_a$ selects which of those features
+matter for the scalar score. The same parameters are reused for every decoder
+step $t$ and source position $i$. Remember Chapter 7's sliding filter: one learned
+rule, applied everywhere. Attention shares a compatibility rule across pairs.
+
+For a batch, let
+$\matr{S}_{t-1}\in\mathbb{R}^{B\times1\times d_d}$ collect the queries. The
+row-major shapes make the broadcasting explicit:
+
+$$
+\matr{S}_{t-1}\matr{W}_q^\top: (B,1,d_a),
+\qquad
+\matr{H}\matr{W}_k^\top: (B,n,d_a).
+$$
+
+Their sum produces $(B,n,d_a)$ match features. Reduction by $\vect{v}_a$ produces
+$(B,n)$ scores, softmax runs over the $n$ source positions, and the weighted read
+returns a $(B,d_e)$ context. That last axis choice is not bookkeeping: softmax over
+the wrong dimension answers the wrong question.
+
+The lecture's scene freezes one simple parameter snapshot so we can watch the
+arithmetic. With identity projections and an all-ones selector, three source states
+receive scores $(1.015,1.562,1.124)$ and therefore weights
+$(0.260,0.450,0.290)$:
+
+```{python}
+#| label: fig-additive-scorer
+#| fig-cap: "Additive attention learns a compatibility function. Query and key enter separate projections, their alignment features interact through tanh, and a learned selector reduces those features to one score. The right panel freezes one parameter setting to show the resulting scores-to-weights calculation; it is arithmetic, not a trained result."
+#| code-summary: "Figure: the additive scorer and a three-key numerical snapshot"
+from __future__ import annotations
+
+import math
+import random
+
+import matplotlib.pyplot as plt
+from matplotlib.patches import FancyBboxPatch
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+torch.manual_seed(6050)
+
+query_snapshot = np.array([0.5, 0.5, 0.2, -0.1])
+key_snapshot = np.array([
+    [-0.3, 0.1, 0.2, 0.0],
+    [0.6, 0.5, 0.1, -0.2],
+    [0.0, -0.4, 0.3, 0.2],
+])
+snapshot_scores = np.tanh(query_snapshot + key_snapshot).sum(axis=1)
+snapshot_weights = np.exp(snapshot_scores - snapshot_scores.max())
+snapshot_weights /= snapshot_weights.sum()
+
+fig, axes = plt.subplots(1, 2, figsize=(7.5, 3.0),
+                         gridspec_kw={"width_ratios": [1.35, 1]})
+ax = axes[0]
+ax.set_xlim(0, 10); ax.set_ylim(0, 5); ax.axis("off")
+
+def stage_box(x: float, y: float, label: str, color: str,
+              width: float = 1.25) -> None:
+    box = FancyBboxPatch(
+        (x - width / 2, y - 0.36), width, 0.72,
+        boxstyle="round,pad=0.06", facecolor=color,
+        edgecolor="#232D4B", linewidth=1.1,
+    )
+    ax.add_patch(box)
+    ax.text(x, y, label, ha="center", va="center", fontsize=9)
+
+stage_box(0.9, 3.7, r"$s_{t-1}$", "#F9DCBF")
+stage_box(0.9, 1.5, r"$h_i$", "#DCEAF7")
+stage_box(3.0, 3.7, r"$W_q$", "#F9DCBF")
+stage_box(3.0, 1.5, r"$W_k$", "#DCEAF7")
+stage_box(5.0, 2.6, "+", "#F4F4EF", 0.8)
+stage_box(6.7, 2.6, "tanh", "#E8E3F2")
+stage_box(8.3, 2.6, r"$v_a^\top$", "#FCE8B2")
+ax.text(9.6, 2.6, r"$e_{t,i}$", ha="center", va="center",
+        color="#B45309", fontsize=11)
+for start, end in [
+    ((1.55, 3.7), (2.35, 3.7)), ((1.55, 1.5), (2.35, 1.5)),
+    ((3.65, 3.7), (4.55, 2.85)), ((3.65, 1.5), (4.55, 2.35)),
+    ((5.4, 2.6), (6.08, 2.6)), ((7.32, 2.6), (7.68, 2.6)),
+    ((8.95, 2.6), (9.25, 2.6)),
+]:
+    ax.annotate("", end, start,
+                arrowprops={"arrowstyle": "->", "color": "#4A5568", "lw": 1.2})
+ax.set_title("One shared learned scorer", fontsize=10)
+
+labels = [r"$h_1$", r"$h_2$", r"$h_3$"]
+axes[1].bar(labels, snapshot_weights,
+            color=["#A9B7C9", "#E57200", "#C99456"])
+for i, (score, weight) in enumerate(zip(snapshot_scores, snapshot_weights)):
+    axes[1].text(i, weight + 0.018, f"{weight:.3f}",
+                 ha="center", fontsize=9)
+    axes[1].text(i, 0.025, f"$e={score:.3f}$",
+                 ha="center", va="bottom", fontsize=8, rotation=90, color="white")
+axes[1].set(ylabel="softmax weight", ylim=(0, 0.53),
+            title="Scores decide the read")
+plt.tight_layout()
+plt.show()
+```
+
+::: {.callout-note}
+## "Learned kernel" is an analogy
+
+Exponentiating a learned score and normalizing it reproduces the
+Nadaraya--Watson algebra. It does not make every attention score a classical kernel.
+Separate query and key projections can make $a_\theta(q,k)$ asymmetric and not
+positive semidefinite. What survives exactly is the operational pattern:
+compare $\rightarrow$ normalize $\rightarrow$ mix.
 :::
 
-*Replace the fixed kernel with learned projections: queries, keys, values. Additive vs
-scaled dot-product (and why matrix hardware prefers the latter), the $\sqrt{d}$
-scaling, masking, and multi-head attention. The seq2seq bottleneck falls. Harvest two
-Chapter 2 seeds by name: softmax as the scores-to-weights machine, and the "softening
-the hard" motif — attention **is** the differentiable lookup promised there. Re-run
-Chapter 11's leak-free date-normalization benchmark with attention added to the same
-architecture and budget: (a) visualize alignment as decoder-step by source-character
-heatmaps; (b) compare convergence on the same fixed subset of 400 unambiguous
-validation sources. The packed no-attention baseline scores 53.8% at epoch 6 and
-95.0% at epoch 12 on that validation subset, then 93.1% in the one final audit on all
-437 unambiguous test sources after 25 epochs. Copy `make_date`, the unique-source
-rejection, and the 8,000/500/500 train/validation/test split exactly; otherwise it is
-not the running benchmark. This is the date-task counterpart of the Chapter 6→8
-shift-cliff rematch.*
+## Scaled dot product: learn the spaces, simplify the score
 
-<!-- draft-sources
-seeds:
-- `sources/8.1-Attention.tex (rest)`
-transcripts:
-- `m08 lectures 2-3`
-- `[coding]_m08_lecture-8-3-implementing-attention-in-seq2seq-de_nDcFkXXFzJs.txt`
--->
+For $m$ decoder queries, additive attention is vectorized, but it forms a
+$(B,m,n,d_a)$ intermediate,
+applies an elementwise tanh, and reduces it. Dense matrix multiplication has a
+simpler computational path. Chapter 1 introduced the dot product as a similarity
+score against a template. Here the key is the template, and training learns the
+space in which that comparison is useful.
+
+The lecture first walks one four-dimensional query past three keys. Its raw dot
+products are $(1.10,-0.60,0.15)$. Since $\sqrt{4}=2$, scaling gives
+$(0.55,-0.30,0.075)$, and softmax gives $(0.488,0.209,0.303)$:
+
+```{python}
+#| label: scaled-dot-snapshot
+#| code-summary: "Code: one query through dot product, scaling, and softmax"
+query_walk = torch.tensor([0.9, -0.3, 0.2, 0.6])
+key_walk = torch.tensor([
+    [0.8, -0.2, 0.1, 0.5],
+    [-0.5, 0.9, 0.0, 0.2],
+    [0.3, 0.0, 0.6, -0.4],
+])
+raw_walk = key_walk @ query_walk
+scaled_walk = raw_walk / math.sqrt(query_walk.numel())
+weight_walk = torch.softmax(scaled_walk, dim=0)
+print("raw scores:", raw_walk.numpy())
+print("scaled scores:", scaled_walk.numpy())
+print("weights:", weight_walk.numpy(), "sum:", weight_walk.sum().item())
+```
+
+Now let raw decoder features
+$\matr{D}\in\mathbb{R}^{B\times m\times d_d}$ and encoder memory
+$\matr{H}\in\mathbb{R}^{B\times n\times d_e}$ enter learned projections:
+
+$$
+\begin{aligned}
+\matr{Q}&=\matr{D}\matr{W}_Q,
+&\matr{W}_Q&\in\mathbb{R}^{d_d\times d_k},\\
+\matr{K}&=\matr{H}\matr{W}_K,
+&\matr{W}_K&\in\mathbb{R}^{d_e\times d_k},\\
+\matr{V}&=\matr{H}\matr{W}_V,
+&\matr{W}_V&\in\mathbb{R}^{d_e\times d_v}.
+\end{aligned}
+$$
+
+The resulting tensors have shapes
+
+$$
+\matr{Q}\in\mathbb{R}^{B\times m\times d_k},\qquad
+\matr{K}\in\mathbb{R}^{B\times n\times d_k},\qquad
+\matr{V}\in\mathbb{R}^{B\times n\times d_v}.
+$$
+
+Only the projected query and key widths must agree. The raw encoder and decoder
+widths need not. Let
+$\matr{M}\in\mathbb{R}^{B\times1\times n}$ broadcast across queries.
+**Scaled dot-product attention** is
+
+$$
+\operatorname{Attention}(\matr{Q},\matr{K},\matr{V})
+=\operatorname{softmax}\!\left(
+  \frac{\matr{Q}\matr{K}^{\top}}{\sqrt{d_k}}+\matr{M}
+\right)\matr{V},
+$$ {#eq-scaled-dot-product}
+
+where $\matr{K}^{\top}$ transposes the last two axes within each batch. Softmax runs
+over the last, key-position axis. The hot path is two dense products:
+$\matr{Q}\matr{K}^{\top}$ and $\matr{A}\matr{V}$. Additive attention remains
+useful and accelerator-compatible; scaled dot product simply maps more directly to
+the matrix operations modern numerical libraries optimize heavily.
+
+Luong and colleagues compared unscaled dot, general, and concat scores in recurrent
+translation. Vaswani and colleagues later introduced the $1/\sqrt{d_k}$ scaling in
+the Transformer formulation. The mechanisms belong in one conceptual family, not a
+single inevitable historical derivation.
+
+The dot product is not magically semantic. $\matr{W}_Q$ and $\matr{W}_K$ learn
+which features to compare, including their magnitudes, while the surrounding RNN
+has already built nonlinear sequence features. In Chapter 14, a feed-forward
+network will help provide that nonlinear feature transformation after recurrence
+disappears.
+
+### Why divide by $\sqrt{d_k}$?
+
+Suppose, for the moment, that projected coordinates $q_\ell$ and $k_\ell$ are
+independent, mean zero, and variance one, and that their products are independent
+across coordinates. Then
+
+$$
+\E[\vect{q}^{\top}\vect{k}]=0,
+\qquad
+\var(\vect{q}^{\top}\vect{k})
+=\sum_{\ell=1}^{d_k}\var(q_\ell k_\ell)=d_k.
+$$
+
+The score's standard deviation grows as $\sqrt{d_k}$. Dividing by that quantity
+returns the idealized variance to one. This is a variance-control rationale, not a
+promise that trained projections remain independent or unit variance.
+
+<!-- NOVEL: needs sign-off - seeded sqrt(d_k) variance/softmax audit and results. -->
+
+Let us test both the variance and what softmax sees. For each width, draw 20,000
+queries and 16 independent keys per query:
+
+```{python}
+#| label: fig-sqrt-d-audit
+#| fig-cap: "The scaling argument under its stated random-feature assumptions. Left: raw dot-product variance grows with width, while division by the square root of the width keeps it near one. Right: without scaling, a 16-key softmax becomes nearly one-hot as width grows; scaling keeps its mean largest weight near 0.25. These are seeded synthetic draws about concentration, not a claim about every trained layer's gradients."
+#| code-summary: "Code: audit score variance and softmax concentration versus width"
+scaling_gen = torch.Generator().manual_seed(6050132)
+scaling_rows = []
+for width in (8, 32, 128, 512):
+    raw_parts, raw_max_parts, scaled_max_parts = [], [], []
+    for _ in range(20_000 // 500):
+        q = torch.randn(500, 1, width, generator=scaling_gen)
+        k = torch.randn(500, 16, width, generator=scaling_gen)
+        raw = (q * k).sum(-1)
+        raw_parts.append(raw.reshape(-1))
+        raw_max_parts.append(torch.softmax(raw, dim=-1).max(-1).values)
+        scaled_max_parts.append(
+            torch.softmax(raw / math.sqrt(width), dim=-1).max(-1).values
+        )
+    raw_scores = torch.cat(raw_parts)
+    scaling_rows.append((
+        width,
+        raw_scores.var(unbiased=True).item(),
+        (raw_scores / math.sqrt(width)).var(unbiased=True).item(),
+        torch.cat(raw_max_parts).mean().item(),
+        torch.cat(scaled_max_parts).mean().item(),
+    ))
+
+print("d_k   raw var   scaled var   raw max-w   scaled max-w")
+for row in scaling_rows:
+    print(f"{row[0]:3d}   {row[1]:8.3f}   {row[2]:10.3f}   "
+          f"{row[3]:9.3f}   {row[4]:12.3f}")
+
+scaling_array = np.asarray(scaling_rows)
+fig, axes = plt.subplots(1, 2, figsize=(7.3, 3.0), constrained_layout=True)
+axes[0].plot(scaling_array[:, 0], scaling_array[:, 1], "o-",
+             color="#E57200", label="raw")
+axes[0].plot(scaling_array[:, 0], scaling_array[:, 2], "s-",
+             color="#232D4B", label=r"divided by $\sqrt{d_k}$")
+axes[0].set(xscale="log", yscale="log", xlabel=r"projected width $d_k$",
+            ylabel="empirical score variance", title="Control the score scale")
+axes[0].legend(frameon=False, fontsize=8)
+axes[1].plot(scaling_array[:, 0], scaling_array[:, 3], "o-",
+             color="#E57200", label="raw")
+axes[1].plot(scaling_array[:, 0], scaling_array[:, 4], "s-",
+             color="#232D4B", label="scaled")
+axes[1].set(xscale="log", ylim=(0, 1), xlabel=r"projected width $d_k$",
+            ylabel="mean largest weight", title="Control softmax concentration")
+axes[1].legend(frameon=False, fontsize=8)
+plt.show()
+```
+
+Raw variance rises from $8.02$ to $510.35$ as $d_k$ grows from 8 to 512. Scaled
+variance stays between $0.997$ and $1.004$. Over the same range, the average
+largest unscaled softmax weight climbs from $0.564$ to $0.944$; the scaled value
+stays near $0.24$. This is Chapter 2's **temperature dial** returning with a
+dimension-dependent setting. Scaling corrects the dimension-induced spread; it does
+not normalize the vectors.
+
+<!-- /NOVEL -->
+
+## Mask before softmax, and mask the right thing
+
+Chapter 11 showed that padding can poison an encoder's final state. Attention creates
+a third place to enforce sequence lengths: the score matrix. A padded key must not
+receive a merely mediocre score. It must be excluded before normalization. Setting
+its score to zero is wrong because $\exp(0)=1$ still earns weight.
+
+<!-- NOVEL: needs sign-off - independent mask implementation and all-masked guard. -->
+
+Here is an independently written scaled-dot operator. It accepts already projected
+queries, keys, and values, then audits a batch whose second example has two padded
+keys:
+
+```{python}
+#| label: fig-padding-mask
+#| fig-cap: "A source-padding mask acts before softmax. The second example has only two real keys; its last two score cells are excluded and receive exactly zero weight. Cross-attention may read every real source position, so no causal triangle belongs here."
+#| code-summary: "Code: scaled dot-product attention with a source-padding mask"
+def scaled_dot_attention(
+    queries: torch.Tensor,
+    keys: torch.Tensor,
+    values: torch.Tensor,
+    key_is_valid: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Attend with Q:(B,m,d_k), K:(B,n,d_k), V:(B,n,d_v)."""
+    if queries.ndim != 3 or keys.ndim != 3 or values.ndim != 3:
+        raise ValueError("Q, K, and V must be three-dimensional")
+    if queries.shape[-1] != keys.shape[-1]:
+        raise ValueError("projected Q and K widths must match")
+    if keys.shape[:2] != values.shape[:2]:
+        raise ValueError("K and V must have the same batch and key axes")
+    if key_is_valid.shape != keys.shape[:2] or not key_is_valid.any(dim=1).all():
+        raise ValueError("every example needs at least one valid key")
+
+    scores = queries @ keys.transpose(-2, -1) / math.sqrt(keys.shape[-1])
+    scores = scores.masked_fill(~key_is_valid[:, None, :], -torch.inf)
+    weights = torch.softmax(scores, dim=-1)
+    return weights @ values, weights
+
+mask_gen = torch.Generator().manual_seed(6050133)
+Q_demo = torch.randn(2, 2, 4, generator=mask_gen)
+K_demo = torch.randn(2, 4, 4, generator=mask_gen)
+V_demo = torch.randn(2, 4, 3, generator=mask_gen)
+valid_demo = torch.tensor([[True, True, True, True],
+                           [True, True, False, False]])
+context_demo, mask_weights = scaled_dot_attention(
+    Q_demo, K_demo, V_demo, valid_demo
+)
+assert torch.allclose(
+    mask_weights.sum(-1), torch.ones_like(mask_weights[..., 0])
+)
+assert torch.count_nonzero(mask_weights[1, :, 2:]) == 0
+print("Q", tuple(Q_demo.shape), "K", tuple(K_demo.shape),
+      "V", tuple(V_demo.shape), "A", tuple(mask_weights.shape),
+      "AV", tuple(context_demo.shape))
+print("maximum row-sum error:",
+      f"{(mask_weights.sum(-1) - 1).abs().max().item():.2e}")
+print("maximum padded weight:",
+      f"{mask_weights[1, :, 2:].max().item():.1f}")
+
+fig, ax = plt.subplots(figsize=(5.8, 2.5), constrained_layout=True)
+shown = mask_weights[1].detach().numpy()
+image = ax.imshow(shown, vmin=0, vmax=shown.max(), cmap="magma", aspect="auto")
+for row in range(shown.shape[0]):
+    for col in range(shown.shape[1]):
+        label = "PAD" if col >= 2 else f"{shown[row, col]:.2f}"
+        ax.text(col, row, label, ha="center", va="center",
+                color="white" if shown[row, col] < 0.65 * shown.max() else "black")
+ax.set(xticks=range(4), xticklabels=["key 1", "key 2", "pad", "pad"],
+       yticks=range(2), yticklabels=["query 1", "query 2"],
+       xlabel="source/key position", title="Mask source padding before softmax")
+fig.colorbar(image, ax=ax, label="attention weight", fraction=0.05, pad=0.04)
+plt.show()
+```
+
+::: {.callout-warning}
+## Three masks are not one mask
+
+The target loss mask says which output positions should not be graded; it remains
+good general hygiene but is dormant for this fixed-length ISO target. The
+cross-attention padding mask says which source positions do not exist. A causal mask
+says which future target positions may not be seen. Our recurrent decoder generates
+one step at a time and the entire source is already available, so the source-padding
+attention mask is the one exercised here. Chapter 14 will use causal masking inside
+decoder self-attention.
+
+An all-masked row has no sensible distribution and would make softmax of all
+$-\infty$ undefined. Good hygiene is to assert that every example has at least one
+real key, as the function does above.
+:::
+
+<!-- /NOVEL -->
+
+## Return to Chapter 11's date task
+
+The abstraction has earned a real rematch. We will change one architectural idea and
+keep the experimental contract fixed:
+
+- the same date generator and duplicate-source rejection;
+- the same 8,000/500/500 train/validation/test split;
+- the same embedding width 32 and LSTM hidden width 128;
+- the same Adam learning rate $10^{-3}$, batch size 128, 25 epochs, teacher forcing,
+  gradient clip 5, and seed 6050;
+- the same first 400 unambiguous validation sources for every learning curve;
+- one final scalar audit on the same 437 unambiguous test sources.
+
+The generator and split below are deliberately byte-for-byte copies of Chapter 11.
+Changing them would end the running benchmark:
+
+```{python}
+#| label: date-data-rematch
+#| code-summary: "Code: reconstruct Chapter 11's sealed date benchmark"
+import random, torch
+import torch.nn as nn
+import torch.nn.functional as F
+import matplotlib.pyplot as plt
+
+MONTHS = ["january", "february", "march", "april", "may", "june", "july",
+          "august", "september", "october", "november", "december"]
+DAYS = dict(zip(MONTHS, [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]))
+
+def make_date(rng: random.Random) -> tuple[str, str]:
+    mo = rng.randrange(12)
+    d = rng.randrange(1, DAYS[MONTHS[mo]] + 1)
+    y = rng.randrange(1950, 2026)
+    iso = f"{y:04d}-{mo+1:02d}-{d:02d}"
+    style = rng.random()
+    if style < 0.35:
+        src = f"{MONTHS[mo]} {d}, {y}"
+    elif style < 0.6:
+        src = f"{d} {MONTHS[mo]} {y}"
+    elif rng.random() < 0.7:
+        src = f"{mo+1:02d}/{d:02d}/{y}"            # US convention: mm/dd
+    else:
+        src = f"{d:02d}/{mo+1:02d}/{y}"            # EU convention: dd/mm
+    return src, iso
+
+rng = random.Random(6050)
+pairs, seen_sources = [], set()
+while len(pairs) < 9000:
+    pair = make_date(rng)
+    if pair[0] not in seen_sources:
+        seen_sources.add(pair[0])
+        pairs.append(pair)
+train_pairs = pairs[:8000]
+valid_pairs = pairs[8000:8500]
+test_pairs = pairs[8500:]
+print(*pairs[:4], sep="\n")
+train_sources = {s for s, _ in train_pairs}
+valid_sources = {s for s, _ in valid_pairs}
+test_sources = {s for s, _ in test_pairs}
+print("exact-source overlaps: "
+      f"train/valid {len(train_sources & valid_sources)}, "
+      f"train/test {len(train_sources & test_sources)}, "
+      f"valid/test {len(valid_sources & test_sources)}")
+
+PAD, BOS, EOS = 0, 1, 2                             # special tokens first
+SRC = sorted(set("".join(s for s, _ in pairs)))
+TGT = sorted(set("".join(t for _, t in pairs)))
+src_stoi = {c: i + 3 for i, c in enumerate(SRC)}
+tgt_stoi = {c: i + 3 for i, c in enumerate(TGT)}
+tgt_itos = {i: c for c, i in tgt_stoi.items()}
+V_src, V_tgt = len(SRC) + 3, len(TGT) + 3
+print(f"source vocab {V_src}, target vocab {V_tgt}")
+```
+
+Numeric dates can be ambiguous, so we retain the same unambiguous subsets as Chapter
+11. Design decisions and the heatmap use validation only. The test set remains a
+single number at the end.
+
+### Put the learned read inside the recurrent decoder
+
+The packed encoder now returns two things: its final $(\vect{h},\vect{c})$ state,
+which still initializes the decoder, and a padded memory tensor containing every
+real encoder output plus a validity mask that excludes the padded slots. At step $t$:
+
+1. use decoder hidden state $\vect{s}_{t-1}$ as the query;
+2. compute additive scores over the encoder memory and mask padding;
+3. form the context $\vect{c}_t$;
+4. concatenate $\vect{c}_t$ with the embedding of the previous target token;
+5. advance one decoder LSTM step, then predict from
+   $[\vect{s}_t;\vect{c}_t]$.
+
+This timing follows the Bahdanau-style formulation. Luong-style variants often score
+with the current decoder state instead; both are valid, but silently mixing their
+indices makes an implementation impossible to audit.
+
+For this date model, the shape ledger is concrete:
+
+| quantity | shape |
+|---|---|
+| previous hidden query | $(B,128)$ |
+| encoder memory | $(B,T_{\text{src}},128)$ |
+| attention weights | $(B,T_{\text{src}})$ |
+| context | $(B,128)$ |
+| token embedding joined with context | $(B,1,160)$ |
+| decoder output | $(B,1,128)$ |
+| output-head input $[\vect{s}_t;\vect{c}_t]$ | $(B,256)$ |
+
+<!-- NOVEL: needs sign-off - independently written attentive date model and rematch. -->
+
+```{python}
+#| label: attentive-seq2seq
+#| code-summary: "Code: a masked additive-attention LSTM decoder"
+def batchify(prs: list[tuple[str, str]], idx: list[int]) -> tuple[
+    torch.Tensor, torch.Tensor, torch.Tensor
+]:
+    srcs = [torch.tensor([src_stoi[c] for c in prs[i][0]]) for i in idx]
+    lengths = torch.tensor([len(s) for s in srcs])
+    tgts = [torch.tensor([BOS] + [tgt_stoi[c] for c in prs[i][1]] + [EOS])
+            for i in idx]
+    S = nn.utils.rnn.pad_sequence(srcs, batch_first=True, padding_value=PAD)
+    T = nn.utils.rnn.pad_sequence(tgts, batch_first=True, padding_value=PAD)
+    return S, lengths, T
+
+def unambiguous(prs: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    return [(s, t) for s, t in prs
+            if "/" not in s or int(s[:2]) > 12 or int(s[3:5]) > 12]
+
+valid_unamb = unambiguous(valid_pairs)
+test_unamb = unambiguous(test_pairs)
+valid_fixed = valid_unamb[:400]
+print(f"fixed validation {len(valid_fixed)}; final test {len(test_unamb)}")
+
+class LearnedAlignment(nn.Module):
+    def __init__(self, hidden: int = 128, alignment: int = 128):
+        super().__init__()
+        self.key_map = nn.Linear(hidden, alignment, bias=False)
+        self.query_map = nn.Linear(hidden, alignment, bias=False)
+        self.selector = nn.Linear(alignment, 1, bias=False)
+
+    def forward(
+        self,
+        memory: torch.Tensor,
+        query: torch.Tensor,
+        valid: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        match_features = torch.tanh(
+            self.key_map(memory) + self.query_map(query).unsqueeze(1)
+        )                                                   # (B, T_src, d_a)
+        scores = self.selector(match_features).squeeze(-1)  # (B, T_src)
+        scores = scores.masked_fill(~valid, -torch.inf)
+        weights = torch.softmax(scores, dim=-1)
+        context = torch.bmm(weights.unsqueeze(1), memory).squeeze(1)
+        return context, weights
+
+class AttentiveSeq2Seq(nn.Module):
+    def __init__(self, v_src: int, v_tgt: int, embed: int = 32,
+                 hidden: int = 128, alignment: int = 128):
+        super().__init__()
+        self.src_emb = nn.Embedding(v_src, embed, padding_idx=PAD)
+        self.tgt_emb = nn.Embedding(v_tgt, embed, padding_idx=PAD)
+        self.encoder = nn.LSTM(embed, hidden, batch_first=True)
+        self.attention = LearnedAlignment(hidden, alignment)
+        self.decoder = nn.LSTM(embed + hidden, hidden, batch_first=True)
+        self.out = nn.Linear(2 * hidden, v_tgt)
+
+    def encode(
+        self, S: torch.Tensor, lengths: torch.Tensor,
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor], torch.Tensor]:
+        packed = nn.utils.rnn.pack_padded_sequence(
+            self.src_emb(S), lengths, batch_first=True, enforce_sorted=False)
+        packed_memory, state = self.encoder(packed)
+        memory, _ = nn.utils.rnn.pad_packed_sequence(
+            packed_memory, batch_first=True, total_length=S.shape[1])
+        valid = torch.arange(S.shape[1])[None, :] < lengths[:, None]
+        return memory, state, valid
+
+    def decode_step(
+        self,
+        token: torch.Tensor,
+        state: tuple[torch.Tensor, torch.Tensor],
+        memory: torch.Tensor,
+        valid: torch.Tensor,
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor], torch.Tensor]:
+        query = state[0][-1]                              # previous hidden state
+        context, weights = self.attention(memory, query, valid)
+        decoder_input = torch.cat(
+            (self.tgt_emb(token), context.unsqueeze(1)), dim=-1
+        )
+        decoder_output, state = self.decoder(decoder_input, state)
+        logits = self.out(torch.cat((decoder_output[:, 0], context), dim=-1))
+        return logits, state, weights
+
+    def forward(
+        self, S: torch.Tensor, lengths: torch.Tensor, T_in: torch.Tensor,
+    ) -> torch.Tensor:
+        memory, state, valid = self.encode(S, lengths)
+        logits = []
+        for t in range(T_in.shape[1]):
+            logit, state, _ = self.decode_step(
+                T_in[:, t:t + 1], state, memory, valid)
+            logits.append(logit)
+        return torch.stack(logits, dim=1)                 # (B, T_tgt, V_tgt)
+
+@torch.inference_mode()
+def greedy_batch(
+    model: AttentiveSeq2Seq,
+    prs: list[tuple[str, str]],
+    batch: int = 128,
+    maxlen: int = 12,
+) -> list[tuple[str, str, torch.Tensor]]:
+    model.eval()
+    outputs = []
+    for start in range(0, len(prs), batch):
+        subset = prs[start:start + batch]
+        S, lengths, _ = batchify(subset, list(range(len(subset))))
+        memory, state, valid = model.encode(S, lengths)
+        token = torch.full((len(subset), 1), BOS)
+        token_steps, weight_steps = [], []
+        for _ in range(maxlen):
+            logits, state, weights = model.decode_step(
+                token, state, memory, valid)
+            token = logits.argmax(-1, keepdim=True)
+            token_steps.append(token[:, 0])
+            weight_steps.append(weights)
+        predicted = torch.stack(token_steps, dim=1)
+        attention = torch.stack(weight_steps, dim=1)
+        for row, (source, _) in enumerate(subset):
+            chars = []
+            for index in predicted[row].tolist():
+                if index == EOS:
+                    break
+                chars.append(tgt_itos.get(index, "?"))
+            outputs.append((
+                source,
+                "".join(chars),
+                attention[row, :, :lengths[row]].clone(),
+            ))
+    return outputs
+
+@torch.inference_mode()
+def exact_match(
+    model: AttentiveSeq2Seq, prs: list[tuple[str, str]],
+) -> float:
+    generated = greedy_batch(model, prs)
+    return sum(
+        guess == truth
+        for (_, truth), (_, guess, _) in zip(prs, generated)
+    ) / len(prs)
+```
+
+Notice what changed relative to Chapter 11. The embeddings and encoder width are
+untouched. Values are the contextual encoder states themselves; learned projections
+create match features for keys and queries. The decoder must now advance one target
+step at a time because its next context depends on its previous state. Teacher forcing
+still supplies the true previous token, but it no longer permits one fused decoder
+call.
+
+### The matched-schedule rematch
+
+The full Chapter 11 validation curve below is frozen from a byte-identical
+re-execution of that chapter's published baseline. We do not retrain it here. We
+train the attentive model once, inspect only validation alignments, and then request
+one final test scalar:
+
+```{python}
+#| label: attention-date-training
+#| code-summary: "Code: matched-schedule date rematch and sealed test audit"
+checkpoints = (2, 4, 6, 8, 12, 16, 20, 25)
+baseline_curve = {
+    2: 0.0025, 4: 0.1475, 6: 0.5375, 8: 0.7575,
+    12: 0.9500, 16: 0.9500, 20: 0.9950, 25: 0.9575,
+}
+
+torch.manual_seed(6050)
+attention_model = AttentiveSeq2Seq(V_src, V_tgt)
+optimizer = torch.optim.Adam(attention_model.parameters(), lr=1e-3)
+attention_curve = {}
+
+for epoch in range(1, 26):
+    attention_model.train()
+    permutation = torch.randperm(len(train_pairs))
+    for start in range(0, len(train_pairs), 128):
+        ids = permutation[start:start + 128].tolist()
+        S, lengths, T = batchify(train_pairs, ids)
+        logits = attention_model(S, lengths, T[:, :-1])
+        loss = F.cross_entropy(
+            logits.reshape(-1, V_tgt),
+            T[:, 1:].reshape(-1),
+            ignore_index=PAD,
+        )
+        optimizer.zero_grad()
+        loss.backward()
+        nn.utils.clip_grad_norm_(attention_model.parameters(), 5.0)
+        optimizer.step()
+    if epoch in checkpoints:
+        attention_curve[epoch] = exact_match(
+            attention_model, valid_fixed)
+
+print("epoch   fixed-state   attention")
+for epoch in checkpoints:
+    print(f"{epoch:2d}       {baseline_curve[epoch]:6.2%}       "
+          f"{attention_curve[epoch]:6.2%}")
+
+validation_outputs = greedy_batch(attention_model, valid_fixed)
+source_example, truth_example = valid_fixed[0]           # fixed before training
+_, generated_example, alignment_example = validation_outputs[0]
+
+year_mass, year_top1, row_errors = [], [], []
+for (source, _), (_, _, weights) in zip(valid_fixed, validation_outputs):
+    year_positions = list(range(len(source) - 4, len(source)))
+    for step in range(4):
+        year_mass.append(weights[step, year_positions].sum().item())
+        year_top1.append(int(weights[step].argmax().item() in year_positions))
+    row_errors.append((weights[:10].sum(1) - 1).abs().max().item())
+
+attention_params = sum(p.numel() for p in attention_model.parameters())
+baseline_params = 169_326
+print(f"parameters: baseline {baseline_params:,}; "
+      f"attention {attention_params:,} "
+      f"(+{(attention_params / baseline_params - 1):.1%})")
+print(f"validation example: {source_example!r} -> "
+      f"{generated_example!r} (truth {truth_example})")
+print(f"validation year-region mass: {np.mean(year_mass):.3%}; "
+      f"top key in region: {np.mean(year_top1):.3%}")
+print("maximum validation row-sum error:", f"{max(row_errors):.2e}")
+
+test_exact = exact_match(attention_model, test_unamb)     # one final test audit
+print(f"one final test audit ({len(test_unamb)} sources): "
+      f"baseline 93.1%; attention {test_exact:.1%}")
+```
+
+```{python}
+#| label: fig-attention-rematch
+#| fig-cap: "Left: exact-sequence accuracy on Chapter 11's fixed 400-source validation subset. Both models use the same data, embedding and recurrent hidden widths, optimizer, top-level seed, and epoch schedule; attention adds parameters and a stepwise decoder, so this is not a parameter- or compute-matched ablation. Right: the predeclared first validation example. Rows are emitted ISO characters, columns are contextual encoder states indexed by source character, and the orange box marks the source year. The first four rows concentrate there."
+#| code-summary: "Figure: convergence rematch and learned date alignment"
+from matplotlib.patches import Rectangle
+
+fig, axes = plt.subplots(
+    1, 2, figsize=(9.8, 3.45),
+    gridspec_kw={"width_ratios": [1.0, 1.35]},
+    constrained_layout=True,
+)
+axes[0].plot(
+    checkpoints, [baseline_curve[c] for c in checkpoints],
+    "o-", color="#8D99AE", lw=2, label="fixed-state baseline",
+)
+axes[0].plot(
+    checkpoints, [attention_curve[c] for c in checkpoints],
+    "s-", color="#E57200", lw=2, label="learned attention",
+)
+axes[0].set(
+    xlabel="epoch", ylabel="validation exact match",
+    ylim=(-0.02, 1.03), title="Same schedule, learned access",
+)
+axes[0].legend(frameon=False, fontsize=8)
+
+heatmap = alignment_example[:len(generated_example)].numpy()
+image = axes[1].imshow(
+    heatmap, cmap="Blues", aspect="auto", vmin=0, vmax=1,
+)
+source_labels = ["·" if char == " " else char for char in source_example]
+axes[1].set_xticks(range(len(source_example)), source_labels)
+axes[1].set_yticks(range(len(generated_example)), list(generated_example))
+axes[1].set(
+    xlabel="source character / encoder state",
+    ylabel="emitted character",
+    title=f"{source_example}  ->  {generated_example}",
+)
+axes[1].add_patch(Rectangle(
+    (len(source_example) - 4.5, -0.5), 4, 4,
+    fill=False, edgecolor="#E57200", linewidth=2,
+))
+fig.colorbar(
+    image, ax=axes[1], fraction=0.047, pad=0.03,
+    label="attention weight",
+)
+plt.show()
+```
+
+At epoch 6, the fixed-state baseline is at $53.8\%$ and the attentive model is at
+$93.25\%$, a 39.5-point lead. At epoch 12 the comparison is $95.0\%$ versus
+$99.75\%$. The one final test audit is $93.1\%$ versus $100.0\%$ on 437
+unambiguous sources.
+
+::: {.callout-warning}
+## Faster convergence is not a one-variable proof
+
+We matched examples, embedding and recurrent hidden widths, optimizer, top-level
+seed, number of updates, and epochs. We did **not** match parameter count,
+computation, or minibatch order: constructing models with different parameter counts
+consumes different random draws before their first permutation. The attentive model
+has 269,550 parameters versus 169,326, an increase of 59.2%, and its input-feeding
+decoder uses a Python step loop where Chapter 11's teacher-forced baseline uses one
+fused target-sequence call. This one seeded synthetic rematch shows that the
+attention-equipped model reaches higher accuracy in fewer epochs and optimizer
+updates, not in less wall-clock time. It does not isolate bottleneck removal as the
+only possible cause.
+:::
+
+The heatmap answers a narrower question. On the fixed validation example, the year
+must travel from the last four source positions to the first four outputs. The orange
+block catches that movement, and across all 400 fixed validation examples, 97.5% of
+those four rows' mass lands on states indexed by the source-year region. The
+top-weighted state is indexed inside that region 99.7% of the time.
+
+Columns are indexed by source characters, but their values are encoder states. Each
+state summarizes a recurrent prefix, so a delimiter can legitimately carry
+information about a field that just ended. Attention weights are internal allocation
+weights, not calibrated confidence and not a causal explanation of the model. The
+quantitative audit and the visual alignment complement each other; neither substitutes
+for the other.
+
+<!-- /NOVEL -->
+
+## One learned view, for now
+
+One attention head learns one set of query, key, and value projections. Multi-head
+attention repeats that operator with several projection sets, concatenates the reads,
+and learns an output projection. It works for cross-attention as well as
+self-attention, and different heads *can* learn different relationships without any
+guarantee that they will. We keep one head in the date rematch so its alignment stays
+easy to inspect. Chapter 14 derives the multi-head shapes and implements the full
+operator in its self-attention setting.
+
+## The bottleneck that remains
+
+Cross-attention has repaired the fixed handoff. A decoder output can read any encoder
+state through one learned allocation. Yet both surrounding LSTMs remain recurrent:
+$\vect{h}_i$ waits for $\vect{h}_{i-1}$, and $\vect{s}_t$ waits for
+$\vect{s}_{t-1}$. Within either sequence, training cannot create all recurrent
+states at once.
+
+The Q/K/V operator itself does not care where its three inputs came from. What if
+every position in one sequence supplied queries, keys, and values to every other
+position? Using that operator in place of the RNN can remove recurrence within each
+layer, but it also removes the RNN's built-in sense of order. Chapter 8 warned that
+throwing away *where* incurs a debt; Chapter 14 pays it back with positional
+information. Chapter 11's masking warning also returns there: a causal mask will
+decide which future positions an autoregressive model may not see.
+
+## Okay, so —
+
+1. **Attention softens the address.** Chapter 11 learned embedding content while
+   keeping lookup indices hard. Chapter 2's differentiable-lookup promise is now
+   paid: learned scores become a distribution over memory locations.
+2. **Additive attention learns the compatibility function.** Query and key enter a
+   shared alignment space, tanh creates match features, and one selector produces
+   each score. The same scorer is reused across all decoder/source pairs.
+3. **Scaled dot product learns comparison spaces.** Projected
+   $\matr{Q}\matr{K}^{\top}/\sqrt{d_k}$ maps directly to dense matrix products.
+   Under the idealized independent unit-variance model, scaling holds score variance
+   near one instead of letting it grow with $d_k$.
+4. **Masking is part of the operator.** Padding is excluded before softmax; zero is
+   not a mask. Cross-attention sees all real source positions, while causal masking
+   belongs to the self-attentive decoder in Chapter 14.
+5. **The date rematch exposes learned access.** Under the shared schedule, attention
+   reaches 93.25% validation exact match at epoch 6 and 100.0% on the final test
+   audit. Its year rows route 97.5% of validation weight to states indexed by the
+   source-year region, with the parameter/compute caveat stated in full.
+
+## Sources and further reading {.unnumbered}
+
+- [Bahdanau, Cho, & Bengio, *Neural Machine Translation by Jointly Learning to Align and Translate*](https://arxiv.org/abs/1409.0473): conjectures that the fixed-length encoder vector is a bottleneck, then tests differentiable soft search with an additive scorer.
+- [Luong, Pham, & Manning, *Effective Approaches to Attention-based Neural Machine Translation*](https://aclanthology.org/D15-1166/): compares dot, general, and concat scoring functions and clarifies a second recurrent-attention timing convention.
+- [Vaswani et al., *Attention Is All You Need*](https://papers.nips.cc/paper/7181-attention-is-all-you-need): introduces scaled dot-product and multi-head attention in the architecture Chapter 14 builds.
+
+## Exercises {.unnumbered}
+
+1. **(Pencil.)** Starting from @eq-additive-attention, write every batched shape for
+   $B=32$, source length 17, $d_e=128$, $d_d=96$, and $d_a=64$. Which axis must
+   softmax normalize, and why can the raw encoder and decoder widths differ?
+2. **(Code.)** Extend the scaled-dot function with a deliberately all-false mask row.
+   Confirm the guard catches it. Remove the guard and inspect the result of softmax
+   over all $-\infty$. Then replace the mask with zero scores and explain why padding
+   receives weight.
+3. **(Pencil + code.)** Generalize the scaling derivation to independent coordinates
+   with variances $\sigma_q^2$ and $\sigma_k^2$. Modify the seeded audit and check
+   which divisor returns score variance near one.
+4. **(Code.)** Replace the date model's additive scorer with learned projected
+   scaled-dot attention. Keep the split, schedule, and validation subset fixed. Select
+   any design choices on validation, report the sealed test once, and compare both
+   convergence and year-region alignment. Explain why a large weight is neither
+   calibrated confidence nor a causal explanation.
+5. **(Pencil.)** The heatmap labels columns by source characters even though each
+   value is a recurrent prefix state. Give two reasons a delimiter state might carry
+   useful month or day information. Then state one conclusion the heatmap supports
+   and one conclusion it cannot support.

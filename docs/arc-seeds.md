@@ -8,17 +8,17 @@ new rows here. The pedagogical-efficiency rule (drafting-template) depends on
 this file: a concept with no payoff chapter listed here should be an exercise or
 a cut.*
 
-*Updated: 2026-07-11, after Chapter 12 shipped.*
+*Updated: 2026-07-12, after Chapter 13 shipped.*
 
 ## 1. Seeds planted and their harvest contracts
 
 | Seed (phrase as planted) | Planted | Harvest | Status |
 |---|---|---|---|
-| Dot product = similarity score against a template | ch. 1 | ch. 7 (sliding template), ch. 12 (kernel similarity), ch. 13 (QK scores) | chs. 7/12 ✓; 13 due |
+| Dot product = similarity score against a template | ch. 1 | ch. 7 (sliding template), ch. 12 (kernel similarity), ch. 13 (QK scores) | done |
 | Prediction = weighted combination of training targets | ch. 1 | ch. 12 (Nadaraya–Watson IS this, made explicit) | done |
-| Softmax = the scores→weights machine | ch. 2 | ch. 12 (kernel weights), ch. 13 (attention weights) | ch. 12 ✓; 13 due |
-| "Softening the hard" / differentiable lookup ("A differentiable lookup, it turns out, is precisely attention") | ch. 2 | ch. 13 — harvest by name | due |
-| Temperature dial between hard max and uniform | ch. 2 | ch. 10 ✓ (sampling); ch. 13 (√d as temperature) | partly |
+| Softmax = the scores→weights machine | ch. 2 | ch. 12 (kernel weights), ch. 13 (attention weights) | done |
+| "Softening the hard" / differentiable lookup ("A differentiable lookup, it turns out, is precisely attention") | ch. 2 | ch. 13 — harvest by name | done |
+| Temperature dial between hard max and uniform | ch. 2 | ch. 10 ✓ (sampling); ch. 13 (√d as temperature) | done |
 | Compositional hierarchy: features of features | ch. 3 | ch. 8 ✓ (receptive fields make it architectural) | done |
 | Gradient superhighway (ReLU's open gate) | ch. 5 | ch. 9 ✓ (residual = the highway as infrastructure), ch. 10 ✓ (cell state = highway through time) | done |
 | Float-precision death (tiny signals can become numerically unusable) | ch. 5 | ch. 9 ✓ (norm underflow + update-resolution diagnostic), ch. 10 ✓ (σ(0)^80); appendix a4 (gather all three) | a4 due |
@@ -29,16 +29,17 @@ a cut.*
 | Equivariance banked → local shift tolerance purchased | ch. 7 | ch. 8 ✓ (pooling, explicitly not exact invariance) | done |
 | Pooling discards *where* → "we will pay to put position back in" | ch. 8 | ch. 14 (positional encodings; self-attention is permutation-equivariant) | due |
 | Head-parameter imbalance (96% in LeNet's head) | ch. 8 | ch. 9 ✓ (1×1 + GAP fire the head) | done |
-| CNN buys global sight through depth; attention buys it in one step | ch. 8 | ch. 13 (@sec-13 named in ch. 8 prose) | due |
+| CNN buys global sight through depth; attention buys it in one step | ch. 8 | ch. 13 (@sec-13 named in ch. 8 prose) | done |
 | Residual stream: "each block reads from it and writes small corrections back… attention will be one kind of correction" | ch. 9 | ch. 14 — harvest by name (x + F(x) wraps every block) | due |
 | LayerNorm: "same equation, different axis — remember @eq-batchnorm when you meet it" | ch. 9 | ch. 14 | due |
 | Transfer decision rule (labels scarce ∧ task feature-hungry ∧ coverage at matched scale) | ch. 9 | ch. 15 (BERT = the regime where it pays), ch. 17 | due |
 | Third weight sharing (examples → space → time) | ch. 10 | ch. 14 (self-attention shares across *pairs*? decide framing when drafting) | open |
-| Finite-state bottleneck; "the book ends Part III when we refuse to pay that price" | ch. 10–11 | ch. 12 (retain the memory bank), ch. 13 (learn the access rule) | ch. 12 partial ✓; 13 due |
-| Fixed attention matrix; "what if the similarity itself were learnable?" | ch. 12 | ch. 13 (learned compatibility and the date-task rematch) | due |
-| "Hard address, learned content" (embeddings); soften the address too | ch. 11 | ch. 13 — harvest the phrase | due |
+| Finite-state bottleneck; "the book ends Part III when we refuse to pay that price" | ch. 10–11 | ch. 12 (retain the memory bank), ch. 13 (learn the access rule) | done |
+| Fixed attention matrix; "what if the similarity itself were learnable?" | ch. 12 | ch. 13 (learned compatibility and the date-task rematch) | done |
+| "Hard address, learned content" (embeddings); soften the address too | ch. 11 | ch. 13 — harvest the phrase | done |
 | Masking = "which positions it may not look at"; causal mask preview | ch. 11 | ch. 14 (causal mask turns transformer into LM) | due |
-| Date-normalization benchmark (leak-free packed seq2seq: 53.8% @ epoch 6, 95.0% @ 12 on 400 unambiguous validation sources; 93.1% on the final 437-source unambiguous test; alignment invisible) | ch. 11 | ch. 13 — MUST re-run with attention: alignment heatmap + convergence comparison (contract in stub) | due |
+| Date-normalization benchmark (leak-free packed seq2seq: 53.8% @ epoch 6, 95.0% @ 12 on 400 unambiguous validation sources; 93.1% on the final 437-source unambiguous test; alignment invisible) | ch. 11 | ch. 13 — attention: 93.25% @ 6, 99.75% @ 12, 100.0% final test; validation alignment visible | done |
+| Cross-attention repairs the fixed handoff, but the surrounding RNNs remain serial; the Q/K/V operator does not care where its inputs came from | ch. 13 | ch. 14 (replace recurrence with self-attention; derive and implement multi-head) | due |
 | Beam search / decoding machinery | ch. 11 | chs. 15/17 (LM decoding reuses it) | ambient |
 | Book-corpus char-LM (held-out fixed-window loss 1.89; sampled training minibatch 1.42; babble) | ch. 10 | ch. 14 (same corpus, split, and evaluation; tiny transformer, compare) | suggested |
 | m06 autoencoder spine (PCA = linear AE, bottleneck, manifolds) | (unused by design in ch. 11) | ch. 19 | due |
@@ -53,9 +54,12 @@ a cut.*
    every pair. The packed seq2seq baseline is 53.8% at epoch 6 and 95.0% at epoch 12
    on a fixed subset of 400 of the 421 unambiguous validation strings. After 25 epochs,
    the single final audit scores 93.1% on all 437 unambiguous test strings (naive
-   padding: 34.3%; free-running: 99.1%). Ch. 13 owes the attention rematch and
-   alignment heatmap. Keep the generator, unique-source rejection, and three-way split
-   byte-identical (copy the full ch. 11 `date-data` cell; seed 6050).
+   padding: 34.3%; free-running: 99.1%). Ch. 13 closes the benchmark with the exact
+   generator/split and an additive-attention LSTM: 93.25% at epoch 6, 99.75% at
+   epoch 12, and 100.0% on the one final 437-source test audit. Across the fixed
+   validation subset, its first four decoder rows place 97.469% of their mass on
+   contextual states indexed by the source-year region. Schedule matched, but not
+   parameters (+59.2%), compute, or minibatch order. Closed.
 3. **The book-corpus LM**: ch. 10 char-LSTM (hidden 128, random fixed windows of
    100 characters, 2,500 steps). On the deterministic 90/10 contiguous split, the
    final sampled training minibatch is 1.42 and held-out fixed-window loss is 1.89.
@@ -86,7 +90,7 @@ optimizers or `backward()` before Chapter 5.
 | 10 | `nn.RNN`/`nn.LSTM` (+GRU eqs), BPTT, truncated chunks, `clip_grad_norm_`, `F.one_hot` (in models), sampling with temperature, `torch.multinomial` |
 | 11 | encoder–decoder, `nn.Embedding`, PAD/BOS/EOS, `pad_sequence`, `pack_padded_sequence`, `ignore_index`, teacher forcing/free-running, exposure bias, scheduled sampling (concept), greedy/beam search, length normalization |
 | 12 | kernels/bandwidth, Nadaraya–Watson, queries/keys/values, row-softmax over log-kernel scores, attention-weight matrices (fixed) |
-| 13 (planned) | learned Q/K/V, scaled dot-product, additive attention, attention in seq2seq, alignment heatmaps |
+| 13 | learned Q/K/V, additive and scaled dot-product cross-attention, source-padding attention masks, attention-augmented seq2seq, alignment heatmaps; multi-head preview only |
 | 14 (planned) | self-attention, multi-head, LayerNorm, positional encodings, causal masks, the transformer block |
 
 ## 4. His signature analogies (use them; don't invent competitors)
