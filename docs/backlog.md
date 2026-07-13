@@ -53,17 +53,20 @@ chapter stub's draft-sources; revisit during the planned outline session with th
 - Extend course-site `bookChapters` mappings as Chapters 12–19 become reviewed and
   substantive.
 
-## 5. GPU experiment queue (backlog-only; revised after Chapter 15, July 13, 2026)
+## 5. GPU experiment queue (backlog-only; revised after Chapter 16, July 13, 2026)
 
 Do not place project-management placeholders in the published chapters. Keep these
 experiments here until GPU access is available; then run them on Rivanna/Colab, pin the
 numbers, and fold only completed results back into the relevant chapter.
 
-Chapters 12–15 audit: the fixed-kernel, scaling, date-attention, tiny Transformer
-book-corpus, and controlled MLM-transfer experiments are CPU-complete. They add no GPU-dependent
-experiment and no published GPU placeholder; the queue below remains the reminder
-for later access. Chapters 13–14 discuss the structure of dense matrix operations
-but make no unmeasured hardware-speed claim.
+Chapters 12–16 audit: the fixed-kernel, scaling, date-attention, tiny Transformer
+book-corpus, controlled MLM-transfer, and five-seed CNN/ViT rematch experiments are
+CPU-complete. They require no GPU dependency or project-management placeholder in
+the published chapters; the queue below remains the private reminder for later
+access. Chapters 13–14 discuss the structure of dense matrix operations but make no
+unmeasured hardware-speed claim. Chapter 16 reports its tiny scratch regime as a
+mechanism study, not as an architecture verdict; the full-scale regime test belongs
+here.
 
 - **Ch. 9 scorecard, full scale**: LeNet / VGG / NiN / deep ResNet on all 60k
   Fashion-MNIST images — reproduce the lecture frontier (≈89% / >90% / ≈90% @ 30k
@@ -82,3 +85,12 @@ but make no unmeasured hardware-speed claim.
   include a source-coverage mismatch control and shallow lexical baseline. Pin the
   corpus/license, split, tokenizer, checkpoint, total compute caveat, and per-seed
   results before replacing or supplementing the synthetic mechanism study.
+- **Ch. 16 CNN/ViT regime ladder, full scale**: compare a modern convolutional
+  family and a vision Transformer on a licensed natural-image dataset across a
+  predeclared data ladder, with separate scratch and pretrained arms. Hold input
+  resolution, augmentation, label budget, and evaluation shifts fixed within each
+  comparison; repeat enough end-to-end seeds to estimate paired uncertainty. Pin
+  architecture and checkpoint provenance, parameter counts, operation estimates,
+  examples seen, wall-clock cost, and clean/shifted per-seed results. Do not call a
+  parameter match a compute match, and do not let a pretrained-versus-scratch gap
+  stand in for an architecture effect.

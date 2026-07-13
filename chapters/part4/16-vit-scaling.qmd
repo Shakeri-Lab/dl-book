@@ -1,29 +1,1138 @@
 # Vision Transformers and Scaling Laws {#sec-16-vit-scaling}
 
-::: {.callout-warning}
-**Chapter stub.** This chapter is planned but not yet written. The abstract below is its
-contract; drafting sources are listed for provenance.
+<!-- lecture-source:
+     m10_10-1-vision-transformer-vit_JSjPB1a-eS8.txt
+     m10_10-3-scaling-of-decoder-transformer-models_Q56DkFc05Tg.txt
+     (spine via ds6050_10_foundation_models/MODULE_NOTES.md; scene concepts
+     checked against that module's Manim source)
+     seeds: sources/10.0_ViT.tex, sources/10.1.scaling.tex,
+            sources/4.3-NextGenCNN.tex
+     primary sources: Dosovitskiy et al. 2021; Tan and Le 2019;
+                      Touvron et al. 2021; Liu et al. 2021, 2022;
+                      Kaplan et al. 2020; Hoffmann et al. 2022
+     provenance note: all executable implementations and figures are independently
+     derived from equations and published constants. The Fashion study is
+     book-original and uses the fixed Chapter 6 split. Paper figures are discussed,
+     not reproduced. Numerical claims from the lecture notes were re-derived against
+     the primary papers before use. -->
+
+Chapter 14 promised that **global routing trades away locality bias**. Chapter 15
+added two pieces: a learned summary token can gather a sequence for a downstream
+head, and **pretraining is a regime, not an architecture**. Let us collect those
+promises in one image. If a Transformer can read a sentence of words, what must
+change before it can read a photograph?
+
+Surprisingly little. Cut the image into patches, project each patch to a vector,
+and let the Transformer encoder read those vectors as tokens. That minimalist
+transplant is the **Vision Transformer (ViT)**. Its simplicity—and the freedom it
+creates—is also the source of the interesting question. A convolutional network
+arrives knowing that nearby pixels belong together and that one local detector
+should slide across the image.
+ViT arrives with a much weaker image-specific prescription. Which learner wins
+therefore depends not just on architecture, but on data, training, and scale.
+
+That word—*scale*—will change jobs halfway through the chapter. First it will mean
+making an image model deeper, wider, or higher-resolution. Then it will mean
+fitting empirical laws that connect loss to parameters, tokens, and training
+compute. The bridge between the two meanings is resource allocation: what should
+we enlarge, and what must grow with it?
+
+## Let the image become a sequence
+
+Start with the arithmetic used by the original ViT. A color image is
+$224\times224$ pixels, and each square patch is $16\times16$. There are
+
+$$
+\frac{224}{16}=14 \quad\Longrightarrow\quad 14^2=196
+$$
+
+patches. Each patch contains
+$16\times16\times3=768$ raw channel values. So one image has become a sequence of
+196 vectors, each initially 768-dimensional—already the same width used by the
+base Transformer in that paper.
+
+In general, let a batch be
+
+$$
+\matr{X}\in\mathbb{R}^{B\times C\times H\times W},
+$$
+
+where $B$ is batch size, $C$ channels, and $H,W$ are spatial dimensions. For a
+square patch width $P$ that divides both $H$ and $W$, the patch count is
+
+$$
+N=\frac{H}{P}\frac{W}{P},
+$$ {#eq-vit-patch-count}
+
+and flattening each patch gives
+
+$$
+\matr{X}_{\text{patch}}
+\in\mathbb{R}^{B\times N\times(CP^2)}.
+$$
+
+We can see this on the fixed Fashion-MNIST subset first opened in
+@sec-06-generalization-inductive-bias. The $28\times28$ grayscale images divide
+into $7\times7=49$ patches when $P=4$.
+
+```{python}
+#| label: vit-setup
+#| code-summary: "Code: imports, the fixed Chapter 6 split, and image shapes"
+
+import hashlib
+import math
+
+import matplotlib.pyplot as plt
+from matplotlib.patches import Rectangle
+import numpy as np
+import torch
+from torch import nn
+import torch.nn.functional as F
+
+torch.set_num_threads(6)
+torch.manual_seed(6050)
+
+development = torch.load("../../data/fashion-train.pt")
+holdout = torch.load("../../data/fashion-test.pt")
+X_dev = development["X"].float().unsqueeze(1) / 255.0  # (1200, 1, 28, 28)
+y_dev, classes = development["y"], development["classes"]
+X_test = holdout["X"].float().unsqueeze(1) / 255.0     # (600, 1, 28, 28)
+y_test = holdout["y"]
+
+split = torch.randperm(len(X_dev), generator=torch.Generator().manual_seed(6050))
+fit_idx, val_idx = split[:1000], split[1000:]
+X_fit, y_fit = X_dev[fit_idx], y_dev[fit_idx]           # (1000, 1, 28, 28)
+X_val, y_val = X_dev[val_idx], y_dev[val_idx]           # (200, 1, 28, 28)
+
+print("fit / validation / benchmark:", len(X_fit), len(X_val), len(X_test))
+```
+
+A learned matrix
+
+$$
+\matr{E}\in\mathbb{R}^{CP^2\times d}
+$$
+
+projects every raw patch to model width $d$. The operation has a useful exact
+identity. Unfold the image, multiply each flattened patch by $\matr{E}$, and add a
+bias—or reshape the columns of $\matr{E}$ into $d$ convolutional kernels with
+kernel size $P$ and stride $P$. The two computations are the same linear map.
+
+```{python}
+#| label: fig-patchify
+#| fig-cap: "An image becomes a sequence. A 28×28 garment is divided into 49 nonoverlapping 4×4 patches (left); one patch contains 16 raw values (center); a shared linear projection maps every patch to width 32, and a separate learned [CLS] row is prepended (right). The displayed projection is random arithmetic, not a trained representation."
+#| fig-width: 10
+#| fig-height: 3.4
+#| code-summary: "Figure code: patchify and verify unfold-plus-linear equals one strided convolution"
+
+P, d = 4, 32
+sample = X_fit[:1]
+generator = torch.Generator().manual_seed(6050)
+E_patch = torch.randn(P * P, d, generator=generator)
+b_patch = torch.randn(d, generator=generator)
+
+raw_patches = F.unfold(sample, kernel_size=P, stride=P).transpose(1, 2)
+tokens_linear = raw_patches @ E_patch + b_patch
+conv_kernel = E_patch.T.reshape(d, 1, P, P)
+tokens_conv = F.conv2d(
+    sample, conv_kernel, bias=b_patch, stride=P
+).flatten(2).transpose(1, 2)
+max_error = (tokens_linear - tokens_conv).abs().max().item()
+
+assert raw_patches.shape == (1, 49, 16)
+assert tokens_linear.shape == (1, 49, 32)
+assert max_error < 2e-6
+print("raw patches:", tuple(raw_patches.shape))
+print("projected tokens:", tuple(tokens_linear.shape))
+print(f"max |linear - convolution|: {max_error:.2e}")
+
+row, col = 2, 3
+chosen = sample[0, 0, row * P:(row + 1) * P, col * P:(col + 1) * P]
+cls_demo = torch.randn(1, d, generator=generator)
+display_tokens = torch.cat((cls_demo, tokens_linear[0]), dim=0)
+
+fig, axes = plt.subplots(1, 3, figsize=(10, 3.4),
+                         gridspec_kw={"width_ratios": [1, 0.72, 1.45]})
+axes[0].imshow(sample[0, 0], cmap="gray", vmin=0, vmax=1)
+for edge in range(0, 29, P):
+    axes[0].axhline(edge - 0.5, color="white", lw=0.45, alpha=0.8)
+    axes[0].axvline(edge - 0.5, color="white", lw=0.45, alpha=0.8)
+axes[0].add_patch(Rectangle((col * P - 0.5, row * P - 0.5), P, P,
+                            fill=False, edgecolor="#E57200", lw=2.5))
+axes[0].set_title("28×28 image → 49 patches")
+axes[0].set_xticks([]); axes[0].set_yticks([])
+
+axes[1].imshow(chosen, cmap="gray", vmin=0, vmax=1)
+for r in range(P):
+    for c in range(P):
+        axes[1].text(c, r, f"{chosen[r, c]:.1f}", ha="center", va="center",
+                     fontsize=7, color="white" if chosen[r, c] < 0.45 else "black")
+axes[1].set_title("one 4×4 patch\n16 raw values")
+axes[1].set_xticks([]); axes[1].set_yticks([])
+
+axes[2].imshow(display_tokens.detach(), aspect="auto", cmap="RdBu_r")
+axes[2].axhline(0.5, color="#E57200", lw=2)
+axes[2].set_yticks([0, 25, 49], ["[CLS]", "patch 25", "patch 49"])
+axes[2].set_xlabel("model coordinate")
+axes[2].set_title("50 tokens × width 32")
+plt.tight_layout()
+plt.show()
+```
+
+This identity is more than a coding shortcut. The patch projection is a learned,
+shared local operator—a thin residue of image structure at ViT's front door. What
+changes is what happens next: instead of stacking local feature maps, we hand the
+patch sequence to global self-attention.
+
+::: {.callout-tip}
+## Patchify once, audit twice
+
+Check that $P$ divides both spatial dimensions, assert the patch and token shapes,
+and compare unfold-plus-linear with the equivalent convolution to numerical
+roundoff. Patchification silently changes sequence length, feature width, and the
+attention bill; one shape mistake propagates through the entire model.
 :::
 
-*Patches as tokens: the transformer eats images. Harvest Chapter 14's handoff by
-name—global routing trades away locality bias—then rematch the convolutional toolkit
-on Fashion images without pretending a small-data result settles the architecture.
-Harvest Chapter 15's learned summary-token pattern and its claim that pretraining is
-a regime, not an architecture.
-From there, scaling laws and Chinchilla's tokens-per-parameter arithmetic make the
-data side of the trade explicit.*
+## A learned meeting place for patches
 
-<!-- draft-sources
-seeds:
-- `sources/10.0_ViT.tex`
-- `sources/10.1.scaling.tex`
-- `sources/4.3-NextGenCNN.tex` (EfficientNet compound scaling, ConvNeXt CNN-renaissance — the CNN side of the ViT-vs-CNN story; snapshotted)
-transcripts:
-- `m10_10-1-vision-transformer-vit_JSjPB1a-eS8.txt`
-- `m10_10-3-scaling-of-decoder-transformer-models_Q56DkFc05Tg.txt`
-harvests:
-- Chapter 6: inductive bias is a trade, not a universal advantage
-- Chapter 14: global routing shortens paths while giving up built-in image locality
-- Chapter 15: a learned summary token can gather a sequence for a downstream head
-- Chapter 15: pretraining is a regime, not an architecture
--->
+The projected patches still need two additions. First, prepend a learned vector
+$\vect{x}_{\mathrm{CLS}}\in\mathbb{R}^{d}$. Second, add one learned position vector
+to every sequence slot. For image $b$, ViT's complete encoder input is
+
+$$
+\matr{Z}_0^{(b)}=
+\left[
+\vect{x}_{\mathrm{CLS}};
+\vect{x}_p^{1}\matr{E};
+\ldots;
+\vect{x}_p^{N}\matr{E}
+\right]
++\matr{E}_{\mathrm{pos}}
+\in\mathbb{R}^{(N+1)\times d},
+$$ {#eq-vit-input}
+
+where $\vect{x}_p^{i}\in\mathbb{R}^{CP^2}$ is flattened patch $i$,
+$\matr{E}\in\mathbb{R}^{CP^2\times d}$ is the shared patch projection, and
+$\matr{E}_{\mathrm{pos}}\in\mathbb{R}^{(N+1)\times d}$ contains learned absolute
+position vectors.
+
+`[CLS]` is not a summary by birth. As in @sec-15-bert-pretraining, it is a
+**learned meeting place** whose downstream loss teaches it what to gather. Every
+encoder layer lets that row query the patch rows; after the final layer, a linear
+head reads its $d$ coordinates and produces class logits. The original ViT
+appendix found that class-token and global-average-pooling heads worked similarly
+after tuning their learning rates. `[CLS]` is a useful interface—not proof of a
+superior pooling rule.
+
+Position is essential for a different reason. Without positional information,
+self-attention is **permutation-equivariant**: permuting patch rows produces the
+same permutation of output rows. A symmetric pooling rule can consequently become
+invariant to patch order, unable to distinguish a sleeve above a shoe from a shoe
+above a sleeve. Learned positions break that symmetry. In the original ablation,
+removing position hurt, while learned 1-D, learned 2-D, and relative alternatives
+performed similarly in that setting. The result supports *supplying geometry*; it
+does not establish one universal positional scheme.
+
+ViT then reuses Chapter 14's pre-LayerNorm encoder block. With
+$\matr{Z}_{\ell-1}\in\mathbb{R}^{B\times(N+1)\times d}$,
+
+$$
+\widetilde{\matr{Z}}_\ell
+=\matr{Z}_{\ell-1}
++\operatorname{MSA}\!\left(\operatorname{LN}(\matr{Z}_{\ell-1})\right),
+$$
+
+$$
+\matr{Z}_\ell
+=\widetilde{\matr{Z}}_\ell
++\operatorname{MLP}\!\left(\operatorname{LN}(\widetilde{\matr{Z}}_\ell)\right).
+$$
+
+The residual stream, LayerNorm axis, multi-head routing, and position-wise MLP are
+unchanged. This is an encoder-only classifier, so there is no causal mask and no
+decoder. Pre-LayerNorm gives gradients a cleaner residual path; it does not make
+optimization automatic. The original ViT training recipe still used learning-rate
+warmup.
+
+## Inductive bias strikes again
+
+Chapter 6 called constraints a form of knowledge. **Inductive bias strikes again,
+this time as a trade.** Convolution spends flexibility to buy locality and
+translation equivariance; ViT gives back much of that image-specific prior and
+must purchase useful geometry with data, optimization, or a new architectural
+constraint.
+
+| Convolutional network | Vision Transformer |
+|---|---|
+| Local, spatially shared kernels | Content-dependent routes between all patch tokens |
+| Translation equivariance built into feature maps | Geometry supplied mainly by patches and position vectors |
+| Global sight accumulated through depth | Every patch reachable in one attention layer |
+| Strong image-specific prior | More freedom, and greater dependence on the training regime |
+
+“Less image-specific bias”—not “no bias”—is the precise phrase. Patchification is
+local, the same projection is shared over the grid, positions identify slots, and the usual
+optimizer and architecture choices contribute biases of their own. ViT did not
+remove assumptions. It changed which assumptions were paid for in code and which
+had to be learned from examples.
+
+That freedom has a computational price. Ignoring `[CLS]` for the cleanest count,
+changing a $224\times224$ image from $P=32$ to $P=16$ changes the patch count from
+$49$ to $196$: four times as many tokens. Each attention head's score matrix
+therefore grows from $49^2=2{,}401$ to $196^2=38{,}416$ entries—sixteen times as
+many. At $1024\times1024$ with $P=16$, there are 4,096 patches—and the score
+matrix has about 437 times as many entries as the $224\times224$ case.
+
+Do not shorten this to “the whole Transformer is quadratic.” Attention mixing
+costs $O(N^2d)$, while the projections and feed-forward layers contribute terms
+like $O(Nd^2)$. Which term dominates depends on both token count and width. The
+quadratic term becomes especially painful when resolution rises or patches shrink.
+
+## A Fashion rematch, not a referendum
+
+The original ViT paper warns us that regime matters. Before looking at its large
+pretraining experiments, let us deliberately choose the opposite regime: 1,000
+Fashion-MNIST fitting images, no pretraining, and models small enough to inspect.
+
+The ViT uses $4\times4$ patches, width 32, four heads, two pre-LayerNorm blocks,
+and feed-forward width 64. Its 49 patch tokens plus `[CLS]` make a 50-token
+sequence. The convolutional baseline uses four $3\times3$ layers, two max pools,
+and global average pooling. Their parameter counts differ by about 3%. Both use
+the same initialization family, optimizer, update count, seed, and explicit
+minibatch order.
+
+The implementations below are derived independently from the chapter equations.
+There is no imported ViT package hiding extra training machinery.
+
+```{python}
+#| label: fashion-models
+#| code-summary: "Code: independently define the tiny ViT and parameter-matched CNN"
+
+class MultiHeadSelfAttention(nn.Module):
+    def __init__(self, width: int, heads: int) -> None:
+        super().__init__()
+        assert width % heads == 0
+        self.heads = heads
+        self.head_width = width // heads
+        self.qkv = nn.Linear(width, 3 * width)
+        self.proj = nn.Linear(width, width)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        batch, tokens, width = x.shape
+        qkv = self.qkv(x).reshape(
+            batch, tokens, 3, self.heads, self.head_width
+        ).permute(2, 0, 3, 1, 4)
+        q, k, v = qkv.unbind(0)
+        scores = (q @ k.transpose(-2, -1)) / math.sqrt(self.head_width)
+        mixed = scores.softmax(dim=-1) @ v
+        mixed = mixed.transpose(1, 2).reshape(batch, tokens, width)
+        return self.proj(mixed)
+
+
+class EncoderBlock(nn.Module):
+    def __init__(self, width: int, heads: int, ff_width: int) -> None:
+        super().__init__()
+        self.norm1 = nn.LayerNorm(width)
+        self.attn = MultiHeadSelfAttention(width, heads)
+        self.norm2 = nn.LayerNorm(width)
+        self.ffn = nn.Sequential(
+            nn.Linear(width, ff_width), nn.GELU(), nn.Linear(ff_width, width)
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = x + self.attn(self.norm1(x))
+        return x + self.ffn(self.norm2(x))
+
+
+class TinyViT(nn.Module):
+    def __init__(self, width: int = 32, patch: int = 4, blocks: int = 2) -> None:
+        super().__init__()
+        self.patch_embed = nn.Conv2d(1, width, kernel_size=patch, stride=patch)
+        patch_tokens = (28 // patch) ** 2
+        self.cls_token = nn.Parameter(torch.zeros(1, 1, width))
+        self.position = nn.Parameter(torch.zeros(1, patch_tokens + 1, width))
+        self.blocks = nn.Sequential(*(
+            EncoderBlock(width, heads=4, ff_width=2 * width)
+            for _ in range(blocks)
+        ))
+        self.norm = nn.LayerNorm(width)
+        self.head = nn.Linear(width, 10)
+        self.apply(_xavier_init)
+        nn.init.normal_(self.cls_token, std=0.02)
+        nn.init.normal_(self.position, std=0.02)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        patches = self.patch_embed(x).flatten(2).transpose(1, 2)
+        cls = self.cls_token.expand(len(x), -1, -1)
+        tokens = torch.cat((cls, patches), dim=1) + self.position
+        encoded = self.blocks(tokens)
+        return self.head(self.norm(encoded[:, 0]))
+
+
+class TinyCNN(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.features = nn.Sequential(
+            nn.Conv2d(1, 8, 3, padding=1), nn.GELU(), nn.MaxPool2d(2),
+            nn.Conv2d(8, 16, 3, padding=1), nn.GELU(), nn.MaxPool2d(2),
+            nn.Conv2d(16, 32, 3, padding=1), nn.GELU(),
+            nn.Conv2d(32, 48, 3, padding=1), nn.GELU(),
+        )
+        self.head = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1), nn.Flatten(), nn.Linear(48, 10)
+        )
+        self.apply(_xavier_init)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.head(self.features(x))
+
+
+def _xavier_init(module: nn.Module) -> None:
+    if isinstance(module, (nn.Linear, nn.Conv2d)):
+        nn.init.xavier_uniform_(module.weight)
+        if module.bias is not None:
+            nn.init.zeros_(module.bias)
+
+
+def count_parameters(model: nn.Module) -> int:
+    return sum(parameter.numel() for parameter in model.parameters())
+
+
+print("CNN parameters:", f"{count_parameters(TinyCNN()):,}")
+print("ViT parameters:", f"{count_parameters(TinyViT()):,}")
+```
+
+For one $28\times28$ image, a simple multiply–accumulate ledger gives about
+1.19 million for the CNN and 1.16 million for the ViT, a 1.8% difference. That
+ledger counts convolution, linear, and attention matrix products; it omits
+normalization, activations, softmax, pooling, memory traffic, and implementation
+effects. It is a useful dot-product proxy—not measured FLOPs, speed, or energy.
+
+The training protocol uses AdamW for 120 epochs, a cosine learning-rate schedule,
+and batches of 100. For each seed, one explicit list of permutations is handed to
+both architectures. Resetting the seed before each model makes initialization
+reproducible; sharing the permutation list makes minibatch order exactly equal.
+The schedule hash makes that equality inspectable rather than aspirational.
+
+```{python}
+#| label: fashion-protocol
+#| code-summary: "Code: define the explicit paired schedule, training loop, and shift audit"
+
+EPOCHS = 120
+SEEDS = list(range(6050, 6055))
+
+
+def minibatch_schedule(seed: int) -> list[torch.Tensor]:
+    generator = torch.Generator().manual_seed(seed + 10_000)
+    return [torch.randperm(len(X_fit), generator=generator) for _ in range(EPOCHS)]
+
+
+def schedule_hash(permutations: list[torch.Tensor]) -> str:
+    raw = torch.cat(permutations).numpy().tobytes()
+    return hashlib.sha256(raw).hexdigest()[:12]
+
+
+def train_with_schedule(
+    model_fn, permutations: list[torch.Tensor], seed: int
+) -> nn.Module:
+    torch.manual_seed(seed)
+    model = model_fn()
+    optimizer = torch.optim.AdamW(model.parameters(), lr=3e-3, weight_decay=1e-2)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, T_max=EPOCHS, eta_min=3e-5
+    )
+    model.train()
+    for permutation in permutations:
+        for start in range(0, len(X_fit), 100):
+            idx = permutation[start:start + 100]
+            loss = F.cross_entropy(model(X_fit[idx]), y_fit[idx])
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+        scheduler.step()
+    return model
+
+
+@torch.no_grad()
+def accuracy(model: nn.Module, x: torch.Tensor, y: torch.Tensor) -> float:
+    model.eval()
+    return (model(x).argmax(1) == y).float().mean().item()
+
+
+def shift_right(x: torch.Tensor, pixels: int) -> torch.Tensor:
+    if pixels == 0:
+        return x.clone()
+    shifted = torch.zeros_like(x)
+    shifted[..., pixels:] = x[..., :-pixels]
+    return shifted
+
+
+def run_paired_seed(seed: int) -> list[dict]:
+    permutations = minibatch_schedule(seed)
+    rows = []
+    print(f"seed {seed}, schedule {schedule_hash(permutations)}")
+    for name, model_fn in (("CNN", TinyCNN), ("ViT", TinyViT)):
+        model = train_with_schedule(model_fn, permutations, seed)
+        row = {
+            "seed": seed,
+            "model": name,
+            "train": accuracy(model, X_fit, y_fit),
+            "validation": [
+                accuracy(model, shift_right(X_val, px), y_val) for px in range(5)
+            ],
+            "benchmark": accuracy(model, X_test, y_test),
+        }
+        rows.append(row)
+        print(
+            f"  {name}: train {row['train']:.3f}, "
+            f"validation {[round(value, 3) for value in row['validation']]}, "
+            f"benchmark {row['benchmark']:.3f}"
+        )
+    return rows
+
+
+vit_macs = (
+    7 * 7 * 32 * 16
+    + 2 * (
+        50 * 32 * (3 * 32) + 2 * 4 * 50 * 50 * 8
+        + 50 * 32 * 32 + 2 * 50 * 32 * 64
+    )
+    + 32 * 10
+)
+cnn_macs = (
+    28 * 28 * 8 * 1 * 3 * 3
+    + 14 * 14 * 16 * 8 * 3 * 3
+    + 7 * 7 * 32 * 16 * 3 * 3
+    + 7 * 7 * 48 * 32 * 3 * 3
+    + 48 * 10
+)
+print(f"dot-product/MAC proxy — CNN: {cnn_macs:,}; ViT: {vit_macs:,}")
+```
+
+The five paired runs use one cell per seed so that each training cell stays within
+the chapter's execution budget. The split is only operational—all five rows enter
+one analysis.
+
+```{python}
+#| label: train-fashion-6050
+#| code-summary: "Training code: paired Fashion run for seed 6050"
+
+fashion_results = []
+fashion_results.extend(run_paired_seed(6050))
+```
+
+```{python}
+#| label: train-fashion-6051
+#| code-summary: "Training code: paired Fashion run for seed 6051"
+
+fashion_results.extend(run_paired_seed(6051))
+```
+
+```{python}
+#| label: train-fashion-6052
+#| code-summary: "Training code: paired Fashion run for seed 6052"
+
+fashion_results.extend(run_paired_seed(6052))
+```
+
+```{python}
+#| label: train-fashion-6053
+#| code-summary: "Training code: paired Fashion run for seed 6053"
+
+fashion_results.extend(run_paired_seed(6053))
+```
+
+```{python}
+#| label: train-fashion-6054
+#| code-summary: "Training code: paired Fashion run for seed 6054"
+
+fashion_results.extend(run_paired_seed(6054))
+```
+
+```{python}
+#| label: fig-fashion-rematch
+#| fig-cap: "Five parameter- and schedule-matched runs on the fixed Chapter 6 split. Every line at left is one paired clean-validation comparison. At right, thin lines are individual seeds and thick lines are means under zero-padded right shifts; the operation also clips pixels at the right boundary. The CNN's flatter curve is consistent with its local sharing and pooling, not a causal isolation of any one component."
+#| fig-width: 10
+#| fig-height: 3.7
+#| code-summary: "Figure code: show every paired clean result and every shift curve"
+
+by_model = {
+    name: [row for row in fashion_results if row["model"] == name]
+    for name in ("CNN", "ViT")
+}
+
+for name in by_model:
+    assert [row["seed"] for row in by_model[name]] == SEEDS
+
+colors = {"CNN": "#232D4B", "ViT": "#E57200"}
+fig, axes = plt.subplots(1, 2, figsize=(10, 3.7),
+                         gridspec_kw={"width_ratios": [0.8, 1.35]})
+
+for index, seed in enumerate(SEEDS):
+    pair = [
+        by_model["CNN"][index]["validation"][0],
+        by_model["ViT"][index]["validation"][0],
+    ]
+    axes[0].plot([0, 1], pair, "o-", color="#8A8A7A", alpha=0.75, lw=1.3)
+axes[0].set_xticks([0, 1], ["CNN", "ViT"])
+axes[0].set_ylabel("clean validation accuracy")
+axes[0].set_title("each line is one paired seed")
+
+shifts = np.arange(5)
+for name in ("CNN", "ViT"):
+    curves = np.array([row["validation"] for row in by_model[name]])
+    for curve in curves:
+        axes[1].plot(shifts, curve, color=colors[name], alpha=0.2, lw=1)
+    axes[1].plot(shifts, curves.mean(0), "o-", color=colors[name],
+                 lw=2.6, ms=6, label=f"{name} mean")
+axes[1].axhline(0.1, color="#B8B8A8", ls=":", lw=1)
+axes[1].set_xticks(shifts)
+axes[1].set_xlabel("pixels shifted right")
+axes[1].set_ylabel("validation accuracy")
+axes[1].set_title("same fitted models under shift")
+axes[1].legend(frameon=False)
+
+for axis in axes:
+    axis.set_ylim(0.15, 0.82)
+plt.tight_layout()
+plt.show()
+
+for name in ("CNN", "ViT"):
+    rows = by_model[name]
+    mean_train = np.mean([row["train"] for row in rows])
+    mean_val = np.mean([row["validation"][0] for row in rows])
+    mean_test = np.mean([row["benchmark"] for row in rows])
+    mean_shift4 = np.mean([row["validation"][4] for row in rows])
+    print(
+        f"{name}: train {mean_train:.1%}; clean validation {mean_val:.1%}; "
+        f"benchmark {mean_test:.1%}; validation at 4px {mean_shift4:.1%}"
+    )
+```
+
+The result is sharper than a one-number leaderboard—it separates fitting from
+generalization. The ViT interpolates the
+fitting set in every run—100.0% mean training accuracy—but averages 70.1% on clean
+validation images. The CNN fits only 87.9% of the training labels under the shared
+recipe yet averages 73.9% on validation, winning all five paired comparisons. On
+the already-opened 600-image benchmark, the same means are 73.3% and 77.9%.
+
+Under a four-pixel shift, the validation means separate much more: 25.2% for ViT
+and 58.9% for CNN. The zero-filled shift also clips garment content—a reminder
+that the right edge is lost—so neither curve measures pure translation
+equivariance. Still, the contrast
+is consistent across the five fitted pairs with what Chapters 7–9 built into the
+CNN: local sharing, pooling, and a position-discarding global-average head.
+
+::: {.callout-warning}
+## A rematch is a regime, not a referendum
+
+These runs match the data split, parameter scale, optimizer, update count,
+minibatch order, and seeds. Their dot-product ledgers are close as well. They do
+**not** match architecture-specific tuning, every operation, wall-clock cost, or
+pretraining. The five runs vary initialization and order while holding one split
+fixed, so they are not population uncertainty estimates. The 600-image benchmark
+was opened in earlier chapters and is descriptive, not a fresh final test. This
+experiment tells us what happened here; it does not rank CNNs and ViTs in general.
+:::
+
+## Scale changes the comparison
+
+Now harvest Chapter 15's second promise: **pretraining is a regime, not an
+architecture**. ViT keeps the encoder pattern but changes the tokens, source data,
+and task. In the original work, the decisive source task was supervised image
+classification—not BERT-style masked prediction—and the amount of source data
+changed the comparison.
+
+The authors pretrained matched families on random subsets of JFT containing 9,
+30, and 90 million images, plus the full 300-million-image dataset. These are four
+measured regimes—not points on a smooth curve we are free to invent. ViT-B/32 was
+slightly faster than the compared ResNet-50, performed much worse on the 9-million
+subset, and performed better at 90 million images and above. The analogous
+ViT-L/16 versus larger ResNet comparison followed the same regime change.
+
+That does not prove “attention scales forever” or that data erases every useful
+prior. It demonstrates the narrower—and more valuable—point: the architecture
+ranking can reverse when the training regime changes. Our 1,000-example scratch
+run and the paper's large-source-pretraining run answer different questions.
+
+### Three places to buy back useful bias
+
+Pure global attention is not the only possible endpoint. Later designs put useful
+image structure back in at different places.
+
+| Where the prior enters | Example | What changes |
+|---|---|---|
+| Input | Hybrid CNN–ViT | A convolutional stem creates local feature tokens before global routing |
+| Routing | Swin Transformer | Shifted local windows and a hierarchy constrain attention and control resolution cost |
+| Training signal | DeiT | Strong augmentation and a convolutional teacher improve data efficiency without changing the student's basic patch encoder |
+
+DeiT makes a particularly human point. A teacher provides another target, but it
+does not replace the ground-truth label. Students can become better than the
+instructor: they listen, see other evidence, and decide for themselves. In DeiT's
+hard-distillation version, a distillation token learns from the teacher's predicted
+class while `[CLS]` learns from the true class; the two heads are combined at
+inference. The teacher changes supervision, not the identity of the student.
+
+ConvNeXt prevents a lazy conclusion in the opposite direction. Its study first
+modernized the training recipe, then progressively changed a ResNet toward design
+choices associated with contemporary Transformers. The training recipe alone
+raised the reported ResNet-50 ImageNet-1K accuracy from 76.1% to 78.8% before the
+architectural sequence was complete. Architecture, augmentation, optimization,
+and data interact—“CNN versus Transformer” is rarely a comparison between two
+isolated operators.
+
+## The word “scaling” changes jobs
+
+We have now used *scaling* in two different ways. EfficientNet asks how to enlarge
+one architecture family under a compute multiplier. Kaplan and Chinchilla ask how
+measured loss changes as parameters, data, and training compute grow. One is a
+design rule; the other is an empirical forecast.
+
+### Compound scaling: three knobs, one budget
+
+Suppose a baseline convolutional network has depth $d_0$, channel width $w_0$,
+and input resolution $r_0$. Scaling just one knob creates a bottleneck elsewhere—a
+deeper network still sees the same pixels, a wider network still has the same
+receptive-field schedule, and higher resolution asks an unchanged feature extractor
+to digest more detail. EfficientNet couples the knobs with one coefficient $\phi$:
+
+$$
+d_\phi=d_0\alpha^\phi,\qquad
+w_\phi=w_0\beta^\phi,\qquad
+r_\phi=r_0\gamma^\phi.
+$$ {#eq-compound-scaling}
+
+For ordinary dense convolutions, the leading operation count scales roughly as
+
+$$
+\operatorname{FLOPs}\propto d\,w^2r^2.
+$$
+
+Therefore one step in $\phi$ multiplies the proxy by
+
+$$
+\alpha\beta^2\gamma^2\approx2.
+$$ {#eq-efficientnet-constraint}
+
+EfficientNet's grid search on its baseline found approximately
+$\alpha=1.2$, $\beta=1.1$, and $\gamma=1.15$. Their product is 1.92027—not
+exactly two, but close enough to serve as the intended budget step.
+
+```{python}
+#| label: fig-compound-scaling
+#| fig-cap: "EfficientNet's published compound multipliers. Each step in φ grows depth, width, and resolution modestly; their approximate convolutional-operation proxy grows by 1.92027 per step. These are normalized design multipliers, not measured accuracy or runtime."
+#| fig-width: 8.5
+#| fig-height: 3.8
+#| code-summary: "Figure code: audit the EfficientNet compound-scaling constraint"
+
+alpha, beta, gamma = 1.2, 1.1, 1.15
+phis = np.arange(5)
+depth_multiplier = alpha ** phis
+width_multiplier = beta ** phis
+resolution_multiplier = gamma ** phis
+compute_multiplier = (alpha * beta**2 * gamma**2) ** phis
+
+print(f"alpha * beta^2 * gamma^2 = {alpha * beta**2 * gamma**2:.5f}")
+
+fig, axes = plt.subplots(1, 2, figsize=(8.5, 3.8))
+for values, label, color in [
+    (depth_multiplier, "depth", "#232D4B"),
+    (width_multiplier, "width", "#E57200"),
+    (resolution_multiplier, "resolution", "#2E7D32"),
+]:
+    axes[0].plot(phis, values, "o-", lw=2, label=label, color=color)
+axes[0].set_xlabel("compound coefficient $\\phi$")
+axes[0].set_ylabel("multiplier over baseline")
+axes[0].set_xticks(phis)
+axes[0].legend(frameon=False)
+axes[0].set_title("three coupled architecture knobs")
+
+axes[1].plot(phis, compute_multiplier, "o-", color="#722F37", lw=2.5)
+for phi, value in zip(phis, compute_multiplier):
+    axes[1].text(phi, value * 1.06, f"{value:.2f}×", ha="center", fontsize=8)
+axes[1].set_yscale("log", base=2)
+axes[1].set_ylim(0.85, compute_multiplier.max() * 1.18)
+axes[1].set_xlabel("compound coefficient $\\phi$")
+axes[1].set_ylabel("operation proxy (log base 2)")
+axes[1].set_xticks(phis)
+axes[1].set_title("the budget grows with them")
+plt.tight_layout()
+plt.show()
+```
+
+The constants are an empirical design choice from a particular search and model
+family, not a law that every network must obey. The durable lesson is the budget
+discipline—when several resources jointly limit performance, scaling one while
+freezing the others can spend compute badly.
+
+## A fitted power law, not a promise
+
+Kaplan and colleagues asked a different question about decoder-only language
+models. Holding other resources out of the way, how does test cross-entropy $L$
+change with non-embedding parameters $N$, dataset tokens $D$, or
+compute-optimally allocated training compute $C_{\min}$? Across their measured
+regime, the answer was well described by power laws:
+
+$$
+L(N)=\left(\frac{N_c}{N}\right)^{\alpha_N},
+\qquad \alpha_N\approx0.076,
+$$
+
+$$
+L(D)=\left(\frac{D_c}{D}\right)^{\alpha_D},
+\qquad \alpha_D\approx0.095,
+$$
+
+$$
+L(C_{\min})=
+\left(\frac{C_c}{C_{\min}}\right)^{\alpha_C},
+\qquad \alpha_C\approx0.050.
+$$
+
+Here $N_c,D_c,C_c$ are fitted scale constants. Their values depend on the data,
+tokenizer, vocabulary, loss definition, and compute units—the small exponents are
+the more portable description of diminishing returns. These are conditional
+fits. The parameter curve assumes data is not the bottleneck, and the data curve
+assumes model capacity is not the bottleneck.
+
+A power law becomes a straight line after taking logs:
+
+$$
+\log L=\log K-\alpha\log x.
+$$
+
+That makes extrapolation visually tempting: fit a line—extend it—and read a
+future loss. But a straight line on transformed axes does not repeal the
+conditions that produced it.
+
+```{python}
+#| label: fig-kaplan-scaling
+#| fig-cap: "Implications of Kaplan et al.'s published exponents, normalized to one at the left endpoint. The markers and lines are calculated from the fitted laws—not raw training runs from this book. Even a thousand-fold resource increase leaves a substantial fraction of the fitted component, which is the arithmetic of diminishing returns."
+#| fig-width: 8.5
+#| fig-height: 4
+#| code-summary: "Figure code: turn the published Kaplan exponents into auditable multipliers"
+
+scales = np.logspace(0, 3, 200)
+kaplan_exponents = {
+    "parameters, $\\alpha=0.076$": (0.076, "#232D4B"),
+    "tokens, $\\alpha=0.095$": (0.095, "#E57200"),
+    "optimal compute, $\\alpha=0.050$": (0.050, "#2E7D32"),
+}
+
+fig, ax = plt.subplots(figsize=(8.5, 4))
+for label, (exponent, color) in kaplan_exponents.items():
+    normalized = scales ** (-exponent)
+    ax.loglog(scales, normalized, lw=2.4, color=color, label=label)
+    marker_x = np.array([1, 10, 100, 1000])
+    ax.scatter(marker_x, marker_x ** (-exponent), color=color, s=28)
+    doubling_factor = 2 ** (-exponent)
+    print(
+        f"{label}: doubling leaves {doubling_factor:.4f} "
+        f"({100 * (1 - doubling_factor):.1f}% reduction)"
+    )
+ax.set_xlabel("resource multiplier")
+ax.set_ylabel("normalized fitted loss component")
+ax.set_xticks([1, 10, 100, 1000], ["1×", "10×", "100×", "1000×"])
+ax.set_title("small exponents imply persistent diminishing returns")
+ax.legend(frameon=False)
+ax.grid(True, which="both", alpha=0.18)
+plt.tight_layout()
+plt.show()
+```
+
+The doubling arithmetic is now pinned. Twice as many parameters multiplies the
+fitted parameter-limited loss by $2^{-0.076}=0.949$, a 5.1% reduction. Doubling
+nonredundant data gives $2^{-0.095}=0.936$, a 6.4% reduction. Doubling optimally
+allocated compute gives $2^{-0.050}=0.966$, a 3.4% reduction. Comparing those
+percentages does **not** say that one parameter and one token have comparable cost
+or value—the units, constants, and constraints differ.
+
+::: {.callout-note}
+## A scaling law is a fitted conditional
+
+The measured range, data distribution, objective, architecture family, optimizer,
+and nonbinding-resource assumptions are part of the result. An extrapolation is a
+forecast under continued conditions, not a guarantee. Kaplan's basic one-variable
+fits above do not contain an explicit additive $1.69$ floor; that constant belongs
+to the later Chinchilla joint fit.
+:::
+
+Kaplan's compute-optimal analysis suggested spending additional compute mostly on
+parameters:
+
+$$
+N_{\mathrm{opt}}\propto C^{0.73},
+\qquad
+D_{\mathrm{opt}}\propto C^{0.27}.
+$$
+
+That recommendation was influential—and it was later revised by a study designed
+to measure the allocation more directly.
+
+## Compute-optimal means balanced
+
+Hoffmann and colleagues trained more than 400 language models while varying model
+size and token count. Their Chinchilla study estimated the compute-optimal frontier
+three ways.
+
+| Fitting approach | $N_{\mathrm{opt}}$ exponent | $D_{\mathrm{opt}}$ exponent |
+|---|---:|---:|
+| Minimum over training curves | 0.50 | 0.50 |
+| IsoFLOP profiles | 0.49 | 0.51 |
+| Parametric loss model | 0.46 | 0.54 |
+
+The exact answers differ—especially under long extrapolation—but all three move
+much more of the growing budget toward data than Kaplan's $0.73/0.27$ allocation.
+That agreement is the central result—not one immortal ratio.
+
+The third approach fits a joint loss surface:
+
+$$
+\widehat{L}(N,D)
+=E+\frac{A}{N^\alpha}+\frac{B}{D^\beta},
+$$ {#eq-chinchilla-loss}
+
+with published constants
+
+$$
+E=1.69,\quad A=406.4,\quad B=410.7,
+\quad \alpha=0.34,\quad \beta=0.28.
+$$
+
+$E$ is the fitted irreducible term for that distribution and objective;
+$A/N^\alpha$ is the model-limited contribution; and $B/D^\beta$ is the
+data-limited contribution. This decomposition is empirical. It is not a theorem
+that every language model has exactly three such terms.
+
+For a dense Transformer, the study uses the approximation
+
+$$
+C\approx6ND,
+$$ {#eq-six-nd}
+
+where $C$ is training floating-point operations, $N$ is non-embedding parameters,
+and $D$ is processed training tokens. The factor six approximates a forward pass
+plus a backward pass. It omits context-dependent and embedding details, so it is a
+planning equation rather than a profiler.
+
+Fixing $C$ forces $D=C/(6N)$. Too large a model leaves too few tokens; too many
+tokens leave too little model. Substituting the constraint into
+@eq-chinchilla-loss and differentiating gives
+
+$$
+G=\left(\frac{\alpha A}{\beta B}\right)^{1/(\alpha+\beta)},
+$$
+
+$$
+N_{\mathrm{opt}}
+=G\left(\frac{C}{6}\right)^{\beta/(\alpha+\beta)},
+\qquad
+D_{\mathrm{opt}}
+=G^{-1}\left(\frac{C}{6}\right)^{\alpha/(\alpha+\beta)}.
+$$ {#eq-chinchilla-optimum}
+
+The rounded constants imply exponents 0.452 and 0.548, close to the reported
+parametric-frontier fit of 0.46 and 0.54. At the reference budget
+$C=5.76\times10^{23}$, this particular fitted surface reaches its minimum near
+32.2 billion parameters and 2.98 trillion tokens. The other two methods place the
+model farther right, in roughly the 40–70 billion range. The paper chose 70
+billion parameters and 1.4 trillion tokens for Chinchilla, at the upper end of
+that range, partly for data and computational efficiency.
+
+```{python}
+#| label: fig-chinchilla-allocation
+#| fig-cap: "One reference iso-compute curve under the published Chinchilla parametric loss fit. The rounded joint fit reaches its mathematical minimum near 32.2B parameters; the separate 20-tokens-per-parameter heuristic lands near 69.3B/1.386T, close to the 70B/1.4T Chinchilla design. A Gopher-sized 280B allocation leaves far fewer tokens. The curve is a fitted surface evaluation, not a new training experiment."
+#| fig-width: 9
+#| fig-height: 4.3
+#| code-summary: "Figure code: separate the joint-fit optimum from the 20-token heuristic"
+
+E_inf, A_fit, B_fit = 1.69, 406.4, 410.7
+alpha_fit, beta_fit = 0.34, 0.28
+C_budget = 5.76e23
+
+G_fit = (
+    alpha_fit * A_fit / (beta_fit * B_fit)
+) ** (1 / (alpha_fit + beta_fit))
+N_joint = G_fit * (C_budget / 6) ** (
+    beta_fit / (alpha_fit + beta_fit)
+)
+D_joint = (C_budget / 6) / N_joint
+
+N_twenty = math.sqrt(C_budget / 120)
+D_twenty = 20 * N_twenty
+
+N_grid = np.logspace(np.log10(4e9), np.log10(5e11), 400)
+D_grid = C_budget / (6 * N_grid)
+loss_grid = (
+    E_inf + A_fit / N_grid**alpha_fit + B_fit / D_grid**beta_fit
+)
+
+def fitted_chinchilla_loss(parameters: float, tokens: float) -> float:
+    return (
+        E_inf
+        + A_fit / parameters**alpha_fit
+        + B_fit / tokens**beta_fit
+    )
+
+points = [
+    (N_joint, D_joint, "joint-fit minimum", "#2E7D32"),
+    (N_twenty, D_twenty, "20-token heuristic", "#E57200"),
+    (280e9, C_budget / (6 * 280e9), "Gopher-sized model", "#722F37"),
+]
+
+fig, ax = plt.subplots(figsize=(9, 4.3))
+ax.semilogx(N_grid / 1e9, loss_grid, color="#232D4B", lw=2.6)
+for parameters, tokens, label, color in points:
+    loss = fitted_chinchilla_loss(parameters, tokens)
+    ax.scatter(parameters / 1e9, loss, s=70, color=color, zorder=3, label=label)
+    ax.annotate(
+        f"{parameters / 1e9:.1f}B params\n{tokens / 1e12:.2f}T tokens",
+        (parameters / 1e9, loss), xytext=(6, 8), textcoords="offset points",
+        fontsize=8, color=color,
+    )
+ax.set_xlabel("parameters $N$ (billions, log scale)")
+ax.set_ylabel("published fitted loss $\\widehat{L}(N,C/(6N))$")
+ax.set_title("same approximate training budget, different allocations")
+ax.legend(frameon=False, fontsize=8, loc="upper left")
+plt.tight_layout()
+plt.show()
+
+print(
+    f"joint-fit minimum: N={N_joint / 1e9:.2f}B, "
+    f"D={D_joint / 1e12:.3f}T, D/N={D_joint / N_joint:.1f}"
+)
+print(
+    f"20-token heuristic: N={N_twenty / 1e9:.2f}B, "
+    f"D={D_twenty / 1e12:.3f}T, C={6 * N_twenty * D_twenty:.2e}"
+)
+```
+
+This distinction matters. The memorable **20 tokens per parameter** comes from the
+near-balanced frontier estimated by the first approaches: their table gives about
+20.2 billion tokens for 1 billion parameters, 205.1 billion for 10 billion, and
+1.5 trillion for 67 billion. If we impose the rounded heuristic $D\approx20N$ at
+the $5.76\times10^{23}$ budget, @eq-six-nd gives
+
+$$
+N\approx\sqrt{\frac{C}{120}}=69.3\text{ billion},
+\qquad
+D\approx1.386\text{ trillion}.
+$$
+
+That arithmetic is close to the actual Chinchilla design, but it is **not** the
+minimum of the rounded joint fit drawn above. Different fitting methods produced a
+broad range, and the authors made an engineering choice within it. Hiding that
+difference would make a heuristic look more exact than the evidence.
+
+The historical comparison makes the allocation tangible. Gopher used about 280
+billion parameters and 300 billion training tokens. Chinchilla used 70 billion
+parameters and 1.4 trillion tokens: four times fewer parameters and about 4.7
+times more tokens, at approximately the same reported training budget. The smaller,
+longer-trained model achieved lower loss and outperformed the larger model across
+the paper's broad evaluation suite. More parameters had not been the only way to
+spend the budget—and, in that regime, they had not been the best way.
+
+::: {.callout-warning}
+## Twenty is not a constant of nature
+
+The 20-to-1 ratio is an approximate rule from this study, model family, data, and
+frontier. The fitted methods do not agree exactly, and the ratio changes weakly
+with compute even inside the parametric model. Data quality, repetition,
+tokenization, objective, architecture, and downstream use can all move the useful
+allocation. Use the rule to challenge an obviously undertrained model, not to end
+the analysis.
+:::
+
+## Where the forecast stops
+
+Scaling laws are powerful precisely because they compress many expensive runs into
+a small predictive object. That compression has boundaries.
+
+**Loss is not a capability map.** A smoother aggregate cross-entropy curve does
+not tell us that every downstream skill appears smoothly, or exactly when a
+particular behavior becomes reliable.
+
+**Tokens are not interchangeable.** A trillion repeated, low-quality, contaminated,
+or mismatched tokens need not buy what a trillion useful, diverse tokens buy.
+$D$ counts processed tokens; it does not measure novelty or truth.
+
+**The law is local to a recipe and range.** Change the architecture, optimizer,
+data mixture, context length, or evaluation distribution and the fitted constants
+can move. Extrapolation beyond the measured range adds uncertainty even when the
+line looks immaculate on log–log axes.
+
+**Training-optimal is not serving-optimal.** Chinchilla allocates a training
+budget; it does not make the resulting backbone cheap to store, run, or adapt.
+@sec-17-peft-quantization will harvest that mismatch: what can we change when
+moving every pretrained weight is no longer affordable?
+
+This closes Part IV's route from fixed lookup to global learned routing. We began
+with a memory bank, learned how to score it, let every token query every other
+token, changed the visibility to pretrain representations, and finally let images
+enter as tokens. The operator was only half the story. The data and budget that
+train it are part of the model too.
+
+## Okay, so—
+
+1. **An image can become a token sequence.** Split it into $P\times P$ patches,
+   flatten to width $CP^2$, and share a learned projection. Unfold-plus-linear is
+   exactly a convolution with kernel and stride $P$ after reshaping its weights.
+2. **ViT is an encoder transplant, not assumption-free learning.** A learned
+   `[CLS]` meeting place, learned positions, pre-LayerNorm blocks, and a linear
+   head reuse the Transformer pattern while retaining a small set of image and
+   optimization biases.
+3. **Inductive bias is a trade.** The five-seed Fashion rematch favors the CNN on
+   clean validation and much more strongly under shift, but it is a tiny scratch
+   regime—not an architecture referendum. Large supervised pretraining changed
+   the comparison in the original ViT study.
+4. **Architecture and recipe cannot be cleanly collapsed into a brand name.**
+   Hybrid stems, windowed routing, distillation, and ConvNeXt put priors in
+   different places. Data, optimization, and operator design interact.
+5. **Scaling has two meanings here.** EfficientNet's compound rule coordinates
+   depth, width, and resolution; empirical scaling laws forecast loss as
+   parameters, tokens, and compute change. Both are resource-allocation tools,
+   but they answer different questions.
+6. **Compute-optimal training balances model and data.** Chinchilla revised the
+   parameter-heavy Kaplan allocation, while also showing why a memorable
+   20-token heuristic must remain a heuristic. A fitted law carries its regime,
+   assumptions, and uncertainty with it.
+
+## Sources and further reading {.unnumbered}
+
+- [Dosovitskiy et al., *An Image Is Worth 16×16 Words: Transformers for Image Recognition at Scale*](https://arxiv.org/abs/2010.11929): the original ViT architecture, position and pooling ablations, and data-scale comparison.
+- [Tan and Le, *EfficientNet: Rethinking Model Scaling for Convolutional Neural Networks*](https://proceedings.mlr.press/v97/tan19a.html): compound depth, width, and resolution scaling.
+- [Touvron et al., *Training Data-Efficient Image Transformers & Distillation Through Attention*](https://proceedings.mlr.press/v139/touvron21a.html): DeiT's augmentation and teacher-guided training recipe.
+- [Liu et al., *Swin Transformer: Hierarchical Vision Transformer Using Shifted Windows*](https://openaccess.thecvf.com/content/ICCV2021/html/Liu_Swin_Transformer_Hierarchical_Vision_Transformer_Using_Shifted_Windows_ICCV_2021_paper.html): local shifted windows, hierarchy, and resolution-aware attention cost.
+- [Liu et al., *A ConvNet for the 2020s*](https://openaccess.thecvf.com/content/CVPR2022/html/Liu_A_ConvNet_for_the_2020s_CVPR_2022_paper.html): the ConvNeXt modernization study and architecture–recipe interaction.
+- [Kaplan et al., *Scaling Laws for Neural Language Models*](https://arxiv.org/abs/2001.08361): the parameter, data, and compute power laws and the earlier compute allocation.
+- [Hoffmann et al., *Training Compute-Optimal Large Language Models*](https://arxiv.org/abs/2203.15556): the three Chinchilla frontier estimates, joint loss fit, and Gopher comparison.
+
+## Exercises {.unnumbered}
+
+1. **(Pencil.)** A batch contains 12 RGB images at $384\times384$. With
+   $P=16$ and model width $d=768$, give the shapes of the raw batch, flattened
+   patch tensor, projected patches, and sequence after `[CLS]`. Repeat the token
+   and per-head score-entry counts for $P=8$. By what factor did halving $P$
+   change each count?
+2. **(Code and proof.)** Generalize the patch-equivalence cell to $C=3$ and a
+   rectangular image whose height and width are each divisible by $P$. State the
+   required unfold ordering, reshape a matrix
+   $\matr{E}\in\mathbb{R}^{CP^2\times d}$ into convolution weights, and assert
+   equality to numerical tolerance. Explain why overlap appears when stride is
+   smaller than $P$.
+3. **(Experimental audit.)** Reproduce all five paired Fashion results and compute
+   the paired clean-validation gaps, clean-to-four-pixel drops, and schedule
+   hashes. Then change exactly one factor—add translated training examples—while
+   keeping the split, seeds, initialization rule, model sizes, and minibatch
+   schedules auditable. What question does the new comparison answer, and what
+   still prevents a general CNN-versus-ViT claim?
+4. **(Scaling arithmetic.)** Using EfficientNet's published constants, compute the
+   depth, width, resolution, and operation-proxy multipliers at $\phi=3$. Then use
+   Kaplan's exponents to compute the fitted component remaining after a 10-fold
+   increase in parameters, data, and compute. Why can you not compare those three
+   numbers as benefits per dollar?
+5. **(Derivation and interpretation.)** Starting from @eq-chinchilla-loss and
+   @eq-six-nd, derive @eq-chinchilla-optimum. Evaluate both the joint-fit optimum
+   and the separate $D=20N$ heuristic at a budget of $1.2\times10^{22}$ FLOPs.
+   Explain why disagreement between the answers is evidence to report rather than
+   an algebra mistake, and name two deployment constraints neither calculation
+   optimizes.

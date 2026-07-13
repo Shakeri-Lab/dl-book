@@ -1,6 +1,6 @@
 # Continuing the Book — Handoff & Roadmap
 
-*Written 2026-07-09 after Chapter 11 shipped; updated 2026-07-13 after Chapter 15
+*Written 2026-07-09 after Chapter 11 shipped; updated 2026-07-13 after Chapter 16
 shipped. This is the master handoff document:
 everything a fresh collaborator (human or Claude session, on any account) needs to
 continue the project without the original conversation history. Read `CLAUDE.md`
@@ -19,7 +19,7 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 | I · From Lines to Networks | 1–6 | **Shipped; repair pass complete and verified** (July 11, 2026) |
 | II · Vision | 7–9 | **Shipped; repair pass complete and verified** (July 11, 2026) |
 | III · Sequences | 10–11 | **Shipped; repair pass complete and verified** (July 11, 2026) |
-| IV · Attention | 12–16 | **12–15 shipped and two-format verified; 16 is next** |
+| IV · Attention | 12–16 | **Shipped and two-format verified** (July 13, 2026) |
 | V · Pretrained Era | 17–19 | Stubs with contracts |
 | Appendices | a1–a4 | Stubs (a4 floating-point queued in backlog) |
 
@@ -56,19 +56,32 @@ from MLM inputs, random replacements, and targets stay near chance: scratch
 labeled sets perfectly. This is a synthetic mechanism demonstration—not a
 natural-language or compute-efficiency claim.
 
+Chapter 16 is complete at the manuscript and experiment level: patches, learned
+position and `[CLS]`, ViT's inductive-bias trade, EfficientNet compound scaling,
+and the Kaplan-to-Chinchilla allocation correction are derived and exercised. Its
+book-original five-seed Fashion rematch uses an explicit paired minibatch schedule
+for a 20,250-parameter CNN and 19,658-parameter ViT. The CNN wins all five clean
+validation pairs and all 25 seed-by-shift validation comparisons; mean clean
+accuracy is 0.739 versus 0.701, and mean four-pixel-shift accuracy is 0.589 versus
+0.252. This is deliberately a tiny scratch regime—not a general CNN-versus-ViT
+ranking. The corrected executed render passed in both formats, and all printed
+HTML and TeX outputs matched exactly. A clean full-book render, browser
+asset/layout checks, and complete Chapter 16 PDF visual QA also passed before
+publication.
+
 **Decisions still gated on the author:**
-- The author's own edit pass over the shipped Chapters 1–15 remains pending.
+- The author's own edit pass over Chapters 1–16 remains pending.
 - Course-site integration was approved, implemented, and shipped July 11, 2026. It uses
   a plural `bookChapters` field because modules and chapters do not map one-to-one;
   only reviewed, substantive chapters are linked. The production build passes.
-  Chapters 12–15's course-site links wait for the author's edit pass.
+  Chapters 12–16's course-site links wait for the author's edit pass.
 - "Deeper dive" collapsed sections: piloted in ch. 6; his verdict pending ("let us
   get back to deeper dive later"). Do not retrofit chs. 1/5.
 - GPU experiments remain backlog-only until access is available. Do not publish
   placeholder callouts in chapters; run the queued experiments on Rivanna/Colab and
   fold real results back into the relevant chapters later.
 
-## 2. The working protocol (refined over chapters 7–15)
+## 2. The working protocol (refined over chapters 7–16)
 
 The single most important lesson of this project: **pre-test every experiment
 regime before writing a word of prose.** Roughly half of all planned experiments
@@ -247,7 +260,7 @@ These are precedents; when a new experiment misbehaves, check here first.
 
 ## 7. Roadmap: the remaining chapters
 
-Work order: 16 → 17 → 18 → 19, appendices opportunistically.
+Work order: 17 → 18 → 19, appendices opportunistically.
 Each stub carries its contract; specifics accumulated so far:
 
 ### Ch. 12 — Kernel Regression: Attention Before It Was Learnable (SHIPPED)
@@ -354,19 +367,68 @@ Each stub carries its contract; specifics accumulated so far:
 - **Forward seeds planted**: learned summary token and “pretraining is a regime,
   not an architecture” into ch. 16; full-backbone fine-tuning cost into ch. 17.
 
-### Ch. 16 — ViT & Scaling Laws
-- Seeds: `10.0_ViT.tex`, `10.1.scaling.tex`, plus `sources/4.3-NextGenCNN.tex`
-  (EfficientNet compound scaling / ConvNeXt — the CNN side of the story;
-  already snapshotted). Patches-as-tokens demo on Fashion subset; inductive bias
-  as a *trade* (callback to ch. 6); scaling-law log-log plots can be drawn from
-  published constants (cite, don't fake data). Harvest ch. 14's “global routing
-  trades away locality bias” by name. Also harvest ch. 15's learned summary-token
-  pattern and “pretraining is a regime, not an architecture” before moving from
-  text corpora to image patches and scaling budgets.
+### Ch. 16 — Vision Transformers and Scaling Laws (SHIPPED)
+- **Seeds and provenance**: public snapshots `sources/10.0_ViT.tex` and
+  `sources/10.1.scaling.tex`, existing `sources/4.3-NextGenCNN.tex`, m10 ViT and
+  scaling transcripts, the module spine, and its Manim scene concepts. The chapter
+  re-derived numerical claims against the primary ViT, EfficientNet, DeiT, Swin,
+  ConvNeXt, Kaplan, and Chinchilla papers; paper figures are discussed, not copied.
+- **Licensing boundary**: every implementation block whose provenance overlapped
+  D2L or could not be established independently was removed from the public ViT
+  source snapshot. All executable patchification, attention, models, training,
+  and figures in the chapter are book-original implementations derived from the
+  equations; no third-party ViT package or D2L implementation was ported.
+- **Harvests completed by name**: ch. 14's “global routing trades away locality
+  bias”; ch. 15's learned summary-token pattern and “pretraining is a regime, not
+  an architecture”; and ch. 6's inductive bias as a trade. ViT is presented as an
+  encoder transplant with weaker image-specific priors, not assumption-free
+  learning. Hybrid stems, Swin, DeiT, and ConvNeXt show that operator, training
+  recipe, data, and prior placement interact.
+- **Patch and cost audits**: a 224-by-224 RGB image with 16-by-16 patches yields
+  196 raw 768-coordinate patches. On Fashion, unfold-plus-linear and the equivalent
+  stride-4 convolution agree to maximum absolute error `7.15e-07`. Halving patch
+  width from 32 to 16 multiplies tokens by four and score entries by sixteen; the
+  chapter distinguishes attention's $O(N^2d)$ mixing term from $O(Nd^2)$
+  projections and feed-forward work.
+- **Pinned paired experiment**: fixed ch. 6 split (1,000 fit / 200 validation;
+  the already-opened 600-image benchmark is descriptive), seeds 6050–6054,
+  AdamW 0.003 with weight decay 0.01, cosine decay over 120 epochs, batch 100,
+  and one explicit shared permutation schedule per pair. Schedule hashes are
+  `c42c1c2b4baf`, `f0c73c85e0e3`, `20ec620b3e2e`, `c93bd2a03038`, and
+  `87a781e7efa8`. The parameter counts are CNN 20,250 and ViT 19,658 (+3.01% for
+  the CNN); the deliberately limited dot-product/MAC proxies are 1,185,888 and
+  1,164,608 (+1.83%), not measured FLOPs or runtime.
+- **Pinned result**: mean CNN/ViT fitting accuracy is 0.8788/1.0000; validation
+  means for right shifts 0–4 are CNN
+  0.739/0.699/0.675/0.657/0.589 and ViT
+  0.701/0.604/0.457/0.356/0.252. Descriptive benchmark means are 0.7792/0.7332.
+  The CNN wins all five clean pairs and all 25 seed-by-shift points. The shift
+  zero-fills and clips the right edge, and the five runs share one split, so the
+  chapter reports a controlled small-data regime rather than population
+  uncertainty or an architecture referendum.
+- **Scaling arithmetic pinned**: EfficientNet's published multipliers give
+  $1.2\times1.1^2\times1.15^2=1.92027$ per compound step. Kaplan's published
+  exponents imply 5.1%, 6.4%, and 3.4% fitted-component reductions when parameters,
+  tokens, and optimally allocated compute respectively double. For
+  $C=5.76\times10^{23}$, the rounded Chinchilla joint fit gives 32.19B parameters,
+  2.982T tokens, and $D/N=92.6$, while the separate 20-token heuristic gives
+  69.28B/1.386T. The chapter keeps those two estimates separate.
+- **Verification state**: the corrected executed HTML and PDF render completed,
+  with both `html.json` and `tex.json` freezes present and every printed numerical
+  output matching across formats. The final full-book render passed; all five HTML
+  figures loaded without overflow or browser-console errors; and the complete
+  Chapter 16 PDF range plus all corrected figure/equation pages passed visual QA.
+- **Forward seed planted**: “training-optimal is not serving-optimal” into ch. 17,
+  where full-backbone storage, movement, adaptation, and inference costs become
+  the problem rather than the training allocation alone.
 
-### Chs. 17–19 — Pretrained Era
-- Per stubs: 17 prompting/PEFT/quantization (a2/a4 appendix ties; quantization
-  connects to the floating-point appendix), 18 alignment, 19 generative
+### Ch. 17 — Prompting, PEFT, and Quantization (NEXT)
+- Harvest ch. 16's “training-optimal is not serving-optimal” handoff together with
+  ch. 15's full-backbone fine-tuning cost. Per the stub, cover prompting, PEFT,
+  and quantization; the quantization thread connects to appendices a2 and a4.
+
+### Chs. 18–19 — Alignment and Generation
+- Per the stubs: ch. 18 alignment; ch. 19 generation
   (PCA→AE→VAE→diffusion — **the m06 autoencoder spine lives here**: PCA as
   linear autoencoder, bottleneck, manifold learning; see
   `ds6050_06_autoencoders/MODULE_NOTES.md` spine #4–8, deliberately NOT used in

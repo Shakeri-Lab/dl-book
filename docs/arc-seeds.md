@@ -8,7 +8,7 @@ new rows here. The pedagogical-efficiency rule (drafting-template) depends on
 this file: a concept with no payoff chapter listed here should be an exercise or
 a cut.*
 
-*Updated: 2026-07-13, after Chapter 15 shipped.*
+*Updated: 2026-07-13, after Chapter 16 shipped.*
 
 ## 1. Seeds planted and their harvest contracts
 
@@ -22,7 +22,7 @@ a cut.*
 | Compositional hierarchy: features of features | ch. 3 | ch. 8 ✓ (receptive fields make it architectural) | done |
 | Gradient superhighway (ReLU's open gate) | ch. 5 | ch. 9 ✓ (residual = the highway as infrastructure), ch. 10 ✓ (cell state = highway through time) | done |
 | Float-precision death (tiny signals can become numerically unusable) | ch. 5 | ch. 9 ✓ (norm underflow + update-resolution diagnostic), ch. 10 ✓ (σ(0)^80); appendix a4 (gather all three) | a4 due |
-| Constraints are knowledge / inductive bias prescription | ch. 6 | ch. 7–8 ✓; ch. 16 (ViT trades the bias away — "inductive bias strikes again, this time as a trade") | ch. 16 due |
+| Constraints are knowledge / inductive bias prescription | ch. 6 | ch. 7–8 ✓; ch. 16 ✓ (ViT trades the bias away — "inductive bias strikes again, this time as a trade") | done |
 | Shift cliff (MLP collapses under 2px shift) | ch. 6 | ch. 8 ✓ (rematch), ch. 9 ✓ (GAP flattens it) — the book's first running benchmark | done |
 | Global templates figure (fig-templates) | ch. 6 | ch. 8 ✓ (learned local kernels vs. global smears) | done |
 | Sliding dot product; "what if the template were learnable?" | ch. 7 | ch. 8 ✓ — the Part II pivot | done |
@@ -43,9 +43,10 @@ a cut.*
 | Beam search / decoding machinery | ch. 11 | chs. 15/17 (LM decoding reuses it) | ambient |
 | Book-corpus char-LM (held-out fixed-window loss 1.89; sampled training minibatch 1.42; babble) | ch. 10 | ch. 14 (exact corpus/split/evaluation and historical window schedule; positional transformer 1.9190, no-position 2.3405) | done |
 | Visibility is a modeling decision | ch. 14 | ch. 15 (causal generation versus bidirectional masked-token representation learning) | done |
-| Global routing trades away locality bias | ch. 14 | ch. 16 (patch tokens rematch convolution's built-in geometry) | due |
-| A learned summary token can gather a sequence for a downstream head | ch. 15 | ch. 16 (`[CLS]` over image patches) | ch. 16 due |
-| Pretraining is a regime, not an architecture | ch. 15 | ch. 16 (text→vision and the scaling budget) | ch. 16 due |
+| Global routing trades away locality bias | ch. 14 | ch. 16 ✓ (patch-token ViT rematches convolution's built-in geometry in a five-seed scratch regime) | done |
+| A learned summary token can gather a sequence for a downstream head | ch. 15 | ch. 16 ✓ (`[CLS]` becomes a learned meeting place over image patches, not a summary by birth) | done |
+| Pretraining is a regime, not an architecture | ch. 15 | ch. 16 ✓ (the same encoder pattern crosses from text to vision; data scale can reverse the CNN–ViT ranking) | done |
+| Training-optimal is not serving-optimal | ch. 16 | ch. 17 — harvest by name: Chinchilla allocates training compute, not storage, inference, or adaptation cost; use that mismatch to motivate prompting, PEFT, and quantization | ch. 17 due |
 | Fine-tuning changes every encoder weight; what if the backbone is too large? | ch. 15 | ch. 17 (prompting, PEFT, quantization) | ch. 17 due |
 | m06 autoencoder spine (PCA = linear AE, bottleneck, manifolds) | (unused by design in ch. 11) | ch. 19 | due |
 
@@ -53,7 +54,15 @@ a cut.*
 
 1. **The shift cliff** (Fashion subset, `shift_right`): ch. 6 MLP 80.8→42.0% @2px →
    ch. 8 LeNet 82.5→62.3% → ch. 9 NiN+GAP 76.2→66.5% from 0→4px (a much gentler
-   slope, not exact invariance). Closed.
+   slope, not exact invariance). Ch. 16 reopens the mechanism in a separate,
+   explicitly paired scratch regime: on the fixed 1,000-fit/200-validation Chapter
+   6 split over seeds 6050–6054, the tiny CNN averages 73.9→58.9% and the tiny ViT
+   70.1→25.2% from 0→4px. The CNN wins all five clean pairs and all 25
+   seed×shift validation comparisons; on the already-opened 600-image benchmark,
+   clean means are 77.9% and 73.3%. Parameters differ by 3.0%, minibatch schedules
+   are pair-exact, and the dot-product proxies differ by 1.8%; architecture-specific
+   tuning and pretraining are not matched, and zero filling clips the right edge.
+   Closed.
 2. **The date task** (synthetic, ch. 11): 9,000 unique source strings split
    8,000/500/500 for train/validation/test, with zero exact-source overlap between
    every pair. The packed seq2seq baseline is 53.8% at epoch 6 and 95.0% at epoch 12
@@ -103,6 +112,7 @@ optimizers or `backward()` before Chapter 5.
 | 13 | learned Q/K/V, additive and scaled dot-product cross-attention, source-padding attention masks, attention-augmented seq2seq, alignment heatmaps; multi-head preview only |
 | 14 | permutation-equivariant self-attention, custom multi-head attention, causal masks, sinusoidal positional encoding, LayerNorm, residual stream, pre-LN transformer blocks, FFN memory lens, exact ablation scheduling |
 | 15 | self-supervision, full nonpadding visibility, MLM selection/corruption and 80/10/10 policy, WordPiece concept, learned token/position/segment embeddings, `[CLS]`/`[SEP]`, GELU, BERT encoder and historical NSP, full fine-tuning versus frozen probes, centered cosine similarity, paired end-to-end transfer controls |
+| 16 | image patch tokens (`F.unfold` and stride-$P$ `nn.Conv2d` equivalence), ViT encoder classifier (learned image positions and `[CLS]`, pre-LN blocks), patch-size/attention-cost arithmetic, paired schedule-hash audits, CNN–ViT inductive-bias regimes; compound depth/width/resolution scaling, empirical power-law scaling, compute-optimal parameter/data allocation, Chinchilla joint loss fit |
 
 ## 4. His signature analogies (use them; don't invent competitors)
 
