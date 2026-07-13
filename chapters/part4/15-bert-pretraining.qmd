@@ -1,26 +1,1224 @@
 # The BERT Moment: Pretraining as the New Regime {#sec-15-bert-pretraining}
 
+<!-- lecture-source:
+     m10_10-2-pretrained-transformer-models_SDHOqinS8dg.txt
+     (spine via ds6050_10_foundation_models/MODULE_NOTES.md; scene concepts
+     checked against that module's Manim source)
+     seeds: sources/bert.tex, sources/10.2_pretrained.tex
+     primary sources: Peters et al. 2018; Howard and Ruder 2018;
+                      Radford et al. 2018; Devlin et al. 2019;
+                      Liu et al. 2019; Raffel et al. 2020
+     provenance note: the executable MLM and encoder implementations are
+     independently derived from the displayed equations. The synthetic
+     transfer study is book-original, uses atomic word tokens rather than
+     WordPiece, and is a mechanism demonstration rather than a BERT replica.
+     The lecture scene depicts a frozen Transformer; the chapter corrects that
+     view by reserving “frozen” for a probe and showing original BERT-style
+     fine-tuning as updates through the full backbone. -->
+
+Chapter 9 left a decision rule unfinished. Transfer should pay when **labels are
+scarce, the target is feature-hungry, and source coverage is useful at a matched
+scale**. Images supplied a natural source task—learn
+visual features from many labeled photographs, then adapt them. What should play
+the same role for language, where task labels are expensive but raw text is
+everywhere?
+
+Text can write its own questions. Hide *bank* in “the boat reached the bank,” and
+the surrounding words contain the answer. Hide the same spelling in “the bank
+approved the loan,” and a different neighborhood supplies a different answer. No
+person had to label either sense. The answer is already inside the sequence;
+corruption turns it into a question.
+
+That move depends on the seed from @sec-14-self-attention-transformer:
+**visibility is a modeling decision**. A next-token model used a causal triangle
+because looking right would reveal its target. A representation model can instead
+let every nonpadding token consult both sides—provided selected targets are
+treated so copying cannot solve the whole task. This chapter separates those
+controls, derives **masked language modeling (MLM)**, and shows how pretraining
+changed the default workflow
+from “initialize and train” to “pretrain, then adapt.”
+
+## Separate controls, not one mask
+
+Bidirectional Encoder Representations from Transformers—**BERT**—uses a few
+special tokens. `[CLS]` is a learned summary placeholder, `[SEP]` marks a boundary,
+and `[PAD]` fills unused batch slots. Consider six positions:
+
+$$
+[\text{CLS}],\quad \text{the},\quad \text{bank},\quad \text{rose},\quad
+[\text{SEP}],\quad [\text{PAD}].
+$$
+
+There are four distinct decisions in play.
+
+1. **Attention visibility** decides which key positions each query may use. A
+   causal decoder blocks future keys; a BERT encoder permits all nonpadding keys.
+2. **The MLM target selector** chooses which ordinary positions contribute loss.
+3. **The corruption branch** replaces some selected tokens by `[MASK]`, replaces
+   some by random tokens, and deliberately leaves some unchanged.
+4. **The padding mask** prevents real tokens from routing information from
+   placeholder slots used only to make batch shapes rectangular.
+
+```{python}
+#| label: fig-visibility-corruption
+#| fig-cap: "Visibility and supervision are separate controls. A causal decoder sees a lower triangle (left); BERT-style attention sees every nonpadding key (center). The MLM selector marks one selected target position (right)."
+#| fig-width: 10
+#| fig-height: 3.2
+#| code-summary: "Figure code: separate attention visibility from MLM selection"
+
+import copy
+import itertools
+
+import matplotlib.pyplot as plt
+import numpy as np
+import torch
+from torch import nn
+import torch.nn.functional as F
+
+tokens = ["[CLS]", "the", "bank", "rose", "[SEP]", "[PAD]"]
+nonpadding = np.array([1, 1, 1, 1, 1, 0], dtype=bool)
+causal = np.tril(np.ones((6, 6), dtype=int)) * nonpadding[None, :]
+full = np.ones((6, 6), dtype=int) * nonpadding[None, :]
+selector = np.zeros((1, 6), dtype=int)
+selector[0, 2] = 1
+
+fig, axes = plt.subplots(
+    1, 3, figsize=(10, 3.2), gridspec_kw={"width_ratios": [1, 1, 0.45]}
+)
+for axis, matrix, title in [
+    (axes[0], causal, "causal visibility"),
+    (axes[1], full, "full nonpadding visibility"),
+]:
+    axis.imshow(matrix, cmap="Blues", vmin=0, vmax=1)
+    axis.set_xticks(range(6), tokens, rotation=55, ha="right")
+    axis.set_yticks(range(6), tokens)
+    axis.set_xlabel("key")
+    axis.set_ylabel("query")
+    axis.set_title(title)
+axes[2].imshow(selector.T, cmap="Oranges", vmin=0, vmax=1)
+axes[2].set_yticks(range(6), tokens)
+axes[2].set_xticks([0], ["loss"])
+axes[2].set_title("MLM selector")
+plt.tight_layout()
+plt.show()
+```
+
+The center matrix contains no future-blocking triangle. Every nonpadding query can
+route from every nonpadding key—including itself. That is what *bidirectional*
+means here: a token's representation can jointly use left and right context in
+every layer. It does not mean running two separate recurrent networks, and it does
+not define a left-to-right probability for the whole sentence.
+
+Only padding *keys* are blocked in the drawing. A `[PAD]` query row can still
+produce an output, but downstream computation ignores that row; the important
+guarantee is that real queries cannot retrieve padding as information.
+
+Now suppose *bank* is selected and replaced:
+
+$$
+[\text{CLS}]\ \text{the}\ [\text{MASK}]\ \text{rose}\ [\text{SEP}].
+$$
+
+Every ordinary token may attend to `[MASK]`, because `[MASK]` is an input token—not
+an attention prohibition. Only the selector says that position 2 contributes MLM
+loss. The padding mask separately blocks the final slot as a key. Reusing *mask*
+for visibility, selection, corruption, and padding is convenient shorthand—and a
+reliable source of bugs.
+
 ::: {.callout-warning}
-**Chapter stub.** This chapter is planned but not yet written. The abstract below is its
-contract; drafting sources are listed for provenance.
+## The copy trap
+
+If full attention received the original token at *every* selected position, the
+model could copy answers through the residual stream. BERT's policy corrupts 90%
+of selected sites, so copying cannot solve the whole task; the deliberate 10%
+unchanged branch has a separate purpose below. Conversely, replacing a token by
+`[MASK]` does not make it invisible—its neighbors still see the placeholder and
+one another. Always audit visibility, selection, corruption, and padding
+separately.
 :::
 
-*Stop training from scratch. Harvest Chapter 14's final seed by name: visibility is
-a modeling decision. Replace the causal triangle with masked-token visibility so
-representations can use context on both sides, then derive masked language modeling,
-bidirectional context, fine-tuning—and why 2018 changed the default workflow of the
-field. Close Chapter 9's transfer decision-rule contract with an honest, matched
-scratch-versus-pretraining comparison at the scale this chapter can execute.*
+## Text supplies supervision
 
-<!-- draft-sources
-seeds:
-- `sources/bert.tex`
-- `sources/10.2_pretrained.tex`
-transcripts:
-- `m10_10-2-pretrained-transformer-models_SDHOqinS8dg.txt`
-harvests:
-- Chapter 14: "visibility is a modeling decision" — causal generation versus
-  bidirectional masked-token representation learning
-- Chapter 9: transfer pays when labels are scarce, features are demanding, and
-  source coverage is useful at matched scale
--->
+In ordinary supervised learning, an external label $y$ accompanies input $x$.
+Masked language modeling derives both from one unlabeled sequence: the corrupted
+sequence is the input, and the original selected tokens are the targets. This is
+*self-supervised learning*—the supervision is constructed from the data rather
+than supplied by a human annotator.
+
+::: {.callout-note}
+## Self-supervised does not mean target-free
+
+The method still has labels and a loss. What changes is their origin. The clean
+text supplies a target for every selected position, so a large corpus can create
+many training examples without a task-specific annotation campaign.
+:::
+
+This idea was part of a broader 2018 convergence, not a solitary invention.
+
+| Work | Pretraining signal | What moved downstream |
+|---|---|---|
+| ELMo | Forward and backward LSTM language models | Fixed contextual features |
+| ULMFiT | Causal language modeling | The entire adapted language model |
+| GPT | Causal Transformer language modeling | A pretrained Transformer plus task head |
+| BERT | Masked tokens in full context, plus NSP | A deeply bidirectional Transformer encoder plus task head |
+
+ELMo demonstrated that a word's useful vector should depend on its sentence.
+ULMFiT supplied a robust recipe for adapting a pretrained language model rather
+than freezing it. GPT paired Transformer pretraining with supervised fine-tuning.
+BERT's decisive change was to pretrain every encoder layer with joint left-and-right
+context. The workflow mattered as much as the architecture: learn broadly from
+raw text first, then spend scarce labels on adaptation.
+
+## The masked-language-model objective
+
+Let us pin the idea to shapes before writing code. Let a tokenized sequence be
+
+$$
+x=(x_1,\ldots,x_T),\qquad x_t\in\{1,\ldots,|V|\},
+$$
+
+where $T$ is sequence length and $V$ is the vocabulary. Choose a random set $M$ of
+eligible positions, then apply a corruption operator $c$ to obtain
+$\widetilde{x}=c(x,M)$. A bidirectional encoder with parameters $\theta$ produces
+
+$$
+H=f_\theta(\widetilde{x})\in\mathbb{R}^{T\times d}.
+$$
+
+An output head maps each selected hidden state to vocabulary logits. The MLM loss
+is
+
+$$
+\mathcal{L}_{\mathrm{MLM}}(\theta)
+=-
+\frac{1}{|M|}
+\sum_{i\in M}
+\log p_\theta\!\left(x_i\mid \widetilde{x}\right).
+$$
+
+The condition is $\widetilde{x}$, the one jointly corrupted sequence—not a
+different clean sequence with only $x_i$ removed for every term. With batches,
+token IDs have shape $(B,T)$, hidden states $(B,T,d)$, and dense vocabulary logits
+$(B,T,|V|)$. Boolean selection gathers $|M|$ rows, so cross-entropy receives
+selected logits $(|M|,|V|)$ and targets $(|M|,)$. Unselected positions can affect
+the representations but contribute no direct MLM loss.
+
+### Fifteen percent, then 80/10/10
+
+Original BERT selects 15% of eligible tokens. Conditional on selection:
+
+- 80% are replaced by `[MASK]`;
+- 10% are replaced by a random vocabulary token;
+- 10% remain unchanged.
+
+For 1,000 eligible positions, the expected flow is therefore
+
+$$
+1000\longrightarrow150\longrightarrow
+\begin{cases}
+120 & [\text{MASK}],\\
+15 & \text{random token},\\
+15 & \text{unchanged}.
+\end{cases}
+$$
+
+All 150 selected positions are scored against their original token. The 120 mask
+replacements are 12% of all eligible positions, not the complete supervision
+rate. Random ordinary-looking replacements force the encoder to cross-check a
+token against its context rather than trusting the visible identity. The unchanged
+branch prevents the opposite shortcut—the assumption that every selected
+ordinary-looking token must be wrong. It also reduces the mismatch between
+pretraining, where `[MASK]` exists, and downstream inputs, where it ordinarily
+does not. An unchanged selected token exposes its answer on purpose; only about
+1.5% of all eligible positions follow that branch, and the encoder is not told
+which normal-looking tokens were selected.
+
+```{python}
+#| label: fig-mlm-policy
+#| fig-cap: "BERT's 80/10/10 policy is conditional on the selected 15%. All three branches retain the original token as the prediction target."
+#| fig-width: 9
+#| fig-height: 3.2
+#| code-summary: "Figure code: trace the two-stage MLM selection policy"
+
+eligible_count = 1_000
+selected_count = round(0.15 * eligible_count)
+branch_counts = np.array([120, 15, 15])
+branch_labels = ["[MASK]", "random", "unchanged"]
+branch_colors = ["#3566a8", "#d37b29", "#6b7280"]
+
+fig, axes = plt.subplots(1, 2, figsize=(9, 3.2))
+axes[0].bar(
+    ["not selected", "selected"],
+    [eligible_count - selected_count, selected_count],
+    color=["#d9dde3", "#3566a8"],
+)
+axes[0].set_ylabel("eligible positions")
+axes[0].set_title("first draw: 15%")
+axes[0].bar_label(axes[0].containers[0])
+bars = axes[1].bar(branch_labels, branch_counts, color=branch_colors)
+axes[1].set_ylabel("selected positions")
+axes[1].set_title("conditional branch: 80 / 10 / 10")
+axes[1].bar_label(bars)
+plt.tight_layout()
+plt.show()
+
+print(f"direct loss targets: {branch_counts.sum()}")
+print(f"[MASK] share of all eligible positions: {branch_counts[0] / 1000:.1%}")
+```
+
+Original BERT pre-generated several masked versions of its training examples;
+RoBERTa later redrew masks as examples were presented. Our controlled lab uses the
+latter *dynamic corruption* choice—the same sentence can ask different questions
+on later passes. Reproducibility therefore requires a separate random generator.
+Seeding model initialization while leaving the corruption stream implicit is not
+an exact experiment.
+
+::: {.callout-tip}
+## Audit the selector before the loss
+
+Print the number of eligible and selected positions, verify that special and
+padding tokens are excluded, and inspect the realized 80/10/10 proportions over
+many batches. Then assert that the selected logit and target shapes agree. A loss
+can decrease while a selector silently trains on padding or on the wrong tokens.
+:::
+
+## From a Transformer encoder to BERT
+
+The original BERT input at position $i$ adds three learned vectors:
+
+$$
+z_i=e_{\text{token}(i)}+e_{\text{position}(i)}+e_{\text{segment}(i)}.
+$$
+
+The token comes from a **WordPiece** vocabulary: frequent character sequences are
+stored whole, while rarer words can be assembled from reusable subword pieces.
+Learned absolute position
+embeddings replace Chapter 14's fixed sinusoidal table. Segment A/B embeddings
+mark which of two packed text spans supplied a token; they do not block
+cross-segment attention. `[CLS]` begins the sequence, and `[SEP]` ends each span:
+
+$$
+[\text{CLS}]\ A\ [\text{SEP}]\ B\ [\text{SEP}].
+$$
+
+The resulting sequence passes through a stack of full-context Transformer encoder
+blocks. Original BERT uses the post-LayerNorm order introduced as the historical
+Transformer in @sec-14-self-attention-transformer. Its two published sizes were:
+
+| Model | Blocks $L$ | Width $d$ | Heads | Parameters |
+|---|---:|---:|---:|---:|
+| BERT Base | 12 | 768 | 12 | about 110 million |
+| BERT Large | 24 | 1,024 | 16 | about 340 million |
+
+Pretraining used BooksCorpus and English Wikipedia—about 3.3 billion words in the
+paper's accounting. The scale is historically important—but the reusable idea is
+the separation of stages:
+
+$$
+\text{raw text}\xrightarrow{\text{self-supervised pretraining}}
+\text{general encoder}\xrightarrow{\text{labeled adaptation}}
+\text{task model}.
+$$
+
+Original BERT combined MLM with **next sentence prediction** (NSP). Half the
+training pairs used the actual following segment and half used a random segment;
+the `[CLS]` state predicted which kind it saw—its direct pretraining assignment.
+MLM alone gives `[CLS]` no token-reconstruction target, although information can
+still route through it. Later recipes such as RoBERTa showed
+that strong BERT-style training did not require NSP in their settings. That is a
+recipe result, not proof that a sentence-relation objective can never help. This
+chapter studies the MLM half because it supplies the cleanest bridge from
+visibility to representation learning.
+
+### `[CLS]` is a learned meeting place
+
+`[CLS]` is an ordinary learned token with an unusual assignment: place it first,
+allow it to attend through every layer, then give its final hidden state to a
+sequence-level head. For $K$ classes,
+
+$$
+\ell=W_{\mathrm{cls}}h_{\mathrm{CLS}}+b,
+\qquad W_{\mathrm{cls}}\in\mathbb{R}^{K\times d}.
+$$
+
+For token labeling, apply a head to every $h_i$. For extractive question
+answering, score candidate start and end positions. The encoder interface stays
+the same while the small task head changes.
+
+`[CLS]` is not born with sentence meaning. Pretraining and downstream gradients
+teach it what information to gather. Chapter 16 will reuse this learned-summary
+pattern after replacing words by image patches.
+
+## Fine-tuning means the backbone moves
+
+Let $\theta_0$ denote pretrained encoder weights and $\phi$ a newly initialized
+task head. Standard BERT fine-tuning solves
+
+$$
+(\theta^*,\phi^*)
+=\arg\min_{\theta,\phi}
+\sum_{(x,y)\in\mathcal{D}_{\mathrm{task}}}
+\mathcal{L}_{\mathrm{task}}
+\bigl(g_\phi(f_\theta(x)),y\bigr),
+$$
+
+starting at $\theta=\theta_0$. Gradients update both $\theta$ and $\phi$.
+Freezing $\theta_0$ and training only $\phi$ is a useful *linear probe* or feature
+probe, but it is not the standard fine-tuning procedure. This distinction matters
+when the task needs the representation itself to move.
+
+```{python}
+#| label: fig-bert-adaptation
+#| fig-cap: "One pretrained encoder supports several task interfaces. In standard fine-tuning, task-loss gradients pass through the new head and continue through the encoder; stopping them at the head would make the run a frozen probe."
+#| fig-width: 10
+#| fig-height: 3.8
+#| code-summary: "Figure code: show task heads and full-backbone update paths"
+
+fig, axis = plt.subplots(figsize=(10, 3.8))
+axis.set_xlim(0, 10)
+axis.set_ylim(0, 6)
+axis.axis("off")
+
+def draw_box(
+    x: float,
+    y: float,
+    width: float,
+    height: float,
+    text: str,
+    color: str,
+) -> None:
+    rectangle = plt.Rectangle(
+        (x, y), width, height,
+        facecolor=color, edgecolor="#263238", linewidth=1.2,
+    )
+    axis.add_patch(rectangle)
+    axis.text(
+        x + width / 2, y + height / 2, text,
+        ha="center", va="center", fontsize=10,
+    )
+
+draw_box(0.25, 2.2, 1.7, 1.3, "tokenized input\n[CLS] … [SEP]", "#eef2f7")
+draw_box(2.8, 1.0, 2.5, 3.7, "pretrained BERT\nencoder\n\nall layers update", "#c9dcf5")
+head_specs = [
+    (4.45, "sequence head\n$h_{CLS} \\to$ class"),
+    (2.55, "token head\n$h_1,\\ldots,h_T \\to$ tags"),
+    (0.65, "span head\n$h_i \\to$ start / end"),
+]
+for y, label in head_specs:
+    draw_box(6.4, y, 2.7, 1.05, label, "#f6dfc5")
+    axis.annotate(
+        "", xy=(6.35, y + 0.52), xytext=(5.35, 2.85),
+        arrowprops={"arrowstyle": "->", "color": "#546e7a", "lw": 1.3},
+    )
+axis.annotate(
+    "", xy=(2.75, 2.85), xytext=(2.0, 2.85),
+    arrowprops={"arrowstyle": "->", "color": "#546e7a", "lw": 1.5},
+)
+axis.annotate(
+    "task-loss gradients update the backbone",
+    xy=(2.85, 0.55), xytext=(8.9, 0.15),
+    ha="right", color="#a33a2b",
+    arrowprops={"arrowstyle": "->", "color": "#a33a2b", "lw": 2},
+)
+plt.tight_layout()
+plt.show()
+```
+
+Fine-tuning also creates experimental obligations. The scratch and pretrained
+arms must share labeled examples, head initialization, minibatch order, update
+count, evaluation, and downstream hyperparameters. The pretrained arm has already
+received extra unlabeled-data compute, so the comparison estimates the value of
+pretraining—not a total-compute advantage.
+
+## A controlled transfer lab
+
+Chapter 9's three gates are easy to repeat and surprisingly hard to test. A first
+pre-test asked a tiny encoder to distinguish true continuations in this book from
+distant splices. The five-seed MLM gain was small, faded as labels increased, and
+lost decisively to a weighted lexical-overlap baseline. We rejected that task as
+the chapter's affirmative experiment—the shallow baseline solved more of the
+problem than the representation story did.
+
+The replacement lab is synthetic by design. It removes spelling, frequency, and
+downstream-context shortcuts so that source coverage is a controllable variable.
+
+<!-- NOVEL: needs sign-off - synthetic distributional-transfer experiment. -->
+
+### Build a latent regularity
+
+Eighty randomly generated four-letter token strings are divided into two latent
+families. Family assignment is independent of spelling. Forty *covered* strings—20
+per family—each appear eight times in an unlabeled MLM corpus. Forty more—20 per
+family—live in the input vocabulary but are withheld from MLM input sequences,
+random replacements, and prediction targets.
+
+Each covered word receives eight source sentences. Six contain cues from its own
+family; two deliberately contain cues from the other family. One family appears
+near words such as *rain*, *soil*, *roots*, and *garden*; the other appears near
+*power*, *metal*, *gears*, and *workshop*. The 25% cue noise gives every covered
+string a mixture of supporting and opposing contexts—the aggregate family signal
+is statistical rather than pure.
+
+The downstream input is always the neutral, previously unseen template
+
+$$
+\text{“we found the PSEUDOWORD today.”}
+$$
+
+No family cue remains. A classifier reads the generated token's hidden state and
+receives only 1, 2, or 4 labeled word types from each family. Evaluation uses the
+remaining covered types, never the labeled types. The 40 uncovered controls use
+the same neutral sentence. Source and target use the same atomic token granularity
+and similarly short sequences, making “matched scale” explicit rather than
+assuming it from a shared domain.
+
+```{python}
+#| label: bert-lab-data
+#| code-summary: "Code: construct the controlled source and target distributions"
+
+SEED = 6050
+WIDTH = 48
+HEADS = 4
+FF_WIDTH = 96
+BLOCKS = 2
+MAX_LEN = 10
+PRETRAIN_STEPS = 600
+BATCH_SIZE = 64
+LABEL_COUNTS = (1, 2, 4)
+REPLICATE_SEEDS = tuple(range(6050, 6055))
+
+torch.set_num_threads(4)
+torch.use_deterministic_algorithms(True)
+
+forms = [
+    "".join(letters)
+    for letters in itertools.product("bglmprstvz", "aeiou", "dknrst", "aeiou")
+]
+form_order = torch.randperm(
+    len(forms), generator=torch.Generator().manual_seed(SEED)
+)[:80]
+token_strings = [forms[index] for index in form_order]
+family_words = [token_strings[:40], token_strings[40:]]
+covered_words = [words[:20] for words in family_words]
+uncovered_words = [words[20:40] for words in family_words]
+
+context_pairs = [
+    ("rain", "power"),
+    ("soil", "metal"),
+    ("roots", "gears"),
+    ("water", "fuel"),
+    ("garden", "workshop"),
+    ("grows", "moves"),
+    ("blooms", "turns"),
+    ("sunlight", "current"),
+]
+
+def source_sentences(word: str, family: int) -> list[list[str]]:
+    cue = [pair[family] for pair in context_pairs]
+    other = [pair[1 - family] for pair in context_pairs]
+    return [
+        ["after", cue[0], "the", word, cue[5]],
+        ["the", word, "needs", cue[3], "near", cue[1]],
+        [cue[2], "support", "the", word],
+        ["in", "the", cue[4], "the", word, cue[6]],
+        ["we", "found", "the", word, "beside", cue[1]],
+        [cue[0], "and", cue[7], "help", "the", word],
+        ["the", word, "rests", "near", other[4]],
+        ["today", "the", word, "follows", other[2]],
+    ]
+
+sentences: list[list[str]] = []
+for family, words in enumerate(covered_words):
+    for word in words:
+        sentences.extend(source_sentences(word, family))
+
+specials = ["[PAD]", "[UNK]", "[CLS]", "[SEP]", "[MASK]"]
+ordinary = sorted(
+    {token for sentence in sentences for token in sentence} | set(token_strings)
+)
+vocabulary = specials + [token for token in ordinary if token not in specials]
+stoi = {token: index for index, token in enumerate(vocabulary)}
+PAD, UNK, CLS, SEP, MASK = [stoi[token] for token in specials]
+
+def encode(sentence: list[str]) -> torch.Tensor:
+    ids = [CLS] + [stoi.get(token, UNK) for token in sentence] + [SEP]
+    ids += [PAD] * (MAX_LEN - len(ids))
+    return torch.tensor(ids[:MAX_LEN])
+
+source_ids = torch.stack([encode(sentence) for sentence in sentences])
+uncovered_ids = torch.tensor([
+    stoi[word] for family in uncovered_words for word in family
+])
+source_token_ids = torch.unique(source_ids)
+random_pool = source_token_ids[
+    ~torch.isin(source_token_ids, torch.tensor([PAD, CLS, SEP]))
+]
+
+assert len(sentences) == 320
+assert len(vocabulary) == 115
+assert not torch.isin(source_ids, uncovered_ids).any()
+print(f"source: {len(sentences)} sentences; vocabulary: {len(vocabulary)} tokens")
+print(f"covered/uncovered token strings: 40 / {len(uncovered_ids)}")
+```
+
+This is an atomic word-level vocabulary, not WordPiece. That simplification is
+intentional—splitting the generated strings into subwords could let spelling leak family
+identity. The source generator—not natural language—defines the latent regularity,
+so the experiment can demonstrate a mechanism but cannot estimate real-world BERT
+performance.
+
+### A small BERT-style encoder
+
+The encoder has two post-LayerNorm blocks, width 48, four heads, learned absolute
+positions, full nonpadding attention, and GELU feed-forward layers. Here
+$\operatorname{GELU}(x)=x\Phi(x)$, with $\Phi$ the standard-normal cumulative
+distribution—a smooth, input-dependent gate used by original BERT. The lab omits
+segment embeddings, NSP, and dropout. Its 43,920 encoder parameters make the study
+fast enough to repeat end to end, while preserving the relevant path from
+bidirectional attention to MLM to fine-tuning.
+
+```{python}
+#| label: bert-lab-model
+#| code-summary: "Code: define full attention, the encoder, and the MLM head"
+
+class FullAttention(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.qkv = nn.Linear(WIDTH, 3 * WIDTH)
+        self.output = nn.Linear(WIDTH, WIDTH)
+
+    def forward(
+        self, x: torch.Tensor, visible: torch.Tensor
+    ) -> torch.Tensor:
+        batch, length, _ = x.shape
+        head_width = WIDTH // HEADS
+        qkv = self.qkv(x).view(
+            batch, length, 3, HEADS, head_width
+        )
+        q, k, v = qkv.permute(2, 0, 3, 1, 4)
+        scores = q @ k.transpose(-2, -1) / head_width**0.5
+        scores = scores.masked_fill(
+            ~visible[:, None, None, :], float("-inf")
+        )
+        weights = F.softmax(scores, dim=-1)
+        mixed = (weights @ v).transpose(1, 2).reshape(
+            batch, length, WIDTH
+        )
+        return self.output(mixed)
+
+class EncoderBlock(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.attention = FullAttention()
+        self.norm1 = nn.LayerNorm(WIDTH)
+        self.ff = nn.Sequential(
+            nn.Linear(WIDTH, FF_WIDTH),
+            nn.GELU(),
+            nn.Linear(FF_WIDTH, WIDTH),
+        )
+        self.norm2 = nn.LayerNorm(WIDTH)
+
+    def forward(
+        self, x: torch.Tensor, visible: torch.Tensor
+    ) -> torch.Tensor:
+        x = self.norm1(x + self.attention(x, visible))
+        return self.norm2(x + self.ff(x))
+
+class TinyBertEncoder(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.token_embedding = nn.Embedding(
+            len(vocabulary), WIDTH, padding_idx=PAD
+        )
+        self.position_embedding = nn.Embedding(MAX_LEN, WIDTH)
+        self.blocks = nn.ModuleList([
+            EncoderBlock() for _ in range(BLOCKS)
+        ])
+        nn.init.normal_(self.token_embedding.weight, std=0.02)
+        nn.init.normal_(self.position_embedding.weight, std=0.02)
+        with torch.no_grad():
+            self.token_embedding.weight[PAD].zero_()
+
+    def forward(self, ids: torch.Tensor) -> torch.Tensor:
+        positions = torch.arange(ids.shape[1], device=ids.device)
+        hidden = (
+            self.token_embedding(ids)
+            + self.position_embedding(positions)
+        )
+        visible = ids != PAD
+        for block in self.blocks:
+            hidden = block(hidden, visible)
+        return hidden
+
+class MaskedLanguageModel(nn.Module):
+    def __init__(self, encoder: TinyBertEncoder) -> None:
+        super().__init__()
+        self.encoder = encoder
+        self.dense = nn.Linear(WIDTH, WIDTH)
+        self.norm = nn.LayerNorm(WIDTH)
+        self.decoder = nn.Linear(WIDTH, len(vocabulary))
+
+    def forward(
+        self, ids: torch.Tensor, selected: torch.Tensor
+    ) -> torch.Tensor:
+        hidden = self.encoder(ids)[selected]
+        hidden = self.norm(F.gelu(self.dense(hidden)))
+        return self.decoder(hidden)
+
+def corrupt(
+    ids: torch.Tensor,
+    generator: torch.Generator,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    eligible = (ids != PAD) & (ids != CLS) & (ids != SEP)
+    selected = eligible & (
+        torch.rand(ids.shape, generator=generator) < 0.15
+    )
+    if not selected.any():
+        rows, columns = torch.where(eligible)
+        choice = torch.randint(
+            len(rows), (1,), generator=generator
+        )
+        selected[rows[choice], columns[choice]] = True
+
+    draw = torch.rand(ids.shape, generator=generator)
+    mask_sites = selected & (draw < 0.8)
+    random_sites = selected & (draw >= 0.8) & (draw < 0.9)
+    corrupted = ids.clone()
+    corrupted[mask_sites] = MASK
+    random_choices = torch.randint(
+        len(random_pool), ids.shape, generator=generator
+    )
+    random_ids = random_pool[random_choices]
+    corrupted[random_sites] = random_ids[random_sites]
+
+    unchanged_sites = selected & ~mask_sites & ~random_sites
+    counts = torch.tensor([
+        mask_sites.sum().item(),
+        random_sites.sum().item(),
+        unchanged_sites.sum().item(),
+    ])
+    assert not (selected & ~eligible).any()
+    assert not torch.isin(corrupted, uncovered_ids).any()
+    return corrupted, selected, counts
+
+encoder_parameters = sum(
+    parameter.numel() for parameter in TinyBertEncoder().parameters()
+)
+print(f"encoder parameters: {encoder_parameters:,}")
+```
+
+The MLM decoder is deliberately *untied* from the input embedding table. The
+original released BERT code explicitly tied those weights, but tying would update an uncovered input row
+through the vocabulary softmax even when that token never appeared. The custom
+control is stricter—random replacements are drawn only from source tokens, and the
+code later asserts that every uncovered input embedding remains bitwise unchanged
+through pretraining. Untied decoder rows for the controls still participate as
+negative softmax classes, but they are discarded downstream and never expose a
+control token's context or identity to the encoder input.
+
+### Pretrain, then adapt
+
+For each seed from 6050 through 6054, one encoder is saved before training and the
+same encoder receives 600 MLM updates. The two downstream arms then receive the
+same labeled word types, identical classifier-head tensors, 160 full-batch
+updates, and the same learning rates. All encoder weights move in both arms. Each
+seed therefore repeats initialization, corruption, MLM, label selection, and
+fine-tuning—not merely the last classifier fit.
+
+```{python}
+#| label: bert-lab-training
+#| code-summary: "Code: pretrain five paired encoders and fine-tune all weights"
+
+TensorState = dict[str, torch.Tensor]
+
+def pretrain(
+    seed: int,
+) -> tuple[TensorState, TensorState, torch.Tensor, int]:
+    torch.manual_seed(seed)
+    encoder = TinyBertEncoder()
+    initial = copy.deepcopy(encoder.state_dict())
+    mlm = MaskedLanguageModel(encoder)
+    optimizer = torch.optim.Adam(mlm.parameters(), lr=1e-3)
+    index_generator = torch.Generator().manual_seed(seed + 1)
+    mask_generator = torch.Generator().manual_seed(seed + 2)
+    schedule = torch.randint(
+        len(source_ids),
+        (PRETRAIN_STEPS, BATCH_SIZE),
+        generator=index_generator,
+    )
+    branch_counts = torch.zeros(3, dtype=torch.long)
+    eligible_count = 0
+
+    for indices in schedule:
+        original = source_ids[indices]
+        eligible_count += (
+            (original != PAD) & (original != CLS) & (original != SEP)
+        ).sum().item()
+        corrupted, selected, counts = corrupt(
+            original, mask_generator
+        )
+        branch_counts += counts
+        logits = mlm(corrupted, selected)
+        targets = original[selected]
+        assert logits.shape == (targets.numel(), len(vocabulary))
+        loss = F.cross_entropy(logits, targets)
+        optimizer.zero_grad()
+        loss.backward()
+        nn.utils.clip_grad_norm_(mlm.parameters(), 1.0)
+        optimizer.step()
+
+    pretrained = copy.deepcopy(mlm.encoder.state_dict())
+    initial_control = initial["token_embedding.weight"][uncovered_ids]
+    final_control = pretrained["token_embedding.weight"][uncovered_ids]
+    assert torch.equal(initial_control, final_control)
+    return initial, pretrained, branch_counts, eligible_count
+
+def neutral_sentence(word: str) -> torch.Tensor:
+    return encode(["we", "found", "the", word, "today"])
+
+class WordClassifier(nn.Module):
+    def __init__(
+        self, encoder_state: TensorState, head_state: TensorState
+    ) -> None:
+        super().__init__()
+        self.encoder = TinyBertEncoder()
+        self.encoder.load_state_dict(encoder_state)
+        self.head = nn.Linear(WIDTH, 2)
+        self.head.load_state_dict(head_state)
+
+    def forward(self, ids: torch.Tensor) -> torch.Tensor:
+        # [CLS] we found the WORD today [SEP] -> WORD is position 4.
+        return self.head(self.encoder(ids)[:, 4])
+
+def fit_classifier(
+    encoder_state: TensorState,
+    head_state: TensorState,
+    family_zero: list[str],
+    family_one: list[str],
+) -> tuple[WordClassifier, float]:
+    inputs = torch.stack([
+        neutral_sentence(word)
+        for word in family_zero + family_one
+    ])
+    targets = torch.tensor(
+        [0] * len(family_zero) + [1] * len(family_one)
+    )
+    model = WordClassifier(encoder_state, head_state)
+    optimizer = torch.optim.Adam([
+        {"params": model.encoder.parameters(), "lr": 2e-4},
+        {"params": model.head.parameters(), "lr": 2e-3},
+    ])
+    for _ in range(160):
+        loss = F.cross_entropy(model(inputs), targets)
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+    train_accuracy = (
+        (model(inputs).argmax(1) == targets).float().mean().item()
+    )
+    return model, train_accuracy
+
+@torch.no_grad()
+def classifier_accuracy(
+    model: WordClassifier,
+    family_zero: list[str],
+    family_one: list[str],
+) -> float:
+    inputs = torch.stack([
+        neutral_sentence(word)
+        for word in family_zero + family_one
+    ])
+    targets = torch.tensor(
+        [0] * len(family_zero) + [1] * len(family_one)
+    )
+    return (
+        (model(inputs).argmax(1) == targets).float().mean().item()
+    )
+
+paired_results: dict[int, list[tuple[float, float]]] = {
+    count: [] for count in LABEL_COUNTS
+}
+uncovered_results: dict[int, list[tuple[float, float]]] = {
+    count: [] for count in LABEL_COUNTS
+}
+training_results: dict[int, list[tuple[float, float]]] = {
+    count: [] for count in LABEL_COUNTS
+}
+all_branches = torch.zeros(3, dtype=torch.long)
+all_eligible = 0
+first_states: tuple[TensorState, TensorState] | None = None
+
+for replicate_seed in REPLICATE_SEEDS:
+    initial_state, pretrained_state, counts, eligible_count = pretrain(
+        replicate_seed
+    )
+    if first_states is None:
+        first_states = (initial_state, pretrained_state)
+    all_branches += counts
+    all_eligible += eligible_count
+
+    label_generator = torch.Generator().manual_seed(replicate_seed)
+    order_zero = torch.randperm(
+        len(covered_words[0]), generator=label_generator
+    ).tolist()
+    order_one = torch.randperm(
+        len(covered_words[1]), generator=label_generator
+    ).tolist()
+    torch.manual_seed(replicate_seed + 10_000)
+    head_state = copy.deepcopy(nn.Linear(WIDTH, 2).state_dict())
+
+    for count in LABEL_COUNTS:
+        label_zero = [covered_words[0][i] for i in order_zero[:count]]
+        label_one = [covered_words[1][i] for i in order_one[:count]]
+        test_zero = [covered_words[0][i] for i in order_zero[count:]]
+        test_one = [covered_words[1][i] for i in order_one[count:]]
+
+        scratch, scratch_train = fit_classifier(
+            initial_state, head_state, label_zero, label_one
+        )
+        pretrained, pretrained_train = fit_classifier(
+            pretrained_state, head_state, label_zero, label_one
+        )
+        scratch_score = classifier_accuracy(
+            scratch, test_zero, test_one
+        )
+        pretrained_score = classifier_accuracy(
+            pretrained, test_zero, test_one
+        )
+        scratch_uncovered = classifier_accuracy(
+            scratch, uncovered_words[0], uncovered_words[1]
+        )
+        pretrained_uncovered = classifier_accuracy(
+            pretrained, uncovered_words[0], uncovered_words[1]
+        )
+        paired_results[count].append(
+            (scratch_score, pretrained_score)
+        )
+        uncovered_results[count].append(
+            (scratch_uncovered, pretrained_uncovered)
+        )
+        training_results[count].append(
+            (scratch_train, pretrained_train)
+        )
+
+branch_shares = all_branches / all_branches.sum()
+print(
+    "selected targets across five runs: "
+    f"{all_branches.sum().item():,}"
+)
+print(f"eligible positions: {all_eligible:,}")
+print(
+    "realized selection rate: "
+    f"{all_branches.sum().item() / all_eligible:.3%}"
+)
+print("realized mask/random/unchanged shares:", branch_shares.tolist())
+for count in LABEL_COUNTS:
+    pairs = np.array(paired_results[count])
+    control_pairs = np.array(uncovered_results[count])
+    train_pairs = np.array(training_results[count])
+    deltas = pairs[:, 1] - pairs[:, 0]
+    print(
+        f"{count}/family: scratch={pairs[:, 0].mean():.3f}, "
+        f"pretrained={pairs[:, 1].mean():.3f}, "
+        f"delta={deltas.mean():+.3f}, wins={(deltas > 0).sum()}/5, "
+        f"uncovered={control_pairs[:, 0].mean():.3f}/"
+        f"{control_pairs[:, 1].mean():.3f}, "
+        f"train={train_pairs[:, 0].mean():.3f}/"
+        f"{train_pairs[:, 1].mean():.3f}"
+    )
+```
+
+Across 1,032,096 eligible positions, the five runs select 155,019—15.020%. The
+realized branches are 80.04% mask, 9.98% random, and 9.99% unchanged. Both scratch
+and pretrained models reach 100% on their tiny labeled training sets in every
+run; failure to fit the labels therefore does not explain the scratch result.
+
+### What transferred?
+
+Remember the question: did pretraining organize covered representations in a way
+that scarce labels could reuse—or did the classifier merely learn the tiny label
+set? The task, control, and geometry answer different parts.
+
+```{python}
+#| label: fig-pretraining-pays
+#| fig-cap: "Five paired end-to-end seeds in the synthetic transfer lab. MLM initialization separates covered latent families and improves every covered-type comparison (left and center); both arms stay near chance on input-vocabulary controls withheld from MLM inputs, replacements, and targets (left). Centered cosine similarity is a representation diagnostic, not a task metric (right)."
+#| fig-width: 11
+#| fig-height: 3.7
+#| code-summary: "Figure code: audit paired transfer, source coverage, and representation geometry"
+
+@torch.no_grad()
+def representation_geometry(
+    encoder_state: TensorState,
+) -> tuple[float, float]:
+    model = TinyBertEncoder()
+    model.load_state_dict(encoder_state)
+    words = covered_words[0] + covered_words[1]
+    vectors = model(torch.stack([
+        neutral_sentence(word) for word in words
+    ]))[:, 4]
+    vectors = vectors - vectors.mean(dim=0, keepdim=True)
+    vectors = F.normalize(vectors, dim=1)
+    similarities = vectors @ vectors.T
+    labels = torch.tensor(
+        [0] * len(covered_words[0]) + [1] * len(covered_words[1])
+    )
+    off_diagonal = ~torch.eye(len(words), dtype=torch.bool)
+    within = similarities[
+        (labels[:, None] == labels[None, :]) & off_diagonal
+    ]
+    between = similarities[labels[:, None] != labels[None, :]]
+    return within.mean().item(), between.mean().item()
+
+assert first_states is not None
+initial_geometry = representation_geometry(first_states[0])
+pretrained_geometry = representation_geometry(first_states[1])
+
+budgets = np.array(LABEL_COUNTS)
+scratch_means = np.array([
+    np.mean(paired_results[count], axis=0)[0]
+    for count in LABEL_COUNTS
+])
+pretrained_means = np.array([
+    np.mean(paired_results[count], axis=0)[1]
+    for count in LABEL_COUNTS
+])
+scratch_uncovered_means = np.array([
+    np.mean(uncovered_results[count], axis=0)[0]
+    for count in LABEL_COUNTS
+])
+pretrained_uncovered_means = np.array([
+    np.mean(uncovered_results[count], axis=0)[1]
+    for count in LABEL_COUNTS
+])
+
+fig, axes = plt.subplots(1, 3, figsize=(11, 3.7))
+for values, label, color, marker in [
+    (scratch_means, "scratch, covered", "#6b7280", "o"),
+    (pretrained_means, "MLM, covered", "#3566a8", "o"),
+    (
+        scratch_uncovered_means,
+        "scratch, unexposed",
+        "#9ca3af",
+        "s",
+    ),
+    (
+        pretrained_uncovered_means,
+        "MLM, unexposed",
+        "#d37b29",
+        "s",
+    ),
+]:
+    axes[0].plot(budgets, values, label=label, color=color, marker=marker)
+axes[0].axhline(0.5, color="black", lw=1, ls="--", alpha=0.5)
+axes[0].set_xticks(budgets)
+axes[0].set_ylim(0.25, 1.05)
+axes[0].set_xlabel("labeled words per family")
+axes[0].set_ylabel("accuracy")
+axes[0].set_title("only covered strings benefit")
+axes[0].legend(frameon=False, fontsize=8)
+
+for column, count in enumerate(LABEL_COUNTS):
+    pairs = np.array(paired_results[count])
+    deltas = pairs[:, 1] - pairs[:, 0]
+    jitter = np.linspace(-0.08, 0.08, len(deltas))
+    axes[1].scatter(
+        np.full(len(deltas), column) + jitter,
+        deltas,
+        color="#3566a8",
+    )
+axes[1].axhline(0, color="black", lw=1)
+axes[1].set_xticks(range(3), ["1", "2", "4"])
+axes[1].set_xlabel("labeled words per family")
+axes[1].set_ylabel("pretrained − scratch")
+axes[1].set_title("all 15 paired gains")
+
+geometry = np.array([initial_geometry, pretrained_geometry])
+x = np.arange(2)
+axes[2].bar(
+    x - 0.18, geometry[:, 0], width=0.36,
+    label="within family", color="#3566a8",
+)
+axes[2].bar(
+    x + 0.18, geometry[:, 1], width=0.36,
+    label="between family", color="#d37b29",
+)
+axes[2].axhline(0, color="black", lw=1)
+axes[2].set_xticks(x, ["initial", "after MLM"])
+axes[2].set_ylabel("centered cosine similarity")
+axes[2].set_title("seed 6050 geometry")
+axes[2].legend(frameon=False, fontsize=8)
+plt.tight_layout()
+plt.show()
+
+print(f"initial within/between: {initial_geometry}")
+print(f"after MLM within/between: {pretrained_geometry}")
+```
+
+| Labels / family | Scratch, covered | MLM, covered | Gain | Scratch, unexposed | MLM, unexposed |
+|---:|---:|---:|---:|---:|---:|
+| 1 | 0.468 | 0.995 | +0.526 | 0.475 | 0.425 |
+| 2 | 0.489 | 1.000 | +0.511 | 0.500 | 0.440 |
+| 4 | 0.494 | 1.000 | +0.506 | 0.550 | 0.430 |
+
+MLM initialization wins all 15 paired covered-type comparisons. At two labels per
+family, for example, mean covered accuracy moves from 0.489 to 1.000. On the 40
+unexposed controls, scratch and MLM-initialized means stay around chance at every
+budget. MLM therefore helps types whose source contexts contain the latent
+regularity—not arbitrary rows that merely exist in the input vocabulary.
+
+The labeled sets are nested within a seed, but increasing the budget removes those
+additional types from that budget's test pool. The within-budget scratch-versus-MLM
+comparison is exact; movement across budgets is not a controlled learning curve.
+
+The representation diagnostic agrees with the task result. In seed 6050, mean
+centered cosine similarity starts at $-0.0347$ within a family and $-0.0160$
+between families—no useful separation. After MLM, it is $0.5323$ within and
+$-0.5517$ between. *Centered cosine* first subtracts the mean representation,
+then unit-normalizes each vector and takes a dot product: positive values point in
+similar residual directions, negative values in opposing directions. Pretraining
+has organized neutral-context token states around
+the latent source regularity, and a few labels recover that organization for
+unseen covered types.
+
+This closes Chapter 9's contract at toy scale:
+
+- **Labels are scarce:** the task supplies only 2, 4, or 8 labeled words total.
+- **The target is representation-hungry:** spelling, frequency, and task-context
+  cues are neutralized; the label must transfer through the token representation.
+- **Source coverage is useful at a matched scale:** source and target use atomic
+  tokens and similarly short sequences; covered strings transfer, while balanced
+  vocabulary residents withheld from MLM inputs, replacements, and targets remain
+  near chance in both arms.
+
+The result is an existence proof for a mechanism. A co-occurrence method could
+also recover the synthetic families; the experiment does not establish
+Transformer superiority. The limits are concrete—the data generator builds the
+regularity, the pretrained arm receives extra compute, and five toy seeds do not
+estimate natural-language performance. The justified conclusion is narrower: **in this controlled
+construction, MLM organizes covered token representations around a latent
+regularity, and a few labels recover it for unseen covered types.**
+
+<!-- /NOVEL -->
+
+## Three pretraining families
+
+Pretraining is a regime, not an architecture. The visibility rule and pretraining
+objective determine what a model can learn—and how it will later be used.
+
+| Family | Visibility during pretraining | Objective | Characteristic use |
+|---|---|---|---|
+| BERT-style encoder | Full nonpadding context | Predict selected original tokens after 80/10/10 treatment | Contextual representations and task heads |
+| GPT-style decoder | Causal prefix | Predict the next token | Autoregressive generation and adaptation |
+| T5-style encoder–decoder | Full encoder; causal decoder with cross-attention | Generate removed spans separated by sentinel tokens | Text-to-text conditional generation |
+
+A GPT-style decoder can train all next-token positions in parallel under teacher
+forcing because the causal mask exposes only each prefix. Generation is still
+sequential: the model must emit a token before that token can join the next
+prefix. Training and inference share a factorization and visibility rule, not an
+execution schedule.
+
+Once those next-token logits exist, Chapter 11's greedy and beam-search machinery
+can rank continuations—the architecture changes, but decoding remains a separate
+decision layer. Chapter 17 will return to how prompts alter the context supplied
+to that decoder.
+
+T5 turns tasks into text-to-text problems and marks removed spans with learned
+sentinel tokens. Its encoder produces a *sequence* of
+memory states under full visibility; its causal decoder cross-attends to that
+sequence while generating the target. It does not squeeze the input into one
+fixed bottleneck vector. These families trade representation, generation, and
+input–output structure differently—they are not a ranking from old to new.
+
+## What changed after 2018
+
+Before the pretrained era, a new labeled dataset often implied a new model trained
+from a random initialization. After BERT and its contemporaries, the default
+question changed: which pretrained model, which adaptation, and which data
+interface fit the task?
+
+Three consequences follow.
+
+**Optimization starts elsewhere.** The downstream run begins in a parameter
+region already shaped by a broad source objective. The task is not asking a few
+labels to invent syntax and semantics from scratch.
+
+**Data work moves upstream.** Corpus choice, tokenization, corruption, and source
+coverage become part of model design. Pretraining is curriculum at dataset scale.
+
+**One backbone serves many interfaces.** A sequence head, token head, or span head
+can reuse the same encoder. That modularity makes comparison easier—but also makes
+pretraining assumptions easy to inherit without inspecting them.
+
+The regime introduces new failure modes. Source bias can transfer with useful
+features. A vocabulary can represent a token without supplying useful exposure.
+Full fine-tuning can forget source behavior or become too expensive as the
+backbone grows. Those are not footnotes to transfer; they are the agenda of the
+pretrained era.
+
+The chapter closes with three forward seeds. A learned summary token can gather a
+sequence for a downstream head; @sec-16-vit-scaling will give that same pattern a
+sequence of image patches. Pretraining is a regime, not an architecture; Chapter
+16 will ask what changes when an encoder leaves text for images and scaling takes
+center stage. Fine-tuning changed every encoder weight here; @sec-17-peft-quantization
+will ask what adaptation remains when most, or all, of those weights must stay
+fixed.
+
+## Okay, so—
+
+1. **Visibility, selection, corruption, and padding are separate.** BERT removes
+   the causal triangle, selects loss targets, then applies the 80/10/10 treatment
+   so copying cannot solve most of them. `[MASK]` is a token—not an attention ban.
+2. **MLM turns raw text into supervision.** Select 15% of eligible positions;
+   conditional on selection, use 80% mask, 10% random, and 10% unchanged. All
+   selected positions predict their original tokens.
+3. **BERT is a full-context Transformer encoder.** WordPiece tokens, learned
+   token/position/segment embeddings, post-LayerNorm blocks, MLM, and historical
+   NSP define the original recipe.
+4. **Fine-tuning updates the encoder.** Training only a new head over frozen
+   features is a probe. Standard BERT adaptation moves the pretrained backbone and
+   task head together.
+5. **The controlled lab closes the transfer loop at toy scale.** Across five full
+   seeds, MLM initialization wins every covered-type comparison under 2–8 total
+   labels; input-vocabulary controls withheld from MLM inputs, replacements, and
+   targets remain near chance in both arms.
+6. **Pretraining changed the unit of work.** The field moved from one random model
+   per task toward reusable backbones and specialized adaptation. Corpus,
+   objective, visibility, and adaptation now belong to one design decision.
+
+## Sources and further reading {.unnumbered}
+
+- [Peters et al., *Deep Contextualized Word Representations*](https://aclanthology.org/N18-1202/): ELMo and fixed contextual features from forward and backward language models.
+- [Howard and Ruder, *Universal Language Model Fine-tuning for Text Classification*](https://aclanthology.org/P18-1031/): ULMFiT's full-model adaptation recipe.
+- [Radford et al., *Improving Language Understanding by Generative Pre-Training*](https://cdn.openai.com/research-covers/language-unsupervised/language_understanding_paper.pdf): causal Transformer pretraining followed by supervised adaptation.
+- [Devlin et al., *BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding*](https://aclanthology.org/N19-1423/): the original BERT architecture, MLM/NSP objectives, and fine-tuning results.
+- [Google Research, *BERT pretraining implementation*](https://github.com/google-research/bert/blob/master/run_pretraining.py): the released implementation documents the tied input/output embedding weights.
+- [Liu et al., *RoBERTa: A Robustly Optimized BERT Pretraining Approach*](https://arxiv.org/abs/1907.11692): a later study of BERT training choices, including removal of NSP.
+- [Raffel et al., *Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer*](https://www.jmlr.org/papers/v21/20-074.html): the T5 text-to-text framework and span-corruption recipe.
+
+## Exercises {.unnumbered}
+
+1. **(Pencil.)** For `[CLS] the wug is calm [SEP] [PAD] [PAD]`, suppose *wug*
+   is selected and replaced by `[MASK]`. Draw Chapter 14's causal visibility
+   matrix and BERT's full nonpadding visibility matrix, using queries as rows and
+   keys as columns. Separately mark the one position that contributes MLM loss.
+   Why may neighboring tokens attend to `[MASK]`, and why would full visibility
+   leak information in a next-token generator?
+2. **(Pencil.)** A batch contains 2,000 eligible ordinary tokens. Under BERT's
+   policy, how many positions are expected to be selected, replaced by `[MASK]`,
+   replaced by a random token, and left unchanged? How many contribute direct MLM
+   loss? Explain why 12% is not the supervision rate.
+3. **(Code.)** For token IDs $(B,T)$, width $d$, and vocabulary size $|V|$, add
+   assertions for hidden states $(B,T,d)$, dense logits $(B,T,|V|)$, selected
+   logits $(|M|,|V|)$, and selected targets $(|M|,)$. Assert that `[PAD]`, `[CLS]`,
+   and `[SEP]` are never selected. Show numerically that selected-only
+   cross-entropy matches dense cross-entropy when unselected targets use
+   `ignore_index`.
+4. **(Code.)** Starting from the same pretrained checkpoint and split, compare a
+   frozen encoder probe with full fine-tuning in the generated-token lab. Match head
+   tensors, labeled types, updates, and seeds. Plot all five paired results rather
+   than only their means. Which regime wins here, and what broader claim would
+   outrun the experiment?
+5. **(Code and interpretation.)** Reproduce paired gains for covered and control
+   strings at all three budgets. Map the evidence to Chapter 9's gates. Explain
+   the unchanged-row assertion, name two unsupported conclusions, and propose one
+   predeclared coverage test.

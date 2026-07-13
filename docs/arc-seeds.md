@@ -8,7 +8,7 @@ new rows here. The pedagogical-efficiency rule (drafting-template) depends on
 this file: a concept with no payoff chapter listed here should be an exercise or
 a cut.*
 
-*Updated: 2026-07-12, after Chapter 14 shipped.*
+*Updated: 2026-07-13, after Chapter 15 shipped.*
 
 ## 1. Seeds planted and their harvest contracts
 
@@ -32,7 +32,7 @@ a cut.*
 | CNN buys global sight through depth; attention buys it in one step | ch. 8 | ch. 13 (@sec-13 named in ch. 8 prose) | done |
 | Residual stream: "each block reads from it and writes small corrections back… attention will be one kind of correction" | ch. 9 | ch. 14 — harvested by name (x + F(x) wraps every block) | done |
 | LayerNorm: "same equation, different axis — remember @eq-batchnorm when you meet it" | ch. 9 | ch. 14 | done |
-| Transfer decision rule (labels scarce ∧ task feature-hungry ∧ coverage at matched scale) | ch. 9 | ch. 15 (BERT = the regime where it pays), ch. 17 | due |
+| Transfer decision rule (labels scarce ∧ task feature-hungry ∧ coverage at matched scale) | ch. 9 | ch. 15 ✓ (controlled generated-token transfer); ch. 17 | ch. 17 due |
 | Third weight sharing (examples → space → time) | ch. 10 | ch. 14 (stationarity retained; one comparison rule shared across ordered pairs) | done |
 | Finite-state bottleneck; "the book ends Part III when we refuse to pay that price" | ch. 10–11 | ch. 12 (retain the memory bank), ch. 13 (learn the access rule) | done |
 | Fixed attention matrix; "what if the similarity itself were learnable?" | ch. 12 | ch. 13 (learned compatibility and the date-task rematch) | done |
@@ -42,8 +42,11 @@ a cut.*
 | Cross-attention repairs the fixed handoff, but the surrounding RNNs remain serial; the Q/K/V operator does not care where its inputs came from | ch. 13 | ch. 14 (replace recurrence with self-attention; derive and implement multi-head) | done |
 | Beam search / decoding machinery | ch. 11 | chs. 15/17 (LM decoding reuses it) | ambient |
 | Book-corpus char-LM (held-out fixed-window loss 1.89; sampled training minibatch 1.42; babble) | ch. 10 | ch. 14 (exact corpus/split/evaluation and historical window schedule; positional transformer 1.9190, no-position 2.3405) | done |
-| Visibility is a modeling decision | ch. 14 | ch. 15 (causal generation versus bidirectional masked-token representation learning) | due |
+| Visibility is a modeling decision | ch. 14 | ch. 15 (causal generation versus bidirectional masked-token representation learning) | done |
 | Global routing trades away locality bias | ch. 14 | ch. 16 (patch tokens rematch convolution's built-in geometry) | due |
+| A learned summary token can gather a sequence for a downstream head | ch. 15 | ch. 16 (`[CLS]` over image patches) | ch. 16 due |
+| Pretraining is a regime, not an architecture | ch. 15 | ch. 16 (text→vision and the scaling budget) | ch. 16 due |
+| Fine-tuning changes every encoder weight; what if the backbone is too large? | ch. 15 | ch. 17 (prompting, PEFT, quantization) | ch. 17 due |
 | m06 autoencoder spine (PCA = linear AE, bottleneck, manifolds) | (unused by design in ch. 11) | ch. 19 | due |
 
 ## 2. Cross-chapter running benchmarks
@@ -99,6 +102,7 @@ optimizers or `backward()` before Chapter 5.
 | 12 | kernels/bandwidth, Nadaraya–Watson, queries/keys/values, row-softmax over log-kernel scores, attention-weight matrices (fixed) |
 | 13 | learned Q/K/V, additive and scaled dot-product cross-attention, source-padding attention masks, attention-augmented seq2seq, alignment heatmaps; multi-head preview only |
 | 14 | permutation-equivariant self-attention, custom multi-head attention, causal masks, sinusoidal positional encoding, LayerNorm, residual stream, pre-LN transformer blocks, FFN memory lens, exact ablation scheduling |
+| 15 | self-supervision, full nonpadding visibility, MLM selection/corruption and 80/10/10 policy, WordPiece concept, learned token/position/segment embeddings, `[CLS]`/`[SEP]`, GELU, BERT encoder and historical NSP, full fine-tuning versus frozen probes, centered cosine similarity, paired end-to-end transfer controls |
 
 ## 4. His signature analogies (use them; don't invent competitors)
 

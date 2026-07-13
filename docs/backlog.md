@@ -53,14 +53,14 @@ chapter stub's draft-sources; revisit during the planned outline session with th
 - Extend course-site `bookChapters` mappings as Chapters 12–19 become reviewed and
   substantive.
 
-## 5. GPU experiment queue (backlog-only; revised after Chapter 14, July 12, 2026)
+## 5. GPU experiment queue (backlog-only; revised after Chapter 15, July 13, 2026)
 
 Do not place project-management placeholders in the published chapters. Keep these
 experiments here until GPU access is available; then run them on Rivanna/Colab, pin the
 numbers, and fold only completed results back into the relevant chapter.
 
-Chapters 12–14 audit: the fixed-kernel, scaling, date-attention, and tiny
-Transformer book-corpus experiments are CPU-complete. They add no GPU-dependent
+Chapters 12–15 audit: the fixed-kernel, scaling, date-attention, tiny Transformer
+book-corpus, and controlled MLM-transfer experiments are CPU-complete. They add no GPU-dependent
 experiment and no published GPU placeholder; the queue below remains the reminder
 for later access. Chapters 13–14 discuss the structure of dense matrix operations
 but make no unmeasured hardware-speed claim.
@@ -76,3 +76,9 @@ but make no unmeasured hardware-speed claim.
 - **Ch. 11 translation, full scale**: English→French with an independently written,
   packed encoder–decoder pipeline, bucketing, BLEU, and greedy-versus-beam decoding.
   Do not use the course's D2L-derived `rnn_data_prep.py`.
+- **Ch. 15 masked-LM transfer, full scale**: use a licensed pretrained encoder and
+  a natural-language target with a predeclared label-scarcity ladder. Compare
+  scratch, frozen probe, and full fine-tuning across multiple end-to-end seeds;
+  include a source-coverage mismatch control and shallow lexical baseline. Pin the
+  corpus/license, split, tokenizer, checkpoint, total compute caveat, and per-seed
+  results before replacing or supplementing the synthetic mechanism study.

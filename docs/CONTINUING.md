@@ -1,6 +1,6 @@
 # Continuing the Book — Handoff & Roadmap
 
-*Written 2026-07-09 after Chapter 11 shipped; updated 2026-07-12 after Chapter 14
+*Written 2026-07-09 after Chapter 11 shipped; updated 2026-07-13 after Chapter 15
 shipped. This is the master handoff document:
 everything a fresh collaborator (human or Claude session, on any account) needs to
 continue the project without the original conversation history. Read `CLAUDE.md`
@@ -19,7 +19,7 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 | I · From Lines to Networks | 1–6 | **Shipped; repair pass complete and verified** (July 11, 2026) |
 | II · Vision | 7–9 | **Shipped; repair pass complete and verified** (July 11, 2026) |
 | III · Sequences | 10–11 | **Shipped; repair pass complete and verified** (July 11, 2026) |
-| IV · Attention | 12–16 | **12–14 shipped and two-format verified; 15 is next** |
+| IV · Attention | 12–16 | **12–15 shipped and two-format verified; 16 is next** |
 | V · Pretrained Era | 17–19 | Stubs with contracts |
 | Appendices | a1–a4 | Stubs (a4 floating-point queued in backlog) |
 
@@ -44,19 +44,31 @@ the matched seed, position lowers held-out loss from 2.3405 to 1.9190; the Chapt
 10 LSTM narrowly remains ahead at 1.8881. The comparison is a controlled case
 study, not an across-seed effect estimate.
 
+Chapter 15 is complete: causal visibility, full nonpadding visibility, MLM target
+selection, and padding protection are separated explicitly; original BERT's
+WordPiece/input recipe, MLM/NSP history, and full-backbone fine-tuning are derived.
+Its book-original 43,920-parameter synthetic transfer lab repeats five end-to-end
+seeds. At 1/2/4 labeled word types per family, MLM initialization raises mean
+covered-type accuracy from 0.468/0.489/0.494 to 0.995/1.000/1.000 (paired gains
++0.526/+0.511/+0.506; 15/15 wins). Forty vocabulary-resident controls withheld
+from MLM inputs, random replacements, and targets stay near chance: scratch
+0.475/0.500/0.550 and MLM-initialized 0.425/0.440/0.430. Both arms fit the tiny
+labeled sets perfectly. This is a synthetic mechanism demonstration—not a
+natural-language or compute-efficiency claim.
+
 **Decisions still gated on the author:**
-- The author's own edit pass over the shipped Chapters 1–14 remains pending.
+- The author's own edit pass over the shipped Chapters 1–15 remains pending.
 - Course-site integration was approved, implemented, and shipped July 11, 2026. It uses
   a plural `bookChapters` field because modules and chapters do not map one-to-one;
   only reviewed, substantive chapters are linked. The production build passes.
-  Chapters 12–14's course-site links wait for the author's edit pass.
+  Chapters 12–15's course-site links wait for the author's edit pass.
 - "Deeper dive" collapsed sections: piloted in ch. 6; his verdict pending ("let us
   get back to deeper dive later"). Do not retrofit chs. 1/5.
 - GPU experiments remain backlog-only until access is available. Do not publish
   placeholder callouts in chapters; run the queued experiments on Rivanna/Colab and
   fold real results back into the relevant chapters later.
 
-## 2. The working protocol (refined over chapters 7–14)
+## 2. The working protocol (refined over chapters 7–15)
 
 The single most important lesson of this project: **pre-test every experiment
 regime before writing a word of prose.** Roughly half of all planned experiments
@@ -211,6 +223,18 @@ These are precedents; when a new experiment misbehaves, check here first.
   the order mismatch as a caveat (Chapter 13). Even after exact matching, one seed
   is a controlled case study rather than an estimate of an average effect (Chapter
   14).
+- **An “unseen” vocabulary row can still move during MLM** (ch. 15): a token absent
+  from clean source text can appear as a random corruption, and tied input/output
+  embeddings receive full-softmax gradients even when the token is never a target.
+  Exclude control IDs from the replacement pool, untie the diagnostic MLM decoder,
+  and assert the held-out input rows are bitwise unchanged. Also require scratch to
+  fit the tiny labeled set before interpreting a transfer gap.
+- **A realistic-looking transfer task can still test the wrong feature** (ch. 15):
+  the book-continuation pilot produced only +0.031 mean five-seed gain at four
+  labels/class (0.497→0.528), while a source-only TF–IDF cosine baseline reached
+  0.632 and the gain faded with more labels. Reject the affirmative story when a
+  shallow baseline exposes it; redesign the mechanism test rather than hiding the
+  baseline.
 
 ## 6. Data assets (committed; no downloads at render)
 
@@ -223,7 +247,7 @@ These are precedents; when a new experiment misbehaves, check here first.
 
 ## 7. Roadmap: the remaining chapters
 
-Work order: 15 → 16 → 17 → 18 → 19, appendices opportunistically.
+Work order: 16 → 17 → 18 → 19, appendices opportunistically.
 Each stub carries its contract; specifics accumulated so far:
 
 ### Ch. 12 — Kernel Regression: Attention Before It Was Learnable (SHIPPED)
@@ -299,16 +323,36 @@ Each stub carries its contract; specifics accumulated so far:
 - **Forward seeds planted**: “visibility is a modeling decision” into ch. 15 and
   “global routing trades away locality bias” into ch. 16.
 
-### Ch. 15 — The BERT Moment
-- Seeds per stub (`bert.tex`, `10.2_pretrained.tex` in Box Module 10) + m10
-  transcripts. Masked-LM objective demo at tiny scale;
-  `squeezenet` precedent says a small committed pretrained artifact is
-  acceptable if a tiny-BERT demo needs one (check size/license; otherwise keep the
-  scaled experiment in the GPU backlog and publish only an honest CPU-scale result).
-  Ties back to ch. 9's transfer decision rule — at THIS scale
-  pretraining pays (the arc's promised resolution). Harvest ch. 14's “visibility
-  is a modeling decision” by contrasting causal generation with bidirectional
-  masked-token representation learning.
+### Ch. 15 — The BERT Moment (SHIPPED)
+- **Seeds and sources**: public snapshots `sources/bert.tex` and
+  `sources/10.2_pretrained.tex`; m10 transcript, module spine, and Manim scene
+  concepts; primary ELMo/ULMFiT/GPT/BERT/RoBERTa/T5 papers. No third-party
+  implementation was ported; the executable encoder and MLM are independently
+  derived.
+- **Harvests completed by name**: ch. 14's “visibility is a modeling decision”
+  becomes causal versus full nonpadding attention; ch. 9's three-gate transfer
+  rule is closed at controlled toy scale.
+- **Content shipped**: self-supervision; MLM loss and shapes; 15% then conditional
+  80/10/10 corruption; original BERT's WordPiece and token/position/segment input,
+  post-LayerNorm encoder, Base/Large sizes, historical NSP, `[CLS]` task heads,
+  and the distinction between full fine-tuning and a frozen probe. GPT and T5 are
+  compared without collapsing their visibility or execution differences.
+- **Pinned transfer lab**: 80 random four-letter token strings in two latent
+  families; 40 covered types receive 320 noisy MLM source sentences and 40
+  vocabulary-resident controls are absent from MLM inputs, random replacements,
+  and targets. A custom width-48, four-head, two-block post-LayerNorm encoder has
+  43,920 parameters. Five full
+  seeds (6050–6054), 600 MLM updates each, then exactly paired 160-update full
+  fine-tuning. Covered mean scratch→MLM accuracies are 0.468→0.995,
+  0.489→1.000, and 0.494→1.000 at 1/2/4 labels per family. Unexposed scratch/MLM
+  controls remain 0.475/0.425, 0.500/0.440, and 0.550/0.430. Both training arms
+  fit all labeled sets at 1.000.
+- **Control repair**: random corruptions draw only from clean-source token IDs; the
+  toy MLM decoder is untied; code asserts uncovered input embeddings stay bitwise
+  unchanged. The result is an existence proof for the scarcity/representation/
+  coverage mechanism, not Transformer superiority or natural-language scale.
+- **Forward seeds planted**: learned summary token and “pretraining is a regime,
+  not an architecture” into ch. 16; full-backbone fine-tuning cost into ch. 17.
 
 ### Ch. 16 — ViT & Scaling Laws
 - Seeds: `10.0_ViT.tex`, `10.1.scaling.tex`, plus `sources/4.3-NextGenCNN.tex`
@@ -316,7 +360,9 @@ Each stub carries its contract; specifics accumulated so far:
   already snapshotted). Patches-as-tokens demo on Fashion subset; inductive bias
   as a *trade* (callback to ch. 6); scaling-law log-log plots can be drawn from
   published constants (cite, don't fake data). Harvest ch. 14's “global routing
-  trades away locality bias” by name.
+  trades away locality bias” by name. Also harvest ch. 15's learned summary-token
+  pattern and “pretraining is a regime, not an architecture” before moving from
+  text corpora to image patches and scaling budgets.
 
 ### Chs. 17–19 — Pretrained Era
 - Per stubs: 17 prompting/PEFT/quantization (a2/a4 appendix ties; quantization
