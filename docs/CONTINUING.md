@@ -1,6 +1,6 @@
 # Continuing the Book — Handoff & Roadmap
 
-*Written 2026-07-09 after Chapter 11 shipped; updated 2026-07-12 after Chapter 13
+*Written 2026-07-09 after Chapter 11 shipped; updated 2026-07-12 after Chapter 14
 shipped. This is the master handoff document:
 everything a fresh collaborator (human or Claude session, on any account) needs to
 continue the project without the original conversation history. Read `CLAUDE.md`
@@ -19,7 +19,7 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 | I · From Lines to Networks | 1–6 | **Shipped; repair pass complete and verified** (July 11, 2026) |
 | II · Vision | 7–9 | **Shipped; repair pass complete and verified** (July 11, 2026) |
 | III · Sequences | 10–11 | **Shipped; repair pass complete and verified** (July 11, 2026) |
-| IV · Attention | 12–16 | **12–13 shipped and two-format verified; 14 is next** |
+| IV · Attention | 12–16 | **12–14 shipped and two-format verified; 15 is next** |
 | V · Pretrained Era | 17–19 | Stubs with contracts |
 | Appendices | a1–a4 | Stubs (a4 floating-point queued in backlog) |
 
@@ -37,19 +37,26 @@ matched-schedule attention rematch plus a validation-only alignment audit. Its
 implementation was independently derived after D2L-like source-code blocks were
 removed from the public snapshot.
 
+Chapter 14 is complete: self-attention, positional encoding, causal multi-head
+attention, the pre-LayerNorm residual block, and the FFN memory lens are derived
+and exercised. Its exact-schedule book-corpus rematch uses 132,488 parameters. In
+the matched seed, position lowers held-out loss from 2.3405 to 1.9190; the Chapter
+10 LSTM narrowly remains ahead at 1.8881. The comparison is a controlled case
+study, not an across-seed effect estimate.
+
 **Decisions still gated on the author:**
-- The author's own edit pass over the shipped Chapters 1–13 remains pending.
+- The author's own edit pass over the shipped Chapters 1–14 remains pending.
 - Course-site integration was approved, implemented, and shipped July 11, 2026. It uses
   a plural `bookChapters` field because modules and chapters do not map one-to-one;
   only reviewed, substantive chapters are linked. The production build passes.
-  Chapters 12–13's course-site links wait for the author's edit pass.
+  Chapters 12–14's course-site links wait for the author's edit pass.
 - "Deeper dive" collapsed sections: piloted in ch. 6; his verdict pending ("let us
   get back to deeper dive later"). Do not retrofit chs. 1/5.
 - GPU experiments remain backlog-only until access is available. Do not publish
   placeholder callouts in chapters; run the queued experiments on Rivanna/Colab and
   fold real results back into the relevant chapters later.
 
-## 2. The working protocol (refined over chapters 7–13)
+## 2. The working protocol (refined over chapters 7–14)
 
 The single most important lesson of this project: **pre-test every experiment
 regime before writing a word of prose.** Roughly half of all planned experiments
@@ -94,7 +101,7 @@ failed their first design (see §5 case law). The loop that works:
     contract gained specifics.
 
 **Budget expectations** (Apple Silicon, CPU): light chapters execute in ~1 min;
-training-heavy ones (9, 10, 11, 13) run 5–15 min. That is fine — execution is
+training-heavy ones (9, 10, 11, 13, 14) run 5–15 min. That is fine — execution is
 one-time-local (freeze), CI never executes. Keep any *single* cell under ~4–5 min
 and seed everything with `torch.manual_seed(6050)` (data variants may use fixed
 generator seeds 0/1/2/100+L etc. — keep them deterministic).
@@ -192,10 +199,18 @@ These are precedents; when a new experiment misbehaves, check here first.
   quarto-actions/setup for TinyTeX resolution; a Pages build stuck "building" is
   re-queued via `gh api -X POST …/pages/builds`; a cancelled runner job with zero
   steps is capacity noise — rerun it.
+- **The $\sqrt d$ embedding convention includes an initialization contract**
+  (ch. 14): PyTorch's default `nn.Embedding` has coordinate standard deviation near
+  1, so multiplying it by $\sqrt d$ dwarfs an order-one sinusoidal position signal.
+  Initialize token embeddings at standard deviation $1/\sqrt d$ before applying
+  that scaling, or omit the scaling and state the changed convention. Audit the
+  actual norms before training.
 - **One seed does not imply one minibatch order**: constructing models with different
   parameter counts consumes different random draws before the first `randperm`.
   Either drive batch order with an explicit generator in a true ablation or report
-  the order mismatch as a caveat (Chapter 13).
+  the order mismatch as a caveat (Chapter 13). Even after exact matching, one seed
+  is a controlled case study rather than an estimate of an average effect (Chapter
+  14).
 
 ## 6. Data assets (committed; no downloads at render)
 
@@ -208,7 +223,7 @@ These are precedents; when a new experiment misbehaves, check here first.
 
 ## 7. Roadmap: the remaining chapters
 
-Work order: 14 → 15 → 16 → 17 → 18 → 19, appendices opportunistically.
+Work order: 15 → 16 → 17 → 18 → 19, appendices opportunistically.
 Each stub carries its contract; specifics accumulated so far:
 
 ### Ch. 12 — Kernel Regression: Attention Before It Was Learnable (SHIPPED)
@@ -259,21 +274,30 @@ Each stub carries its contract; specifics accumulated so far:
   `sources/8.1-Attention.tex` snapshot. The chapter implementation is independently
   derived from the lecture equations and book-original ch. 11 pipeline.
 
-### Ch. 14 — Self-Attention and the Transformer
-- **Seeds**: `sources/9.1-self-attention.tex` + positional-encoding/normalization
-  notes (in Box Module 9); m09 transcripts.
-- **Harvests due (all contracted, all by name)**: residual stream (ch. 9's
-  highway; "every block wrapped as x + F(x)"), LayerNorm (ch. 9's BN note:
-  "same equation, different axis"), causal masking (ch. 11's masking warning),
-  paying to get position BACK (ch. 8's pooling warning — attention is
-  permutation-equivariant), and ch. 13's remaining recurrent bottleneck: the Q/K/V
-  operator does not care where its inputs came from. Derive and implement the
-  multi-head operator that ch. 13 only previewed.
-- **Experiments**: tiny transformer LM on the book-corpus (upgrade ch. 10's
-  char-LM finale — same corpus, deterministic 90/10 split, fixed-window evaluation,
-  and matched budget; the LSTM's held-out baseline is 1.89);
-  attention-map visualizations; positional-encoding ablation (pre-test whether
-  no-positions actually hurts at this scale — honesty gate!).
+### Ch. 14 — Self-Attention and the Transformer (SHIPPED)
+- **Seeds and sources**: `sources/9.1-self-attention.tex`,
+  `sources/9.A.1-positional_encoding.tex`, and
+  `sources/9.1A-Normalization_in_Transformers.tex`; m09 lecture/coding transcripts;
+  module spine and Manim scenes. All uncleared implementation blocks were removed
+  from the public snapshots, and the chapter's custom attention was independently
+  derived.
+- **Harvests completed by name**: ch. 13's origin-free Q/K/V operator and remaining
+  recurrent bottleneck; ch. 10's third sharing axis and book-corpus benchmark;
+  ch. 8's position debt; ch. 11's “which positions it may not look at” masking
+  warning; ch. 9's residual stream and “same equation, different axis” LayerNorm.
+- **Architecture shipped**: decoder-only causal Transformer, width 84, four heads
+  of width 21, two pre-LayerNorm blocks, FFN width 168, fixed sinusoidal position,
+  no dropout, 132,488 parameters. The fused-QKV attention is custom code, with
+  executable upper-triangle and row-sum assertions.
+- **Pinned book-corpus rematch**: exact Chapter 10 corpus/split, its exact historical
+  2,501-by-64 random-window schedule, 100-character context, Adam 0.002, clip 1,
+  and 16,006,400 targets. Shared initialization hash begins `4d2f7f434cb5`; schedule
+  hash begins `e470a091bd50`. With seed 6050, position yields train/held-out
+  1.1132/1.9190; no position yields 1.8672/2.3405. Position improves held-out loss
+  by 0.4214 (18.0%), but the 1.8881 LSTM baseline narrowly wins by 0.0309 (1.64%).
+  The positional run repeated exactly; the one-seed gap is not an average effect.
+- **Forward seeds planted**: “visibility is a modeling decision” into ch. 15 and
+  “global routing trades away locality bias” into ch. 16.
 
 ### Ch. 15 — The BERT Moment
 - Seeds per stub (`bert.tex`, `10.2_pretrained.tex` in Box Module 10) + m10
@@ -282,14 +306,17 @@ Each stub carries its contract; specifics accumulated so far:
   acceptable if a tiny-BERT demo needs one (check size/license; otherwise keep the
   scaled experiment in the GPU backlog and publish only an honest CPU-scale result).
   Ties back to ch. 9's transfer decision rule — at THIS scale
-  pretraining pays (the arc's promised resolution).
+  pretraining pays (the arc's promised resolution). Harvest ch. 14's “visibility
+  is a modeling decision” by contrasting causal generation with bidirectional
+  masked-token representation learning.
 
 ### Ch. 16 — ViT & Scaling Laws
 - Seeds: `10.0_ViT.tex`, `10.1.scaling.tex`, plus `sources/4.3-NextGenCNN.tex`
   (EfficientNet compound scaling / ConvNeXt — the CNN side of the story;
   already snapshotted). Patches-as-tokens demo on Fashion subset; inductive bias
   as a *trade* (callback to ch. 6); scaling-law log-log plots can be drawn from
-  published constants (cite, don't fake data).
+  published constants (cite, don't fake data). Harvest ch. 14's “global routing
+  trades away locality bias” by name.
 
 ### Chs. 17–19 — Pretrained Era
 - Per stubs: 17 prompting/PEFT/quantization (a2/a4 appendix ties; quantization

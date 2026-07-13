@@ -53,17 +53,17 @@ chapter stub's draft-sources; revisit during the planned outline session with th
 - Extend course-site `bookChapters` mappings as Chapters 12–19 become reviewed and
   substantive.
 
-## 5. GPU experiment queue (backlog-only; revised after Chapter 13, July 12, 2026)
+## 5. GPU experiment queue (backlog-only; revised after Chapter 14, July 12, 2026)
 
 Do not place project-management placeholders in the published chapters. Keep these
 experiments here until GPU access is available; then run them on Rivanna/Colab, pin the
 numbers, and fold only completed results back into the relevant chapter.
 
-Chapters 12–13 audit: the fixed-kernel, scaling, and date-attention experiments are
-CPU-complete. They add no GPU-dependent experiment and no published GPU placeholder;
-the queue below remains the reminder for later access. Chapter 13 discusses why
-scaled dot product maps cleanly to dense matrix multiplication, but makes no unmeasured
-hardware-speed claim.
+Chapters 12–14 audit: the fixed-kernel, scaling, date-attention, and tiny
+Transformer book-corpus experiments are CPU-complete. They add no GPU-dependent
+experiment and no published GPU placeholder; the queue below remains the reminder
+for later access. Chapters 13–14 discuss the structure of dense matrix operations
+but make no unmeasured hardware-speed claim.
 
 - **Ch. 9 scorecard, full scale**: LeNet / VGG / NiN / deep ResNet on all 60k
   Fashion-MNIST images — reproduce the lecture frontier (≈89% / >90% / ≈90% @ 30k

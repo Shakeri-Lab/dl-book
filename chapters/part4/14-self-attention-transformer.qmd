@@ -1,28 +1,1267 @@
 # Self-Attention and the Transformer {#sec-14-self-attention-transformer}
 
-::: {.callout-warning}
-**Chapter stub.** This chapter is planned but not yet written. The abstract below is its
-contract; drafting sources are listed for provenance.
+<!-- lecture-source:
+     m09_lecture-9-transformer_N4ePLi42ADk.txt
+     [coding]_m09_lecture-9-2-transformer-part-2_tG8b2eNm6Gg.txt
+     (spine via ds6050_09_transformer/MODULE_NOTES.md; scene compositions from
+     that module's Manim source)
+     seeds: sources/9.1-self-attention.tex,
+            sources/9.A.1-positional_encoding.tex,
+            sources/9.1A-Normalization_in_Transformers.tex
+     primary sources: Vaswani et al. 2017; Ba et al. 2016;
+                      Xiong et al. 2020; Geva et al. 2021;
+                      Jain and Wallace 2019
+     provenance note: all executable implementations were independently derived
+     from the displayed equations. The book-corpus schedule is reconstructed from
+     the book-original Chapter 10 cell. The experiment uses a custom decoder-only,
+     pre-LayerNorm Transformer rather than the original encoder-decoder,
+     post-LayerNorm architecture. It makes no measured hardware-speed claim. -->
+
+@sec-13-attention ended with a question that the attention operator itself had already
+answered. A query, key, and value need not come from an encoder or a decoder. They
+need not come from a recurrent network at all. If all three come from the same
+sequence, each token can ask every token—including itself—what matters and route the answers
+directly. The recurrent state—the last serial bottleneck left standing—becomes
+optional.
+
+That substitution is the core of a *Transformer*. It is also easy to state too
+quickly. Removing recurrence creates a position problem. Splitting one attention
+operation into heads creates a bookkeeping problem. Stacking the resulting
+operations creates an optimization problem. This chapter solves each one—from the
+equations outward—then returns to the book-corpus benchmark from
+@sec-10-sequences-rnn with a
+deliberately small causal Transformer.
+
+<!-- NOVEL: needs sign-off - opening preview of the seeded book-corpus rematch. -->
+
+Here is the result we have to explain on the same 14,860-character held-out tail.
+In one exactly matched seed, positional encoding improves the Transformer's loss
+from 2.3405 to 1.9190. Yet Chapter 10's compact LSTM remains better at 1.8881. The new architecture
+has learned, and position matters in this run—but at this scale, the LSTM still
+wins.
+
+<!-- /NOVEL -->
+
+## Let the sequence query itself
+
+Suppose the sentence contains the words *bank*, *river*, and *boats*. A useful
+representation of *bank* should route information from *river* and *boats*, while
+another occurrence—now near *loan* and *interest*—should route different information.
+Chapter 13 built exactly this kind of content-dependent routing. Self-attention
+changes only the source of the three inputs.
+
+The lecture's three questions still fit: a query asks “what am I looking for?”, a
+key advertises “what do I offer?”, and a value carries “what information do I
+contain?”
+
+Let a batch of token representations be
+
+$$
+X \in \mathbb{R}^{B \times n \times d},
+$$
+
+where $B$ is batch size, $n$ is sequence length, and $d$ is model width. Learned
+projections produce
+
+$$
+Q=XW_Q,\qquad K=XW_K,\qquad V=XW_V,
+$$
+
+with $W_Q,W_K,W_V\in\mathbb{R}^{d\times d}$. Scaled dot-product attention is
+
+$$
+\operatorname{Attention}(Q,K,V)
+=
+\operatorname{softmax}\left(\frac{QK^\top}{\sqrt d}\right)V.
+$$
+
+For one sequence, $QK^\top$ has shape $n\times n$. Row $i$ contains the scores from
+query position $i$ to every key position $j$. The row-wise softmax makes each row a
+distribution, and multiplying by $V$ returns one weighted sum for each query:
+
+$$
+(n,d)(d,n)\to(n,n),\qquad (n,n)(n,d)\to(n,d).
+$$
+
+Chapter 10 named time as the book's third sharing axis. An RNN shares one transition
+rule across time. Self-attention keeps that stationarity and extends the shared rule
+across every ordered pair of positions. The weights in a particular attention row
+still depend on the content; what is shared is the machinery that produces them.
+
+All query positions can be evaluated together during training because none waits
+for a hidden state from the preceding position. That is a structural statement—not
+a timing result. Dense self-attention still forms $n^2$ pairwise scores, and
+autoregressive generation still emits one new token at a time.
+
+### The position debt
+
+Bare self-attention knows content but not slot number. A precise proof is more
+useful than the slogan.
+
+Let $P$ be an $n\times n$ permutation matrix, so $PX$ reorders the tokens. Then
+
+$$
+Q'=PQ,\quad K'=PK,\quad V'=PV
+$$
+
+and therefore
+
+$$
+Q'K'^\top=P(QK^\top)P^\top.
+$$
+
+Write $S=QK^\top/\sqrt d$; then $S'=PSP^\top$. Row-wise softmax respects the
+same simultaneous row-and-column permutation:
+
+$$
+\operatorname{softmax}(PSP^\top)
+=P\operatorname{softmax}(S)P^\top.
+$$
+
+Putting the pieces together gives
+
+$$
+\operatorname{SA}(PX)
+=P\operatorname{SA}(X).
+$$
+
+Self-attention is *permutation equivariant*: permute the inputs and the outputs
+permute in the same way. It is not permutation invariant—the token outputs do not
+all become identical. But without another signal, the operator has no basis for
+distinguishing “first” from “fifth.” A pooled sequence summary can consequently
+become invariant to order.
+
+@sec-08-cnn planted this debt when convolution received locality “for free.” A
+convolution knows which values are neighbors because its kernel is tied to nearby
+offsets. Global attention abandons that built-in geometry—so we must pay to put
+position back in.
+
+<!-- NOVEL: needs sign-off - seeded permutation/position audits and figures. -->
+
+```{python}
+#| label: fig-permutation-debt
+#| fig-cap: "The same content is permuted across slots (left). The audit (right) shows bare self-attention rematches after the same output permutation, while fixed positional signals break that rematch."
+#| fig-width: 10
+#| fig-height: 3.4
+
+import math
+import numpy as np
+import matplotlib.pyplot as plt
+
+def numpy_attention(x: np.ndarray) -> np.ndarray:
+    scores = x @ x.T / math.sqrt(x.shape[-1])
+    scores = scores - scores.max(axis=-1, keepdims=True)
+    weights = np.exp(scores)
+    weights = weights / weights.sum(axis=-1, keepdims=True)
+    return weights @ x
+
+def numpy_positions(length: int, width: int) -> np.ndarray:
+    position = np.arange(length)[:, None]
+    frequency = np.exp(
+        np.arange(0, width, 2) * (-math.log(10_000.0) / width)
+    )
+    pe = np.zeros((length, width))
+    pe[:, 0::2] = np.sin(position * frequency)
+    pe[:, 1::2] = np.cos(position * frequency)
+    return pe
+
+rng = np.random.default_rng(6050)
+x = rng.normal(size=(5, 8))
+permutation = np.array([2, 4, 0, 1, 3])
+bare_error = np.abs(
+    numpy_attention(x[permutation]) - numpy_attention(x)[permutation]
+).max()
+
+pe = numpy_positions(5, 8)
+with_position = numpy_attention(x + pe)
+fixed_slot_change = np.abs(
+    numpy_attention(x[permutation] + pe) - with_position[permutation]
+).max()
+
+fig, axes = plt.subplots(1, 2)
+token_ids = np.arange(5)
+tokens = np.array(["bank", "by", "the", "river", "."])
+axes[0].imshow(
+    np.stack([token_ids, token_ids[permutation]]),
+    cmap="tab10", aspect="auto", vmin=0, vmax=9,
+)
+for row, order in enumerate([token_ids, token_ids[permutation]]):
+    for column, token_id in enumerate(order):
+        axes[0].text(column, row, tokens[token_id], ha="center", va="center")
+axes[0].set_yticks([0, 1], ["$X$", "$PX$"])
+axes[0].set_xticks(range(5), [f"slot {i}" for i in range(5)])
+axes[0].set_title("content moves with the permutation")
+
+axes[1].bar(
+    ["bare equivariance\nerror", "+ fixed position\ndifference"],
+    [bare_error, fixed_slot_change],
+    color=["#6b7280", "#d37b29"],
+)
+axes[1].set_yscale("log")
+axes[1].set_ylabel("maximum rematched difference")
+axes[1].set_title("position breaks the rematch")
+plt.tight_layout()
+plt.show()
+
+print(f"bare permutation-equivariance error: {bare_error:.2e}")
+print(f"fixed-slot difference after adding position: {fixed_slot_change:.3f}")
+```
+
+The first error is numerical roundoff, about $2.2\times10^{-16}$. Adding a fixed
+signal to each slot changes the rematched outputs by about 1.581 in this example.
+Position has not been inferred from content; it has been supplied.
+
+## Position as a bank of clocks
+
+The simplest additive code repeats $i/(n-1)$ in every coordinate. It supplies
+order, but every position vector lies on the same ray and differs only in
+magnitude; attention receives no multidirectional geometry. A binary code supplies
+more coordinates, yet adjacent integers can flip many bits and have poor locality.
+These are not impossible designs—they are weak inductive biases for a model that
+must reason about shifts and distances.
+
+Sinusoidal encoding gives every position a bank of clocks. For even model width
+$d$, define
+
+$$
+\begin{aligned}
+\operatorname{PE}(i,2j)
+&=\sin\left(i\,10000^{-2j/d}\right),\\
+\operatorname{PE}(i,2j+1)
+&=\cos\left(i\,10000^{-2j/d}\right).
+\end{aligned}
+$$
+
+Small $j$ gives a fast clock; large $j$ gives a slow one. Every sine coordinate is
+paired with a cosine at the same frequency. The model receives
+
+$$
+Z_i=\sqrt d\,E_i+\operatorname{PE}(i),
+$$
+
+where $E_i$ is the token embedding. Scaling the embedding keeps its initial
+magnitude commensurate with the position vector.
+
+Why pair sine and cosine? For frequency $\omega$, advancing by offset $\delta$ is a
+rotation—an algebraic answer to a geometric question:
+
+$$
+\begin{bmatrix}
+\sin((i+\delta)\omega)\\
+\cos((i+\delta)\omega)
+\end{bmatrix}
+=
+\begin{bmatrix}
+\cos(\delta\omega)&\sin(\delta\omega)\\
+-\sin(\delta\omega)&\cos(\delta\omega)
+\end{bmatrix}
+\begin{bmatrix}
+\sin(i\omega)\\
+\cos(i\omega)
+\end{bmatrix}.
+$$
+
+The rotation depends on the offset, not the absolute position. This gives learned
+linear maps a convenient raw material for representing relative shifts. It is a
+property of the positional pair itself—not a guarantee that arbitrary learned
+$W_Q$ and $W_K$ will preserve or use it.
+
+```{python}
+#| label: fig-position-build
+#| fig-cap: "Sinusoidal position is a bank of clocks. Fast coordinates track local offsets; slow coordinates vary across longer ranges. Each sine/cosine pair acts like a clock, and a fixed offset rotates that pair by a start-independent angle."
+#| fig-width: 10
+#| fig-height: 5
+
+pe = numpy_positions(100, 32)
+
+delta = 7
+j = 5
+omega = 10_000 ** (-2 * j / 32)
+rotation = np.array([
+    [np.cos(delta * omega), np.sin(delta * omega)],
+    [-np.sin(delta * omega), np.cos(delta * omega)],
+])
+pair_i = pe[13, 2 * j : 2 * j + 2]
+pair_shifted = pe[13 + delta, 2 * j : 2 * j + 2]
+rotation_error = np.abs(rotation @ pair_i - pair_shifted).max()
+norm_error = np.abs(np.linalg.norm(pe, axis=1) - 4.0).max()
+
+fig, axes = plt.subplots(
+    2, 2, figsize=(10, 5), gridspec_kw={"height_ratios": [1, 2]}
+)
+axes[0, 0].plot(pe[:, 0], label="sin")
+axes[0, 0].plot(pe[:, 1], label="cos")
+axes[0, 0].set_title("fast clock: coordinates 0–1")
+axes[0, 0].legend(frameon=False, ncol=2)
+axes[0, 1].plot(pe[:, 20], label="sin")
+axes[0, 1].plot(pe[:, 21], label="cos")
+axes[0, 1].set_title("slow clock: coordinates 20–21")
+axes[0, 1].legend(frameon=False, ncol=2)
+
+heat = axes[1, 0].imshow(pe.T, aspect="auto", cmap="coolwarm", vmin=-1, vmax=1)
+axes[1, 0].set_xlabel("position")
+axes[1, 0].set_ylabel("coordinate")
+axes[1, 0].set_title("the complete position code")
+fig.colorbar(heat, ax=axes[1, 0], fraction=0.05)
+
+from matplotlib.patches import FancyArrowPatch
+
+angles = np.arange(0, 2 * np.pi, 0.01)
+axes[1, 1].plot(np.sin(angles), np.cos(angles), color="0.8")
+axes[1, 1].scatter(*pair_i, label="position 13")
+axes[1, 1].scatter(*pair_shifted, label=f"position {13 + delta}")
+axes[1, 1].plot([0, pair_i[0]], [0, pair_i[1]], color="0.4")
+axes[1, 1].plot([0, pair_shifted[0]], [0, pair_shifted[1]], color="0.4")
+axes[1, 1].add_patch(
+    FancyArrowPatch(
+        pair_i,
+        pair_shifted,
+        connectionstyle="arc3,rad=0.25",
+        arrowstyle="->",
+        mutation_scale=12,
+        color="black",
+    )
+)
+axes[1, 1].axis("equal")
+axes[1, 1].set_title(f"offset {delta} is a rotation")
+axes[1, 1].legend(frameon=False)
+plt.tight_layout()
+plt.show()
+
+print(f"rotation identity maximum error: {rotation_error:.2e}")
+print(f"constant position-vector norm maximum error: {norm_error:.2e}")
+```
+
+For $d=32$, each position vector has norm $\sqrt{d/2}=4$ because every
+$\sin^2+\cos^2$ pair contributes one. Adding this vector does *not* preserve the
+norm of the combined token representation—the embedding and position vector can
+reinforce or cancel one another. Layer normalization will soon manage scale at the
+block level.
+
+<!-- /NOVEL -->
+
+## One routing operation, many heads
+
+A single attention distribution must make one compromise about what to retrieve.
+Multi-head attention lets several smaller routing systems—separate views of the
+same residual stream—operate in parallel.
+Choose a number of heads $h$ that divides $d$, and let $d_h=d/h$. For each head
+$r$,
+
+$$
+Q_r=XW_Q^{(r)},\quad
+K_r=XW_K^{(r)},\quad
+V_r=XW_V^{(r)},
+$$
+
+where
+$W_Q^{(r)},W_K^{(r)},W_V^{(r)}\in\mathbb{R}^{d\times d_h}$. The head output is
+
+$$
+H_r=
+\operatorname{softmax}\left(
+\frac{Q_rK_r^\top}{\sqrt{d_h}}+M
+\right)V_r.
+$$
+
+Here $M$ is the visibility mask defined next; $M=0$ for unmasked attention.
+
+The complete operation concatenates the heads and mixes them:
+
+$$
+\operatorname{MHA}(X)
+=\operatorname{Concat}(H_1,\ldots,H_h)W_O,
+\qquad W_O\in\mathbb{R}^{d\times d}.
+$$
+
+The shape ledger is the safest implementation guide:
+
+$$
+(B,n,d)
+\to(B,h,n,d_h)
+\to(B,h,n,n)
+\to(B,h,n,d_h)
+\to(B,n,d).
+$$
+
+Scaling uses $\sqrt{d_h}$, not $\sqrt d$, because a head's dot product sums $d_h$
+terms. With fixed $d$, splitting into heads does not multiply the leading projection
+count: $W_Q,W_K,W_V,W_O$ together contribute about $4d^2$ weights regardless of
+$h$. Heads divide the representational subspace—they do not each receive a fresh
+width-$d$ model.
+
+### The mask is part of the model
+
+@sec-11-encoder-decoder called masking the rule that tells a model *which positions it may not
+look at*. Here that rule is causal: position $i$ may use tokens at positions
+$j\le i$ but must not inspect future tokens $j>i$. Rows are queries and columns
+are keys, so the forbidden region is the strict upper triangle. We add
+
+$$
+M_{ij}=
+\begin{cases}
+0,&j\le i,\\
+-\infty,&j>i
+\end{cases}
+$$
+
+*before* softmax. Replacing forbidden probabilities with zero afterward would
+leave the remaining row unnormalized. Masking every key in a row is invalid—softmax
+would receive only negative infinity. Here the diagonal remains visible:
+the representation at a character may use that character while predicting the
+next one.
+
+<!-- NOVEL: needs sign-off - independent causal multi-head implementation and mask audit. -->
+
+```{python}
+#| label: fig-causal-multihead
+#| fig-cap: "Multi-head attention splits, routes in parallel, concatenates, and projects (top). In the untrained causal heads below, every query row sums to one and every future key has exactly zero weight."
+#| fig-width: 10
+#| fig-height: 7
+
+import torch
+from torch import nn
+from matplotlib.patches import FancyBboxPatch
+
+class CausalMultiHeadAttention(nn.Module):
+    def __init__(self, width: int, heads: int) -> None:
+        super().__init__()
+        if width % heads != 0:
+            raise ValueError("width must be divisible by heads")
+        self.heads = heads
+        self.head_width = width // heads
+        self.qkv = nn.Linear(width, 3 * width)
+        self.project = nn.Linear(width, width)
+        nn.init.xavier_uniform_(self.qkv.weight)
+        nn.init.zeros_(self.qkv.bias)
+
+    def forward(self, x: torch.Tensor, return_weights: bool = False):
+        batch, length, width = x.shape
+        qkv = self.qkv(x)
+        qkv = qkv.reshape(
+            batch, length, 3, self.heads, self.head_width
+        ).permute(2, 0, 3, 1, 4)
+        q, k, v = qkv.unbind(dim=0)
+        scores = q @ k.transpose(-2, -1) / math.sqrt(self.head_width)
+        forbidden = torch.triu(
+            torch.ones(length, length, dtype=torch.bool, device=x.device),
+            diagonal=1,
+        )
+        scores = scores.masked_fill(forbidden, float("-inf"))
+        weights = torch.softmax(scores, dim=-1)
+        routed = weights @ v
+        routed = routed.transpose(1, 2).reshape(batch, length, width)
+        output = self.project(routed)
+        if return_weights:
+            return output, weights
+        return output
+
+torch.manual_seed(6050)
+demo_attention = CausalMultiHeadAttention(width=32, heads=4)
+demo_x = torch.randn(1, 12, 32)
+_, demo_weights = demo_attention(demo_x, return_weights=True)
+
+future = torch.triu(torch.ones(12, 12, dtype=torch.bool), diagonal=1)
+assert demo_weights[0, :, future].max().item() == 0.0
+assert torch.allclose(
+    demo_weights.sum(dim=-1),
+    torch.ones_like(demo_weights.sum(dim=-1)),
+    atol=1e-6,
+)
+
+fig = plt.figure(figsize=(10, 7), layout="constrained")
+grid = fig.add_gridspec(2, 4, height_ratios=[1, 3])
+flow_axis = fig.add_subplot(grid[0, :])
+flow_axis.set_xlim(0, 10)
+flow_axis.set_ylim(0, 1)
+flow_axis.axis("off")
+flow = [
+    (0.1, "$X$", "#d8ecff"),
+    (2.1, "split $Q,K,V$\ninto $h$ heads", "#f9dfb5"),
+    (4.5, "$h$ attention\nroutes", "#f9dfb5"),
+    (6.9, "concatenate", "#d9f2d0"),
+    (8.7, "$W_O$", "#d9f2d0"),
+]
+for index, (left, label, color) in enumerate(flow):
+    width = 1.2 if index in [0, 4] else 1.7
+    flow_axis.add_patch(FancyBboxPatch(
+        (left, 0.2), width, 0.6,
+        boxstyle="round,pad=0.05",
+        facecolor=color, edgecolor="0.25",
+    ))
+    flow_axis.text(left + width / 2, 0.5, label, ha="center", va="center")
+    if index < len(flow) - 1:
+        next_left = flow[index + 1][0]
+        flow_axis.annotate(
+            "", xy=(next_left, 0.5), xytext=(left + width, 0.5),
+            arrowprops={"arrowstyle": "->", "color": "0.25"},
+        )
+
+axes = [fig.add_subplot(grid[1, head]) for head in range(4)]
+for head, axis in enumerate(axes):
+    image = axis.imshow(
+        demo_weights[0, head].detach().numpy(),
+        cmap="viridis", vmin=0, vmax=1,
+    )
+    axis.set_title(f"head {head + 1}")
+    axis.set_xlabel("key position")
+    if head == 0:
+        axis.set_ylabel("query position")
+fig.colorbar(image, ax=axes, fraction=0.025)
+plt.show()
+
+print("maximum forbidden attention:", demo_weights[0, :, future].max().item())
+print(
+    "maximum row-sum error:",
+    (demo_weights.sum(dim=-1) - 1).abs().max().item(),
+)
+```
+
+The assertions are part of the derivation. A visually plausible triangle can still
+be transposed, shifted by one, or applied after softmax. Executable shape and
+normalization checks catch those errors—before training can disguise them.
+
+<!-- /NOVEL -->
+
+The mask changes visibility, not dense computation. The implementation still
+forms all $n^2$ scores and stores $Bhn^2$ attention weights, alongside roughly
+$Bnd^2$ projection work and $Bndd_{ff}$ work in the FFN. Self-attention shortens
+the graph path between distant
+tokens to one routing step—but “one step away” is not “constant runtime.”
+
+## Build a Transformer block
+
+Attention routes information between token positions. A Transformer block needs
+two more ingredients—a stable path through depth and a nonlinear computation at
+each position.
+
+### The residual stream
+
+@sec-09-modern-cnns-transfer introduced the residual stream with one durable sentence: every block
+reads the stream and writes a correction back. If a sublayer computes $F(x)$, the
+residual update is
+
+$$
+x\leftarrow x+F(x).
+$$
+
+The identity branch provides a direct route for representations and gradients
+while the learned branch proposes a correction. It makes deep optimization more
+tractable—it does not guarantee that gradients can never vanish or explode.
+
+Layer normalization controls each token's feature scale. For one token vector
+$x\in\mathbb{R}^{d}$,
+
+$$
+\mu=\frac1d\sum_{k=1}^{d}x_k,\qquad
+\sigma^2=\frac1d\sum_{k=1}^{d}(x_k-\mu)^2,
+$$
+
+$$
+\operatorname{LN}(x)_k
+=\gamma_k\frac{x_k-\mu}{\sqrt{\sigma^2+\epsilon}}+\beta_k,
+\qquad \gamma,\beta\in\mathbb{R}^d.
+$$
+
+This is Chapter 9's normalization equation applied along a different axis—the same
+equation, different axis. Chapter 9's BatchNorm2d used batch and spatial axes for
+each channel. LayerNorm flips to the feature axis of each token: it computes
+statistics across the features within one token, without aggregating statistics
+across other tokens or examples. Its calculation is the same at training and
+evaluation time. Before the learned $\gamma$ and $\beta$, the vector is
+approximately zero mean and unit variance. After applying them, that claim need
+not remain true.
+
+```{python}
+#| label: fig-transformer-block
+#| fig-cap: "A pre-LayerNorm Transformer block (left): each sublayer reads a normalized view of the residual stream and writes a correction back. LayerNorm centers and scales every token across its own feature axis (right)."
+#| fig-width: 9
+#| fig-height: 4.5
+
+from matplotlib.patches import FancyBboxPatch, FancyArrowPatch
+
+fig, axes = plt.subplots(1, 2, figsize=(9, 4.5))
+axis = axes[0]
+axis.set_xlim(0, 10)
+axis.set_ylim(0, 10)
+axis.axis("off")
+
+def box(
+    axis: plt.Axes,
+    x: float,
+    y: float,
+    width: float,
+    height: float,
+    text: str,
+    color: str,
+) -> None:
+    patch = FancyBboxPatch(
+        (x, y), width, height,
+        boxstyle="round,pad=0.08",
+        facecolor=color, edgecolor="0.25",
+    )
+    axis.add_patch(patch)
+    axis.text(x + width / 2, y + height / 2, text, ha="center", va="center")
+
+axis.plot([2, 2], [0.7, 9.3], color="0.25", linewidth=3)
+axis.text(0.2, 0.25, "residual stream", color="0.25")
+box(axis, 3.5, 1.0, 2.5, 1.0, "LayerNorm", "#d8ecff")
+box(axis, 3.5, 2.6, 2.5, 1.0, "causal MHA", "#f9dfb5")
+box(axis, 3.5, 5.7, 2.5, 1.0, "LayerNorm", "#d8ecff")
+box(axis, 3.5, 7.3, 2.5, 1.0, "FFN", "#d9f2d0")
+
+for stream_y in [1.5, 6.2]:
+    axis.add_patch(
+        FancyArrowPatch((2, stream_y), (3.5, stream_y), arrowstyle="->")
+    )
+for box_top, stream_y in [(3.6, 4.3), (8.3, 9.0)]:
+    axis.add_patch(
+        FancyArrowPatch((4.75, box_top), (2, stream_y), arrowstyle="->")
+    )
+axis.add_patch(FancyArrowPatch((4.75, 2.0), (4.75, 2.6), arrowstyle="->"))
+axis.add_patch(FancyArrowPatch((4.75, 6.7), (4.75, 7.3), arrowstyle="->"))
+axis.text(2.25, 4.05, "+", fontsize=18)
+axis.text(2.25, 8.75, "+", fontsize=18)
+axis.set_title("reads, computes, writes")
+
+audit = torch.tensor([
+    [[1.0, 3.0, 5.0, 7.0], [40.0, 50.0, 60.0, 70.0]],
+    [[-3.0, 1.0, 5.0, 9.0], [2.0, 2.5, 3.0, 3.5]],
+])
+normalized = nn.functional.layer_norm(audit, (4,))
+token_means = normalized.mean(dim=-1)
+token_vars = normalized.var(dim=-1, unbiased=False)
+assert token_means.abs().max().item() < 1e-6
+assert (token_vars - 1).abs().max().item() < 1e-4
+
+for token, values in enumerate(normalized.reshape(-1, 4)):
+    axes[1].plot(
+        range(1, 5), values.numpy(), marker="o", label=f"token {token + 1}"
+    )
+axes[1].axhline(0, color="0.7", linestyle="--")
+axes[1].set_xticks(range(1, 5))
+axes[1].set_xlabel("feature within token")
+axes[1].set_ylabel("normalized activation")
+axes[1].set_title("each token centers and scales itself")
+axes[1].legend(frameon=False, ncol=2)
+plt.tight_layout()
+plt.show()
+
+print("maximum absolute token mean:", token_means.abs().max().item())
+print("maximum token variance error:", (token_vars - 1).abs().max().item())
+```
+
+The original Transformer normalized *after* each residual addition:
+
+$$
+x\leftarrow\operatorname{LN}(x+\operatorname{MHA}(x)),\qquad
+x\leftarrow\operatorname{LN}(x+\operatorname{FFN}(x)).
+$$
+
+Our small experiment uses the now-common pre-LayerNorm arrangement:
+
+$$
+\begin{aligned}
+x&\leftarrow x+\operatorname{MHA}(\operatorname{LN}(x)),\\
+x&\leftarrow x+\operatorname{FFN}(\operatorname{LN}(x)).
+\end{aligned}
+$$
+
+Pre-LayerNorm leaves an unobstructed identity route along the residual stream and
+often improves optimization at initialization. This is an implementation choice,
+not a universal theorem that post-LayerNorm fails or that pre-LayerNorm eliminates
+every need for careful optimization.
+
+### The position-wise feed-forward network
+
+After tokens communicate through attention, the same two-layer network processes
+each position independently:
+
+$$
+\operatorname{FFN}(z)
+=W_2\operatorname{ReLU}(W_1z+b_1)+b_2.
+$$
+
+Here $W_1\in\mathbb{R}^{d_{ff}\times d}$,
+$b_1\in\mathbb{R}^{d_{ff}}$, $W_2\in\mathbb{R}^{d\times d_{ff}}$, and
+$b_2\in\mathbb{R}^{d}$.
+
+If $w_{1j}^\top$ is row $j$ of $W_1$ and $v_j$ is column $j$ of $W_2$, the same
+operation can be written
+
+$$
+\operatorname{FFN}(z)
+=\sum_j [w_{1j}^\top z+b_{1j}]_+\,v_j+b_2.
+$$
+
+This form motivates an associative-memory lens. Each first-layer row tests whether
+the current representation lies in a learned half-space; its positive activation
+controls how much of the corresponding output vector is written. Empirically,
+Transformer FFNs can behave like key-value memories. The analogy has limits—the
+selectors are half-spaces rather than point anchors, the gates do not sum to one,
+and the operation is not literally kernel regression or a normalized lookup.
+
+The complete block therefore alternates two kinds of computation:
+
+1. causal multi-head attention moves information *between positions*; and
+2. the FFN transforms information *within each position*.
+
+Residual additions keep both results in one shared stream—a common workspace that
+survives the full stack.
+
+## From the original Transformer to this experiment
+
+The 2017 Transformer was an encoder–decoder system for translation. Its encoder
+stack uses unmasked self-attention to build a representation of the source
+sentence. Its decoder stack uses causal self-attention over the partial target,
+then cross-attention whose queries come from the decoder while keys and values
+come from the encoder. In compact form:
+
+$$
+\begin{array}{lll}
+\text{encoder:}&X_s\to\text{self-attention}\to\text{FFN},\\
+\text{decoder:}&X_t\to\text{causal self-attention}
+\to\text{cross-attention to encoder}\to\text{FFN}.
+\end{array}
+$$
+
+The book-corpus task predicts the next character from earlier characters. It has no
+separate source sentence, so the encoder and cross-attention are unnecessary. What
+remains—a **decoder-only causal Transformer**—has token plus position embeddings,
+two pre-LayerNorm blocks, a final LayerNorm, and a linear map to vocabulary logits.
+The logits go directly to cross-entropy. Softmax belongs inside attention and,
+later, inside sampling—not between the output layer and the loss.
+
+<!-- NOVEL: needs sign-off - exact-schedule book-corpus rematch, positional ablation,
+     learned-map audit, and deterministic samples. -->
+
+## The book reads itself, again
+
+A fair rematch begins by preserving what can be preserved. Chapter 10 trained on
+the code-stripped text of Chapters 1–9: 148,594 characters, vocabulary 104, a
+contiguous 90/10 split, 100-character windows, batch size 64, and 2,501 updates
+with Adam at learning rate 0.002 and gradient clipping at norm 1. The held-out
+metric resets state at each fixed window.
+
+The two architectures cannot be made identical—one has recurrent gates and the
+other has attention blocks—but their opportunity to see training targets can be.
+The code below reconstructs Chapter 10's exact random-window schedule, then gives
+both Transformer variants the same initial weights and all 16,006,400 target
+characters in the same order. The held-out tail has been inspected repeatedly
+across chapters, so treat it as a stable validation benchmark—not a newly sealed
+test set.
+
+```{python}
+#| label: transformer-data-model
+#| code-summary: "Code: exact Chapter 10 corpus and schedule, plus a custom tiny Transformer"
+
+import glob
+import hashlib
+import re
+import torch.nn.functional as F
+
+torch.set_num_threads(4)
+torch.use_deterministic_algorithms(True)
+
+SEED = 6050
+CONTEXT = 100
+BATCH = 64
+UPDATES = 2501
+WIDTH = 84
+HEADS = 4
+FF_WIDTH = 168
+BLOCKS = 2
+
+fence = chr(96) * 3
+files = sorted(glob.glob("../part*/0*.qmd"))
+text = ""
+for filename in files:
+    raw = open(filename).read()
+    code_pattern = (
+        re.escape(fence) + r"\{python\}.*?" + re.escape(fence)
+    )
+    raw = re.sub(code_pattern, "", raw, flags=re.S)
+    raw = re.sub(r"<!--.*?-->", "", raw, flags=re.S)
+    text += raw
+
+chars = sorted(set(text))
+stoi = {char: index for index, char in enumerate(chars)}
+data = torch.tensor([stoi[char] for char in text])
+split = int(0.9 * len(data))
+train_data, valid_data = data[:split], data[split:]
+
+def sinusoidal_positions(length: int, width: int) -> torch.Tensor:
+    position = torch.arange(length, dtype=torch.float32).unsqueeze(1)
+    frequency = torch.exp(
+        torch.arange(0, width, 2, dtype=torch.float32)
+        * (-math.log(10_000.0) / width)
+    )
+    table = torch.zeros(length, width)
+    table[:, 0::2] = torch.sin(position * frequency)
+    table[:, 1::2] = torch.cos(position * frequency)
+    return table
+
+class TransformerBlock(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.norm1 = nn.LayerNorm(WIDTH)
+        self.attention = CausalMultiHeadAttention(WIDTH, HEADS)
+        self.norm2 = nn.LayerNorm(WIDTH)
+        self.ff = nn.Sequential(
+            nn.Linear(WIDTH, FF_WIDTH),
+            nn.ReLU(),
+            nn.Linear(FF_WIDTH, WIDTH),
+        )
+
+    def forward(self, x: torch.Tensor, return_weights: bool = False):
+        if return_weights:
+            attended, weights = self.attention(self.norm1(x), True)
+            x = x + attended
+            return x + self.ff(self.norm2(x)), weights
+        x = x + self.attention(self.norm1(x))
+        return x + self.ff(self.norm2(x))
+
+class TinyTransformerLM(nn.Module):
+    def __init__(self, vocab: int, positions: bool) -> None:
+        super().__init__()
+        self.positions = positions
+        self.token_embedding = nn.Embedding(vocab, WIDTH)
+        nn.init.normal_(
+            self.token_embedding.weight,
+            mean=0.0,
+            std=1 / math.sqrt(WIDTH),
+        )
+        self.blocks = nn.ModuleList(
+            [TransformerBlock() for _ in range(BLOCKS)]
+        )
+        self.final_norm = nn.LayerNorm(WIDTH)
+        self.output = nn.Linear(WIDTH, vocab)
+        self.register_buffer(
+            "position_table",
+            sinusoidal_positions(CONTEXT, WIDTH),
+            persistent=False,
+        )
+
+    def forward(self, tokens: torch.Tensor, return_weights: bool = False):
+        length = tokens.shape[1]
+        x = self.token_embedding(tokens) * math.sqrt(WIDTH)
+        if self.positions:
+            x = x + self.position_table[:length]
+        maps = []
+        for block in self.blocks:
+            if return_weights:
+                x, weights = block(x, True)
+                maps.append(weights)
+            else:
+                x = block(x)
+        logits = self.output(self.final_norm(x))
+        return (logits, maps) if return_weights else logits
+
+class HistoricalCharLSTM(nn.Module):
+    def __init__(self, vocab: int, hidden: int = 128) -> None:
+        super().__init__()
+        self.vocab = vocab
+        self.lstm = nn.LSTM(vocab, hidden, batch_first=True)
+        self.out = nn.Linear(hidden, vocab)
+
+def state_digest(state: dict[str, torch.Tensor]) -> str:
+    digest = hashlib.sha256()
+    for name, value in state.items():
+        digest.update(name.encode())
+        digest.update(value.detach().cpu().numpy().tobytes())
+    return digest.hexdigest()
+
+# Reconstruct the random-number state immediately after Chapter 10 created
+# its LSTM, then draw that chapter's complete minibatch-start schedule.
+torch.manual_seed(SEED)
+_ = HistoricalCharLSTM(len(chars))
+schedule_generator = torch.Generator()
+schedule_generator.set_state(torch.random.get_rng_state())
+starts = torch.randint(
+    0,
+    len(train_data) - CONTEXT - 1,
+    (UPDATES, BATCH),
+    generator=schedule_generator,
+)
+
+# The two Transformer variants begin with exactly the same tensors.
+torch.manual_seed(SEED)
+base_model = TinyTransformerLM(len(chars), positions=True)
+initial_state = {
+    name: value.clone() for name, value in base_model.state_dict().items()
+}
+initial_hash = state_digest(initial_state)
+schedule_hash = hashlib.sha256(starts.numpy().tobytes()).hexdigest()
+
+print(
+    f"corpus: {len(files)} chapters, {len(text):,} characters, "
+    f"vocab {len(chars)}"
+)
+print(
+    f"deterministic split: {len(train_data):,} train / "
+    f"{len(valid_data):,} held out"
+)
+print(
+    f"Transformer parameters: "
+    f"{sum(parameter.numel() for parameter in base_model.parameters()):,}"
+)
+print(f"first eight window starts: {starts[0, :8].tolist()}")
+print(f"initial tensors: {initial_hash[:12]}…")
+print(f"window schedule: {schedule_hash[:12]}…")
+```
+
+The model has 132,488 trainable parameters—736 fewer than Chapter 10's 133,224.
+That difference is only 0.55%—close enough to remove model size as an easy
+explanation. The model width is 84, split into four 21-dimensional heads; each of
+the two FFNs expands to 168 features. Token embeddings are initialized with
+coordinate standard deviation $1/\sqrt d$ before the displayed $\sqrt d$ scaling,
+so their coordinates and the sinusoidal coordinates begin on comparable scales.
+`ModuleList` registers the two repeated blocks with the model. The nonpersistent
+position buffer moves with the model but is neither optimized nor included in the
+state-dictionary fingerprint; its contents follow deterministically from the
+displayed formula. There is no dropout, so resetting the trainable/state-dictionary
+tensors and window schedule makes the positional ablation exact and repeatable.
+
+::: {.callout-tip}
+## One seed call was not enough
+
+Calling the same random seed before both training runs would not, by itself, prove
+that they saw the same windows. Model construction consumes random numbers, and
+different construction paths can silently shift every later draw. The experiment
+precomputes the full start-index tensor with an explicit generator and copies one
+saved initialization into both models. It also prints fingerprints for both
+artifacts.
 :::
 
-*Let a sequence attend to itself and recurrence becomes optional. Harvest Chapter
-13's remaining recurrent bottleneck by name: the Q/K/V operator does not care where
-its inputs came from, so use it in place of the RNN and fully derive the multi-head
-operator that Chapter 13 only previewed. Positional encodings as rotations,
-LayerNorm and residuals, the FFN as associative memory — the full block, built and
-trained. Re-run Chapter 10's book-corpus language-model benchmark with a tiny
-transformer: use the same code-stripped Chapters 1–9 corpus, deterministic contiguous
-90/10 split, 100-character fixed-window evaluation, and matched training budget. The
-char-LSTM baseline is 1.89 held-out loss (its final sampled training minibatch is
-1.42); compare held-out loss and samples, not a favorable training batch. Pre-test
-the positional-encoding ablation before promising a result.*
+```{python}
+#| label: transformer-training-function
+#| code-summary: "Code: one matched training and evaluation protocol"
 
-<!-- draft-sources
-seeds:
-- `sources/9.1-self-attention.tex`
-- `sources/9.A.1-positional_encoding.tex`
-- `sources/9.1A-Normalization_in_Transformers.tex`
-transcripts:
-- `m09_lecture-9-transformer_N4ePLi42ADk.txt`
-- `[coding]_m09_lecture-9-2-transformer-part-2_tG8b2eNm6Gg.txt`
--->
+def train_transformer(
+    positions: bool,
+) -> tuple[nn.Module, list[tuple[int, float]]]:
+    net = TinyTransformerLM(len(chars), positions=positions)
+    net.load_state_dict(initial_state, strict=True)
+    assert state_digest(net.state_dict()) == initial_hash
+    optimizer = torch.optim.Adam(net.parameters(), lr=2e-3)
+    curve = []
+    for step, batch_starts in enumerate(starts):
+        xb = torch.stack([
+            train_data[j : j + CONTEXT] for j in batch_starts
+        ])
+        yb = torch.stack([
+            train_data[j + 1 : j + CONTEXT + 1] for j in batch_starts
+        ])
+        logits = net(xb)
+        loss = F.cross_entropy(
+            logits.reshape(-1, len(chars)), yb.reshape(-1)
+        )
+        optimizer.zero_grad()
+        loss.backward()
+        nn.utils.clip_grad_norm_(net.parameters(), 1.0)
+        optimizer.step()
+        if step % 250 == 0:
+            curve.append((step, loss.item()))
+            print(f"step {step:4d}   loss {loss.item():.4f}")
+    return net, curve
+
+@torch.no_grad()
+def fixed_window_loss(
+    net: nn.Module,
+    sequence: torch.Tensor,
+    window: int = CONTEXT,
+) -> float:
+    net.eval()
+    total_loss, n_tokens = 0.0, 0
+    for start in range(0, len(sequence) - 1, window):
+        stop = min(start + window, len(sequence) - 1)
+        xb = sequence[start:stop].unsqueeze(0)
+        yb = sequence[start + 1 : stop + 1]
+        logits = net(xb)
+        total_loss += F.cross_entropy(
+            logits.reshape(-1, len(chars)),
+            yb,
+            reduction="sum",
+        ).item()
+        n_tokens += yb.numel()
+    return total_loss / n_tokens
+
+@torch.no_grad()
+def transformer_sample(
+    net: nn.Module,
+    prompt: str,
+    n: int = 300,
+    temperature: float = 0.8,
+) -> str:
+    net.eval()
+    generator = torch.Generator().manual_seed(1_406_050)
+    tokens = [stoi.get(char, 0) for char in prompt]
+    for _ in range(n):
+        context = torch.tensor(tokens[-CONTEXT:]).unsqueeze(0)
+        probabilities = F.softmax(
+            net(context)[0, -1] / temperature, dim=-1
+        )
+        next_token = torch.multinomial(
+            probabilities, 1, generator=generator
+        ).item()
+        tokens.append(next_token)
+    return "".join(chars[index] for index in tokens)
+```
+
+The training function is defined once, then called in separate cells so each
+substantial run stays within the chapter's execution budget.
+
+```{python}
+#| label: train-transformer-positions
+#| code-summary: "Code: train the positional Transformer"
+
+position_model, position_curve = train_transformer(positions=True)
+position_train_loss = fixed_window_loss(position_model, train_data)
+position_valid_loss = fixed_window_loss(position_model, valid_data)
+print(f"fixed-window train loss: {position_train_loss:.4f}")
+print(f"fixed-window held-out loss: {position_valid_loss:.4f}")
+```
+
+```{python}
+#| label: train-transformer-no-positions
+#| code-summary: "Code: repeat with position removed and everything else fixed"
+
+no_position_model, no_position_curve = train_transformer(positions=False)
+no_position_train_loss = fixed_window_loss(no_position_model, train_data)
+no_position_valid_loss = fixed_window_loss(no_position_model, valid_data)
+print(f"fixed-window train loss: {no_position_train_loss:.4f}")
+print(f"fixed-window held-out loss: {no_position_valid_loss:.4f}")
+```
+
+```{python}
+#| label: fig-book-corpus-rematch
+#| fig-cap: "Matched training curves (left) and fixed-window held-out loss (right). Position helps in this seed, while the Chapter 10 LSTM remains the strongest small model."
+#| fig-width: 10
+#| fig-height: 4
+
+lstm_valid_loss = 1.888110429
+
+fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+for curve, label, color in [
+    (position_curve, "Transformer + position", "#3566a8"),
+    (no_position_curve, "Transformer, no position", "#d37b29"),
+]:
+    steps, losses = zip(*curve)
+    axes[0].plot(steps, losses, marker="o", ms=3, label=label, color=color)
+axes[0].set_xlabel("update")
+axes[0].set_ylabel("sampled training-minibatch loss")
+axes[0].set_title("same windows, same initialization")
+axes[0].legend(frameon=False)
+
+labels = ["Ch. 10\nLSTM", "Transformer\n+ position", "Transformer\nno position"]
+values = [lstm_valid_loss, position_valid_loss, no_position_valid_loss]
+bars = axes[1].bar(labels, values, color=["#6b7280", "#3566a8", "#d37b29"])
+axes[1].set_ylim(1.5, 2.7)
+axes[1].set_ylabel("held-out loss ↓")
+axes[1].set_title("fixed-window rematch")
+axes[1].bar_label(bars, fmt="%.4f", padding=3)
+plt.tight_layout()
+plt.show()
+
+improvement = no_position_valid_loss - position_valid_loss
+relative = improvement / no_position_valid_loss
+lstm_gap = position_valid_loss - lstm_valid_loss
+print(
+    f"position improvement: {improvement:.4f} loss "
+    f"({relative:.1%} relative)"
+)
+print(f"positional Transformer minus LSTM: {lstm_gap:.4f} loss")
+```
+
+The positional model finishes at 1.1132 on a deterministic pass over the training
+text and 1.9190 on the held-out tail. Removing position raises those values to
+1.8672 and 2.3405. Position lowers
+held-out loss by 0.4214, or 18.0% relative to the no-position variant.
+
+::: {.callout-warning}
+## What this matched run can—and cannot—show
+
+The causal mask already gives a position some weak structural information: row
+$i$ sees a prefix of length $i+1$, and stacked layers can propagate clues from
+those nested prefixes. That is why the no-position model does better than a purely
+orderless caricature might suggest—fixed sinusoidal encoding still produces a
+large improvement in this run.
+
+But Chapter 10's LSTM remains ahead by 0.0309 held-out loss, or 1.64%. At 100
+characters of context and roughly 133,000 parameters, the LSTM wins this regime.
+This comparison matches corpus, parameter scale, updates,
+minibatch order, optimizer, clipping, and evaluation. It does not match internal
+architecture—or promise that either model has been tuned to its own optimum.
+We did not repeat the comparison across initialization seeds, so the 0.4214 gap is
+a controlled case study, not an estimate of an average effect.
+:::
+
+### What did the heads route?
+
+An attention map records routing weights, not reasons, confidence, or a guaranteed
+explanation of a prediction. Still, inspecting real learned maps can verify the
+mask and reveal the kinds of patterns a trained model happened to use. The next
+cell sends the prompt *The gradient* through the positional model and plots the
+second block's four heads.
+
+```{python}
+#| label: fig-learned-attention
+#| fig-cap: "Learned attention weights in the second block for the prompt “The gradient ”. The maps are real routing distributions, not explanations or named head roles."
+#| fig-width: 10
+#| fig-height: 6
+
+prompt = "The gradient "
+prompt_tokens = torch.tensor([[stoi[char] for char in prompt]])
+position_model.eval()
+with torch.no_grad():
+    _, learned_maps = position_model(prompt_tokens, return_weights=True)
+learned = learned_maps[-1][0]
+
+future = torch.triu(
+    torch.ones(len(prompt), len(prompt), dtype=torch.bool), diagonal=1
+)
+assert learned[:, future].max().item() == 0.0
+assert torch.allclose(
+    learned.sum(dim=-1),
+    torch.ones_like(learned.sum(dim=-1)),
+    atol=1e-6,
+)
+
+display_tokens = ["·" if char == " " else char for char in prompt]
+fig, axes = plt.subplots(2, 2, figsize=(10, 6), layout="constrained")
+for head, axis in enumerate(axes.flat):
+    image = axis.imshow(
+        learned[head].numpy(), cmap="viridis", vmin=0, vmax=1
+    )
+    axis.set_title(f"block 2, head {head + 1}")
+    axis.set_xticks(range(len(prompt)), display_tokens)
+    axis.set_yticks(range(len(prompt)), display_tokens)
+    axis.set_xlabel("key")
+    axis.set_ylabel("query")
+fig.colorbar(image, ax=axes, fraction=0.025, shrink=0.8, pad=0.02)
+plt.show()
+
+print("maximum future attention:", learned[:, future].max().item())
+print(
+    "maximum row-sum error:",
+    (learned.sum(dim=-1) - 1).abs().max().item(),
+)
+```
+
+The maps obey the contract exactly: no future key receives weight and every row
+sums to one. The heads also differ from one another, but naming one “the previous
+character head” or another “the word head” from this single prompt would outrun
+the evidence. Attention shows where values were mixed—the rest of the network can
+transform, cancel, or ignore what was retrieved.
+
+### Listen, but do not grade by fluency
+
+Both Transformer variants can now generate by repeatedly truncating to the most
+recent 100 characters, predicting a distribution for the next one, sampling, and
+feeding the result back. Unlike Chapter 10's LSTM, this simple implementation does
+not carry a recurrent state; it recomputes the current context on every step.
+
+```{python}
+#| label: transformer-samples
+#| code-summary: "Code: deterministic samples from both Transformer variants"
+
+print("WITH POSITION\n")
+print(transformer_sample(position_model, "The gradient "))
+print("\n\nWITHOUT POSITION\n")
+print(transformer_sample(no_position_model, "The gradient "))
+```
+
+The positional sample has the book's punctuation, fragments of mathematical
+vocabulary, and stretches that resemble prose. It still loses its argument. The
+no-position sample is visibly rougher. Neither qualitative judgment replaces the
+held-out loss—a sample is one stochastic path, while the loss evaluates every
+held-out target under the model's full probability distribution.
+
+<!-- /NOVEL -->
+
+## What the architecture bought
+
+The rematch is not a referendum on all Transformers—it isolates what this small
+one bought and what it paid.
+
+**Direct content routing.** Any earlier visible token can contribute to the next
+representation in one attention sublayer. The recurrent state no longer has to
+compress the entire past before the current token can consult it.
+
+**Short paths, dense work.** The graph distance between visible tokens is short,
+but the routing matrix is quadratic in context length. Global access is a
+different tradeoff, not free memory.
+
+**Position becomes a modeling choice.** Convolution and recurrence bake in local
+order. Attention asks the designer to supply position—and decide visibility.
+@sec-15-bert-pretraining will change visibility itself; @sec-16-vit-scaling will
+revisit what happens
+when global routing trades away an image model's locality bias.
+
+**A modular residual stream.** Attention moves information, the FFN transforms it,
+and residual additions let both write into a shared representation. LayerNorm
+keeps each token's feature scale manageable along the way.
+
+The causal mask is therefore more than an implementation detail. It says which
+information a representation is allowed to use. “Visibility is a modeling
+decision” is the seed this chapter hands forward.
+
+## Okay, so—
+
+1. **Self-attention reuses Chapter 13's operator within one sequence.** $Q$, $K$,
+   and $V$ all come from $X$; one learned comparison rule is shared over every
+   ordered pair. Training positions can be evaluated together, while
+   autoregressive generation remains sequential.
+2. **Bare attention is permutation equivariant, not invariant.**
+   $\operatorname{SA}(PX)=P\operatorname{SA}(X)$. Sinusoidal clocks repay Chapter
+   8's position debt, and their sine/cosine pairs turn relative shifts into
+   rotations.
+3. **Multi-head attention is shape discipline.** Split
+   $(B,n,d)\to(B,h,n,d_h)$, scale by $\sqrt{d_h}$, form
+   $(B,h,n,n)$ routing weights, concatenate, and project. At fixed $d$, the four
+   leading projections remain about $4d^2$ parameters.
+4. **The causal mask defines visibility.** Future scores become negative infinity
+   before softmax. The dense operator still performs quadratic work; the mask does
+   not make the forbidden half computationally disappear.
+5. **The block alternates routing and computation.** Multi-head attention mixes
+   positions, the FFN transforms each position, and both write corrections into
+   Chapter 9's residual stream. LayerNorm is the same normalization equation over
+   a token's feature axis.
+6. **Position wins this seed's controlled ablation.** It lowers held-out loss from
+   2.3405 to 1.9190. **The LSTM narrowly wins the small-model rematch**, 1.8881
+   versus 1.9190.
+   Architecture changes inductive bias; it does not guarantee victory in every
+   data and scale regime.
+
+## Sources and further reading {.unnumbered}
+
+- [Vaswani et al., *Attention Is All You Need*](https://papers.nips.cc/paper_files/paper/2017/hash/3f5ee243547dee91fbd053c1c4a845aa-Abstract.html): multi-head attention, sinusoidal position, and the original post-LayerNorm encoder–decoder.
+- [Ba, Kiros, and Hinton, *Layer Normalization*](https://arxiv.org/abs/1607.06450): normalization within one example and identical train/evaluation computation.
+- [Xiong et al., *On Layer Normalization in the Transformer Architecture*](https://proceedings.mlr.press/v119/xiong20b.html): a qualified comparison of pre- and post-LayerNorm optimization.
+- [Geva et al., *Transformer Feed-Forward Layers Are Key-Value Memories*](https://aclanthology.org/2021.emnlp-main.446/): empirical evidence behind the associative-memory interpretation of FFNs.
+- [Jain and Wallace, *Attention Is Not Explanation*](https://aclanthology.org/N19-1357/): an important limit on reading attention maps as explanations.
+
+## Exercises {.unnumbered}
+
+1. **(Pencil.)** Starting from $Q'=PQ$, $K'=PK$, and $V'=PV$, prove each step of
+   $\operatorname{SA}(PX)=P\operatorname{SA}(X)$. Then show that mean-pooling the
+   token outputs produces a permutation-*invariant* sequence representation.
+2. **(Pencil.)** For width $d=512$ and $h=8$, write every tensor shape in
+   multi-head attention for $B=32$ and $n=100$. Count the weights in
+   $W_Q,W_K,W_V,W_O$. Repeat for $h=16$ and explain which dimensions change while
+   the leading parameter count does not.
+3. **(Code.)** Deliberately transpose the causal mask in
+   @fig-causal-multihead, then design an assertion that identifies the first
+   leaked query-key pair. Next set forbidden probabilities to zero *after*
+   softmax and measure the row-sum error.
+4. **(Code.)** Replace the fixed sinusoidal table with a learned
+   $\text{Embedding}(100,d)$ while preserving the exact initialization and window
+   schedule protocol. Compare held-out loss. Then extend the sinusoidal buffer by
+   evaluating its formula beyond position 99, and propose an explicit extension
+   rule for the learned table before testing either model on a longer context.
+   Which design has a natural extension, and which has to invent one?
+5. **(Code and interpretation.)** Aggregate learned attention by relative offset
+   across the held-out tail rather than naming heads from one prompt. Report a
+   distribution for every head and block. Then perturb the highest-weight key's
+   value vector and measure the logit change. Explain why routing weight and causal
+   influence need not rank tokens identically.

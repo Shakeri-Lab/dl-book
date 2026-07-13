@@ -1,3 +1,6 @@
+% Public source snapshot: implementation blocks whose provenance has not been
+% cleared have been omitted. See sources/README.md for the project's stricter
+% independent-provenance and licensing boundary.
 \documentclass{article}
 \usepackage{graphicx}
 \usepackage{amsmath}
@@ -297,19 +300,8 @@ In the decoder's self-attention, we apply a \textbf{causal mask} (also called an
 
 Position $i$ can only attend to positions $j \leq i$ (itself and previous positions).
 
-% \textbf{Implementation}:
-% \begin{lstlisting}[language=Python, caption=Causal Mask]
-% def create_causal_mask(seq_len):
-%    # Create upper triangular matrix of -inf
-%    mask = torch.triu(torch.ones(seq_len, seq_len) * float('-inf'), 
-%              diagonal=1)
-%    return mask  # Shape: (seq_len, seq_len)
-
-% # In attention computation:
-% scores = torch.matmul(Q, K.transpose(-2, -1)) / math.sqrt(d_k)
-% scores = scores + causal_mask  # Add -inf to future positions
-% attention_weights = torch.softmax(scores, dim=-1)
-% \end{lstlisting}
+% Causal-mask implementation omitted from the public snapshot because its
+% implementation provenance has not been cleared. See sources/README.md.
 
 
 
@@ -785,52 +777,8 @@ The concrete parameters that encode phrase/fact associations reside largely in t
 
 \section{Implementation: Self-Attention Layer}
 
-\begin{lstlisting}[language=Python, caption=Self-Attention Implementation]
-import torch
-import torch.nn as nn
-import math
-
-class SelfAttention(nn.Module):
-   def __init__(self, d_model, d_k, d_v, dropout=0.1):
-     super().__init__()
-     self.d_k = d_k
-     
-     # Linear projections for Q, K, V
-     self.W_q = nn.Linear(d_model, d_k, bias=False)
-     self.W_k = nn.Linear(d_model, d_k, bias=False)
-     self.W_v = nn.Linear(d_model, d_v, bias=False)
-     
-     self.dropout = nn.Dropout(dropout)
-     
-   def forward(self, x, mask=None):
-     ``""
-     x: (batch, seq_len, d_model)
-     mask: (batch, seq_len, seq_len) or (seq_len, seq_len)
-         True for positions to keep, False for masked positions
-     ``""
-     # Project to Q, K, V
-     Q = self.W_q(x)  # (batch, seq_len, d_k)
-     K = self.W_k(x)  # (batch, seq_len, d_k)
-     V = self.W_v(x)  # (batch, seq_len, d_v)
-     
-     # Compute attention scores
-     scores = torch.matmul(Q, K.transpose(-2, -1)) / math.sqrt(self.d_k)
-     # scores shape: (batch, seq_len, seq_len)
-     
-     # Apply mask if provided
-     if mask is not None:
-       scores = scores.masked_fill(mask == 0, float('-inf'))
-     
-     # Softmax to get attention weights
-     attention_weights = torch.softmax(scores, dim=-1)
-     attention_weights = self.dropout(attention_weights)
-     
-     # Weighted sum of values
-     output = torch.matmul(attention_weights, V)
-     # output shape: (batch, seq_len, d_v)
-     
-     return output, attention_weights
-\end{lstlisting}
+% Self-attention implementation omitted from the public snapshot because its
+% implementation provenance has not been cleared. See sources/README.md.
 
 \section{Multi-Head Self-Attention}
 A single attention head computes its output as a weighted average of the value vectors across all positions. This averaging mechanism can dilute information and inhibit the model's ability to focus sharply on multiple aspects of the sequence simultaneously.
@@ -866,106 +814,12 @@ Instead of performing a single attention function with $d_{model}$-dimensional k
 
 \subsection{Implementation}
 
-In practice, we do not use $h$ separate sets of matrices. For computational efficiency, the projections for all heads are combined into single, large matrices ($W_Q, W_K, W_V$), and the dimensions are reshaped to calculate the heads in parallel.
-
-\begin{lstlisting}[language=Python, caption=Multi-Head Self-Attention]
-class MultiHeadSelfAttention(nn.Module):
-   def __init__(self, d_model, num_heads, dropout=0.1):
-     super().__init__()
-     assert d_model % num_heads == 0
-     
-     self.d_model = d_model
-     self.num_heads = num_heads
-     self.d_k = d_model // num_heads
-     
-     # Single projections for all heads (more efficient)
-     self.W_q = nn.Linear(d_model, d_model, bias=False)
-     self.W_k = nn.Linear(d_model, d_model, bias=False)
-     self.W_v = nn.Linear(d_model, d_model, bias=False)
-     self.W_o = nn.Linear(d_model, d_model, bias=False)
-     
-     self.dropout = nn.Dropout(dropout)
-     
-   def forward(self, x, mask=None):
-     """
-     x: (batch, seq_len, d_model)
-     """
-     batch_size, seq_len, _ = x.shape
-     
-     # Linear projections and split into heads
-     # (batch, seq_len, d_model) -> (batch, seq_len, num_heads, d_k)
-     Q = self.W_q(x).view(batch_size, seq_len, self.num_heads, self.d_k)
-     K = self.W_k(x).view(batch_size, seq_len, self.num_heads, self.d_k)
-     V = self.W_v(x).view(batch_size, seq_len, self.num_heads, self.d_k)
-     
-     # Transpose to (batch, num_heads, seq_len, d_k)
-     # This allows for efficient parallel computation across heads
-     Q = Q.transpose(1, 2)
-     K = K.transpose(1, 2)
-     V = V.transpose(1, 2)
-     
-     # Compute scaled dot-product attention
-     # (b, h, T, d_k) @ (b, h, d_k, T) -> (b, h, T, T)
-     scores = torch.matmul(Q, K.transpose(-2, -1)) / math.sqrt(self.d_k)
-     
-     if mask is not None:
-       # Expand mask for all heads
-       mask = mask.unsqueeze(1)  # (batch, 1, seq_len, seq_len)
-       scores = scores.masked_fill(mask == 0, float('-inf'))
-     
-     attention_weights = torch.softmax(scores, dim=-1)
-     attention_weights = self.dropout(attention_weights)
-     
-     # (b, h, T, T) @ (b, h, T, d_k) -> (b, h, T, d_k)
-     attn_output = torch.matmul(attention_weights, V)
-     
-     # Concatenate heads
-     # (b, h, T, d_k) -> (b, T, h, d_k) -> (b, T, d_model)
-     attn_output = attn_output.transpose(1, 2).contiguous()
-     attn_output = attn_output.view(batch_size, seq_len, self.d_model)
-     
-     # Final linear projection (W_O)
-     output = self.W_o(attn_output)
-     
-     return output, attention_weights
-\end{lstlisting}
+% Multi-head implementation omitted from the public snapshot because its
+% implementation provenance has not been cleared. See sources/README.md.
 \section{Positional Encoding Implementation}
 
-\begin{lstlisting}[language=Python, caption=Sinusoidal Positional Encoding]
-class PositionalEncoding(nn.Module):
-   def __init__(self, d_model, max_len=5000, dropout=0.1):
-     super().__init__()
-     self.dropout = nn.Dropout(dropout)
-     
-     # Create positional encoding matrix
-     pe = torch.zeros(max_len, d_model)
-     position = torch.arange(0, max_len).unsqueeze(1).float()
-     
-     # Compute the div term: 1 / (10000^(2i/d_model))
-     div_term = torch.exp(
-       torch.arange(0, d_model, 2).float() * 
-       -(math.log(10000.0) / d_model)
-     )
-     
-     # Apply sin to even indices, cos to odd indices
-     pe[:, 0::2] = torch.sin(position * div_term)
-     pe[:, 1::2] = torch.cos(position * div_term)
-     
-     # Add batch dimension
-     pe = pe.unsqueeze(0)  # (1, max_len, d_model)
-     
-     # Register as buffer (not a parameter, but part of state)
-     self.register_buffer('pe', pe)
-     
-   def forward(self, x):
-     ``""
-     x: (batch, seq_len, d_model)
-     ``""
-     # Add positional encoding to input
-     # pe is (1, max_len, d_model), we take first seq_len positions
-     x = x + self.pe[:, :x.size(1), :]
-     return self.dropout(x)
-\end{lstlisting}
+% Positional-encoding implementation omitted from the public snapshot because its
+% implementation provenance has not been cleared. See sources/README.md.
 
 \section{Why Transformers Are Revolutionary}
 
@@ -1280,7 +1134,7 @@ Propose a modification to self-attention that:
 \subsection{Textbooks}
 
 \begin{itemize}
-\item Zhang, A., et al. (2023). \textbf{Dive into Deep Learning}. Chapter 11: Attention Mechanisms and Transformers.
+% D2L textbook item omitted from the public snapshot. See sources/README.md.
 
 \item Jurafsky, D., \& Martin, J. H. (2023). \textbf{Speech and Language Processing} (3rd ed.). Chapter 10: Transformers and Large Language Models.
 \end{itemize}

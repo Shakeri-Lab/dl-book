@@ -8,7 +8,7 @@ new rows here. The pedagogical-efficiency rule (drafting-template) depends on
 this file: a concept with no payoff chapter listed here should be an exercise or
 a cut.*
 
-*Updated: 2026-07-12, after Chapter 13 shipped.*
+*Updated: 2026-07-12, after Chapter 14 shipped.*
 
 ## 1. Seeds planted and their harvest contracts
 
@@ -27,21 +27,23 @@ a cut.*
 | Global templates figure (fig-templates) | ch. 6 | ch. 8 ✓ (learned local kernels vs. global smears) | done |
 | Sliding dot product; "what if the template were learnable?" | ch. 7 | ch. 8 ✓ — the Part II pivot | done |
 | Equivariance banked → local shift tolerance purchased | ch. 7 | ch. 8 ✓ (pooling, explicitly not exact invariance) | done |
-| Pooling discards *where* → "we will pay to put position back in" | ch. 8 | ch. 14 (positional encodings; self-attention is permutation-equivariant) | due |
+| Pooling discards *where* → "we will pay to put position back in" | ch. 8 | ch. 14 (positional encodings; self-attention is permutation-equivariant) | done |
 | Head-parameter imbalance (96% in LeNet's head) | ch. 8 | ch. 9 ✓ (1×1 + GAP fire the head) | done |
 | CNN buys global sight through depth; attention buys it in one step | ch. 8 | ch. 13 (@sec-13 named in ch. 8 prose) | done |
-| Residual stream: "each block reads from it and writes small corrections back… attention will be one kind of correction" | ch. 9 | ch. 14 — harvest by name (x + F(x) wraps every block) | due |
-| LayerNorm: "same equation, different axis — remember @eq-batchnorm when you meet it" | ch. 9 | ch. 14 | due |
+| Residual stream: "each block reads from it and writes small corrections back… attention will be one kind of correction" | ch. 9 | ch. 14 — harvested by name (x + F(x) wraps every block) | done |
+| LayerNorm: "same equation, different axis — remember @eq-batchnorm when you meet it" | ch. 9 | ch. 14 | done |
 | Transfer decision rule (labels scarce ∧ task feature-hungry ∧ coverage at matched scale) | ch. 9 | ch. 15 (BERT = the regime where it pays), ch. 17 | due |
-| Third weight sharing (examples → space → time) | ch. 10 | ch. 14 (self-attention shares across *pairs*? decide framing when drafting) | open |
+| Third weight sharing (examples → space → time) | ch. 10 | ch. 14 (stationarity retained; one comparison rule shared across ordered pairs) | done |
 | Finite-state bottleneck; "the book ends Part III when we refuse to pay that price" | ch. 10–11 | ch. 12 (retain the memory bank), ch. 13 (learn the access rule) | done |
 | Fixed attention matrix; "what if the similarity itself were learnable?" | ch. 12 | ch. 13 (learned compatibility and the date-task rematch) | done |
 | "Hard address, learned content" (embeddings); soften the address too | ch. 11 | ch. 13 — harvest the phrase | done |
-| Masking = "which positions it may not look at"; causal mask preview | ch. 11 | ch. 14 (causal mask turns transformer into LM) | due |
+| Masking = "which positions it may not look at"; causal mask preview | ch. 11 | ch. 14 (causal mask turns transformer into LM) | done |
 | Date-normalization benchmark (leak-free packed seq2seq: 53.8% @ epoch 6, 95.0% @ 12 on 400 unambiguous validation sources; 93.1% on the final 437-source unambiguous test; alignment invisible) | ch. 11 | ch. 13 — attention: 93.25% @ 6, 99.75% @ 12, 100.0% final test; validation alignment visible | done |
-| Cross-attention repairs the fixed handoff, but the surrounding RNNs remain serial; the Q/K/V operator does not care where its inputs came from | ch. 13 | ch. 14 (replace recurrence with self-attention; derive and implement multi-head) | due |
+| Cross-attention repairs the fixed handoff, but the surrounding RNNs remain serial; the Q/K/V operator does not care where its inputs came from | ch. 13 | ch. 14 (replace recurrence with self-attention; derive and implement multi-head) | done |
 | Beam search / decoding machinery | ch. 11 | chs. 15/17 (LM decoding reuses it) | ambient |
-| Book-corpus char-LM (held-out fixed-window loss 1.89; sampled training minibatch 1.42; babble) | ch. 10 | ch. 14 (same corpus, split, and evaluation; tiny transformer, compare) | suggested |
+| Book-corpus char-LM (held-out fixed-window loss 1.89; sampled training minibatch 1.42; babble) | ch. 10 | ch. 14 (exact corpus/split/evaluation and historical window schedule; positional transformer 1.9190, no-position 2.3405) | done |
+| Visibility is a modeling decision | ch. 14 | ch. 15 (causal generation versus bidirectional masked-token representation learning) | due |
+| Global routing trades away locality bias | ch. 14 | ch. 16 (patch tokens rematch convolution's built-in geometry) | due |
 | m06 autoencoder spine (PCA = linear AE, bottleneck, manifolds) | (unused by design in ch. 11) | ch. 19 | due |
 
 ## 2. Cross-chapter running benchmarks
@@ -61,11 +63,16 @@ a cut.*
    contextual states indexed by the source-year region. Schedule matched, but not
    parameters (+59.2%), compute, or minibatch order. Closed.
 3. **The book-corpus LM**: ch. 10 char-LSTM (hidden 128, random fixed windows of
-   100 characters, 2,500 steps). On the deterministic 90/10 contiguous split, the
-   final sampled training minibatch is 1.42 and held-out fixed-window loss is 1.89.
-   The held-out number is the ch. 14 comparison point. NOTE: the corpus is
-   `glob("../part*/0*.qmd")` — chapters 1–9 only, code cells stripped; editing
-   those chapters changes the corpus only when ch. 10/14 re-render (freeze).
+   100 characters, 2,501 updates) finishes at sampled-minibatch loss 1.42 and
+   held-out fixed-window loss 1.8881. Ch. 14 reconstructs its exact historical
+   2,501-by-64 window schedule and matches corpus, split, evaluation, optimizer,
+   clipping, targets, and parameter scale. Its 132,488-parameter positional
+   Transformer reaches train/held-out 1.1132/1.9190; the no-position ablation reaches
+   1.8672/2.3405. Position improves 0.4214 (18.0%) in the matched seed; the LSTM
+   narrowly remains ahead by 0.0309 (1.64%). The positional repeat is tensor- and
+   metric-exact. Closed. NOTE: the corpus is `glob("../part*/0*.qmd")` — Chapters
+   1–9 only, code cells stripped; editing those chapters changes the corpus only
+   when ch. 10/14 re-render (freeze).
 
 ## 3. Reader's toolbox — what is introduced where (reading-order rule)
 
@@ -91,7 +98,7 @@ optimizers or `backward()` before Chapter 5.
 | 11 | encoder–decoder, `nn.Embedding`, PAD/BOS/EOS, `pad_sequence`, `pack_padded_sequence`, `ignore_index`, teacher forcing/free-running, exposure bias, scheduled sampling (concept), greedy/beam search, length normalization |
 | 12 | kernels/bandwidth, Nadaraya–Watson, queries/keys/values, row-softmax over log-kernel scores, attention-weight matrices (fixed) |
 | 13 | learned Q/K/V, additive and scaled dot-product cross-attention, source-padding attention masks, attention-augmented seq2seq, alignment heatmaps; multi-head preview only |
-| 14 (planned) | self-attention, multi-head, LayerNorm, positional encodings, causal masks, the transformer block |
+| 14 | permutation-equivariant self-attention, custom multi-head attention, causal masks, sinusoidal positional encoding, LayerNorm, residual stream, pre-LN transformer blocks, FFN memory lens, exact ablation scheduling |
 
 ## 4. His signature analogies (use them; don't invent competitors)
 
