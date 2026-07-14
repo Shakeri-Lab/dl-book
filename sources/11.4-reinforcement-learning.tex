@@ -1,0 +1,200 @@
+% Public source snapshot of the instructor's Module 11 lecture notes. Executable
+% implementations, diagram source, external images, private links, and product-current
+% claims are omitted under the boundary in sources/README.md. Headings and equations
+% are preserved for provenance, not endorsed as reproduced results; the book
+% independently re-derives the mathematics and checks claims against primary sources.
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage[margin=1in]{geometry}
+\usepackage{xcolor}
+\usepackage{tcolorbox}
+\usepackage{booktabs}
+\usepackage{hyperref}
+
+\title{Lecture 11.4: Reinforcement Learning for Fine-Tuning}
+\author{Deep Learning Class}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{tcolorbox}[colback=gray!5!white, colframe=gray!60!black, title=Public Snapshot Boundary]
+This provenance snapshot preserves the instructor-authored lecture spine and equations.
+Executable and external-library implementations, diagram source, external images,
+private links, and claims tied to current products have been omitted; their original
+locations remain marked in the source. Remaining technical and numerical claims are
+historical lecture notes and are independently checked before publication in the book.
+\end{tcolorbox}
+
+\section{Reinforcement Learning for Fine-Tuning (Brief Overview)}
+
+\subsection{Motivation: Why Not Just Supervised Fine-Tuning?}
+
+Supervised Fine-Tuning (SFT) trains models to mimic demonstrations. Given input-output pairs $(x, y)$, we minimize:
+
+\begin{equation}
+\mathcal{L}_{\text{SFT}} = -\mathbb{E}_{(x,y) \sim \mathcal{D}} \left[ \log p_\theta(y \mid x) \right]
+\end{equation}
+
+\textbf{Problem:} SFT teaches the model ``what good outputs look like'' but not ``what makes an output better than another.''
+
+\begin{tcolorbox}[colback=yellow!5!white, colframe=orange!50!black, title=SFT Limitations]
+\textbf{Example:} You want a helpful, harmless assistant.
+
+\textbf{SFT approach:} Train on demonstrations of helpful responses.
+
+\textbf{Issue:} Model learns the \textit{format} of helpfulness but may still generate:
+\begin{itemize}
+\item Plausible but incorrect answers (hallucinations)
+\item Responses that are technically correct but unhelpful
+\item Content that follows the style but violates safety guidelines
+\end{itemize}
+
+\textbf{What's missing?} Explicit optimization for desirable properties (helpfulness, truthfulness, safety).
+\end{tcolorbox}
+
+\subsection{High-Level Idea: Reinforcement Learning from Human Feedback (RLHF)}
+
+Instead of only imitating demonstrations, we can:
+
+\begin{enumerate}
+\item \textbf{Learn what humans prefer} (train a reward model)
+\item \textbf{Optimize the language model} to generate high-reward outputs
+\end{enumerate}
+
+\textbf{Three-stage pipeline:}
+
+\begin{center}
+% [Diagram source omitted from the public snapshot; the book uses independently drawn figures.]
+\end{center}
+
+\textbf{Stage 1 (SFT):} Train base model on demonstrations $\rightarrow$ produces $\pi_{\text{SFT}}$
+
+\textbf{Stage 2 (Reward Modeling):} Collect human preferences on pairs of outputs $(y_1, y_2)$ for the same prompt $x$. Train a reward model $r_\phi(x, y)$ to predict which output humans prefer:
+
+\begin{equation}
+\mathcal{L}_{\text{RM}} = -\mathbb{E} \left[ \log \sigma\left(r_\phi(x, y_{\text{win}}) - r_\phi(x, y_{\text{lose}})\right) \right]
+\end{equation}
+
+where $\sigma$ is the sigmoid function and $y_{\text{win}}$ is the preferred output.
+
+\textbf{Stage 3 (RL Optimization):} Optimize the language model policy $\pi_\theta$ to maximize expected reward while staying close to the SFT model (to prevent collapse):
+
+\begin{equation}
+\mathcal{L}_{\text{RL}} = \mathbb{E}_{x \sim \mathcal{D}, y \sim \pi_\theta} \left[ r_\phi(x, y) - \beta \cdot D_{\text{KL}}\left(\pi_\theta(y|x) \| \pi_{\text{SFT}}(y|x)\right) \right]
+\end{equation}
+
+The KL penalty term prevents the model from drifting too far from the SFT initialization.
+
+\begin{tcolorbox}[colback=blue!5!white, colframe=blue!50!black, title=Intuition Without RL Theory]
+Think of the reward model as a ``critic'' that scores outputs. The RL stage adjusts the language model to generate outputs that the critic rates highly, but with a constraint: don't change so much that you lose the knowledge from SFT.
+
+\textbf{You don't need to understand PPO internals} to follow this conceptual overview.
+\end{tcolorbox}
+
+\subsection{Direct Preference Optimization (DPO): Simpler Alternative}
+
+\textbf{Problem with RLHF:} Requires training a separate reward model and then running RL (complex, unstable).
+
+\textbf{DPO insight:} You can optimize directly on preference pairs without an explicit reward model!
+
+Given preference data $\{x, y_{\text{win}}, y_{\text{lose}}\}$, DPO minimizes:
+
+\begin{equation}
+\mathcal{L}_{\text{DPO}} = -\mathbb{E} \left[ \log \sigma\left( \beta \log \frac{\pi_\theta(y_{\text{win}}|x)}{\pi_{\text{ref}}(y_{\text{win}}|x)} - \beta \log \frac{\pi_\theta(y_{\text{lose}}|x)}{\pi_{\text{ref}}(y_{\text{lose}}|x)} \right) \right]
+\end{equation}
+
+where $\pi_{\text{ref}}$ is the reference policy (usually the SFT model).
+
+\textbf{Advantage:} No reward model, no RL algorithm. Just a classification-like loss on preference pairs.
+
+\textbf{When to use DPO:}
+\begin{itemize}
+\item You have preference data (A vs B comparisons)
+\item You want simplicity over the full RLHF pipeline
+\item You're working with smaller models or limited compute
+\end{itemize}
+
+\subsection{External Library Workflow}
+
+The original lecture included a survey of one external library's trainer APIs.
+That product-current API inventory is omitted from this public snapshot.
+
+\textbf{Typical external-library workflow:}
+
+% [Executable library example omitted from the public snapshot: independent provenance was not established. See sources/README.md.]
+
+The original lecture demonstrated this workflow with an external library. That executable example is omitted from this provenance snapshot.
+
+\subsection{When to Use Each Method}
+
+\begin{center}
+\begin{tabular}{|l|p{10cm}|}
+\hline
+\textbf{Method} & \textbf{Use When...} \\
+\hline
+SFT & You have demonstrations; task is well-defined; format matters \\
+\hline
+RLHF (PPO) & You have human preferences; want to optimize complex objectives (helpfulness + safety); have compute for reward model + RL \\
+\hline
+DPO & You have preference pairs; want simpler pipeline; smaller models \\
+\hline
+\end{tabular}
+\end{center}
+
+\begin{tcolorbox}[colback=green!5!white, colframe=green!50!black, title=Practical Recommendation]
+\textbf{For this course:} Start with SFT (Sections 3-5). If you need alignment:
+\begin{enumerate}
+\item Collect preference data (have humans rank outputs)
+\item Try DPO first (simpler)
+\item Use RLHF only if DPO is insufficient
+\end{enumerate}
+
+% [Product-current adoption claim omitted; publication claims are checked against primary sources.]
+\end{tcolorbox}
+
+\subsection{Example: DPO Workflow (Code Omitted)}
+
+The original lecture pointed to a separate implementation file. That reference and the uncleared executable example are omitted from this public snapshot.
+
+% [Executable library example omitted from the public snapshot: independent provenance was not established. See sources/README.md.]
+
+\textbf{Key points:}
+\begin{itemize}
+\item The reference policy is frozen (usually the SFT model)
+\item The active policy is optimized to prefer ``chosen'' over ``rejected''
+\item $\beta$ controls how much the policy can deviate from the reference
+\end{itemize}
+
+\subsection{What We're Not Covering (But You Can Learn More)}
+
+This course focuses on deep learning fundamentals, not RL theory. We're \textit{not} covering:
+
+\begin{itemize}
+\item Markov Decision Processes (MDPs)
+\item Policy gradient derivations
+\item Value functions and Q-learning
+\item PPO algorithm internals (clipped objective, advantage estimation)
+\item Variance reduction techniques
+\end{itemize}
+
+\textbf{If you want to learn RL for LLMs:}
+\begin{itemize}
+\item \textbf{TRL Documentation:} \url{https://huggingface.co/docs/trl}
+\item \textbf{RLHF Paper:} Ouyang et al., ``Training language models to follow instructions with human feedback'' (2022)
+\item \textbf{DPO Paper:} Rafailov et al., ``Direct Preference Optimization'' (2023)
+\item \textbf{Spinning Up in Deep RL:} \url{https://spinningup.openai.com} (for RL foundations)
+\end{itemize}
+
+\subsection{Summary: The Alignment Stack}
+
+\begin{center}
+% [Diagram source omitted from the public snapshot; the book uses independently drawn figures.]
+\end{center}
+
+\textbf{For this course:} Focus on SFT (Sections 3-5). Treat RLHF/DPO as ``optional advanced topics.''
+
+% [Product-current library recommendation omitted from the public snapshot.]
+
+\end{document}

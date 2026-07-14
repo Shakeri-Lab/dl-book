@@ -53,22 +53,25 @@ chapter stub's draft-sources; revisit during the planned outline session with th
 - Extend course-site `bookChapters` mappings as Chapters 12–19 become reviewed and
   substantive.
 
-## 5. GPU experiment queue (backlog-only; revised after Chapter 17, July 14, 2026)
+## 5. GPU experiment queue (backlog-only; revised after Chapter 18, July 14, 2026)
 
 Do not place project-management placeholders in the published chapters. Keep these
 experiments here until GPU access is available; then run them on Rivanna/Colab, pin the
 numbers, and fold only completed results back into the relevant chapter.
 
-Chapters 12–17 audit: the fixed-kernel, scaling, date-attention, tiny Transformer
+Chapters 12–18 audit: the fixed-kernel, scaling, date-attention, tiny Transformer
 book-corpus, controlled MLM-transfer, and five-seed CNN/ViT rematch experiments are
 CPU-complete, as are Chapter 17's frozen-context, planted-rank LoRA, and controlled
-quantization audits. They require no GPU dependency or project-management placeholder
-in the published chapters; the queue below remains the private reminder for later
-access. Chapters 13–14 discuss the structure of dense matrix operations but make no
-unmeasured hardware-speed claim. Chapter 16 reports its tiny scratch regime as a
-mechanism study, not as an architecture verdict. Chapter 17 separates payload and
-metadata but makes no kernel-speed or natural-language quality claim; both full-scale
-regime tests belong here.
+quantization audits, and Chapter 18's completion-mask, scalar-preference, exact-policy,
+DPO-identity, and five-seed proxy-coverage audits. They require no GPU dependency or
+project-management placeholder in the published chapters; the queue below remains the
+private reminder for later access. Chapters 13–14 discuss the structure of dense matrix
+operations but make no unmeasured hardware-speed claim. Chapter 16 reports its tiny
+scratch regime as a mechanism study, not as an architecture verdict. Chapter 17
+separates payload and metadata but makes no kernel-speed or natural-language quality
+claim. Chapter 18 calls its designed-utility study a finite planted mechanism, not
+evidence that a natural-language model is aligned; all full-scale regime tests belong
+here.
 
 - **Ch. 9 scorecard, full scale**: LeNet / VGG / NiN / deep ResNet on all 60k
   Fashion-MNIST images — reproduce the lecture frontier (≈89% / >90% / ≈90% @ 30k
@@ -103,3 +106,14 @@ regime tests belong here.
   tokenizer, dataset license, task-state bytes, peak memory, realized quality,
   latency, throughput, and wall-clock cost separately; do not infer deployment speed
   from parameter count, nominal bit width, or the CPU mechanism studies.
+- **Ch. 18 natural-language feedback and alignment study**: choose a licensed
+  checkpoint, tokenizer, prompt dataset, and comparison dataset; predeclare the rubric,
+  annotator or evaluator population, prompt and candidate coverage, and primary policy
+  outcomes. Compare response-masked SFT, fixed-pair DPO, and either online policy
+  optimization or best-of-$N$ under a matched, disclosed regime. Use independent blinded
+  evaluation and report ties, uncertainty clustered by prompt, realized KL, response
+  length and refusal shifts, retained capabilities, and relevant safety/domain slices.
+  Audit reward-model calibration on held-out prompts and newer-policy candidates. Pin
+  seeds, decoding settings, versions, licenses, sample counts, wall-clock cost, and
+  per-run results; do not treat a rising proxy, judge score, or win rate as universal
+  alignment.

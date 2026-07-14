@@ -1,6 +1,6 @@
 # Continuing the Book — Handoff & Roadmap
 
-*Written 2026-07-09 after Chapter 11 shipped; updated 2026-07-14 after Chapter 17
+*Written 2026-07-09 after Chapter 11 shipped; updated 2026-07-14 after Chapter 18
 shipped. This is the master handoff document:
 everything a fresh collaborator (human or Claude session, on any account) needs to
 continue the project without the original conversation history. Read `CLAUDE.md`
@@ -20,7 +20,7 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 | II · Vision | 7–9 | **Shipped; repair pass complete and verified** (July 11, 2026) |
 | III · Sequences | 10–11 | **Shipped; repair pass complete and verified** (July 11, 2026) |
 | IV · Attention | 12–16 | **Shipped and two-format verified** (July 13, 2026) |
-| V · Pretrained Era | 17–19 | **Chapter 17 shipped and two-format verified** (July 14, 2026); 18–19 stubs with contracts |
+| V · Pretrained Era | 17–19 | **Chapters 17–18 shipped and two-format verified** (July 14, 2026); Chapter 19 stub with contract |
 | Appendices | a1–a4 | Stubs (a4 floating-point queued in backlog) |
 
 **Milestone 1** (Part I complete + skeleton) is met. The July 11 quantitative,
@@ -83,19 +83,33 @@ makes no hardware-runtime claim. Corrected HTML and PDF outputs match exactly; t
 full-book PDF, all six original figures, browser assets/layout, and the complete
 Chapter 17 page range passed visual QA before publication.
 
+Chapter 18 is complete: response-masked instruction SFT, preference measurement,
+Bradley–Terry reward modeling, KL-regularized policy optimization, PPO's distinct old
+and reference anchors, proxy overoptimization, DPO, and alignment evaluation are tied
+into one measurement-first spine. Its completion-mask audit scores 3/4 response tokens
+and is invariant to excluded-position perturbations. The scalar-preference study pins a
+cyclic-model loss of 0.693147 against an unconstrained 0.610864 floor. The four-response
+Gibbs and DPO policies agree to `5.55e-17` at beta one. In the five-seed designed-utility
+study, narrow in-range feedback reaches held-out NLL 0.665633 yet collapses to utility
+0.484541 under strong proxy pressure; adding 20% longer-response coverage retains
+1.316470 in the same setting. The chapter calls these finite CPU mechanism tests—not
+natural-language alignment results. Both execution freezes, all seven original
+figures, browser layout/assets, and the complete PDF chapter range passed QA before
+publication.
+
 **Decisions still gated on the author:**
-- The author's own edit pass over Chapters 1–17 remains pending.
+- The author's own edit pass over Chapters 1–18 remains pending.
 - Course-site integration was approved, implemented, and shipped July 11, 2026. It uses
   a plural `bookChapters` field because modules and chapters do not map one-to-one;
   only reviewed, substantive chapters are linked. The production build passes.
-  Chapters 12–17's course-site links wait for the author's edit pass.
+  Chapters 12–18's course-site links wait for the author's edit pass.
 - "Deeper dive" collapsed sections: piloted in ch. 6; his verdict pending ("let us
   get back to deeper dive later"). Do not retrofit chs. 1/5.
 - GPU experiments remain backlog-only until access is available. Do not publish
   placeholder callouts in chapters; run the queued experiments on Rivanna/Colab and
   fold real results back into the relevant chapters later.
 
-## 2. The working protocol (refined over chapters 7–17)
+## 2. The working protocol (refined over chapters 7–18)
 
 The single most important lesson of this project: **pre-test every experiment
 regime before writing a word of prose.** Roughly half of all planned experiments
@@ -469,20 +483,39 @@ Each stub carries its contract; specifics accumulated so far:
 - **Forward seed planted**: “where the update lives is not what the update
   optimizes” into ch. 18.
 
-### Ch. 18 — Alignment and RL Fine-Tuning (NEXT)
-- Harvest ch. 17's “where the update lives is not what the update optimizes” by
-  separating the supervision interface from permitted parameter writes. Build the
-  durable spine around response-masked instruction SFT, preference pairs,
-  Bradley–Terry reward modeling, KL-regularized policy optimization, PPO's distinct
-  old-policy and reference-policy anchors, DPO's reference-relative margin, and
-  evaluation under feedback coverage.
-- Pretest CPU mechanism studies before prose: scalar-reward consistency, the exact
-  finite-response Gibbs policy/DPO identity under its assumptions, and proxy
-  optimization where measured reward rises after true utility turns over. Treat
-  alignment as a stated evaluation contract, not a certificate.
+### Ch. 18 — Alignment and RL Fine-Tuning (SHIPPED)
+- **Seeds and provenance**: sanitized public snapshots
+  `sources/11.4-reinforcement-learning.tex` and `sources/11L-llm-alignment.tex`, with
+  the model-card material in the original `11.4S.tex` checked privately; primary SFT,
+  human-preference, PPO, DPO, reward-overoptimization, model-card, and judge-audit
+  papers. External diagrams, paper figures, private links, executable library code,
+  and product-current claims were removed; every executable study and figure is
+  book-original.
+- **Harvest completed by name**: ch. 17's “where the update lives is not what the
+  update optimizes.” The opening map separates demonstration, preference, and sampled
+  reward signals from full-weight, low-rank, and prompt-state write surfaces.
+- **Pinned preference and policy identities**: completion masking scores 3/4 response
+  tokens and changes by `0.00e+00` after excluded predictions are perturbed. A symmetric
+  0.70 preference cycle forces a scalar-model loss of 0.693147 rather than the edgewise
+  0.610864 floor. On four complete responses, the beta-one Gibbs policy is
+  0.164562/0.203330/0.331625/0.300483, and DPO recovers it to `5.55e-17` under its
+  explicitly stated scalar-preference, support, coverage, capacity, and optimization
+  assumptions.
+- **Pinned proxy-pressure audit**: five reward-model seeds trained on 20,000 noisy
+  comparisons each. Narrow feedback produces in-range NLL 0.665633 (oracle 0.665603)
+  and designed-order accuracy 0.992940 while leaving the missing curvature exactly
+  unidentified. At beta 0.125 its proxy rises to 1.969632 while designed utility falls
+  to 0.484541; 20% out-of-range response coverage fits mean curvature -1.208128 and
+  retains designed utility 1.316470. This is a planted finite mechanism, not a prevalence
+  estimate or method ranking.
+- **Verification state**: HTML and TeX stdout match exactly. Both-format execution,
+  full-book rendering, all seven figures, browser assets/alt/layout, and the complete
+  PDF chapter range passed QA.
+- **Forward seed planted**: “A judge is not a generator” into ch. 19.
 
 ### Ch. 19 — Generative Models: From PCA to Diffusion
-- Per the stub: generation
+- Harvest ch. 18's “A judge is not a generator” by separating evaluation of completed
+  samples from learning the distribution that produces them. Per the stub: generation
   (PCA→AE→VAE→diffusion — **the m06 autoencoder spine lives here**: PCA as
   linear autoencoder, bottleneck, manifold learning; see
   `ds6050_06_autoencoders/MODULE_NOTES.md` spine #4–8, deliberately NOT used in

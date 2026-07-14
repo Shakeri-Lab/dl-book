@@ -29,3 +29,17 @@ When adding a snapshot:
    original.
 3. Record any permissively licensed material retained in `THIRD_PARTY_NOTICES.md` and
    cite it at the point of use.
+
+## Module 11 alignment snapshots
+
+- `11.4-reinforcement-learning.tex` preserves the short SFT, reward-model, RLHF,
+  and DPO lecture spine as a standalone article. Its TikZ diagrams and external-library
+  implementations are represented by explicit omission markers.
+- `11L-llm-alignment.tex` preserves the longer preference-alignment slide deck as a
+  standalone Beamer handout. The private Colab link, local preamble dependency,
+  diagram source, external images and paper figures, product-current ecosystem survey,
+  and product-specific adoption claims are omitted.
+
+Both snapshots retain primary-paper citations and instructor-authored equations for
+traceability. Their boundary notices make clear that technical and empirical claims
+must still be independently checked before they enter the book.

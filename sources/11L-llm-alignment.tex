@@ -1,0 +1,670 @@
+% Public source snapshot of the instructor's Module 11 alignment lecture. Private
+% links, executable implementations, diagram source, external images, paper
+% screenshots, and product-current claims are omitted under sources/README.md.
+% The preserved prose and equations document provenance; publication claims are
+% independently checked against primary sources.
+\documentclass[xcolor=svgnames, 10pt, handout]{beamer}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage{xcolor}
+% Define colors for better visualization
+\definecolor{darkblue}{rgb}{0.0, 0.0, 0.55}
+\definecolor{darkred}{rgb}{0.55, 0.0, 0.0}
+
+\title{Aligning LLMs with Human Preferences}
+% \subtitle{RLHF, DPO, and the Science of Helpful and Harmless AI}
+\author{Heman Shakeri}
+\date{}
+
+\begin{document}
+
+\begin{frame}
+    \titlepage
+\end{frame}
+
+\begin{frame}{Public Snapshot Boundary}
+    \begin{alertblock}{Provenance, not a publishable asset bundle}
+        This snapshot preserves the instructor-authored lecture spine and equations.
+        Private links, executable or library code, diagram source, external images and
+        paper screenshots, and claims tied to current products have been omitted; their
+        original locations remain marked. Remaining claims are historical lecture notes
+        and are independently checked against primary sources before book publication.
+    \end{alertblock}
+\end{frame}
+
+\begin{frame}{Agenda}
+    \tableofcontents
+\end{frame}
+
+% ----------------------------------------------------------------
+\section{Introduction: The Alignment Problem}
+% ----------------------------------------------------------------
+
+\begin{frame}{Recap: Building Capable Models}
+    We have established how to adapt and enhance Large Language Models:
+    \begin{itemize}
+        \item \textbf{Pre-training:} Building foundational knowledge.
+        \pause
+        \item \textbf{Supervised Fine-Tuning (SFT):} Adapting models for specific tasks or instruction following.
+        \pause
+        \item \textbf{PEFT (LoRA/QLoRA):} Efficiently performing SFT.
+        \pause
+        \item \textbf{RAG:} Connecting LLMs to external, dynamic data.
+    \end{itemize}
+    \vspace{0.5cm}
+    \pause
+    These techniques focus on \textit{capabilities}---what the model \textit{can} do.
+    \pause
+
+    Now we focus on \textit{behavior}---what the model \textit{should} do.
+    \pause
+
+    \begin{alertblock}{From Model to Assistant}
+        Transforming a capable language model into a helpful, safe assistant requires a fundamentally different type of training.
+    \end{alertblock}
+\end{frame}
+
+\begin{frame}{The Limitations of SFT}
+    SFT maximizes the likelihood of the training data (MLE). It teaches the model the \textit{format} of interaction, but struggles to define the \textit{quality} of interaction.
+    \pause
+
+    \begin{block}{The Alignment Gap}
+        A model can follow instructions correctly according to SFT loss, yet still be undesirable.
+    \end{block}
+    \pause
+
+    We aim for models that are \textbf{HHH} (Anthropic's framework):
+    \begin{itemize}
+        \item \textbf{Helpful:} Provides useful, well-formatted, and detailed answers.
+        \pause
+        \item \textbf{Harmless:} Avoids generating toxic, biased, or dangerous content.
+        \pause
+        \item \textbf{Honest:} Provides accurate information and\\ expresses uncertainty (avoids hallucination).
+    \end{itemize}
+    \pause
+    This challenge of instilling human values and\\ preferences is the \textbf{Alignment Problem}.
+
+    \only<6->{
+        % [Diagram or external-image composition omitted from the public snapshot; the book uses independently drawn figures.]
+    }
+\end{frame}
+
+\begin{frame}{Why Preferences Instead of Demonstrations?}
+    Why not just use SFT with ``perfect'' examples?
+    \pause
+    \begin{enumerate}
+        \item \textbf{Difficulty of Specification:} It is hard to write explicit rules for subjective concepts like ``helpfulness'' or ``creativity.''
+        \pause
+        \item \textbf{Generation vs. Evaluation Gap:} Humans are much better at \textit{comparing} two generated outputs (A vs B) than \textit{writing} the ideal output from scratch.
+        \pause
+        \item \textbf{Scalability:} Collecting comparison data is often faster and provides a denser learning signal than expert demonstrations.
+    \end{enumerate}
+    \pause
+    \begin{block}{The Core Idea}
+        Leverage human feedback in the form of \textbf{preferences} to guide the optimization process beyond SFT.
+    \end{block}
+\end{frame}
+
+% ----------------------------------------------------------------
+\section{Background: Deep Reinforcement Learning}
+% ----------------------------------------------------------------
+
+\begin{frame}{Reinforcement Learning Primer}
+    \textbf{Reinforcement Learning (RL)} is a paradigm where an agent learns to make decisions by interacting with an environment.
+    \pause
+
+    \begin{center}
+    % [Diagram or external-image composition omitted from the public snapshot; the book uses independently drawn figures.]
+    \end{center}
+    \pause
+
+    \textbf{Key Components:}
+    \begin{itemize}
+        \item \textbf{Agent:} The learner/decision maker (e.g., a neural network).
+        \item \textbf{State ($s_t$):} Current situation/observation.
+        \item \textbf{Action ($a_t$):} Decision made by the agent.
+        \item \textbf{Reward ($r_t$):} Scalar feedback signal (how good was the action?).
+        \item \textbf{Policy ($\pi$):} Agent's strategy, mapping states to actions.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{RL for Language Models: The Connection}
+    How do we map RL concepts to LLM training?
+    \pause
+
+    \begin{center}
+    % [Diagram or external-image composition omitted from the public snapshot; the book uses independently drawn figures.]
+    \end{center}
+    \pause
+
+    \textbf{Goal:} Train policy $\pi_\theta$ to maximize expected cumulative reward (i.e., generate high-quality, complete responses).
+\end{frame}
+
+\begin{frame}{Proximal Policy Optimization (PPO)}
+    \textbf{PPO} (Schulman et al., 2017) is the RL algorithm developed in this lecture's classic alignment pipeline.
+    \pause
+
+    \textbf{Intuition:} Limit how much the policy can change \textit{per optimization step}.
+    \pause
+    \textbf{Why PPO?}
+    \begin{itemize}
+        \item Policy gradient methods can be unstable---large updates can catastrophically hurt performance.
+        \pause
+        \item PPO constrains updates to stay within a ``trust region'' of the \textit{previous iteration's policy} ($\pi_{\theta}^{\text{old}} \rightarrow \pi_{\theta}^{\text{new}}$).
+        \pause
+        \item More stable and sample-efficient than vanilla policy gradients.
+    \end{itemize}
+    \pause
+
+    \textbf{Key Mechanism: Clipped Objective}
+    \begin{equation*}
+        L^{CLIP}(\theta) = \mathbb{E}_t \left[ \min\left( r_t(\theta) \hat{A}_t, \text{clip}(r_t(\theta), 1-\epsilon, 1+\epsilon) \hat{A}_t \right) \right]
+    \end{equation*}
+
+    Where $r_t(\theta) = \frac{\pi_\theta(a_t|s_t)}{\pi_{\theta}^{\text{old}}(a_t|s_t)}$ (probability ratio) and $\hat{A}_t$ is the advantage.
+    \pause
+
+
+\end{frame}
+
+% ----------------------------------------------------------------
+\section{RLHF: The Classic Approach}
+% ----------------------------------------------------------------
+
+\begin{frame}{Reinforcement Learning from Human Feedback (RLHF)}
+    RLHF (popularized by OpenAI's InstructGPT, Ouyang et al., 2022) adapts RL principles to LLM training.
+    \pause
+
+    \begin{itemize}
+        \item \textbf{Agent (Policy $\pi$):} The Language Model.
+        \item \textbf{Action:} Generating the next token.
+        \item \textbf{State:} The sequence of tokens generated so far (context).
+        \item \textbf{Reward:} How do we score the quality of a complete response?
+    \end{itemize}
+    \pause
+    \begin{alertblock}{The Challenge}
+        We cannot mathematically define a perfect reward function for human language (e.g., a ``helpfulness score'').
+    \end{alertblock}
+    \pause
+    \begin{block}{The Solution}
+        We train a separate \textbf{Reward Model} (RM) to act as a proxy for human judgment.
+    \end{block}
+\end{frame}
+
+\begin{frame}{The RLHF Pipeline: Three Stages}
+    RLHF involves three distinct stages.
+
+    % [Third-party paper figure omitted from the public snapshot; consult the cited primary paper.]
+    \pause
+
+    \begin{enumerate}
+        \item Supervised Fine-Tuning (SFT) (Warm Start)
+        \item Reward Model (RM) Training
+        \item RL Optimization (PPO)
+    \end{enumerate}
+\end{frame}
+
+\begin{frame}{}
+\textbf{Stage 1: SFT (The Baseline)}
+    \begin{block}{Goal: Establish a capable starting point.}
+       \pause
+    \begin{itemize}
+        \item We fine-tune the base model on high-quality instruction-response pairs.
+        \pause
+        \item This provides a strong initial policy ($\pi_{\text{SFT}}$) that understands instructions.
+        \pause
+        \item Necessary because starting RL directly on a base model is highly unstable; the exploration space is too vast.
+    \end{itemize}
+    \end{block}
+
+\textbf{Stage 2: Training the Reward Model (RM)}
+    \begin{block}{Goal: Create a model $r_\phi(x, y)$ that outputs a scalar score}
+    \pause
+
+    \textbf{1. Preference Data Collection:}
+    \begin{itemize}
+        \item A prompt $x$ is sampled.
+        \pause
+        \item The SFT model generates multiple outputs $(y_1, y_2, ..., y_k)$.
+        \pause
+        \item Human labelers rank these outputs from best to worst.
+        \pause
+        \item This results in preference pairs: $(x, y_w, y_l)$, where $y_w$ (winner) is preferred over $y_l$ (loser).
+    \end{itemize}
+    \pause
+
+    \textbf{2. Model Architecture:} Typically initialized from the SFT model with the final layer replaced by a regression head.
+\end{block}
+
+
+\end{frame}
+
+\begin{frame}{Stage 2: The RM Loss Function}
+    We use the \textbf{Bradley-Terry model}, which assumes the probability of preferring $y_w$ over $y_l$ depends on the difference in their underlying latent scores (rewards):
+    \pause
+
+    $$ P(y_w \succ y_l | x) = \sigma(r_\phi(x, y_w) - r_\phi(x, y_l)) $$
+    \pause
+
+    Where $\sigma$ is the sigmoid function. The RM is trained by minimizing the negative log-likelihood (a standard classification loss):
+    \pause
+
+    $$ \mathcal{L}_{\text{RM}}(\phi) = -\mathbb{E}_{(x, y_w, y_l) \sim D} [\log \sigma(r_\phi(x, y_w) - r_\phi(x, y_l))] $$
+    \pause
+
+    \begin{block}{Intuition}
+        We maximize the margin between the score of the preferred response and the score of the rejected response.
+    \end{block}
+\end{frame}
+
+\begin{frame}{Stage 3: RL Optimization (PPO)}
+    \begin{block}{Goal: Optimize the LLM policy $\pi_\theta$ to generate responses that maximize the reward from the trained RM $r_\phi$.}
+
+    \pause
+
+    \begin{itemize}
+        \item The policy $\pi_\theta$ (initialized from $\pi_{\text{SFT}}$) generates responses.
+        \pause
+        \item The (now frozen) RM scores these responses.
+        \pause
+        \item The policy weights $\theta$ are updated using an RL algorithm.
+        \pause
+        \item \textbf{Algorithm:} This lecture develops the stage using \textbf{Proximal Policy Optimization (PPO)}.
+    \end{itemize}
+    \end{block}
+\end{frame}
+
+\begin{frame}{Stage 3: An Additional Constraint Beyond PPO}
+    \begin{alertblock}{The Risk: Reward Hacking}
+        If we optimize purely for reward, the model might learn to generate nonsensical outputs that exploit weaknesses in the RM (Goodhart's Law). The RM is only a proxy.
+    \end{alertblock}
+    \pause
+
+    \textbf{Two Levels of Constraints:}
+    \pause
+    \begin{enumerate}
+        \item \textbf{PPO's built-in trust region:} Keeps $\pi_{\theta}^{\text{new}}$ close to $\pi_{\theta}^{\text{old}}$ (step-to-step stability).
+        \pause
+        \item \textbf{KL penalty to reference:} Keeps $\pi_{\theta}$ close to $\pi_{\text{ref}} = \pi_{\text{SFT}}$ (prevents drift from coherent language).
+    \end{enumerate}
+    \pause
+
+    \begin{block}{The Complete RLHF Optimization Objective}
+    $ \text{maximize } \mathbb{E}_{x, y \sim \pi_\theta} \left[ r_\phi(x, y) - \beta \cdot D_{KL}(\pi_\theta(y|x) || \pi_{\text{ref}}(y|x)) \right] $
+    \end{block}
+    \pause
+
+    $\beta$ controls the trade-off: maximize reward while staying close to the original SFT model throughout training.
+    \pause
+
+    \textbf{Why both?} PPO prevents catastrophic step-wise updates; KL prevents long-term reward hacking.
+\end{frame}
+
+\begin{frame}{RLHF and PEFT: Practical Considerations}
+    \begin{block}{
+        Training large models using RLHF (PPO) is extremely memory intensive.}
+
+    \pause
+    During the PPO phase, we must load multiple models simultaneously:
+    \begin{enumerate}
+        \item The active policy $\pi_\theta$ (requires gradients).
+        \pause
+        \item The reference policy $\pi_{\text{ref}}$ (for KL calculation).
+        \pause
+        \item The Reward Model $r_\phi$.
+        \pause
+        \item The Value Model/Critic (part of the PPO algorithm).
+    \end{enumerate}
+    \end{block}
+    \pause
+    \begin{alertblock}{Parameter-Efficient Training}
+        The lecture proposed freezing base models and training low-rank adapters for
+        the policy, reward model, and value model to reduce the trainable state.
+        Product-specific memory and feasibility claims are omitted here and checked
+        independently before publication.
+    \end{alertblock}
+\end{frame}
+
+% ----------------------------------------------------------------
+\section{Challenges and Alternatives: DPO}
+% ----------------------------------------------------------------
+
+\begin{frame}{The Drawbacks of RLHF/PPO}
+    While effective, the standard RLHF pipeline is notoriously difficult to implement:
+    \pause
+
+    \begin{itemize}
+        \item \textbf{Complexity:} Requires training multiple models sequentially and managing a complex RL pipeline.
+        \pause
+        \item \textbf{Instability:} PPO is highly sensitive to hyperparameters and difficult to debug.
+        \pause
+        \item \textbf{Computational Cost:} High memory usage and slow sampling during the RL phase.
+    \end{itemize}
+
+    \vspace{0.5cm}
+    \pause
+    \begin{block}{So ..}
+        Can we optimize the policy using preference data \textit{without} explicit Reward Modeling and complex Reinforcement Learning?
+    \end{block}
+\end{frame}
+
+\begin{frame}{Direct Preference Optimization (DPO)}
+    \textbf{Direct Preference Optimization (DPO)} (Rafailov et al., 2023) provides an elegant, stable, and efficient alternative.
+    \pause
+
+    \begin{block}{The ``Aha!'' Moment}
+        In RLHF, the optimal policy $\pi^*$ that maximizes reward $r$ while staying close to $\pi_{\text{ref}}$ has a closed-form solution:
+        $ \pi^*(y|x) \propto \pi_{\text{ref}}(y|x) \cdot \exp\left(\frac{r(x,y)}{\beta}\right) $
+    \end{block}
+    \pause
+
+    We can \textbf{invert} this to express the reward in terms of the policy:
+    $ r(x,y) = \beta \log \frac{\pi^*(y|x)}{\pi_{\text{ref}}(y|x)} + \text{constant} $
+    \pause
+
+    \begin{alertblock}{The Key Insight: Off-Policy Connection}
+    This is the \textbf{log importance sampling ratio} from off-policy RL!
+    \begin{itemize}
+        \item $\pi_{\text{ref}}$ (SFT model) = \textbf{behavior policy} (generated the data)
+        \item $\pi_\theta$ = \textbf{target policy} (what we're optimizing)
+        \item The reward captures how much the target deviates from the reference
+    \end{itemize}
+    \end{alertblock}
+    \pause
+
+    \textbf{Implication:} We don't need to learn $r$ explicitly---just optimize the importance ratio directly!
+\end{frame}
+
+\begin{frame}{DPO: Cutting Out the Middleman}
+    \textbf{The DPO Strategy:}
+    \pause
+    \begin{enumerate}
+        \item Substitute $r(x,y) = \beta \log \frac{\pi_\theta(y|x)}{\pi_{\text{ref}}(y|x)}$ into the Bradley-Terry preference model.
+        \pause
+        \item This gives us a loss function that depends \textit{only} on $\pi_\theta$ and the preference data.
+        \pause
+        \item Optimize $\pi_\theta$ directly to maximize preference classification accuracy.
+    \end{enumerate}
+    \pause
+
+    \begin{block}{Analogy}
+        \textbf{RLHF:} Train a judge (RM) $\rightarrow$ Then try to please the judge (PPO) \\[0.2cm]
+        \textbf{DPO:} Directly learn what pleases people by comparing examples
+    \end{block}
+    \pause
+
+    \textbf{Result:} DPO treats alignment as a \textbf{classification problem}---given $(x, y_w, y_l)$, increase probability of $y_w$ and decrease probability of $y_l$, weighted by the policy ratio.
+\end{frame}
+
+\begin{frame}{The DPO Loss Function}
+    DPO maximizes the relative log probability of preferred completions over dispreferred completions, inherently maintaining the KL constraint.
+    \pause
+
+    \begin{equation*}
+    \begin{split}
+        \mathcal{L}_{DPO}(\pi_\theta; \pi_{\text{ref}}) = -\mathbb{E}_{(x, y_w, y_l) \sim D} \Bigg[ \log \sigma \Bigg( &\beta \log \frac{\pi_\theta(y_w|x)}{\pi_{\text{ref}}(y_w|x)} \\
+        &- \beta \log \frac{\pi_\theta(y_l|x)}{\pi_{\text{ref}}(y_l|x)} \Bigg) \Bigg]
+    \end{split}
+    \end{equation*}
+    \pause
+
+    \begin{block}{Intuition}
+    We increase the likelihood of $y_w$ and decrease the likelihood of $y_l$. The degree of change is weighted by how much the current policy already diverges from the reference policy (controlled by $\beta$).
+    \end{block}
+\end{frame}
+
+\begin{frame}{RLHF vs DPO: Sequential vs End-to-End}
+    \textbf{The Fundamental Difference:}
+    \pause
+
+    \begin{columns}[T]
+    \column{0.48\textwidth}
+    \begin{block}{RLHF: Two-Stage}
+        \textbf{Stage 1:} Train RM on preferences
+        $ r_\phi(x,y) \leftarrow \text{preference data} $
+        \textbf{Then freeze} $r_\phi$ \\[0.3cm]
+        \textbf{Stage 2:} Optimize policy
+        $ \pi_\theta \leftarrow \text{maximize } r_\phi(x,y) $
+    \end{block}
+    \pause
+
+    \textcolor{red}{\textbf{Issue:}} No gradient flow between stages!
+    \begin{itemize}
+        \item RM might be wrong
+        \item Distribution shift
+        \item Can't correct RM errors
+    \end{itemize}
+
+    \column{0.48\textwidth}
+    \pause
+    \begin{block}{DPO: End-to-End}
+        \textbf{Single stage:} Directly optimize policy on preference data
+        $ \pi_\theta \leftarrow \text{preference data} $
+        \\[0.3cm]
+        Reward function is \textit{implicit}---derived analytically from $\pi_\theta$ and $\pi_{\text{ref}}$
+    \end{block}
+    \pause
+
+    \textcolor{green!50!black}{\textbf{Benefit:}} Full gradient flow!
+    \begin{itemize}
+        \item Policy learns from preferences directly
+        \item No frozen approximation
+        \item Simpler optimization
+    \end{itemize}
+    \end{columns}
+    \pause
+
+    \vspace{0.3cm}
+    \begin{alertblock}{Key Insight}
+        DPO eliminates the ``frozen reward model bottleneck'' by optimizing end-to-end.
+    \end{alertblock}
+\end{frame}
+
+\begin{frame}{DPO Advantages: Pipeline Comparison}
+    \begin{center}
+% [Third-party paper figure omitted from the public snapshot; consult the cited primary paper.]
+\end{center}
+    \pause
+
+    \textbf{Key Advantages:}
+    \begin{itemize}
+        \item \textbf{Simplicity:} No PPO, no explicit RM, no sampling during training.
+        \item \textbf{Stability:} Standard supervised learning optimization.
+        \item \textbf{Efficiency:} Faster and lower VRAM usage.
+        % [Comparative performance claim omitted; the book checks empirical claims against primary results.]
+    \end{itemize}
+\end{frame}
+
+% ----------------------------------------------------------------
+\section{Modern Efficient Methods}
+% ----------------------------------------------------------------
+
+\begin{frame}{Group Relative Policy Optimization (GRPO)}
+    \textbf{GRPO}, as presented in the 2024 lecture notes, further simplifies RL-based alignment by removing the critic/value model.
+    \pause
+
+    \textbf{Key Innovation:} Group-based advantage estimation
+    \begin{itemize}
+        \item Sample multiple outputs $(y_1, ..., y_G)$ for each prompt $x$.
+        \pause
+        \item Compute rewards $r_i$ for each output using the RM.
+        \pause
+        \item Estimate advantage relative to the group mean:
+        $$ \hat{A}_i = r_i - \frac{1}{G}\sum_{j=1}^G r_j $$
+        \pause
+        \item No separate value network needed!
+    \end{itemize}
+    \pause
+
+    \textbf{Why is GRPO Efficient?}
+    \begin{itemize}
+        \item Eliminates one large model from memory (the critic).
+        \pause
+        % [Comparative stability claim omitted; the book checks empirical claims against primary results.]
+        \pause
+        % [Product-current deployment claim omitted from the public snapshot.]
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Why Choose GRPO over DPO?}
+    \textbf{The Key Difference: Online vs Offline Learning}
+    \pause
+
+    \begin{columns}[T]
+    \column{0.48\textwidth}
+    \begin{block}{DPO (Offline)}
+        \begin{itemize}
+            \item Learns from \textit{fixed} preference dataset
+            \pause
+            \item Preferences collected from SFT model outputs
+            \pause
+            \item Cannot explore beyond training data
+            \pause
+            \item \textcolor{red}{Distribution mismatch:} training data is static
+        \end{itemize}
+    \end{block}
+
+    \column{0.48\textwidth}
+    \pause
+    \begin{block}{GRPO (Online)}
+        \begin{itemize}
+            \item Generates \textit{new} samples during training
+            \pause
+            \item Gets immediate reward feedback
+            \pause
+            \item Can discover better solutions through exploration
+            \pause
+            \item \textcolor{green!50!black}{Always on-policy:} learns from its own generations
+        \end{itemize}
+    \end{block}
+    \end{columns}
+    \pause
+
+    \vspace{0.3cm}
+    \textbf{When to use GRPO?}
+    \begin{itemize}
+        \item Complex reasoning tasks where exploration matters
+        \item When you want the model to go beyond the training data
+        \item When you have a good reward model and can afford online sampling
+    \end{itemize}
+\end{frame}
+
+
+
+\begin{frame}{Two Diverging Paths in Alignment}
+
+    \begin{columns}[T]
+    \column{0.48\textwidth}
+    \begin{block}{Path 1: Offline Simplification}
+        \textbf{For:} Instruction following, safety, general helpfulness
+        \pause
+        \vspace{0.3cm}
+        \textbf{Method:} Supervised-like approaches (DPO, KTO (unary feedback), IPO, Rejection Sampling + SFT)
+        \pause
+
+        \vspace{0.3cm}
+
+        \textbf{Why:}
+        \begin{itemize}
+            \item Fixed preference data sufficient
+            \item Simpler, more stable
+            \item No need for exploration
+        \end{itemize}
+    \end{block}
+
+    \column{0.48\textwidth}
+    \pause
+    \begin{block}{Path 2: Better Online RL}
+        \textbf{For:} Complex reasoning, math, code generation
+        \pause
+
+        \vspace{0.3cm}
+        \textbf{Method:} Improved RL algorithms (PPO, GRPO, Outcome-based RM)
+        \pause
+        \vspace{0.3cm}
+
+        \textbf{Why:}
+        \begin{itemize}
+            \item Need exploration/search
+            \item Model must discover solutions
+            \item Verifiable rewards (unit tests, proofs)
+        \end{itemize}
+    \end{block}
+    \end{columns}
+    \pause
+
+    \vspace{0.3cm}
+    \begin{alertblock}{The Principle}
+        Choose your alignment method based on whether your task benefits from \textbf{exploration} (RL) or just needs \textbf{preference fitting} (offline/supervised).
+    \end{alertblock}
+\end{frame}
+
+% ----------------------------------------------------------------
+\section{Future Directions and Summary}
+% ----------------------------------------------------------------
+
+\begin{frame}{Evolving Methods in Alignment}
+    The lecture surveyed additional approaches beyond RLHF and DPO:
+    \pause
+
+    \begin{itemize}
+        \item \textbf{KTO (Kahneman-Tversky Optimization):} (Ethayarajh et al., 2024). Argues that pairwise preferences (A>B) are unnecessary. KTO aligns models using only unary feedback (is this output ``good'' or ``bad''?). This drastically simplifies data collection.
+        \pause
+        \item \textbf{IPO (Identity Preference Optimization):} Addresses theoretical issues in DPO regarding long training runs by adding regularization.
+        \pause
+        \item \textbf{RLAIF (RL from AI Feedback):} Using another language model to generate preference labels instead of humans.
+        \begin{itemize}
+            % [Product-current cost and scalability claim omitted from the public snapshot.]
+            \item Cons: Distills the preferences and biases of the teacher model.
+        \end{itemize}
+        \pause
+        \item \textbf{Constitutional AI (CAI):} (Anthropic). RLAIF guided by a specific set of written principles (a ``constitution'').
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Practical Tools}
+    % [Product-current framework and platform recommendations omitted from this public snapshot.]
+    The original lecture included an ecosystem survey here. Current product and API
+    recommendations are checked separately before publication in the book.
+\end{frame}
+
+\begin{frame}{Summary: The Alignment Journey}
+    \begin{enumerate}
+        \item \textbf{Pre-training:} Develops core capabilities.
+        \pause
+        \item \textbf{SFT:} Teaches instruction following and format.
+        \pause
+        \item \textbf{Preference Tuning:} Aligns behavior with human values (HHH).
+    \end{enumerate}
+
+    \pause
+    \begin{block}{Key Takeaways}
+        \begin{itemize}
+            \item Alignment is crucial for making LLMs useful and safe.
+            \pause
+            \item RLHF (PPO) was the foundational approach but is complex and costly.
+            \pause
+            \item DPO offers a simpler, stable, and efficient alternative by directly optimizing preferences.
+            \pause
+            \item The lecture connects PEFT (LoRA) to the resource demands of alignment training.
+        \end{itemize}
+    \end{block}
+    \tiny
+\textbf{References and Further Reading}
+    \begin{itemize}
+        \item Ouyang, L., et al. (2022). Training language models to follow instructions with human feedback. (InstructGPT) \href{https://arxiv.org/abs/2203.02155}{arXiv:2203.02155}
+
+        \item Schulman, J., et al. (2017). Proximal Policy Optimization Algorithms. \href{https://arxiv.org/abs/1707.06347}{arXiv:1707.06347}
+
+        \item Rafailov, R., et al. (2023). Direct Preference Optimization: Your Language Model is Secretly a Reward Model. \href{https://arxiv.org/abs/2305.18290}{arXiv:2305.18290}
+
+        \item Ethayarajh, K., et al. (2024). KTO: Model Alignment as Prospect Theoretic Optimization. \href{https://arxiv.org/abs/2402.01306}{arXiv:2402.01306}
+
+        \item Bai, Y., et al. (2022). Constitutional AI: Harmlessness from AI Feedback. \href{https://arxiv.org/abs/2212.08073}{arXiv:2212.08073}
+
+        \item Askell, A., et al. (2021). A General Language Assistant as a Laboratory for Alignment. (The Anthropic HHH paper). \href{https://arxiv.org/abs/2112.00861}{arXiv:2112.00861}
+    \end{itemize}
+\end{frame}
+
+\end{document}
