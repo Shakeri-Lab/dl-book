@@ -1,21 +1,1390 @@
 # Adapting Pretrained Models: Prompting, PEFT, Quantization {#sec-17-peft-quantization}
 
-::: {.callout-warning}
-**Chapter stub.** This chapter is planned but not yet written. The abstract below is its
-contract; drafting sources are listed for provenance.
+<!-- lecture-source:
+     Module 11 is slide-only; the prose spine comes from the instructor's detailed
+     notes in sources/11.1-before-fine-tuning.tex, sources/11.2-peft.tex, and
+     sources/11.3-quantization.tex.
+     primary sources: Brown et al. 2020; Lewis et al. 2020; Houlsby et al. 2019;
+                      Li and Liang 2021; Lester et al. 2021; Ben-Zaken et al. 2022;
+                      Hu et al. 2022; Wei et al. 2022; Turpin et al. 2023;
+                      Greshake et al. 2023;
+                      Dettmers et al. 2022, 2023; Frantar et al. 2023;
+                      Lin et al. 2024; Jacob et al. 2018
+     provenance note: all executable implementations, synthetic studies, and
+     figures are independently derived from displayed equations. External paper
+     figures and source implementations were not reproduced. The canonical LoRA
+     and affine-quantization forms were independently re-derived and checked against
+     primary sources. The context, rank-capacity, and quantization studies are
+     book-original mechanism demonstrations, not natural-language LLM benchmarks. -->
+
+Chapter 9 left us a transfer rule: importing a representation is most promising
+when **labels are scarce, the target is feature-hungry, and the source supplies
+useful coverage at a matched scale**. Chapter 15 showed the conventional next
+step—fine-tuning changes every encoder weight. Chapter 16 then planted a second
+warning: **training-optimal is not serving-optimal**. Chinchilla's allocation can
+spend a pretraining budget well while leaving us with a backbone that is expensive
+to copy, update, or store once per downstream task.
+
+Let us put those promises on one ledger. A pretrained model creates three different
+bills:
+
+1. the **backbone storage**—a base shared across tasks, or a full task-specific copy
+   when sharing is abandoned;
+2. the **incremental task state**—the prompt, adapter, or unmerged delta that makes
+   one task different from another; and
+3. the **transient work**—context tokens, activations, gradients, optimizer state,
+   and caches needed while adapting or running the model.
+
+These bills are related—but they are not interchangeable. Freezing a billion
+weights removes their gradients—it does not make the billion weights disappear.
+Packing each weight into fewer bits reduces a storage lower bound—it does not prove
+that a particular kernel will run faster. Adding demonstrations changes no weight—it
+still lengthens the sequence the model must process. A merged LoRA or fully tuned
+checkpoint can collapse base and delta into one artifact—but then each task carries
+a full backbone-sized copy instead of sharing the original.
+
+The useful organizing questions are therefore not simply “How many parameters?”
+They are **where does task-specific information live, and which object does the
+method change?** Hard prompts and retrieved documents place task information in
+context. Parameter-efficient fine-tuning (PEFT) places it in a restricted set of
+learned values. Quantization need not add task information at all—it changes the numerical
+representation of a base or adapter. QLoRA composes the last two—it is not a fourth
+kind of objective.
+
+```{python}
+#| label: fig-adaptation-map
+#| fig-cap: "Three levers act on three different objects. Prompting changes the context presented to a fixed model; PEFT permits a small learned state to receive gradient blame; quantization changes how fixed values are represented. QLoRA combines a quantized frozen base with a trainable low-rank branch. The separate cost ledger below is deliberately not column-matched: every lever can affect more than one bill, and none removes all backbone storage or transient work."
+#| fig-alt: "Three top boxes label context, trainable state, and representation. A separate dashed ledger below lists backbone storage, incremental state, and transient work, explicitly marked as not column-matched."
+#| fig-width: 10
+#| fig-height: 4.6
+#| code-summary: "Figure code: separate the changed object from the three resource bills"
+
+import math
+
+import matplotlib.pyplot as plt
+from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
+import numpy as np
+import torch
+from torch import nn
+import torch.nn.functional as F
+
+torch.set_num_threads(6)
+torch.manual_seed(6050)
+
+navy, orange, green, wine = "#232D4B", "#E57200", "#2E7D32", "#722F37"
+fig, ax = plt.subplots(figsize=(10, 4.6))
+ax.set_xlim(0, 10)
+ax.set_ylim(0, 5)
+ax.axis("off")
+
+cards = [
+    (0.25, 2.05, 2.8, 2.35, navy, "CONTEXT", "prompt · examples · retrieved text",
+     "fixed weights\nlonger sequence"),
+    (3.60, 2.05, 2.8, 2.35, orange, "TRAINABLE STATE", "soft prompt · adapter · LoRA",
+     "restricted writes\nbackprop through base"),
+    (6.95, 2.05, 2.8, 2.35, green, "REPRESENTATION", "integer codes · scales · metadata",
+     "approximate values\nkernel-dependent speed"),
+]
+for x, y, width, height, color, title, examples, consequence in cards:
+    ax.add_patch(FancyBboxPatch(
+        (x, y), width, height, boxstyle="round,pad=0.05,rounding_size=0.12",
+        facecolor=color, edgecolor="none", alpha=0.10,
+    ))
+    ax.text(x + width / 2, y + 1.90, title, ha="center", va="center",
+            color=color, weight="bold", fontsize=10)
+    ax.text(x + width / 2, y + 1.25, examples, ha="center", va="center", fontsize=8.7)
+    ax.text(x + width / 2, y + 0.52, consequence, ha="center", va="center",
+            fontsize=8.5, color="#333333")
+
+ax.add_patch(FancyArrowPatch((5.0, 1.96), (8.35, 1.96), arrowstyle="<->",
+                             mutation_scale=13, lw=1.8, color=wine))
+ax.text(6.68, 1.63, "QLoRA composes these two", ha="center", color=wine,
+        fontsize=9, weight="bold")
+
+ledger = [
+    (0.45, "BACKBONE STORAGE", "shared or copied per task"),
+    (3.72, "INCREMENTAL STATE", "prompt or learned delta"),
+    (7.00, "TRANSIENT WORK", "tokens · activations · caches"),
+]
+ax.add_patch(FancyBboxPatch((0.20, 0.12), 9.60, 1.16, boxstyle="round,pad=0.03",
+                            facecolor="none", edgecolor="#B8BCC4", lw=1,
+                            linestyle="--"))
+ax.text(5, 1.15, "SEPARATE COST LEDGER — NOT COLUMN-MATCHED", ha="center",
+        va="center", fontsize=8.2, color="#555555", weight="bold")
+for x, title, detail in ledger:
+    ax.add_patch(FancyBboxPatch((x, 0.24), 2.55, 0.72, boxstyle="round,pad=0.04",
+                                facecolor="#F3F4F6", edgecolor="#B8BCC4", lw=1))
+    ax.text(x + 1.275, 0.67, title, ha="center", va="center", fontsize=8.5,
+            color=navy, weight="bold")
+    ax.text(x + 1.275, 0.38, detail, ha="center", va="center", fontsize=7.8)
+
+ax.text(5, 4.78, "Which object does the method change?", ha="center",
+        fontsize=13, weight="bold", color=navy)
+plt.tight_layout()
+plt.show()
+```
+
+## Prompting: move evidence into context
+
+A decoder in @sec-14-self-attention-transformer already defines a conditional
+distribution over the next token. Prompting changes the prefix on which that fixed
+distribution is conditioned. For an instruction $I$, demonstrations
+$(x_i,y_i)$, and a query $x_\star$—a discrete prompted prediction can be written
+
+$$
+\widehat y
+=\argmax_y p_{\theta_0}\!\left(
+y\mid I,(x_1,y_1),\ldots,(x_k,y_k),x_\star
+\right),
+\qquad
+\theta_{\text{after}}=\theta_{\text{before}}=\theta_0.
+$$ {#eq-icl-fixed-weights}
+
+With no demonstrations, this is **zero-shot** prompting. With a few, it is
+**few-shot prompting**; when the model uses those examples to infer the task inside
+its forward computation, we call the behavior **in-context learning (ICL)**. The
+word *learning* names a behavioral change with context—not a checkpoint update.
+
+Brown and colleagues found that few-shot gains often grew with model scale in
+GPT-3—but that is an empirical result over particular models and tasks. It does
+not establish universal parameter thresholds, nor does it settle the mechanism by
+which a Transformer uses demonstrations. Attention makes earlier examples visible
+and routable; saying it literally “performs analogy” would outrun the evidence.
+Prompt order, label words, formatting, and example choice can all matter.
+
+Instructions that ask for intermediate steps can improve some multi-step tasks.
+Those visible steps are generated tokens, however—not a guaranteed faithful window
+into the model's internal computation. The same logits and decoding cautions from
+@sec-11-encoder-decoder still apply.
+
+::: {.callout-note}
+## Prompting is not prompt tuning
+
+A hard prompt is a sequence of ordinary token IDs chosen by a person or program.
+It receives no gradient. **Prompt tuning**, introduced later in this chapter, learns
+continuous vectors by backpropagation and is therefore a PEFT method. Similar names
+do not mean the same training procedure.
 :::
 
-*When the model is too big to fine-tune, get surgical: prompting and in-context learning, LoRA's low-rank updates, quantization and QLoRA.*
+Zero trainable parameters is not zero cost—demonstrations consume context length.
+They increase **prefill** work, the initial forward pass that processes the supplied
+prefix, and occupy entries in the **key/value (KV) cache**, the stored attention keys
+and values reused while autoregressively generating later tokens. They also expose
+task data at inference time. Prompting trades a new checkpoint for a longer, more
+carefully constructed input.
 
-<!-- draft-sources
-seeds:
-- `Module 11 slide decks (11.1-11.3)`
-transcripts:
-- `(slides-only module; no transcript)`
-harvests:
-- Chapter 9/15: transfer pays under the right scarcity/feature/coverage regime
-- Chapter 15: full-backbone adaptation cost—fine-tuning changes every encoder
-  weight; what remains when the backbone is too large to move?
-- Chapter 16: "training-optimal is not serving-optimal"—compute-optimal
-  pretraining does not make storage, inference, or adaptation affordable
--->
+### A frozen-context mechanism test
+
+Can a fixed network genuinely change its answer because examples in the prompt
+reveal a task? We can test that mechanism without claiming to reproduce
+natural-language ICL.
+
+Each synthetic episode secretly permutes four group symbols onto four label symbols.
+A demonstration reveals one group–label pair; demo groups are distinct. A two-shot
+prompt might read `[BOS] group C, label A; group A, label D; [QUERY] group A`, whose
+target is `label D`. The query
+asks for another group's label. A tiny causal Transformer is meta-trained across
+many such episodes, cycling through one to four demonstrations. During evaluation,
+it receives a new random mapping and **no parameter update**.
+
+The information ceiling is known before training. With $k<4$ demonstrations, the
+query is already covered with probability $k/4$. Otherwise, its label is uniform
+among the $4-k$ unused labels. Therefore
+
+$$
+\Pr(\text{correct}\mid k)
+=
+\begin{cases}
+\dfrac{k}{4}+\left(1-\dfrac{k}{4}\right)\dfrac{1}{4-k}
+=\dfrac{k+1}{4}, & 0\le k\le3,\\[6pt]
+1, & k=4.
+\end{cases}
+$$ {#eq-icl-ceiling}
+
+At $k=3$, even an unseen query group is solvable by elimination—a distinction that
+will tell us whether the model merely copies a seen pair or uses the whole mapping.
+
+The code uses `nn.TransformerEncoderLayer` as a compact container for the same
+pre-LayerNorm attention–residual–FFN structural pattern built from first principles
+in @sec-14-self-attention-transformer. Its GELU choice differs from that chapter's
+teaching block; the wrapper does not hide the causal or padding masks, embeddings,
+or classifier. Token IDs have shape $[B,11]$, hidden states $[B,11,48]$, and the
+query logits $[B,4]$.
+
+```{python}
+#| label: icl-mechanism
+#| code-summary: "Code: meta-train a tiny causal Transformer, then audit frozen-weight in-context adaptation over five seeds"
+
+PAD, BOS, QUERY = 0, 1, 2
+GROUP0, LABEL0 = 3, 7
+VOCAB, SEQUENCE_LENGTH, N_CLASSES = 11, 11, 4
+
+
+def sample_episode_bank(
+    batch_size: int, generator: torch.Generator
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    mapping = torch.rand(batch_size, N_CLASSES, generator=generator).argsort(dim=1)
+    demo_groups = torch.rand(
+        batch_size, N_CLASSES, generator=generator
+    ).argsort(dim=1)
+    query_groups = torch.randint(
+        N_CLASSES, (batch_size,), generator=generator
+    )
+    return mapping, demo_groups, query_groups
+
+
+def render_episodes(
+    bank: tuple[torch.Tensor, torch.Tensor, torch.Tensor], k: int
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    mapping, demo_groups, query_groups = bank
+    tokens = torch.full((len(mapping), SEQUENCE_LENGTH), PAD, dtype=torch.long)
+    tokens[:, 0] = BOS
+    for slot in range(k):
+        group = demo_groups[:, slot]
+        label = mapping.gather(1, group[:, None]).squeeze(1)
+        tokens[:, 1 + 2 * slot] = GROUP0 + group
+        tokens[:, 2 + 2 * slot] = LABEL0 + label
+    tokens[:, 9] = QUERY
+    tokens[:, 10] = GROUP0 + query_groups
+    targets = mapping.gather(1, query_groups[:, None]).squeeze(1)
+    covered = (
+        (demo_groups[:, :k] == query_groups[:, None]).any(dim=1)
+        if k else torch.zeros(len(mapping), dtype=torch.bool)
+    )
+    return tokens, targets, covered
+
+
+class ContextLearner(nn.Module):
+    def __init__(self, width: int = 48, heads: int = 4, layers: int = 2) -> None:
+        super().__init__()
+        self.token = nn.Embedding(VOCAB, width, padding_idx=PAD)
+        self.position = nn.Embedding(SEQUENCE_LENGTH, width)
+        layer = nn.TransformerEncoderLayer(
+            d_model=width, nhead=heads, dim_feedforward=2 * width,
+            dropout=0.0, batch_first=True, norm_first=True, activation="gelu",
+        )
+        self.encoder = nn.TransformerEncoder(
+            layer, layers, norm=nn.LayerNorm(width), enable_nested_tensor=False
+        )
+        self.head = nn.Linear(width, N_CLASSES)
+        self.register_buffer(
+            "causal",
+            torch.triu(torch.ones(SEQUENCE_LENGTH, SEQUENCE_LENGTH, dtype=torch.bool),
+                       diagonal=1),
+        )
+
+    def forward(self, tokens: torch.Tensor) -> torch.Tensor:
+        positions = torch.arange(SEQUENCE_LENGTH, device=tokens.device)
+        hidden = self.token(tokens) + self.position(positions)[None]
+        hidden = self.encoder(
+            hidden, mask=self.causal, src_key_padding_mask=tokens.eq(PAD)
+        )
+        return self.head(hidden[:, -1])
+
+
+@torch.no_grad()
+def evaluate_context(
+    model: nn.Module, seed: int, n: int = 8192
+) -> tuple[list[dict], bool]:
+    model.eval()
+    before = [parameter.detach().clone() for parameter in model.parameters()]
+    bank = sample_episode_bank(n, torch.Generator().manual_seed(seed + 10_000))
+    rows = []
+    for k in range(5):
+        tokens, targets, covered = render_episodes(bank, k)
+        correct = model(tokens).argmax(1).eq(targets)
+        rows.append({
+            "k": k,
+            "accuracy": correct.float().mean().item(),
+            "covered": correct[covered].float().mean().item()
+                       if covered.any() else float("nan"),
+            "uncovered": correct[~covered].float().mean().item()
+                         if (~covered).any() else float("nan"),
+        })
+    unchanged = all(
+        torch.equal(old, new) for old, new in zip(before, model.parameters())
+    )
+    return rows, unchanged
+
+
+def run_context_seed(seed: int, steps: int = 1200) -> dict:
+    torch.manual_seed(seed)
+    generator = torch.Generator().manual_seed(seed)
+    model = ContextLearner()
+    optimizer = torch.optim.AdamW(model.parameters(), lr=3e-3, weight_decay=1e-2)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, T_max=steps, eta_min=3e-5
+    )
+    model.train()
+    for step in range(steps):
+        k = 1 + step % 4
+        bank = sample_episode_bank(256, generator)
+        tokens, targets, _ = render_episodes(bank, k)
+        loss = F.cross_entropy(model(tokens), targets)
+        optimizer.zero_grad(set_to_none=True)
+        loss.backward()
+        nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+        optimizer.step()
+        scheduler.step()
+    rows, unchanged = evaluate_context(model, seed)
+    return {
+        "seed": seed,
+        "rows": rows,
+        "unchanged": unchanged,
+        "parameters": sum(parameter.numel() for parameter in model.parameters()),
+    }
+
+
+CONTEXT_SEEDS = list(range(6050, 6055))
+context_runs = [run_context_seed(seed) for seed in CONTEXT_SEEDS]
+context_accuracy = np.array([
+    [row["accuracy"] for row in run["rows"]] for run in context_runs
+])
+context_ceiling = np.array([0.25, 0.50, 0.75, 1.00, 1.00])
+
+print("model parameters:", f'{context_runs[0]["parameters"]:,}')
+print("k  mean accuracy  seed sd  information ceiling")
+for k in range(5):
+    print(
+        f"{k}      {context_accuracy[:, k].mean():.3f}       "
+        f"{context_accuracy[:, k].std(ddof=1):.3f}          "
+        f"{context_ceiling[k]:.2f}"
+    )
+print("all evaluation passes left weights unchanged:",
+      all(run["unchanged"] for run in context_runs))
+```
+
+```{python}
+#| label: fig-icl-coverage
+#| fig-cap: "A frozen model changes behavior as demonstrations reveal an episode's hidden label mapping. Across five independently trained seeds, overall accuracy (left) tracks the exact information ceiling. Conditional accuracy (right) is perfect when the query group appeared; for unseen groups it follows the shrinking set of unused labels and reaches 1 at three demonstrations by elimination. Evaluation uses one nested episode bank per seed, and every parameter is bitwise unchanged across all five context lengths."
+#| fig-alt: "Two line plots. Mean accuracy rises from one quarter with no examples to one with three examples and tracks the analytic ceiling. Seen queries are always correct; unseen-query accuracy rises from one quarter to one by elimination."
+#| fig-width: 9
+#| fig-height: 3.8
+#| code-summary: "Figure code: compare frozen-context accuracy with the analytic ceiling and the seen-versus-unseen decomposition"
+
+fig, axes = plt.subplots(1, 2, figsize=(9, 3.8))
+ks = np.arange(5)
+for seed_row in context_accuracy:
+    axes[0].plot(ks, seed_row, color="#A7ABB4", lw=1.1, alpha=0.75)
+axes[0].plot(ks, context_accuracy.mean(axis=0), "o-", color=orange, lw=2.6,
+             label="five-seed mean")
+axes[0].plot(ks, context_ceiling, "--", color=navy, lw=2,
+             label="information ceiling")
+axes[0].set(xlabel="demonstrations $k$", ylabel="query accuracy",
+            title="behavior changes; weights do not", ylim=(0.18, 1.04))
+axes[0].set_xticks(ks)
+axes[0].legend(frameon=False, fontsize=8)
+
+covered_mean = np.array([
+    np.mean([run["rows"][k]["covered"] for run in context_runs])
+    for k in range(1, 5)
+])
+uncovered_mean = np.array([
+    np.mean([run["rows"][k]["uncovered"] for run in context_runs])
+    for k in range(4)
+])
+axes[1].plot(np.arange(1, 5), covered_mean, "s-", color=green, lw=2.4,
+             label="query group demonstrated")
+axes[1].plot(np.arange(4), uncovered_mean, "o-", color=wine, lw=2.4,
+             label="query group unseen")
+axes[1].plot(np.arange(4), [1 / 4, 1 / 3, 1 / 2, 1], "^--",
+             color="#555555", lw=1.7, label="unseen ceiling")
+axes[1].set(xlabel="demonstrations $k$", ylabel="conditional accuracy",
+            title="copy when seen; eliminate when unseen", ylim=(0.18, 1.04))
+axes[1].set_xticks(ks)
+axes[1].legend(frameon=False, fontsize=7.6, loc="lower right")
+for ax in axes:
+    ax.grid(alpha=0.18)
+plt.tight_layout()
+plt.show()
+```
+
+The 39,268-parameter network lands at mean accuracies
+$0.252,0.500,0.749,1.000,1.000$ for $k=0,1,2,3,4$, respectively. The analytic
+ceilings are $0.25,0.50,0.75,1,1$. More revealingly, unseen-query accuracy rises
+from $0.252$ to $0.330$, $0.499$, and $1.000$. The model is not only copying a
+matching demonstration; at $k=3$ it identifies the remaining label.
+
+::: {.callout-warning}
+## An existence proof in a designed regime
+
+The model was meta-trained on exactly this family of random permutation tasks. The
+study demonstrates that a frozen causal Transformer can use prompt evidence in this
+controlled distribution. It does not estimate natural-language ICL quality,
+explain the mechanism inside a large language model, or show that more examples
+always help. Across runs, initialization, meta-training episodes, and the finite
+8,192-episode evaluation bank all change. The seed SD therefore measures combined
+run-to-run repeatability—not task or domain diversity, and not optimization alone.
+:::
+
+### Retrieval is another context lever
+
+A prompt can contain information selected at query time rather than written by
+hand. **Retrieval-augmented generation (RAG)** first searches an external corpus,
+then places retrieved passages beside the instruction and query before generation.
+The generator's weights may remain fixed—the task-specific state lives partly in
+the index and partly in the retrieved context.
+
+This reconnects to @sec-12-kernel-regression. A retriever computes query–document
+similarities, selects neighbors, and hands their content to a downstream weighted
+computation. Modern systems can learn the retriever, the generator, or both, but
+the basic context-augmentation move is distinct from PEFT.
+
+Retrieval moves rather than abolishes failure—a missed document cannot support the
+answer; a highly ranked irrelevant passage can distract it; retrieved text can
+contain malicious instructions; and a plausible citation does not prove that the
+generated claim follows from the cited evidence. RAG is attractive when facts change
+faster than checkpoints or when provenance matters, but it is a pipeline whose
+retrieval and generation stages must be evaluated separately.
+
+## What if the prompt itself were learnable?
+
+Hard prompts spend human effort and context tokens. The chapter's familiar refrain
+now applies: **what if the prompt itself were learnable?** Let
+$\matr{P}\in\mathbb{R}^{m\times d}$ be $m$ continuous vectors with the same width
+as token embeddings. For an $n$-token input, define
+$\operatorname{Embed}(x)\in\mathbb{R}^{n\times d}$. Prompt tuning prepends the
+learned rows,
+
+$$
+\matr{H}^{(0)}=[\matr{P};\operatorname{Embed}(x)],
+\qquad
+\min_{\matr{P}}
+-\sum_i\log p_{\theta_0,\matr{P}}(y_i\mid x_i),
+$$ {#eq-prompt-tuning}
+
+while freezing $\theta_0$. Before any task head, the learned state contains exactly
+$md$ values. Those values are not words—and need not be nearest to any vocabulary
+embedding. They are virtual tokens optimized by gradient descent, and they still
+occupy $m$ virtual sequence positions during use.
+
+**Prefix tuning** moves a related idea deeper. At every Transformer layer $\ell$,
+let the ordinary keys and values be
+$\matr{K}_\ell,\matr{V}_\ell\in\mathbb{R}^{n\times d}$ and the learned prefixes be
+$\matr{P}^K_\ell,\matr{P}^V_\ell\in\mathbb{R}^{m\times d}$. The prefix rows extend
+the ordinary keys and values:
+
+$$
+\matr{K}'_\ell=[\matr{P}^K_\ell;\matr{K}_\ell],
+\qquad
+\matr{V}'_\ell=[\matr{P}^V_\ell;\matr{V}_\ell].
+$$
+
+A direct implementation with $m$ prefix slots, width $d$, and $L$ layers stores
+$2Lmd$ values, although practical parameterizations can differ. Li and Liang used
+an auxiliary network during optimization—then retained only the learned prefix for
+inference. Lester and colleagues found that prompt tuning approached full tuning as
+T5 scale grew in their SuperGLUE study; that result is not a universal size
+threshold.
+
+Two other PEFT families complete the map. **Adapters** insert a small bottleneck
+inside each frozen Transformer block. For bottleneck width $d_b$, let
+$\matr{W}_{\mathrm{down}}\in\mathbb{R}^{d_b\times d}$,
+$\vect{b}_{\mathrm{down}}\in\mathbb{R}^{d_b}$,
+$\matr{W}_{\mathrm{up}}\in\mathbb{R}^{d\times d_b}$, and
+$\vect{b}_{\mathrm{up}}\in\mathbb{R}^{d}$. One common residual form is
+
+$$
+\operatorname{Adapter}(\vect{h})
+=\vect{h}
++\matr{W}_{\mathrm{up}}
+\sigma(\matr{W}_{\mathrm{down}}\vect{h}+\vect{b}_{\mathrm{down}})
++\vect{b}_{\mathrm{up}},
+$$
+
+This module adds $2dd_b+d+d_b$ parameters. **BitFit** takes the selective-update idea to an
+extreme—freeze pretrained weight matrices and update their existing bias terms. The
+original BitFit classification experiments also trained the task-specific output
+layer; “bias-only” describes the restriction inside the pretrained backbone.
+Neither method promises the same accuracy on every task. They are different
+restrictions on where gradient blame may write.
+
+## LoRA: a low-rank correction beside a frozen path
+
+Consider one frozen linear map
+
+$$
+\matr{W}_0\in\mathbb{R}^{d_{\mathrm{out}}\times d_{\mathrm{in}}},
+\qquad
+\vect{h}=\matr{W}_0\vect{x}.
+$$
+
+Full fine-tuning learns an unrestricted correction $\Delta\matr{W}$ with
+$d_{\mathrm{out}}d_{\mathrm{in}}$ values. **Low-Rank Adaptation (LoRA)** instead
+constrains the correction to a product of two thin matrices:
+
+$$
+\Delta\matr{W}
+=\frac{\alpha}{r}\matr{B}\matr{A},
+\qquad
+\matr{A}\in\mathbb{R}^{r\times d_{\mathrm{in}}},
+\quad
+\matr{B}\in\mathbb{R}^{d_{\mathrm{out}}\times r}.
+$$ {#eq-lora-delta}
+
+The forward pass is
+
+$$
+\vect{h}
+=\matr{W}_0\vect{x}
++\frac{\alpha}{r}\matr{B}(\matr{A}\vect{x}).
+$$ {#eq-lora-forward}
+
+$\matr{A}$ compresses to $r$ coordinates and $\matr{B}$ expands back to the output
+width. Because $\operatorname{rank}(\matr{B}\matr{A})\le r$, task updates can use
+at most $r$ independent linear directions in that matrix. The merged matrix is not
+therefore rank $r$—the constraint applies only to the correction.
+
+The trainable count is
+
+$$
+P_{\mathrm{LoRA}}
+=r(d_{\mathrm{in}}+d_{\mathrm{out}}).
+$$ {#eq-lora-count}
+
+For one $4096\times4096$ map and $r=16$, full tuning exposes 16,777,216 values;
+LoRA exposes $16(4096+4096)=131{,}072$, or $0.78125\%$. A model-level percentage
+requires summing @eq-lora-count over the matrices actually targeted. The original
+LoRA experiments emphasized query and value projections—later recipes often target
+different or more numerous matrices. “Rank 16” alone does not specify an adapter's
+size.
+
+```{python}
+#| label: fig-lora-path
+#| fig-cap: "LoRA adds a trainable low-rank branch beside a frozen linear map. Gradient blame flows through both computational paths, but only A and B receive updates. Initializing A randomly and B to zero begins with an exact zero correction while leaving a nonzero first gradient for B; after training, the correction can be merged into a compatible base weight."
+#| fig-alt: "A frozen W-zero path and a parallel trainable A-then-B path both receive x and are added to produce h. A merge equation above combines the two paths after training."
+#| fig-width: 9
+#| fig-height: 3.5
+#| code-summary: "Figure code: draw the frozen path, trainable low-rank branch, and merge identity"
+
+fig, ax = plt.subplots(figsize=(9, 3.5))
+ax.set_xlim(0, 10)
+ax.set_ylim(0, 4)
+ax.axis("off")
+
+def diagram_box(
+    x: float, y: float, width: float, height: float,
+    text: str, color: str, frozen: bool = False
+) -> None:
+    ax.add_patch(FancyBboxPatch(
+        (x, y), width, height, boxstyle="round,pad=0.04,rounding_size=0.08",
+        facecolor=color, edgecolor=color, alpha=0.13, lw=1.5,
+    ))
+    ax.text(x + width / 2, y + height / 2, text, ha="center", va="center",
+            fontsize=9, color=color, weight="bold")
+    ax.text(x + width / 2, y - 0.19, "frozen" if frozen else "trainable",
+            ha="center", va="top", fontsize=8, color="#555555")
+
+ax.text(0.35, 2.03, "$x$", fontsize=15, va="center")
+diagram_box(2.0, 2.55, 2.15, 0.75, "$W_0\\;[d_{out}\\times d_{in}]$", navy, True)
+diagram_box(1.65, 0.65, 1.55, 0.75, "$A\\;[r\\times d_{in}]$", orange)
+diagram_box(3.75, 0.65, 1.55, 0.75, "$B\\;[d_{out}\\times r]$", orange)
+
+for start, end in [((0.8, 2.05), (2.0, 2.88)), ((0.8, 1.98), (1.65, 1.03)),
+                   ((3.2, 1.03), (3.75, 1.03)), ((5.3, 1.03), (6.55, 1.78)),
+                   ((4.15, 2.88), (6.55, 2.24))]:
+    ax.add_patch(FancyArrowPatch(start, end, arrowstyle="->", mutation_scale=12,
+                                 color="#555555", lw=1.5))
+ax.add_patch(FancyBboxPatch((6.55, 1.65), 0.65, 0.65, boxstyle="circle,pad=0.02",
+                            facecolor="#F3F4F6", edgecolor="#777777"))
+ax.text(6.875, 1.98, "+", ha="center", va="center", fontsize=15)
+ax.add_patch(FancyArrowPatch((7.2, 1.98), (8.15, 1.98), arrowstyle="->",
+                             mutation_scale=12, color="#555555", lw=1.5))
+ax.text(8.28, 1.98, "$h$", fontsize=15, va="center")
+ax.text(3.47, 0.29, "$\\alpha/r$", ha="center", color=orange, fontsize=9)
+ax.text(6.95, 3.18, "$W_{merged}=W_0+(\\alpha/r)BA$", ha="center",
+        fontsize=10, color=wine,
+        bbox={"boxstyle": "round,pad=0.35", "fc": "#F8EEF0", "ec": wine, "alpha": 0.75})
+ax.text(5, 3.78, "one frozen foundation, one permitted correction path",
+        ha="center", fontsize=12, color=navy, weight="bold")
+plt.tight_layout()
+plt.show()
+```
+
+The usual initialization samples $\matr{A}$ and sets $\matr{B}=0$. The initial
+correction is then exactly zero—yet $\matr{B}$ can receive a gradient because
+$\matr{A}\vect{x}$ is generally nonzero. Setting both factors to zero would block
+both first gradients. The scale $\alpha/r$ separates a chosen adapter strength from
+rank, but its best value remains a tuning decision.
+
+Once trained, a single compatible adapter can be merged:
+
+$$
+\matr{W}_{\mathrm{merged}}
+=\matr{W}_0+\frac{\alpha}{r}\matr{B}\matr{A}.
+$$ {#eq-lora-merge}
+
+Merged and unmerged arithmetic should agree to numerical tolerance. Only the merged
+form removes the extra branch at inference. Dynamic adapter switching, keeping many
+adapters active, or combining LoRA with a quantized base changes that systems story;
+a quantized merge generally requires dequantization and requantization.
+
+::: {.callout-tip}
+## A four-part freeze audit
+
+Count trainable values; assert the base tensor is bitwise unchanged; inspect that
+only permitted parameters receive gradients; and compare merged with unmerged
+outputs. A small checkpoint is not evidence that the intended tensors were frozen.
+The assertions belong beside the implementation, not in a comment after training.
+:::
+
+### Make the rank bottleneck fail on purpose
+
+Low rank is a hypothesis about the update—not a free compression theorem. We can
+make its boundary visible by planting a target correction with exactly six
+independent diagonal directions. The frozen base is a $32\times32$ map. Full tuning
+may move all 1,024 entries; LoRA may use ranks $1,2,4,6,$ or $8$. Inputs are fixed
+Gaussian vectors, targets are noiseless, and five LoRA initializations see the same
+problem and optimizer schedule.
+
+Write the six planted magnitudes as $\sigma_1\ge\cdots\ge\sigma_6$. Their values are
+$1.20,0.90,0.65,0.40,0.22,0.10$. A rank-$r$ correction below six must leave some
+directions behind. This design deliberately favors the LoRA assumption—that is what
+makes the capacity claim falsifiable before we run it.
+
+Because the six diagonal basis directions are mutually orthogonal, their squared
+correction energy is $\sum_{j=1}^{6}\sigma_j^2$. A rank-$r$ correction can retain at
+most $r$ independent directions; spending them on the $r$ largest magnitudes leaves
+the concrete relative floor
+
+$$
+\epsilon_r
+=\sqrt{\frac{\sum_{j=r+1}^{6}\sigma_j^2}
+              {\sum_{j=1}^{6}\sigma_j^2}},
+\qquad r<6,
+$$ {#eq-lora-diagonal-floor}
+
+and zero for $r\ge6$. The plotted “capacity floor” is this calculation—not a result
+estimated from the optimizer.
+
+```{python}
+#| label: lora-capacity
+#| code-summary: "Code: compare frozen, full, and low-rank updates against a planted rank-six correction"
+
+D_IN = D_OUT = 32
+TARGET_RANK = 6
+DIRECTION_MAGNITUDES = torch.tensor([1.20, 0.90, 0.65, 0.40, 0.22, 0.10])
+
+
+def make_rank_problem(
+    seed: int = 1700,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor,
+           torch.Tensor, torch.Tensor]:
+    generator = torch.Generator().manual_seed(seed)
+    base = torch.randn(D_OUT, D_IN, generator=generator) / math.sqrt(D_IN)
+    correction = torch.zeros(D_OUT, D_IN)
+    diagonal = torch.arange(TARGET_RANK)
+    correction[diagonal, diagonal] = DIRECTION_MAGNITUDES
+    x_train = torch.randn(1024, D_IN, generator=generator)
+    x_validation = torch.randn(4096, D_IN, generator=generator)
+    y_train = F.linear(x_train, base + correction)
+    y_validation = F.linear(x_validation, base + correction)
+    return base, correction, x_train, y_train, x_validation, y_validation
+
+
+class FullUpdate(nn.Module):
+    def __init__(self, base: torch.Tensor) -> None:
+        super().__init__()
+        self.weight = nn.Parameter(base.clone())
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return F.linear(x, self.weight)
+
+
+class LoRAUpdate(nn.Module):
+    def __init__(
+        self, base: torch.Tensor, rank: int, generator: torch.Generator
+    ) -> None:
+        super().__init__()
+        self.register_buffer("weight0", base.clone())
+        self.A = nn.Parameter(torch.randn(rank, D_IN, generator=generator) * 0.02)
+        self.B = nn.Parameter(torch.zeros(D_OUT, rank))
+        self.rank = rank
+        self.alpha = rank
+
+    @property
+    def scaling(self) -> float:
+        return self.alpha / self.rank
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        low_rank = F.linear(F.linear(x, self.A), self.B)
+        return F.linear(x, self.weight0) + self.scaling * low_rank
+
+    def merged_weight(self) -> torch.Tensor:
+        return self.weight0 + self.scaling * (self.B @ self.A)
+
+
+def train_linear_update(
+    model: nn.Module, x: torch.Tensor, y: torch.Tensor, steps: int = 1200
+) -> None:
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.03)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, T_max=steps, eta_min=3e-4
+    )
+    for _ in range(steps):
+        loss = F.mse_loss(model(x), y)
+        optimizer.zero_grad(set_to_none=True)
+        loss.backward()
+        optimizer.step()
+        scheduler.step()
+
+
+def relative_update_error(
+    estimate: torch.Tensor, target: torch.Tensor
+) -> float:
+    return (torch.linalg.norm(estimate - target) / torch.linalg.norm(target)).item()
+
+
+base, target_delta, x_train, y_train, x_val, y_val = make_rank_problem()
+target_energy = torch.sum(DIRECTION_MAGNITUDES ** 2)
+
+full_model = FullUpdate(base)
+train_linear_update(full_model, x_train, y_train)
+with torch.no_grad():
+    full_mse = F.mse_loss(full_model(x_val), y_val).item()
+    full_relative_error = relative_update_error(
+        full_model.weight - base, target_delta
+    )
+    frozen_mse = F.mse_loss(F.linear(x_val, base), y_val).item()
+
+LORA_RANKS = [1, 2, 4, 6, 8]
+lora_runs = []
+for seed in range(6050, 6055):
+    for rank in LORA_RANKS:
+        model = LoRAUpdate(
+            base, rank, torch.Generator().manual_seed(seed + rank)
+        )
+        frozen_before = model.weight0.clone()
+        train_linear_update(model, x_train, y_train)
+        with torch.no_grad():
+            merged = model.merged_weight()
+            merge_error = (
+                model(x_val[:64]) - F.linear(x_val[:64], merged)
+            ).abs().max().item()
+            assert torch.equal(frozen_before, model.weight0)
+            assert merge_error < 2e-6
+            learned_delta = merged - base
+            lora_runs.append({
+                "seed": seed,
+                "rank": rank,
+                "trainable": rank * (D_IN + D_OUT),
+                "validation_mse": F.mse_loss(model(x_val), y_val).item(),
+                "relative_error": relative_update_error(learned_delta, target_delta),
+                "merge_error": merge_error,
+            })
+
+print(f"frozen validation MSE: {frozen_mse:.6f}")
+print(
+    f"full update: MSE={full_mse:.2e}, relative delta error="
+    f"{full_relative_error:.2e} (1,024 trainable)"
+)
+print("rank  trainable  mean validation MSE  mean relative update error")
+for rank in LORA_RANKS:
+    selected = [row for row in lora_runs if row["rank"] == rank]
+    print(
+        f"{rank:>4}  {selected[0]['trainable']:>9,}  "
+        f"{np.mean([row['validation_mse'] for row in selected]):>19.8f}  "
+        f"{np.mean([row['relative_error'] for row in selected]):>26.6f}"
+    )
+print("largest merged/unmerged difference:",
+      f"{max(row['merge_error'] for row in lora_runs):.2e}")
+```
+
+```{python}
+#| label: fig-lora-rank-capacity
+#| fig-cap: "LoRA's rank is a real capacity constraint in a problem constructed to expose it. Five factor initializations converge to the same rank-limited relative update errors (left), closely tracking the analytic best floors from the planted diagonal magnitudes. Validation error (right) falls sharply but remains nonzero below the planted rank six; rank six, rank eight, and the unrestricted full update reach numerical zero. Counts label trainable adapter values in this deliberately small layer."
+#| fig-alt: "Two logarithmic line plots. Relative correction error follows a calculated floor at ranks one, two, and four, then drops near zero at the planted rank six. Validation MSE shows the same boundary."
+#| fig-width: 9
+#| fig-height: 3.8
+#| code-summary: "Figure code: compare learned rank-sweep errors with the planted capacity floors"
+
+rank_error = np.array([
+    [next(row["relative_error"] for row in lora_runs
+          if row["seed"] == seed and row["rank"] == rank)
+     for rank in LORA_RANKS]
+    for seed in range(6050, 6055)
+])
+rank_mse = np.array([
+    [next(row["validation_mse"] for row in lora_runs
+          if row["seed"] == seed and row["rank"] == rank)
+     for rank in LORA_RANKS]
+    for seed in range(6050, 6055)
+])
+floors = np.array([
+    math.sqrt((DIRECTION_MAGNITUDES[rank:] ** 2).sum().item() / target_energy.item())
+    if rank < TARGET_RANK else 0.0
+    for rank in LORA_RANKS
+])
+
+fig, axes = plt.subplots(1, 2, figsize=(9, 3.8))
+for seed_row in rank_error:
+    axes[0].plot(LORA_RANKS, np.maximum(seed_row, 1e-8), color="#A7ABB4", lw=1)
+axes[0].plot(LORA_RANKS, np.maximum(rank_error.mean(axis=0), 1e-8), "o-",
+             color=orange, lw=2.5, label="learned mean")
+axes[0].plot(LORA_RANKS, np.maximum(floors, 1e-8), "s--", color=navy, lw=2,
+             label="capacity floor")
+axes[0].axvline(TARGET_RANK, color=green, ls=":", lw=1.7)
+axes[0].set_yscale("log")
+axes[0].set(xlabel="adapter rank $r$", ylabel="relative correction error",
+            title="below rank six, information is missing")
+axes[0].set_xticks(LORA_RANKS)
+axes[0].legend(frameon=False, fontsize=8)
+
+axes[1].plot(LORA_RANKS, np.maximum(rank_mse.mean(axis=0), 1e-15), "o-",
+             color=wine, lw=2.5, label="LoRA")
+axes[1].axhline(frozen_mse, color="#555555", ls="--", lw=1.6, label="frozen base")
+axes[1].axhline(max(full_mse, 1e-15), color=green, ls=":", lw=1.8,
+                label="full update")
+for rank, mse, count in zip(LORA_RANKS, rank_mse.mean(axis=0),
+                            [64, 128, 256, 384, 512]):
+    axes[1].annotate(f"{count}", (rank, max(mse, 1e-15)), xytext=(0, 7),
+                     textcoords="offset points", ha="center", fontsize=8)
+axes[1].set_yscale("log")
+axes[1].set(xlabel="adapter rank $r$", ylabel="validation MSE",
+            title="task error inherits the rank boundary")
+axes[1].set_xticks(LORA_RANKS)
+axes[1].legend(frameon=False, fontsize=8)
+for ax in axes:
+    ax.grid(alpha=0.17)
+plt.tight_layout()
+plt.show()
+```
+
+The failure is orderly. Rank 1 leaves relative correction error $0.710$; rank 2
+leaves $0.472$; rank 4 leaves $0.142$. Their mean validation MSEs are
+$0.04535,0.02022,$ and $0.001888$. Rank 6 and rank 8 recover the target to below
+$10^{-7}$ relative correction error. The unrestricted update reaches numerical-zero
+validation MSE and $2.39\times10^{-7}$ relative correction error. Every frozen base
+is bitwise intact, and the largest merged–unmerged discrepancy is below
+$2\times10^{-6}$.
+
+In this toy $32\times32$ layer, rank 6 still trains 384 values—37.5% of a full
+matrix. The point is inspectability, not an impressive compression ratio. Real
+LoRA savings depend on wide matrices, small ranks, and which layers are targeted.
+Likewise, the experiment was built from a low-rank shift—a task whose useful
+correction is not well captured at the chosen rank will retain error no matter how
+fashionable the adapter is.
+
+## Quantization: put weights on a smaller grid
+
+PEFT restricts which values may change. **Quantization** asks how precisely values
+must be represented. If a tensor contains $N$ values stored at $b$ bits each, its
+ideal packed payload is
+
+$$
+\text{payload}=\frac{Nb}{8}\ \text{bytes}.
+$$ {#eq-quant-payload}
+
+One billion FP16 weights therefore require 2 GB in decimal units; an ideal packed
+4-bit payload requires 0.5 GB. Those are weight-payload lower bounds—not complete
+checkpoints or working-memory forecasts. Scales, zero-points, unquantized tensors,
+packing alignment, activations, and caches remain.
+
+This is where a tensor's *dtype* becomes more than a software label.
+@sec-a2-tensors will gather dtype, shape, stride, and physical layout in one place;
+@sec-a4-floating-point will connect FP16, BF16, rounding, and mixed precision to the
+finite representations first encountered in Chapter 5. Here we need one narrower
+fact—fewer nominal bits change both representable values and storage arithmetic.
+
+Start with signed **symmetric uniform quantization** of a real-valued tensor
+$\matr{W}$. For $b$ bits, let
+
+$$
+Q=2^{b-1}-1,
+\qquad
+s=\frac{\max_{ij}|W_{ij}|}{Q}.
+$$
+
+Quantize and reconstruct by
+
+$$
+q_{ij}=\operatorname{clip}\!\left(
+\operatorname{round}(W_{ij}/s),-Q,Q
+\right),
+\qquad
+\widehat W_{ij}=s q_{ij}.
+$$ {#eq-symmetric-quantization}
+
+$s$ is the distance between adjacent real-valued grid points. This symmetric choice
+uses codes $-Q,\ldots,Q$: $2^b-1$ levels, leaving the most-negative two's-complement
+code unused so the endpoints remain balanced around zero. With the maximum used for
+calibration, values are not clipped beyond the selected range; nearest
+rounding gives $|W_{ij}-\widehat W_{ij}|\le s/2$. One extreme value increases $s$
+for everything sharing that scale, so small values may all round to zero.
+
+If every value is zero, choose any positive sentinel scale—say $s=1$—and store zero
+codes. A constant affine range likewise needs a separately defined convention; the
+range formula below otherwise divides by zero.
+
+An **affine** grid also stores an integer zero-point $z$:
+
+$$
+q=\operatorname{clip}\!\left(
+\operatorname{round}(w/s)+z,q_{\min},q_{\max}
+\right),
+\qquad
+\widehat w=s(q-z).
+$$ {#eq-affine-quantization}
+
+For a nonconstant calibrated interval $[w_{\min},w_{\max}]$, a standard choice is
+
+$$
+s=\frac{w_{\max}-w_{\min}}{q_{\max}-q_{\min}},
+\qquad
+z=\operatorname{clip}\!\left(
+\operatorname{round}\!\left(q_{\min}-\frac{w_{\min}}{s}\right),
+q_{\min},q_{\max}
+\right).
+$$
+
+The zero-point lives in integer-code coordinates. Mixing it with a real-valued
+offset—subtracting $z$ before dividing by $s$, then adding $z$ after
+dequantization—is a units error.
+
+### One scale can erase a quiet channel
+
+Scale granularity changes the trade—**per-tensor** quantization shares one scale
+across an entire matrix. **Per-row** quantization gives each output row its own
+scale; for a linear layer this is often called per-output-channel quantization.
+More scales cost metadata, but a large row no longer sets the grid spacing for a
+small row.
+
+The next audit creates a $64\times256$ weight matrix whose row ranges span
+$0.01$ to $10$. It compares 8-bit and 4-bit symmetric grids, either global or
+per-row, on 4,096 fixed Gaussian inputs. The code reports relative weight error,
+relative layer-output error, the distribution of row errors, and ideal packed
+payload plus FP32 scale metadata. It reports no runtime—the simple Python arithmetic
+is not a quantized production kernel.
+
+```{python}
+#| label: quantization-audit
+#| code-summary: "Code: compare per-tensor and per-row symmetric quantization, including output error and metadata"
+
+QUANT_D_IN, QUANT_D_OUT = 256, 64
+
+
+def make_quantization_problem(
+    seed: int = 1701,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    generator = torch.Generator().manual_seed(seed)
+    directions = torch.randn(QUANT_D_OUT, QUANT_D_IN, generator=generator)
+    directions = directions / directions.abs().amax(dim=1, keepdim=True)
+    row_ranges = torch.logspace(-2, 1, QUANT_D_OUT).unsqueeze(1)
+    weights = directions * row_ranges
+    inputs = torch.randn(4096, QUANT_D_IN, generator=generator)
+    return weights, inputs
+
+
+def symmetric_quantize(
+    weights: torch.Tensor, bits: int, per_row: bool
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    qmax = 2 ** (bits - 1) - 1
+    scale = (
+        weights.abs().amax(dim=1, keepdim=True) / qmax
+        if per_row else weights.abs().amax() / qmax
+    )
+    scale = torch.where(scale == 0, torch.ones_like(scale), scale)
+    codes = torch.clamp(torch.round(weights / scale), -qmax, qmax).to(torch.int8)
+    reconstructed = codes.float() * scale
+    return codes, reconstructed, scale
+
+
+@torch.no_grad()
+def run_quantization_audit() -> list[dict]:
+    weights, inputs = make_quantization_problem()
+    reference = inputs @ weights.T
+    rows = []
+    for bits in (8, 4):
+        for per_row in (False, True):
+            codes, reconstructed, scale = symmetric_quantize(
+                weights, bits, per_row
+            )
+            row_errors = (
+                torch.linalg.norm(reconstructed - weights, dim=1)
+                / torch.linalg.norm(weights, dim=1)
+            )
+            payload_bytes = codes.numel() * bits / 8
+            metadata_bytes = scale.numel() * 4
+            rows.append({
+                "bits": bits,
+                "granularity": "per-row" if per_row else "per-tensor",
+                "weight_error": (
+                    torch.linalg.norm(reconstructed - weights)
+                    / torch.linalg.norm(weights)
+                ).item(),
+                "output_error": (
+                    torch.linalg.norm(inputs @ reconstructed.T - reference)
+                    / torch.linalg.norm(reference)
+                ).item(),
+                "row_errors": row_errors.numpy(),
+                "row_ranges": weights.abs().amax(dim=1).numpy(),
+                "payload_bytes": int(payload_bytes),
+                "metadata_bytes": int(metadata_bytes),
+                "total_bytes": int(payload_bytes + metadata_bytes),
+            })
+    return rows
+
+
+quant_rows = run_quantization_audit()
+print("bits  scheme       w err   out err  med row  max row  payload  meta  total")
+for row in quant_rows:
+    print(
+        f"{row['bits']:>4}  {row['granularity']:<10}  "
+        f"{row['weight_error']:.4f}      {row['output_error']:.4f}      "
+        f"{np.median(row['row_errors']):.4f}      {row['row_errors'].max():.4f}  "
+        f"{row['payload_bytes']:>7,}  {row['metadata_bytes']:>8,}  "
+        f"{row['total_bytes']:>5,}"
+    )
+```
+
+```{python}
+#| label: fig-quantization-granularity
+#| fig-cap: "Quantization is a grid plus a granularity decision. A 3-bit symmetric example (left) rounds real values to seven levels. In the unequal-row audit, per-row scales reduce relative layer-output error at both bit widths (center). At 8 bits, the global scale entirely erases the smallest rows—relative error 1—while per-row error stays near 0.7% across ranges (right). The improvement costs 256 rather than 4 bytes of FP32 scale metadata."
+#| fig-alt: "A number line shows real values rounding to seven grid points. Hatched bars show lower output error with per-row scales at eight and four bits. A log-log plot shows a global scale erasing small rows while per-row errors stay low."
+#| fig-width: 11
+#| fig-height: 3.7
+#| code-summary: "Figure code: show the quantization grid, output-error trade, and small-row erasure"
+
+fig, axes = plt.subplots(1, 3, figsize=(11, 3.7),
+                         gridspec_kw={"width_ratios": [1.25, 0.92, 1.15]})
+
+grid = np.arange(-3, 4) / 3
+values = np.array([-1.00, -0.79, -0.54, -0.11, 0.08, 0.31, 0.72, 1.00])
+rounded = np.clip(np.round(values * 3), -3, 3) / 3
+axes[0].axhline(0, color="#777777", lw=1)
+axes[0].scatter(grid, np.zeros_like(grid), s=60, color=navy, zorder=3,
+                label="representable grid")
+axes[0].scatter(values, np.full_like(values, 0.48), marker="x", s=48,
+                color=orange, label="real values")
+for value, target in zip(values, rounded):
+    axes[0].add_patch(FancyArrowPatch((value, 0.42), (target, 0.08),
+                                      arrowstyle="->", mutation_scale=8,
+                                      color="#999999", lw=0.8))
+axes[0].set(xlim=(-1.12, 1.12), ylim=(-0.18, 0.72), xlabel="real value",
+            title="3-bit symmetric rounding")
+axes[0].set_yticks([])
+axes[0].legend(frameon=False, fontsize=8, loc="upper left")
+
+labels = ["8-bit", "4-bit"]
+tensor_errors = [next(row["output_error"] for row in quant_rows
+                      if row["bits"] == bits and row["granularity"] == "per-tensor")
+                 for bits in (8, 4)]
+row_errors = [next(row["output_error"] for row in quant_rows
+                   if row["bits"] == bits and row["granularity"] == "per-row")
+              for bits in (8, 4)]
+x = np.arange(2)
+axes[1].bar(x - 0.18, tensor_errors, 0.36, color=navy, hatch="//",
+            edgecolor="white", label="one scale")
+axes[1].bar(x + 0.18, row_errors, 0.36, color=orange, hatch="..",
+            edgecolor="white", label="per row")
+axes[1].set_yscale("log")
+axes[1].set_xticks(x, labels)
+axes[1].set(ylabel="relative output error", title="granularity changes error")
+axes[1].legend(frameon=False, fontsize=8)
+axes[1].grid(axis="y", alpha=0.18)
+
+eight_tensor = next(row for row in quant_rows
+                    if row["bits"] == 8 and row["granularity"] == "per-tensor")
+eight_row = next(row for row in quant_rows
+                 if row["bits"] == 8 and row["granularity"] == "per-row")
+axes[2].loglog(eight_tensor["row_ranges"], eight_tensor["row_errors"], "o-",
+               ms=3, color=navy, label="one scale")
+axes[2].loglog(eight_row["row_ranges"], eight_row["row_errors"], "o-",
+               ms=3, color=orange, label="per row")
+axes[2].set(xlabel="row maximum magnitude", ylabel="relative row error",
+            title="quiet rows need a local grid")
+axes[2].legend(frameon=False, fontsize=8)
+axes[2].grid(alpha=0.18, which="both")
+
+plt.tight_layout()
+plt.show()
+```
+
+The global 8-bit grid has only $2.13\%$ relative output error overall, which sounds
+reassuring until we inspect rows—the median relative row error is $22.13\%$, and the
+quietest rows are reconstructed as all zeros. Per-row scales lower overall output
+error to $0.689\%$ and maximum row error below $0.964\%$. At 4 bits, per-row scales
+improve output error from $26.95\%$ to $12.23\%$, but do not make the approximation
+exact.
+
+The packed 4-bit codes require 8,192 bytes. One FP32 scale brings the global total
+to 8,196 bytes; 64 row scales bring it to 8,448. The live `torch.int8` tensor in
+this teaching cell occupies one byte per code—it is **not** physically packed into
+nibbles. @eq-quant-payload is the payload a packing format could achieve.
+
+::: {.callout-warning}
+## A smaller checkpoint is not automatically faster
+
+Bit count does not determine latency by itself. Real speed depends on supported
+kernels, hardware, packing, dequantization, memory bandwidth, batch shape, and which
+tensors remain in higher precision. Dettmers and colleagues even reported cases
+where LLM.int8() overhead made smaller models slower than FP16. Measure the target
+system; do not turn a file-size ratio into a runtime claim.
+:::
+
+### What a quantization workflow protects
+
+**Post-training quantization (PTQ)** chooses a representation after the base model
+has trained. It may use calibration inputs, but it does not run ordinary end-to-end
+training again. Our uniform audit used only weight ranges. More sophisticated PTQ
+methods protect behavior measured on calibration data. For a layer
+$\matr{W}\in\mathbb{R}^{d_{\mathrm{out}}\times d_{\mathrm{in}}}$ and $n$
+calibration activations
+$\matr{X}\in\mathbb{R}^{d_{\mathrm{in}}\times n}$, GPTQ frames a layerwise
+weight-only problem as
+
+$$
+\widehat{\matr{W}}
+=\argmin_{\widetilde{\matr{W}}\in\mathcal{Q}}
+\left\|\matr{W}\matr{X}
+-\widetilde{\matr{W}}\matr{X}\right\|_F^2,
+$$ {#eq-gptq-objective}
+
+where $\widetilde{\matr{W}}$ has the same shape as $\matr{W}$ and
+$\mathcal{Q}$ is the chosen quantized set. The objective
+protects layer outputs—not ordinary weight MSE and not the original task loss. AWQ
+uses activation evidence to choose channel scaling that protects salient weights.
+These methods make the calibration distribution part of the result.
+
+**Quantization-aware training (QAT)** instead inserts fake quantize–dequantize
+operations into the forward pass while retaining higher-precision shadow weights
+for optimization. Because rounding is nondifferentiable, training uses a surrogate
+gradient such as a straight-through estimator. QAT is not integer-only training;
+conversion to integer execution remains a separate, kernel-dependent step.
+
+Weight-only and weight–activation quantization also answer different bottlenecks.
+A weight-only method leaves activations and the autoregressive key/value cache at
+their chosen compute precision. LLM.int8(), by contrast, quantizes both matrix
+inputs and weights while routing a small activation-outlier subspace through FP16 in
+its studied regime. “8-bit method” is not a complete algorithm description.
+
+### QLoRA: compose a frozen grid with a trainable delta
+
+QLoRA places the two major levers side by side. Store a pretrained base in blockwise
+4-bit **NormalFloat (NF4)**, dequantize blocks to BF16 for matrix multiplication,
+and train higher-precision LoRA factors:
+
+$$
+\vect{h}
+=\operatorname{Dequant}_{\mathrm{NF4}}(\matr{W}_q)\vect{x}
++\frac{\alpha}{r}\matr{B}(\matr{A}\vect{x}).
+$$ {#eq-qlora-forward}
+
+The base codes $\matr{W}_q$ remain frozen. Gradient blame passes through the
+dequantized computation to the LoRA path, but ordinary updates do not rewrite the
+4-bit base. QLoRA is therefore not QAT of the backbone, and “4-bit storage” does
+not mean every multiply or accumulator is 4-bit.
+
+NF4 uses a nonuniform codebook with denser resolution where a standardized normal
+distribution places more probability mass, plus an exact zero. Its information
+argument applies to block-normalized, approximately zero-centered normal weights;
+it is not a universal optimal grid for arbitrary tensors.
+
+```{python}
+#| label: fig-qlora-composition
+#| fig-cap: "QLoRA composes two axes without conflating them. A frozen blockwise NF4 base is dequantized to the compute dtype for the main matrix multiplication. Higher-precision A and B factors form a trainable low-rank branch, and only that branch has optimizer state. The sum defines the adapted layer; storage dtype, compute dtype, and trainable dtype are separate choices."
+#| fig-alt: "A top path sends frozen NF4 codes and scales through dequantization into a base matrix product. A lower trainable A-then-B path processes the same input, and the two outputs are summed."
+#| fig-width: 10
+#| fig-height: 3.8
+#| code-summary: "Figure code: separate QLoRA storage, compute, and trainable paths"
+
+fig, ax = plt.subplots(figsize=(10, 3.8))
+ax.set_xlim(0, 11)
+ax.set_ylim(0, 4)
+ax.axis("off")
+
+def qlora_box(
+    x: float, y: float, width: float, text: str, color: str, subtitle: str
+) -> None:
+    ax.add_patch(FancyBboxPatch(
+        (x, y), width, 0.82, boxstyle="round,pad=0.04,rounding_size=0.08",
+        facecolor=color, edgecolor=color, alpha=0.13, lw=1.4,
+    ))
+    ax.text(x + width / 2, y + 0.52, text, ha="center", va="center",
+            color=color, fontsize=9.5, weight="bold")
+    ax.text(x + width / 2, y + 0.20, subtitle, ha="center", va="center",
+            color="#444444", fontsize=8)
+
+ax.text(0.15, 2.12, "$x$", fontsize=15, va="center")
+qlora_box(0.85, 2.55, 2.15, "NF4 codes + scales", navy, "4-bit frozen storage")
+qlora_box(3.65, 2.55, 2.15, "dequantize block", green, "BF16 compute values")
+qlora_box(6.45, 2.55, 1.55, "$W x$", navy, "frozen path")
+qlora_box(2.20, 0.55, 1.45, "$A x$", orange, "trainable")
+qlora_box(4.25, 0.55, 1.45, "$B(Ax)$", orange, "trainable")
+
+ax.plot([0.55, 0.55, 6.10, 6.10], [2.10, 3.35, 3.35, 2.96],
+        color="#666666", lw=1.4)
+ax.add_patch(FancyArrowPatch((6.10, 2.96), (6.45, 2.96), arrowstyle="->",
+                             mutation_scale=11, color="#666666", lw=1.4))
+arrows = [
+    ((3.0, 2.96), (3.65, 2.96)),
+    ((5.8, 2.96), (6.45, 2.96)), ((0.55, 2.02), (2.20, 0.96)),
+    ((3.65, 0.96), (4.25, 0.96)), ((5.70, 0.96), (8.50, 1.78)),
+    ((8.0, 2.96), (8.50, 2.26)),
+]
+for start, end in arrows:
+    ax.add_patch(FancyArrowPatch(start, end, arrowstyle="->", mutation_scale=11,
+                                 color="#666666", lw=1.4))
+ax.add_patch(FancyBboxPatch((8.48, 1.68), 0.65, 0.65, boxstyle="circle,pad=0.02",
+                            facecolor="#F3F4F6", edgecolor="#777777"))
+ax.text(8.805, 2.01, "+", ha="center", va="center", fontsize=15)
+ax.add_patch(FancyArrowPatch((9.13, 2.01), (10.0, 2.01), arrowstyle="->",
+                             mutation_scale=11, color="#666666", lw=1.4))
+ax.text(10.15, 2.01, "$h$", fontsize=15, va="center")
+ax.text(5.5, 3.72, "storage precision ≠ compute precision ≠ trainable state",
+        ha="center", color=wine, fontsize=12, weight="bold")
+ax.text(4.0, 0.15, "optimizer state exists only for the adapter",
+        ha="center", color=orange, fontsize=8.5)
+plt.tight_layout()
+plt.show()
+```
+
+QLoRA also uses **double quantization**—it quantizes its quantization constants.
+With the paper's illustrative
+group sizes, FP32 constants for each 64-weight block cost $32/64=0.5$ bits per
+weight. Storing those constants at 8 bits and adding one FP32 second-level constant
+per 256 first-level constants costs
+
+$$
+\frac{8}{64}+\frac{32}{64\cdot256}=0.126953
+\quad\text{bits per weight},
+$$
+
+a saving of $0.373047$ bits per weight. That number belongs to those block sizes;
+it is not a universal number of gigabytes. Paged optimizers address transient memory
+spikes in the paper's implementation, while the LoRA factors still carry their own
+gradients and optimizer state.
+
+::: {.callout-note}
+## QLoRA is a composition, not a new objective
+
+NF4 decides how the frozen foundation is stored; LoRA decides where task gradients
+may write. The supervised, preference, or other loss still decides what behavior is
+rewarded. A parameter-efficient route can optimize a poor objective just as
+efficiently as a good one.
+:::
+
+## Choose by the bill you need to reduce
+
+| Method | Task state and permitted writes | Main consequence |
+|---|---|---|
+| Hard prompt / ICL | State in ordinary context; no gradients during use | No learned task checkpoint; longer context |
+| RAG | State in index and retrieved context; writes depend on design | Fresher evidence; retrieval failure surface |
+| Prompt tuning | State in continuous input vectors; write prompt vectors, plus any deliberately unfrozen head | Small learned state; virtual positions remain |
+| Prefix / adapters | State in per-layer prefixes or bottlenecks; write added modules | Small checkpoint; extra inference path |
+| LoRA | State in $\matr{A},\matr{B}$; write factors, plus any deliberately unfrozen head | Conditionally mergeable; rank bottleneck |
+| Full fine-tuning | State in a changed backbone; write all permitted parameters | Maximum update freedom; one full task copy |
+| PTQ | No task state—representation only; no gradients in ordinary PTQ | Smaller weight representation; approximation error |
+| QLoRA | Task state in LoRA factors; codes/scales describe the frozen base; write factors plus any deliberately unfrozen head | Smaller base representation during PEFT; mixed dtypes |
+
+The instructor's practical instinct remains useful: when a carefully evaluated
+prompt or retrieval pipeline solves the task, avoid fine-tuning merely because it
+is available. Treat that as a search heuristic—not a law. A stable format change
+may fit a small adapter; genuinely new knowledge may belong in retrieval or further
+training; a severe source-coverage mismatch may defeat all of them.
+
+That last point harvests Chapter 9's full promise. PEFT changes the cost **after**
+we choose transfer; it does not repeal the coverage condition. A frozen foundation
+cannot guarantee a reliable representation absent from source coverage, and a
+low-rank update does not guarantee that scarce target labels can build the missing
+feature. Quantization preserves or damages an existing computation—it does not add
+coverage.
+
+::: {.callout-warning}
+## Trainable parameters are not total memory
+
+During PEFT, the frozen base still occupies memory and backpropagation still stores
+or recomputes activations through it. During generation, context and key/value caches
+can dominate different regimes. Optimizer dtype and implementation change the bill.
+Report trainable state, base storage, transient training memory, context length, and
+measured runtime separately. One percentage cannot stand in for all five.
+:::
+
+Parameter efficiency also does not guarantee immunity to forgetting or harmful
+behavior. Restricting an update constrains which coordinates or directions are
+available—it does not bound the update's magnitude or certify what the movement
+preserves. Evaluation must include the target task,
+retained capabilities that matter, calibration or distribution shifts, and the
+actual deployment representation.
+
+## The next question: what deserves the update?
+
+**Where the update lives is not what the update optimizes.** Prompt vectors,
+low-rank matrices, and full fine-tuning decide where task gradients may write.
+Quantization decides how values are stored. None decides which answer is helpful,
+harmless, honest, or preferred.
+
+@sec-18-alignment will keep the adaptation machinery and change the question from
+*which parameters move?* to *which objective should move them?* Instruction tuning,
+preference learning, and alignment methods are claims about supervision and
+objectives—not automatic consequences of choosing LoRA or a full checkpoint.
+
+## Okay, so—
+
+1. **Adaptation has three bills.** Backbone storage, incremental task state, and transient
+   work must be reported separately. Zero trainable weights and fewer stored bits
+   do not mean zero inference or training cost.
+2. **Prompting changes context, not weights.** The five-seed permutation study reaches
+   the exact information ceilings while every evaluation weight stays bitwise fixed.
+   RAG is another context lever, with a separate retrieval failure surface.
+3. **PEFT restricts where gradient blame may write.** Prompt tuning, prefixes,
+   adapters, BitFit, and LoRA impose different parameterizations; they are not
+   interchangeable labels for “small fine-tuning.”
+4. **LoRA learns a low-rank correction.** Its trainable count is
+   $r(d_{\mathrm{in}}+d_{\mathrm{out}})$ per targeted matrix, and its rank is a real
+   capacity limit. The planted rank-six experiment fails exactly where it should.
+5. **Quantization is a grid, a granularity, and a workflow.** Per-row scales rescue
+   quiet rows in the controlled audit, but consume metadata. Payload size does not
+   predict runtime without kernels and hardware.
+6. **QLoRA composes representation and adaptation.** A frozen NF4 base is
+   dequantized for compute while higher-precision LoRA factors train. Storage dtype,
+   compute dtype, and trainable dtype are distinct.
+7. **Transfer coverage still governs the choice.** None of these methods creates
+   source knowledge for free. The next chapter will ask what the permitted update
+   should optimize.
+
+## Sources and further reading {.unnumbered}
+
+- [Brown et al., *Language Models are Few-Shot Learners*](https://proceedings.neurips.cc/paper/2020/hash/1457c0d6bfcb4967418bfb8ac142f64a-Abstract.html): GPT-3's zero-, one-, and few-shot evaluation and its model-scale dependence.
+- [Lewis et al., *Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks*](https://arxiv.org/abs/2005.11401): learned retrieval combined with a pretrained generator.
+- [Houlsby et al., *Parameter-Efficient Transfer Learning for NLP*](https://proceedings.mlr.press/v97/houlsby19a.html): bottleneck adapters inserted into a frozen Transformer.
+- [Li and Liang, *Prefix-Tuning: Optimizing Continuous Prompts for Generation*](https://aclanthology.org/2021.acl-long.353/): trainable per-layer prefixes for generation.
+- [Lester et al., *The Power of Scale for Parameter-Efficient Prompt Tuning*](https://aclanthology.org/2021.emnlp-main.243/): input-level soft prompts and the scoped T5 scale study.
+- [Ben-Zaken et al., *BitFit: Simple Parameter-Efficient Fine-Tuning for Transformer-Based Masked Language-Models*](https://aclanthology.org/2022.acl-short.1/): bias-term updates plus the task-specific classifier in the original experiments.
+- [Hu et al., *LoRA: Low-Rank Adaptation of Large Language Models*](https://arxiv.org/abs/2106.09685): the low-rank update parameterization, initialization, and merge.
+- [Wei et al., *Chain-of-Thought Prompting Elicits Reasoning in Large Language Models*](https://arxiv.org/abs/2201.11903): scoped gains from prompting with intermediate reasoning steps.
+- [Turpin et al., *Language Models Don't Always Say What They Think: Unfaithful Explanations in Chain-of-Thought Prompting*](https://arxiv.org/abs/2305.04388): controlled evidence that visible explanations can omit causal influences on predictions.
+- [Greshake et al., *Not What You've Signed Up For: Compromising Real-World LLM-Integrated Applications with Indirect Prompt Injection*](https://arxiv.org/abs/2302.12173): the attack surface created when untrusted retrieved data can act as instructions.
+- [Jacob et al., *Quantization and Training of Neural Networks for Efficient Integer-Arithmetic-Only Inference*](https://openaccess.thecvf.com/content_cvpr_2018/html/Jacob_Quantization_and_Training_CVPR_2018_paper.html): affine quantization and the fake-quantization training pattern.
+- [Dettmers et al., *LLM.int8(): 8-bit Matrix Multiplication for Transformers at Scale*](https://papers.neurips.cc/paper_files/paper/2022/hash/c3ba4962c05c49636d4c6206a97e9c8a-Abstract-Conference.html): mixed-precision decomposition for activation outliers—and measured overhead caveats.
+- [Frantar et al., *GPTQ: Accurate Post-Training Quantization for Generative Pre-trained Transformers*](https://arxiv.org/abs/2210.17323): calibration-output-aware, layerwise weight-only PTQ.
+- [Lin et al., *AWQ: Activation-aware Weight Quantization for LLM Compression and Acceleration*](https://arxiv.org/abs/2306.00978): activation evidence for protecting salient weights.
+- [Dettmers et al., *QLoRA: Efficient Finetuning of Quantized LLMs*](https://papers.nips.cc/paper_files/paper/2023/hash/1feb87871436031bdc0f2beaa62a049b-Abstract-Conference.html): NF4, double quantization, paged optimizers, and LoRA over a frozen quantized base.
+
+## Exercises {.unnumbered}
+
+1. **(Pencil.)** A model has 24 matrices of shape $4096\times4096$. LoRA targets
+   each with rank 16. Compute full and adapter value counts, the adapter fraction,
+   and FP16 adapter bytes. Then compute the ideal 4-bit base payload. Add one FP32
+   scale per block of 64 weights and explain which deployment costs remain absent.
+2. **(Code and interpretation.)** Reproduce the frozen-context experiment, then
+   randomize demonstration order, repeat one group with the same label, and finally
+   insert a contradictory label for a repeated group. Predeclare which interventions
+   preserve @eq-icl-ceiling and which make it inapplicable. Report all seeds and
+   verify bitwise parameter identity before interpreting a difference.
+3. **(Proof and code.)** Prove
+   $\operatorname{rank}(\matr{B}\matr{A})\le r$. Extend the rank-capacity audit with
+   a planted rank-10 correction and ranks $2,6,10,14$. Audit gradients after the
+   first backward pass for (a) random $\matr{A}$ and zero $\matr{B}$, and (b) both
+   factors zero. Verify merged–unmerged equality.
+4. **(Pencil and code.)** Quantize
+   $[-1.2,-0.3,0.0,0.5,1.7]$ onto a signed 4-bit symmetric grid, showing $Q,s,q,$
+   and $\widehat w$. Then construct an affine 8-bit grid for a nonnegative interval.
+   On the chapter's unequal-row matrix, compare calibration and held-out output error
+   after inserting one new outlier row.
+5. **(Decision audit.)** For each of three cases—fresh facts with citations, a stable
+   output format, and a target domain absent from the source data—choose a first
+   experiment among prompting/RAG, PEFT, full tuning, and quantization. State where
+   task state lives, which bill it reduces, what it cannot repair, and one retained
+   behavior you would evaluate. Finally explain why none of those choices answers
+   the Chapter 18 question of which behavior deserves reward.

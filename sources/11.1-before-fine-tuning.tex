@@ -1,0 +1,754 @@
+% Public source snapshot of the instructor's Module 11 lecture notes. Executable
+% implementations, diagram source, and external images are omitted under the
+% boundary in sources/README.md. Headings and claims are preserved for provenance,
+% not endorsed as reproduced results; the book re-derives equations and checks
+% numerical claims against primary papers before use.
+\documentclass{article}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{listings}
+\usepackage[margin=1in]{geometry}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{shapes, arrows, positioning, calc}
+\usepackage{tcolorbox}
+\usepackage{booktabs}
+
+% Define colors
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+
+% Python style
+\lstdefinestyle{pythonstyle}{
+    backgroundcolor=\color{backcolour},
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,
+    breaklines=true,
+    captionpos=b,
+    keepspaces=true,
+    numbers=left,
+    numbersep=5pt,
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    tabsize=2
+}
+\lstset{style=pythonstyle}
+
+\title{Lecture 11.1: Adapting Large Language Models Without Fine-Tuning\\
+In-Context Learning, Prompt Engineering, and RAG}
+\author{Deep Learning Class}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{tcolorbox}[colback=gray!5!white, colframe=gray!60!black, title=Public Snapshot Boundary]
+This provenance snapshot preserves the instructor-authored lecture spine. Executable
+implementations, diagram source, and external images have been omitted; their original
+locations remain marked in the source. Product and numerical claims are historical
+lecture notes and are independently checked before publication in the book.
+\end{tcolorbox}
+
+\begin{tcolorbox}[colback=blue!5!white, colframe=blue!75!black, title=Lecture Overview]
+Today's focus: How to adapt LLMs to specific tasks \textit{without} modifying their parameters.
+
+\textbf{Central thesis}: When you can get away with no fine-tuning, you absolutely should!
+
+\textbf{Topics}:
+\begin{enumerate}
+\item The adaptation challenge: generality vs specificity
+\item In-Context Learning (ICL): Learning without parameter updates
+\item Prompt engineering: The art and science of effective prompts
+\item Retrieval-Augmented Generation (RAG): Grounding LLMs in external knowledge
+\item Why hesitate to fine-tune? Costs, risks, and hidden dangers
+\item Decision framework: When to use each approach
+\item Practical examples with Llama 3.1-8B
+\end{enumerate}
+\end{tcolorbox}
+
+\section{The Adaptation Challenge}
+
+\subsection{The Generality-Specificity Tension}
+
+Large Language Models like GPT-4, Claude, and Llama 3.1 represent a remarkable achievement: models with general-purpose natural language understanding and generation. This proficiency comes from pre-training on trillions of tokens of text.
+
+\textbf{The challenge}: This very generality presents a fundamental problem for practical applications.
+
+\begin{center}
+% [Diagram source omitted from the public snapshot; the book uses independently drawn figures.]
+\end{center}
+
+\textbf{Key limitations of base models}:
+\begin{itemize}
+\item \textbf{Static knowledge}: Fixed training cutoff date (e.g., Llama 3 trained on data through 2023)
+\item \textbf{Diffuse knowledge}: Broad but not deep on specialized domains
+\item \textbf{No private data}: Cannot access proprietary company information
+\item \textbf{Lack of specificity}: May not follow exact style, format, or behavioral requirements
+\end{itemize}
+
+\subsection{Two Paradigms for Adaptation}
+
+How do we bridge this gap? There are two fundamentally different approaches:
+
+\begin{center}
+% [Diagram source omitted from the public snapshot; the book uses independently drawn figures.]
+\end{center}
+
+\textbf{Context Augmentation}: Treat the LLM as a fixed, powerful reasoning engine. Guide its output by providing information, examples, and instructions in the prompt at inference time. The model's weights never change.
+
+\textbf{Parameter Modification}: Adjust the internal weights of the model through additional training on task-specific data, embedding new knowledge or behaviors directly into the model.
+
+\begin{tcolorbox}[colback=yellow!5!white, colframe=orange!50!black, title=Central Principle]
+\textbf{``When you can get away with no fine-tuning, you absolutely should!''}
+
+This lecture will explain why this principle holds and show you powerful techniques that often eliminate the need for fine-tuning entirely.
+\end{tcolorbox}
+
+\section{In-Context Learning: The Remarkable Capability}
+
+\subsection{What is In-Context Learning?}
+
+\textbf{Definition}: In-Context Learning (ICL) is the ability of large language models to learn a new task from examples or instructions provided in the prompt, \textit{without any parameter updates}.
+
+\textbf{Key characteristics}:
+\begin{itemize}
+\item Model weights remain \textbf{completely frozen}
+\item ``Learning'' is transient, lasting only for that inference
+\item The prompt itself serves as the ``training'' for the task
+\item No gradient descent, no backpropagation, no optimization
+\end{itemize}
+
+\begin{center}
+% [Diagram source omitted from the public snapshot; the book uses independently drawn figures.]
+\end{center}
+
+\subsection{How ICL Works: The Mechanism}
+
+\textbf{Core mechanism}: Pattern recognition and analogical reasoning through the attention mechanism.
+
+When you provide examples in the prompt, the model's multi-head attention analyzes these demonstrations to:
+\begin{enumerate}
+\item Identify the underlying task structure
+\item Recognize input-output patterns
+\item Infer the desired format and style
+\item Extrapolate to new, unseen queries
+\end{enumerate}
+
+\textbf{Example}: Sentiment classification with ICL
+
+\begin{tcolorbox}[colback=gray!5!white, colframe=gray!50!black, title=ICL Prompt]
+\textbf{Task}: Classify the sentiment of movie reviews as positive or negative.
+
+\textbf{Examples}:
+\begin{itemize}
+\item Review: ``This movie was absolutely fantastic! I loved every minute.''\\
+Sentiment: Positive
+\item Review: ``Terrible film. Waste of time and money.''\\
+Sentiment: Negative
+\item Review: ``An unexpected masterpiece with brilliant acting.''\\
+Sentiment: Positive
+\end{itemize}
+
+\textbf{New query}:\\
+Review: ``The plot was confusing and the pacing was too slow.''\\
+Sentiment: ?
+\end{tcolorbox}
+
+The model recognizes the pattern and responds: ``Negative''
+
+\textbf{What makes this remarkable}:
+\begin{itemize}
+\item No training data collection or annotation
+\item No model training or optimization
+\item Instant adaptation at inference time
+\item Same model can handle countless tasks by changing the prompt
+\end{itemize}
+
+\subsection{The Scaling Law for ICL}
+
+\begin{tcolorbox}[colback=blue!5!white, colframe=blue!75!black, title=Critical Finding: ICL and Model Scale]
+The effectiveness of In-Context Learning is \textbf{strongly dependent on model scale}.
+
+\textbf{Empirical observation}: Larger models, pre-trained on more data, exhibit dramatically better ICL performance.
+
+\textbf{Why?} Extensive pre-training endows large models with sophisticated understanding of language patterns, enabling them to recognize and utilize contextual cues more effectively.
+\end{tcolorbox}
+
+\textbf{Implications for practice}:
+\begin{itemize}
+\item Small models ($<$1B parameters): ICL capabilities are limited
+\item Medium models (7-13B parameters like Llama 3.1-8B): Strong ICL for many tasks
+\item Large models ($>$70B parameters): Exceptional ICL, approaching fine-tuned performance
+\end{itemize}
+
+\textbf{Good news}: Modern open-weight models like Llama 3.1-8B have reached the scale where ICL is highly effective for a wide range of applications.
+
+\section{Prompt Engineering: Crafting Effective Prompts}
+
+\subsection{The Importance of Prompt Design}
+
+\textbf{Key insight}: The model's output \textit{heavily depends} on how the input is phrased and structured.
+
+Small changes in wording, example ordering, or formatting can significantly affect results. This makes prompt engineering both an art and a science.
+
+\begin{center}
+% [Diagram source omitted from the public snapshot; the book uses independently drawn figures.]
+\end{center}
+
+\textbf{Prompt engineering}: The practice of systematically designing effective prompts to guide the model's behavior and maximize task performance.
+
+\subsection{Core Prompting Strategies}
+
+\subsubsection{1. Zero-Shot Prompting}
+
+\textbf{Definition}: Give the model an instruction or question with no examples---just a description of the task.
+
+\textbf{Example}:
+% [Implementation omitted from the public snapshot: independent provenance was not established. See sources/README.md.]
+
+\textbf{When to use}: For simple, well-defined tasks where the model likely has seen many similar examples during pre-training.
+
+\subsubsection{2. Few-Shot Prompting}
+
+\textbf{Definition}: Provide one or more demonstration examples of input-output pairs so the model can mimic the pattern.
+
+\textbf{Example}:
+% [Implementation omitted from the public snapshot: independent provenance was not established. See sources/README.md.]
+
+\textbf{Best practices}:
+\begin{itemize}
+\item Use 2-5 diverse, high-quality examples
+\item Ensure examples cover edge cases
+\item Maintain consistent formatting across examples
+\item Order matters: sometimes quality examples should go first
+\end{itemize}
+
+\subsubsection{3. Chain-of-Thought (CoT) Prompting}
+
+\textbf{Breakthrough technique}: Dramatically improves performance on complex reasoning tasks by including intermediate reasoning steps in the examples.
+
+\textbf{Key insight}: Standard prompting asks for a direct answer, forcing the model to compute the solution in one step. CoT prompting encourages the model to ``think step by step'', decomposing the problem.
+
+\begin{tcolorbox}[colback=yellow!5!white, colframe=orange!50!black, title=Power of Chain-of-Thought]
+\textbf{Impact}: CoT prompting can improve accuracy by up to +18\% on arithmetic reasoning tasks and even more on complex multi-step problems.
+
+\textbf{Why it works}:
+\begin{itemize}
+\item Allocates more computation to each reasoning step
+\item Makes the reasoning process explicit and verifiable
+\item Helps the model avoid shortcuts that lead to errors
+\item Provides interpretability into the model's thought process
+\end{itemize}
+\end{tcolorbox}
+
+\textbf{Example: Standard vs CoT}
+
+\textbf{Standard prompting}:
+\begin{tcolorbox}[colback=gray!5!white, colframe=gray!50!black]
+Q: Roger has 5 tennis balls. He buys 2 more cans of tennis balls. Each can has 3 tennis balls. How many tennis balls does he have now?
+
+A: 11
+\end{tcolorbox}
+
+\textbf{Chain-of-Thought prompting}:
+\begin{tcolorbox}[colback=green!5!white, colframe=green!50!black]
+Q: Roger has 5 tennis balls. He buys 2 more cans of tennis balls. Each can has 3 tennis balls. How many tennis balls does he have now?
+
+A: Roger started with 5 balls. 2 cans of 3 tennis balls each is $2 \times 3 = 6$ tennis balls. $5 + 6 = 11$. The answer is 11.
+\end{tcolorbox}
+
+\textbf{Advanced CoT Variants}:
+
+\begin{itemize}
+\item \textbf{Zero-Shot CoT}: Simply append ``Let's think step by step'' to the query---no examples needed! Surprisingly effective for large models.
+
+\item \textbf{Self-Consistency}: Generate multiple reasoning chains for the same question (using sampling), then take a majority vote among the final answers. More robust to occasional reasoning errors.
+
+\item \textbf{Auto-CoT}: Automatically generate reasoning chain examples by clustering questions and generating chains for representative samples.
+\end{itemize}
+
+\subsection{Automated Prompt Optimization}
+
+\textbf{Challenge}: Manually crafting optimal prompts can be time-consuming and requires expertise.
+
+\textbf{Solution}: Use learning algorithms or auxiliary models to automatically improve prompts.
+
+\begin{center}
+% [Diagram source omitted from the public snapshot; the book uses independently drawn figures.]
+\end{center}
+
+\textbf{Key approaches}:
+
+\begin{enumerate}
+\item \textbf{AutoPrompt}: Search in the space of possible prompts (even at token level) using gradient signals. Can discover prompts that match fine-tuned model performance without parameter updates.
+
+\item \textbf{RL-based optimization}: Train a small neural policy network to generate prompts that maximize the target LLM's performance reward.
+
+\item \textbf{LLM-as-optimizer}: Use a separate LLM to iteratively refine prompts based on feedback.
+\end{enumerate}
+
+\textbf{Key insight}: We can often achieve better task performance by improving the prompt itself---using machine learning or programmatic search---rather than adjusting the large model's weights.
+
+\subsection{Practical Prompt Engineering with Llama 3.1-8B}
+
+% [Implementation omitted from the public snapshot: independent provenance was not established. See sources/README.md.]
+
+% [Implementation omitted from the public snapshot: independent provenance was not established. See sources/README.md.]
+
+\section{Retrieval-Augmented Generation (RAG)}
+
+\subsection{The Knowledge Problem}
+
+\textbf{Limitation}: Even with excellent ICL and prompting, the model can only work with:
+\begin{itemize}
+\item Knowledge from its pre-training (cutoff date: 2023 for Llama 3)
+\item Information you can fit in the context window
+\end{itemize}
+
+\textbf{Problem scenarios}:
+\begin{itemize}
+\item Need current information (news, stock prices, recent events)
+\item Large proprietary knowledge base (company documents, medical records)
+\item Domain-specific information not well-represented in pre-training
+\item Verifiable, attributed answers (citations required)
+\end{itemize}
+
+\textbf{Solution}: Retrieval-Augmented Generation (RAG)
+
+\subsection{RAG Architecture and Pipeline}
+
+\textbf{Core principle}: Combine the LLM's reasoning abilities with an external, updatable knowledge base. Ground the model's responses in retrieved, authoritative information.
+
+\begin{center}
+% [Diagram source omitted from the public snapshot; the book uses independently drawn figures.]
+\end{center}
+
+\subsection{RAG Pipeline Steps}
+
+\subsubsection{Step 1: Indexing and Data Preparation (Offline)}
+
+\textbf{Input}: External corpus (PDFs, documents, websites, databases)
+
+\textbf{Process}:
+\begin{enumerate}
+\item \textbf{Parse}: Extract text from various formats
+\item \textbf{Chunk}: Segment into smaller pieces
+\begin{itemize}
+\item Too large: Too general, may overflow context window
+\item Too small: Loses semantic context
+\item Typical: 256-512 tokens per chunk with overlap
+\end{itemize}
+\item \textbf{Embed}: Transform each chunk into a high-dimensional vector using an embedding model (e.g., sentence-transformers)
+\item \textbf{Store}: Save vectors in a vector database (e.g., FAISS, Pinecone, Weaviate, Chroma)
+\end{enumerate}
+
+\textbf{Key property}: In the vector space, semantically similar chunks are located close to each other, enabling semantic search rather than just keyword matching.
+
+\subsubsection{Step 2: Retrieval at Query Time (Online)}
+
+\textbf{Input}: User query
+
+\textbf{Process}:
+\begin{enumerate}
+\item \textbf{Embed query}: Convert query to vector using the \textit{same} embedding model
+\item \textbf{Similarity search}: Find top-$k$ most similar chunks using cosine similarity or dot product
+\item \textbf{(Optional) Re-rank}: Use a re-ranking model to further refine relevance
+\end{enumerate}
+
+\textbf{Output}: Top-$k$ most relevant text chunks from the knowledge base
+
+\subsubsection{Step 3: Prompt Augmentation and Generation (Online)}
+
+\textbf{Input}: Original query + retrieved chunks
+
+\textbf{Process}:
+\begin{enumerate}
+\item \textbf{Synthesize prompt}: Combine query and retrieved content
+\item \textbf{Generate}: Pass augmented prompt to LLM (e.g., Llama 3.1-8B)
+\item \textbf{Output}: Comprehensive, grounded answer with optional source attribution
+\end{enumerate}
+
+\subsection{The Core Value Proposition of RAG}
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\textbf{Challenge} & \textbf{Fine-Tuning Approach} & \textbf{RAG Approach} \\
+\midrule
+Hallucinations & Reduces but doesn't eliminate & Grounds in verifiable sources \\
+Data freshness & Requires retraining & Update knowledge base instantly \\
+Transparency & Black box & Can cite source documents \\
+Privacy/Security & Embeds in weights & Data stays in secure database \\
+Cost & High (retraining) & Moderate (maintain database) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsubsection{1. Mitigation of Hallucinations}
+
+\textbf{Problem}: LLMs can generate factually incorrect or nonsensical information (``hallucination'').
+
+\textbf{RAG solution}: By grounding every response in specific retrieved information, RAG significantly reduces hallucination. The model is instructed to base its answer on provided context.
+
+\subsubsection{2. Ensuring Data Freshness}
+
+\textbf{Problem}: Foundation models have fixed knowledge cutoff dates.
+
+\textbf{RAG solution}: The external knowledge base can be continuously updated. No need to retrain the model---just update the vector database.
+
+\textbf{Example}: Llama 3 has a 2023 cutoff. Using RAG, it can answer questions about 2024 or 2025 events by retrieving recent documents.
+
+\subsubsection{3. Source Attribution and Transparency}
+
+\textbf{RAG advantage}: Can present retrieved source documents as citations, allowing users to verify information.
+
+\textbf{Fine-tuning limitation}: Knowledge is opaquely embedded in weights---impossible to trace the origin of specific information.
+
+\subsubsection{4. Enhanced Security and Privacy}
+
+\textbf{For enterprises with proprietary data}:
+\begin{itemize}
+\item Store confidential data in secure, on-premise vector database
+\item LLM only sees small, relevant snippets at query time
+\item Data never used to train or update model parameters
+\item Prevents sensitive information from leaking to third-party models
+\end{itemize}
+
+\subsection{RAG and Large Context Windows: A Game Changer}
+
+\begin{tcolorbox}[colback=blue!5!white, colframe=blue!75!black, title=The 128K Context Window Revolution]
+\textbf{Llama 3.1}: 128,000-token context window (equivalent to $\sim$300 pages of text)
+
+\textbf{Impact}: Fundamentally reshapes the RAG vs fine-tuning calculus.
+
+\textbf{Historical constraint}: Early models had 2K-4K token windows, making it impossible to provide sufficient context in the prompt. Fine-tuning was often the only option for knowledge injection.
+
+\textbf{New reality}: With 128K tokens, we can:
+\begin{itemize}
+\item Include hundreds of retrieved documents in a single prompt
+\item Use ``context stuffing''---provide entire knowledge base directly
+\item Eliminate the need for fine-tuning for many knowledge tasks
+\end{itemize}
+\end{tcolorbox}
+
+\textbf{Strategic implications}:
+\begin{itemize}
+\item For \textbf{large, dynamic corpora}: Use RAG with retrieval
+\item For \textbf{small, static document sets}: Direct context injection (no RAG needed)
+\item \textbf{Reserve fine-tuning} for behavior/style modification, not knowledge transfer
+\end{itemize}
+
+\subsection{Practical RAG Implementation with Llama 3.1-8B}
+
+% [Implementation omitted from the public snapshot: independent provenance was not established. See sources/README.md.]
+
+% [Implementation omitted from the public snapshot: independent provenance was not established. See sources/README.md.]
+
+\section{Why Hesitate to Fine-Tune?}
+
+We've seen powerful techniques for adapting LLMs without touching their parameters. But why should we prefer these methods over fine-tuning? Let's examine the hidden costs and dangers of parameter modification.
+
+\subsection{Reason 1: Catastrophic Forgetting}
+
+\textbf{Definition}: When fine-tuned on a new task, the model often loses proficiency on previously learned tasks. The fine-tuning process overwrites knowledge acquired during pre-training.
+
+\begin{center}
+% [Diagram source omitted from the public snapshot; the book uses independently drawn figures.]
+\end{center}
+
+\textbf{Example}: Fine-tune Llama 3.1-8B extensively on legal documents:
+\begin{itemize}
+\item[$+$] Improves legal reasoning
+\item[$-$] May lose ability to write creative stories
+\item[$-$] May degrade at code generation
+\item[$-$] May lose multilingual capabilities
+\end{itemize}
+
+\textbf{Mechanism}: During fine-tuning, gradient updates shift weights to optimize for the new task. This can move weights away from optimal points for pre-trained tasks, effectively ``overwriting'' that knowledge.
+
+\textbf{Implications}:
+\begin{itemize}
+\item Fine-tuning is a \textbf{trade-off}: specialized expertise at the cost of generalist capability
+\item May need to maintain multiple model versions (base + fine-tuned) for different use cases
+\item ICL and RAG preserve the original model's versatility
+\end{itemize}
+
+\subsection{Reason 2: The Alignment Tax}
+
+\begin{tcolorbox}[colback=red!5!white, colframe=red!75!black, title=The Alignment Tax]
+\textbf{Definition}: The process of aligning an LLM with human preferences (via RLHF, DPO, etc.) can lead to degradation in the model's performance on standard benchmarks.
+
+\textbf{Trade-off}: As a model becomes more ``aligned'' (helpful, harmless, honest), its raw capabilities may decline.
+\end{tcolorbox}
+
+\textbf{Mechanism}:
+\begin{itemize}
+\item Alignment constrains the model's output space
+\item Teaching caution and safety may reduce creative reasoning
+\item Model may overfit to biases in human preference data
+\item Knowledge forgetting occurs during alignment training
+\end{itemize}
+
+\textbf{Implication}: Every step to make a model more polished through fine-tuning may simultaneously make it less capable in fundamental ways.
+
+\subsection{Reason 3: Compromised Safety Guardrails}
+
+\begin{tcolorbox}[colback=red!10!white, colframe=red!75!black, title=Critical Security Risk]
+\textbf{Alarming finding}: Fine-tuning can easily and systematically dismantle safety guardrails that prevent harmful outputs.
+
+\textbf{Research from Stanford, Princeton, and IBM}:
+\begin{itemize}
+\item Fine-tuning on as few as \textbf{10 harmful examples} can ``jailbreak'' models like GPT-3.5 or Llama 2
+\item \textbf{Cost}: Only \$0.20 on a commercial API
+\item Even fine-tuning on \textbf{benign datasets} can unintentionally degrade safety
+\end{itemize}
+
+\textbf{Mechanism}: Fine-tuning doesn't teach new harmful behaviors---it \textbf{removes} safety guardrails, revealing latent dangerous capabilities.
+\end{tcolorbox}
+
+\textbf{Example}: Llama 3.1-8B-Instruct has been carefully aligned to refuse:
+\begin{itemize}
+\item Instructions for building weapons
+\item Generating malware
+\item Creating hate speech
+\item Harmful medical advice
+\end{itemize}
+
+\textbf{Risk}: Fine-tuning for any purpose may weaken these protections.
+
+\textbf{Contrast with RAG/ICL}: These methods do not modify parameters, so they \textbf{do not interfere} with core safety alignment.
+
+\subsection{Reason 4: Expertise and Scale Required}
+
+\textbf{Challenge 1: Computational Cost}
+\begin{itemize}
+\item Full fine-tuning of 8B model: Requires high-end GPU (A100/H100)
+\item Training time: Hours to days depending on dataset size
+\item Cost: \$100s to \$1000s per training run
+\end{itemize}
+
+\textbf{Challenge 2: Data Requirements}
+\begin{itemize}
+\item Need high-quality, labeled dataset
+\item Typical: 1000s to 100,000s of examples
+\item Manual annotation by domain experts: \$100,000+ for complex domains
+\end{itemize}
+
+\textbf{Challenge 3: Technical Expertise}
+\begin{itemize}
+\item Requires deep ML/NLP expertise
+\item Hyperparameter tuning (learning rate, batch size, epochs)
+\item Evaluation and debugging
+\item Risk of overfitting or misalignment if done incorrectly
+\end{itemize}
+
+\textbf{Contrast}: Prompt engineering and RAG require more software engineering and data management skills than deep learning expertise---lower barrier to entry.
+
+\subsection{Reason 5: Maintenance and Update Complexity}
+
+\textbf{Fine-tuning creates a fork}:
+\begin{itemize}
+\item Creates a new model instance specific to your task
+\item When base model is updated (bug fixes, improvements), your fine-tuned version doesn't automatically benefit
+\item Must re-fine-tune on new base model to incorporate improvements
+\end{itemize}
+
+\textbf{RAG/Prompting advantage}:
+\begin{itemize}
+\item Can upgrade to newer/better base model effortlessly
+\item Just prompt the new model the same way or plug retrieval into it
+\item No retraining required
+\end{itemize}
+
+\subsection{Reason 6: Models Are Optimized by Labs with Expertise}
+
+\begin{tcolorbox}[colback=yellow!5!white, colframe=orange!50!black, title=Trust the Experts]
+State-of-the-art LLMs like Llama 3.1 are the result of:
+\begin{itemize}
+\item Years of research and engineering
+\item Billions of dollars in compute
+\item Careful optimization by world-class ML teams
+\item Extensive safety alignment and red-teaming
+\end{itemize}
+
+\textbf{Risk}: By modifying weights without the same level of rigor, you may:
+\begin{itemize}
+\item Deteriorate overall performance
+\item Violate safety alignment
+\item Introduce unexpected behaviors
+\end{itemize}
+
+\textbf{Principle}: If you're not Meta/OpenAI/Anthropic with massive resources, be cautious about changing what they've built.
+\end{tcolorbox}
+
+\section{Decision Framework: When to Use Each Approach}
+
+\subsection{The Stepwise Approach}
+
+Follow this progression---\textbf{always try less invasive methods first}:
+
+\begin{center}
+% [Diagram source omitted from the public snapshot; the book uses independently drawn figures.]
+\end{center}
+
+\subsection{Comparative Analysis}
+
+\begin{center}
+\small
+\begin{tabular}{p{2.5cm}p{3.5cm}p{3.5cm}p{3.5cm}}
+\toprule
+\textbf{Dimension} & \textbf{Prompting/ICL} & \textbf{RAG} & \textbf{Fine-Tuning} \\
+\midrule
+\textbf{Goal} & Task guidance, reasoning & Knowledge injection & Behavior/style change \\
+\midrule
+\textbf{Data freshness} & N/A & Excellent (real-time) & Poor (static) \\
+\midrule
+\textbf{Hallucination} & Moderate & Low (grounded) & Moderate-Low \\
+\midrule
+\textbf{Transparency} & High & High (citations) & Low (black box) \\
+\midrule
+\textbf{Safety risk} & None & None & High \\
+\midrule
+\textbf{Forgetting} & None & None & High \\
+\midrule
+\textbf{Cost} & Very low & Low-Moderate & High \\
+\midrule
+\textbf{Expertise} & Low & Moderate & High \\
+\midrule
+\textbf{Latency} & Low & Moderate & Low \\
+\midrule
+\textbf{Maintenance} & Easy & Easy (update DB) & Hard (retrain) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{When Fine-Tuning IS Appropriate}
+
+Fine-tuning is the right choice when:
+
+\begin{enumerate}
+\item \textbf{Behavioral modification}: Need to change how the model acts, not what it knows
+\begin{itemize}
+\item Example: Always output in JSON format
+\item Example: Adopt specific brand personality/tone
+\item Example: Follow domain-specific reasoning patterns
+\end{itemize}
+
+\item \textbf{Style enforcement}: Need consistent style that prompting can't reliably achieve
+\begin{itemize}
+\item Example: Medical report writing style
+\item Example: Legal document formatting
+\end{itemize}
+
+\item \textbf{Skill acquisition}: Teaching complex, specialized skills
+\begin{itemize}
+\item Example: Proprietary programming language
+\item Example: Domain-specific reasoning (e.g., radiology interpretation)
+\end{itemize}
+
+\item \textbf{Prompt compression}: When optimal prompt is too long for context window
+\begin{itemize}
+\item Can ``distill'' long instructions into model weights
+\end{itemize}
+\end{enumerate}
+
+\textbf{Important}: Even when fine-tuning is appropriate, use \textbf{Parameter-Efficient Fine-Tuning (PEFT)} methods like LoRA (topic of next lecture) to minimize risks.
+
+\section{Summary and Looking Ahead}
+
+\subsection{Key Takeaways}
+
+\begin{enumerate}
+\item \textbf{In-Context Learning} is a remarkable capability that allows LLMs to adapt to new tasks without parameter updates. Modern models like Llama 3.1-8B have strong ICL abilities.
+
+\item \textbf{Prompt engineering} is the first line of attack for any adaptation task. Simple techniques like few-shot prompting and Chain-of-Thought can achieve impressive results.
+
+\item \textbf{RAG} is the superior method for knowledge injection. It provides:
+\begin{itemize}
+\item Fresh, updatable information
+\item Reduced hallucination
+\item Source attribution and transparency
+\item Better security for proprietary data
+\end{itemize}
+
+\item \textbf{Large context windows} (128K tokens in Llama 3.1) fundamentally change the game, making fine-tuning for knowledge transfer largely obsolete.
+
+\item \textbf{Fine-tuning carries serious risks}:
+\begin{itemize}
+\item Catastrophic forgetting
+\item Alignment tax
+\item Safety guardrail degradation
+\item High cost and expertise requirements
+\item Maintenance complexity
+\end{itemize}
+
+\item \textbf{General principle}: ``When you can get away with no fine-tuning, you absolutely should!''
+\end{enumerate}
+
+\subsection{The Adaptation Hierarchy}
+
+\begin{center}
+% [Diagram source omitted from the public snapshot; the book uses independently drawn figures.]
+\end{center}
+
+\subsection{Next Lecture: When We Must Fine-Tune}
+
+In the next lecture, we'll cover Parameter-Efficient Fine-Tuning (PEFT):
+
+\begin{itemize}
+\item When fine-tuning is truly necessary
+\item The baseline: Full Fine-Tuning and its costs
+\item PEFT taxonomy: Additive, Selective, and Prompt-Based methods
+\item LoRA: Low-Rank Adaptation in depth
+\item Practical implementation with Llama 3.1-8B
+\item Hybrid approaches: Combining RAG with fine-tuning
+\end{itemize}
+
+\begin{tcolorbox}[colback=blue!5!white, colframe=blue!75!black, title=The Complete Picture]
+\textbf{Best practice}: Use a modular, hybrid approach
+\begin{itemize}
+\item Start with prompting and RAG (today's lecture)
+\item If necessary, use minimal PEFT (next lecture)
+\item Combine approaches for optimal results
+\end{itemize}
+
+The future of LLM applications is not about choosing between fine-tuning and prompting---it's about intelligently combining them in a sophisticated system architecture.
+\end{tcolorbox}
+
+\section{Further Reading}
+
+\subsection{In-Context Learning}
+\begin{itemize}
+\item Brown et al. (2020). ``Language Models are Few-Shot Learners.'' (GPT-3 paper)
+\item IBM Research. ``What is In-Context Learning?''
+\item Wei et al. (2022). ``Emergent Abilities of Large Language Models.''
+\end{itemize}
+
+\subsection{Prompt Engineering}
+\begin{itemize}
+\item Wei et al. (2022). ``Chain-of-Thought Prompting Elicits Reasoning in Large Language Models.''
+\item Kojima et al. (2022). ``Large Language Models are Zero-Shot Reasoners.''
+\item Shin et al. (2020). ``AutoPrompt: Eliciting Knowledge from Language Models with Automatically Generated Prompts.''
+\end{itemize}
+
+\subsection{Retrieval-Augmented Generation}
+\begin{itemize}
+\item Lewis et al. (2020). ``Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks.''
+\item Gao et al. (2023). ``Retrieval-Augmented Generation for Large Language Models: A Survey.''
+\end{itemize}
+
+\subsection{Fine-Tuning Risks}
+\begin{itemize}
+\item Qi et al. (2023). ``Fine-tuning Aligned Language Models Compromises Safety, Even When Users Do Not Intend To!'' (Stanford/Princeton/IBM)
+\item Kirkpatrick et al. (2017). ``Overcoming Catastrophic Forgetting in Neural Networks.''
+\end{itemize}
+
+\end{document}

@@ -1,0 +1,803 @@
+% Public source snapshot of the instructor's Module 11 lecture notes. Executable
+% implementations, diagram source, and external images are omitted under the
+% boundary in sources/README.md. Headings and claims are preserved for provenance,
+% not endorsed as reproduced results; the book re-derives equations and checks
+% numerical claims against primary papers before use.
+\documentclass{article}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{listings}
+\usepackage[margin=1in]{geometry}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{shapes, arrows, positioning, calc}
+\usepackage{tcolorbox}
+\usepackage{booktabs}
+\usepackage{url}
+% Define colors
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+
+% Python style
+\lstdefinestyle{pythonstyle}{
+    backgroundcolor=\color{backcolour},
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,
+    breaklines=true,
+    captionpos=b,
+    keepspaces=true,
+    numbers=left,
+    numbersep=5pt,
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    tabsize=2
+}
+\lstset{style=pythonstyle}
+
+\title{Lecture 11.2: Pretraining, Fine-tuning, and Scaling Laws\\
+From Task-Specific Models to Foundation Models}
+\author{Deep Learning Class}
+\date{\today}
+
+\begin{document}
+\maketitle
+\begin{tcolorbox}[colback=gray!5!white, colframe=gray!60!black, title=Public Snapshot Boundary]
+This provenance snapshot preserves the instructor-authored lecture spine. Executable
+implementations, diagram source, and external images have been omitted; their original
+locations remain marked in the source. Product and numerical claims are historical
+lecture notes and are independently checked before publication in the book.
+\end{tcolorbox}
+\section{Parameter-Efficient Fine-Tuning: A Pedagogical Taxonomy}
+
+\subsection{The Adaptation Imperative}
+
+The dominant paradigm in modern NLP consists of a two-stage process:
+
+\begin{enumerate}
+\item \textbf{Pre-training}: Large-scale, self-supervised learning on vast corpora of general domain data (e.g., 2 trillion tokens)
+\item \textbf{Adaptation}: Specialization to specific downstream tasks or domains
+\end{enumerate}
+
+This ``generalist-to-specialist'' pipeline has proven remarkably effective. Models acquire broad linguistic and world knowledge during pre-training, which can then be specialized for particular applications.
+
+However, as models have scaled to hundreds of billions of parameters, traditional adaptation methods have become computationally and financially prohibitive. This creates a fundamental bottleneck: \textit{How can we efficiently adapt massive pre-trained models without the costs of full fine-tuning?}
+
+\subsection{The Modern LLM Training Pipeline}
+
+Before diving into Parameter-Efficient Fine-Tuning (PEFT), let's understand where adaptation fits in the full training lifecycle:
+
+\begin{center}
+% [Diagram source omitted from the public snapshot; the book uses independently drawn figures.]
+\end{center}
+
+\textbf{The challenge}: Steps 2-4 all involve fine-tuning, and there are unlimited possibilities for task-specific applications. We need efficient methods to explore all these adaptation paths.
+
+\section{The Baseline: Promises and Perils of Full Fine-Tuning}
+
+To understand PEFT, we must first analyze the method it seeks to replace: Full Fine-Tuning (FFT).
+
+\subsection{FFT as the Performance Gold Standard}
+
+\textbf{Definition}: Full Fine-Tuning updates \textit{all} parameters $\theta$ of a pre-trained model during adaptation.
+
+By updating every weight, FFT provides maximum expressive capacity for the model to adapt its internal representations to the nuances of a new task. Consequently, \textbf{FFT serves as the performance benchmark} that all PEFT methods aim to match.
+
+\subsection{The Prohibitive Costs of Full Adaptation}
+
+The primary driver for PEFT development is the exorbitant cost of FFT, which manifests in three key areas:
+
+\subsubsection{1. Computational Expense}
+
+FFT demands immense computational resources:
+\begin{itemize}
+\item Requires clusters of high-end GPUs (A100s, H100s)
+\item Single fine-tuning run: thousands to tens of thousands of dollars
+\item Limits experimentation and accessibility for smaller organizations
+\end{itemize}
+
+\subsubsection{2. Memory Footprint}
+
+VRAM consumption during training is driven by three components:
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\textbf{Component} & \textbf{Size (16-bit)} & \textbf{Example (7B model)} \\
+\midrule
+Model weights & $2N$ bytes & 14 GB \\
+Gradients & $2N$ bytes & 14 GB \\
+Optimizer states (Adam) & $8N$ bytes & 56 GB \\
+\midrule
+\textbf{Total} & $\mathbf{12N}$ bytes & \textbf{84 GB} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+This makes fine-tuning large models impossible on consumer hardware.
+
+\subsubsection{3. Storage Inefficiency}
+
+FFT produces a complete, new copy of the entire model for every task:
+
+\begin{itemize}
+\item 70B parameter model: $\sim$140 GB per task
+\item 10 tasks: 1.4 TB storage
+\item Maintaining dozens of task-specific models is impractical
+\end{itemize}
+
+\begin{center}
+% [Diagram source omitted from the public snapshot; the book uses independently drawn figures.]
+\end{center}
+
+\subsection{The Representational Challenge: Catastrophic Forgetting}
+
+Beyond resource constraints, FFT faces a fundamental problem: \textbf{catastrophic forgetting}.
+
+\begin{tcolorbox}[colback=red!5!white, colframe=red!75!black, title=Catastrophic Forgetting]
+When a model is fine-tuned on Task B, it often loses proficiency on previously learned Task A. Gradient updates for the new task overwrite the knowledge representations crucial for the old task.
+\end{tcolorbox}
+
+\textbf{Mechanism}: During fine-tuning for Task B, gradient updates significantly shift parameters to minimize loss on the new data distribution. These updates can overwrite knowledge representations crucial for Task A, as the model over-prioritizes new information.
+
+\textbf{Implication}: FFT is fundamentally unsuitable for applications requiring incremental knowledge accumulation over time without retraining on all previous data simultaneously.
+
+\textbf{Important caveat}: While PEFT methods are often cited as a solution to catastrophic forgetting, this is an oversimplification. Studies show that some PEFT techniques (e.g., LoRA) can still suffer from significant forgetting in sequential learning scenarios. Parameter efficiency alone does not guarantee preservation of prior knowledge.
+
+\section{A Foundational Taxonomy of PEFT Methods}
+
+The PEFT paradigm seeks to achieve FFT-level performance while updating a tiny fraction of parameters (often $<$1\%), drastically reducing computational, memory, and storage costs.
+
+\subsection{The Three-Category Framework}
+
+We organize PEFT methods by \textit{how they interact with the original model's parameters} $\theta$:
+
+\begin{center}
+% [Diagram source omitted from the public snapshot; the book uses independently drawn figures.]
+\end{center}
+
+\begin{enumerate}
+\item \textbf{Additive Methods}: Freeze base model weights $\theta$ and introduce new, trainable parameters $\phi$
+\item \textbf{Selective Methods}: Freeze most weights and strategically unfreeze a small subset $\theta' \subset \theta$
+\item \textbf{Prompt-Based Methods}: Freeze the entire model and optimize learnable ``virtual tokens'' at input or intermediate layers
+\end{enumerate}
+
+\subsection{Master Taxonomy Table}
+
+\begin{center}
+\begin{tabular}{llll}
+\toprule
+\textbf{Category} & \textbf{Core Hypothesis} & \textbf{Method} & \textbf{Paper} \\
+\midrule
+Additive & Bottleneck modules & Adapters & Houlsby et al. (2019) \\
+Additive & Low intrinsic rank & LoRA & Hu et al. (2021) \\
+Selective & Bias-centric adaptation & BitFit & Ben-Zaken et al. (2021) \\
+Prompt-Based & External steering & Prompt Tuning & Lester et al. (2021) \\
+Prompt-Based & Layer-wise steering & Prefix Tuning & Li \& Liang (2021) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Orthogonal Techniques}
+
+For pedagogical clarity, distinguish PEFT principles from complementary techniques:
+
+\begin{itemize}
+\item \textbf{Quantization} (e.g., 4-bit, 8-bit): Reduces memory footprint via lower-precision data types. This is \textit{complementary}, not a fine-tuning principle. Example: QLoRA applies 4-bit quantization to frozen weights, then uses LoRA for fine-tuning.
+
+\item \textbf{Data-Centric Tuning}: Focuses on \textit{what} the model learns (e.g., instruction tuning, RLHF) rather than \textit{how} parameters are updated. Out of scope for this taxonomy.
+\end{itemize}
+
+\section{Principle Analysis I: Additive Methods}
+
+Additive methods introduce new, trainable parameters into a frozen pre-trained model.
+
+\subsection{The Bottleneck Hypothesis: Classic Adapters}
+
+\textbf{Paper}: Houlsby et al. (2019), ``Parameter-Efficient Transfer Learning for NLP''
+
+\textbf{Core Hypothesis}: A large pre-trained model can be adapted by inserting a small number of new, task-specific parameters while leaving original weights untouched.
+
+\subsubsection{Architectural Analysis}
+
+Adapters are small feedforward networks inserted \textit{serially} within each Transformer layer, typically after the attention and FFN sub-layers.
+
+\textbf{Structure}:
+\begin{enumerate}
+\item \textbf{Down-projection}: Reduce dimension from $d$ to $r$ (bottleneck)
+\item \textbf{Non-linearity}: Apply activation function (e.g., ReLU)
+\item \textbf{Up-projection}: Restore dimension from $r$ to $d$
+\item \textbf{Residual connection}: Add adapter output to original hidden state
+\end{enumerate}
+
+\begin{center}
+% [Diagram source omitted from the public snapshot; the book uses independently drawn figures.]
+\end{center}
+
+\textbf{Forward pass}: $h \leftarrow h + \text{Adapter}(h)$
+
+\textbf{Initialization}: Adapter weights are initialized near zero, ensuring initial behavior matches the pre-trained model.
+
+\subsubsection{Impact on Inference}
+
+\begin{tcolorbox}[colback=yellow!5!white, colframe=orange!50!black, title=Critical Trade-off: Serial Architecture]
+Because adapters are \textbf{separate modules executed sequentially}, they introduce additional computational steps and thus \textbf{increase latency during inference} for every layer.
+
+This is not a minor implementation detail---it's a fundamental consequence of the serial architectural choice.
+\end{tcolorbox}
+
+\subsection{The Low-Rank Adaptation Hypothesis: LoRA}
+
+\textbf{Paper}: Hu et al. (2021), ``LoRA: Low-Rank Adaptation of Large Language Models''
+
+\textbf{Core Hypothesis}: The change in a model's weight matrix during adaptation, $\Delta W$, has a very low ``intrinsic rank''. This implies $\Delta W$ can be efficiently approximated by the product of two much smaller matrices.
+
+\subsubsection{Mathematical Foundation}
+
+For a weight matrix $W \in \mathbb{R}^{d \times k}$, instead of learning the full update $\Delta W \in \mathbb{R}^{d \times k}$, we decompose it:
+
+\[
+\Delta W \approx BA
+\]
+
+where:
+\begin{itemize}
+\item $B \in \mathbb{R}^{d \times r}$ (down-projection)
+\item $A \in \mathbb{R}^{r \times k}$ (up-projection)
+\item $r \ll \min(d, k)$ (rank, typically 8--64)
+\end{itemize}
+
+\textbf{Parameter count}:
+\begin{itemize}
+\item Original: $d \times k$ parameters
+\item LoRA: $dr + rk = r(d + k)$ parameters
+\item Reduction factor: $\frac{r(d+k)}{dk} \approx \frac{2r}{d}$ (when $d \approx k$)
+\end{itemize}
+
+\subsubsection{Architectural Analysis: Parallel Design}
+
+\textbf{Key distinction from Adapters}: LoRA injects trainable matrices \textit{in parallel} to existing linear layers, not serially.
+
+\textbf{Modified forward pass}:
+\[
+h = W_0 x + \Delta W x = W_0 x + BAx
+\]
+
+\begin{center}
+% [Diagram source omitted from the public snapshot; the book uses independently drawn figures.]
+\end{center}
+
+\subsubsection{The Zero-Latency Advantage}
+
+\begin{tcolorbox}[colback=green!5!white, colframe=green!75!black, title=Critical Advantage: Merging for Zero Latency]
+Because the LoRA update is a \textbf{linear operation added to another linear operation}, the matrices can be algebraically merged after training:
+
+\[
+W' = W_0 + BA
+\]
+
+This means the parallel path can be eliminated entirely for deployment, resulting in \textbf{zero additional inference latency} compared to the original model.
+
+This property is fundamentally unavailable to serial architectures like Adapters.
+\end{tcolorbox}
+
+\subsubsection{Understanding Low-Rank Decomposition}
+
+\textbf{Concrete example}: Update a $5 \times 5$ weight matrix (25 parameters).
+
+\textbf{Rank $r=1$ decomposition}:
+\[
+\underbrace{\begin{bmatrix}
+b_1 \\ b_2 \\ b_3 \\ b_4 \\ b_5
+\end{bmatrix}}_{B: 5 \text{ params}}
+\times
+\underbrace{\begin{bmatrix}
+a_1 & a_2 & a_3 & a_4 & a_5
+\end{bmatrix}}_{A: 5 \text{ params}}
+=
+\underbrace{\begin{bmatrix}
+b_1a_1 & b_1a_2 & \cdots & b_1a_5 \\
+b_2a_1 & b_2a_2 & \cdots & b_2a_5 \\
+\vdots & \vdots & \ddots & \vdots \\
+b_5a_1 & b_5a_2 & \cdots & b_5a_5
+\end{bmatrix}}_{\Delta W: 25 \text{ values}}
+\]
+
+\textbf{Trade-off}: 10 trainable parameters vs 25 full parameters. Sacrifice some precision for dramatic efficiency. As matrices grow larger, savings become massive.
+
+\subsubsection{Where to Apply LoRA}
+
+Can apply to any linear layer in the Transformer:
+\begin{itemize}
+\item Query, Key, Value projections ($W_Q, W_K, W_V$)
+\item Output projection ($W_O$)
+\item FFN layers ($W_1, W_2$)
+\end{itemize}
+
+\begin{tcolorbox}[colback=blue!5!white, colframe=blue!75!black, title=Critical Finding: Train All Layers]
+Research shows that \textbf{training ALL layers is essential} to match full fine-tuning performance. Applying LoRA to only some layers (e.g., just attention) gives worse results.
+
+\textbf{Minimum recommendation}: Apply to $W_Q$ and $W_V$ in all attention layers.\\
+\textbf{Best results}: Apply to all linear projections in all layers.
+\end{tcolorbox}
+
+\subsubsection{Hyperparameter Selection}
+
+\paragraph{Rank $r$}
+
+\begin{tcolorbox}[colback=yellow!5!white, colframe=orange!50!black, title=Surprising Result About Rank]
+Research shows that \textbf{rank in the range 8--256 has minimal impact on performance}, provided LoRA is applied to all layers.
+
+\textbf{Intuition}: LLMs are over-parameterized for most downstream tasks. Since the model was pre-trained on massive data, task-specific fine-tuning only needs ``rough'' adjustments. Low-rank updates suffice to capture task-specific patterns.
+
+\textbf{Exception}: Higher rank may help when:
+\begin{itemize}
+\item Teaching complex new behavior
+\item Teaching behavior that contradicts pre-training
+\end{itemize}
+\end{tcolorbox}
+
+\textbf{Practical recommendations}:
+\begin{itemize}
+\item \textbf{Start with $r=16$ or $r=64$}: Good balance for most tasks
+\item \textbf{Low $r=8$}: Very efficient, works for simple adaptations
+\item \textbf{High $r=128$--$256$}: For complex tasks with compute to spare
+\end{itemize}
+
+\begin{center}
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Model} & \textbf{Params} & \textbf{Rank} & \textbf{LoRA Params} & \textbf{\% Original} \\
+\midrule
+7B & 7B & 8 & 4.2M & 0.06\% \\
+7B & 7B & 16 & 8.4M & 0.12\% \\
+7B & 7B & 64 & 33.6M & 0.48\% \\
+70B & 70B & 64 & 336M & 0.48\% \\
+70B & 70B & 256 & 1.34B & 1.92\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{Alpha $\alpha$ (Scaling Factor)}
+
+Controls how much LoRA updates affect original weights:
+\[
+h = W_0x + \frac{\alpha}{r} \cdot BAx
+\]
+
+\textbf{Examples}:
+\begin{itemize}
+\item $\alpha = 2r$: Scaling factor = 2 (2$\times$ impact)
+\item $\alpha = r$: Scaling factor = 1 (1$\times$ impact)
+\item $\alpha = r/4$: Scaling factor = 0.25 (0.25$\times$ impact)
+\end{itemize}
+
+\textbf{Common settings}:
+\begin{itemize}
+\item Original LoRA: $\alpha = 2r$ (Microsoft)
+\item Q-LoRA: $\alpha = 16$, $r = 64$ (0.25$\times$ scaling)
+\end{itemize}
+
+\textbf{Practical tip}: Fix $\alpha$ (e.g., $\alpha=16$) and adjust learning rate instead. However, $\alpha/r$ and learning rate aren't identical, so experimentation may be worthwhile.
+
+\paragraph{Dropout}
+
+\textbf{Recommended from Q-LoRA paper}:
+\begin{itemize}
+\item Smaller models (7B, 13B): dropout = 0.1
+\item Larger models (33B, 65B+): dropout = 0.05
+\end{itemize}
+
+\paragraph{Other Hyperparameters}
+
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Model Size} & \textbf{Learning Rate} & \textbf{Batch Size} & \textbf{Epochs} \\
+\midrule
+7B & $2 \times 10^{-4}$ & 16 & 3 \\
+13B & $2 \times 10^{-4}$ & 16 & 3 \\
+33B & $1 \times 10^{-4}$ & 16 & 3 \\
+65B & $1 \times 10^{-4}$ & 16 & 3 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsubsection{Adapters vs LoRA: A Fundamental Architectural Choice}
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\textbf{Dimension} & \textbf{Adapters (Serial)} & \textbf{LoRA (Parallel)} \\
+\midrule
+Architecture & Sequential bottleneck modules & Low-rank matrices in parallel \\
+Inference latency & Adds latency (unavoidable) & Zero latency (can merge) \\
+Modularity & High (easy to stack/combine) & Lower (creates monolithic model) \\
+Hypothesis & Architectural solution & Mathematical hypothesis \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+This is not an implementation detail---it's a fundamental design choice with direct consequences for deployment.
+
+\subsection{Implementation Example}
+
+% [Implementation omitted from the public snapshot: independent provenance was not established. See sources/README.md.]
+
+\section{Principle Analysis II: Selective \& Prompt-Based Methods}
+
+\subsection{The Bias-Centric Hypothesis: BitFit}
+
+\textbf{Paper}: Ben-Zaken et al. (2021), ``BitFit: Simple Parameter-efficient Fine-tuning''
+
+\textbf{Core Hypothesis}: Fine-tuning is primarily a process of \textit{exposing or redirecting} knowledge already acquired during pre-training, rather than learning new linguistic knowledge. This can be achieved by modifying only the bias terms.
+
+\subsubsection{Architectural Analysis}
+
+\textbf{Method}: Freeze all weight matrices $W$, train only bias vectors $b$.
+
+\textbf{Parameter count}: Typically $<$0.1\% of model parameters.
+
+\textbf{No architecture changes}: The model structure remains completely unchanged.
+
+\subsubsection{The Knowledge Exposure Hypothesis}
+
+\begin{tcolorbox}[colback=purple!5!white, colframe=purple!75!black, title=Surprising Effectiveness of BitFit]
+The success of BitFit, particularly in low-to-medium data regimes, strongly supports the ``knowledge exposure'' hypothesis:
+
+\textbf{Interpretation}: The vast weight matrices of a pre-trained LLM encode rich, latent knowledge. Bias terms act as powerful ``knobs'' or ``switches'' to modulate how this knowledge is accessed and expressed for specific tasks.
+
+\textbf{Implication}: For many downstream tasks, the model already ``knows'' what to do---we just need to adjust how it accesses that knowledge.
+\end{tcolorbox}
+
+\subsection{The External Steering Hypothesis: Prompt-Based Methods}
+
+Prompt-based methods represent the \textit{least intrusive} category. They operate on the principle that a frozen model's behavior can be ``steered'' without modifying any internal weights.
+
+\subsubsection{Prompt Tuning}
+
+\textbf{Paper}: Lester et al. (2021), ``The Power of Scale for Parameter-Efficient Prompt Tuning''
+
+\textbf{Method}: Prepend a sequence of continuous embedding vectors (``soft prompts'' or ``virtual tokens'') to the input text's embedding sequence. Base model parameters are completely frozen.
+
+\textbf{Forward pass}:
+\[
+\text{input} = [\text{soft\_prompt}_1, \ldots, \text{soft\_prompt}_k, \text{text\_embeddings}]
+\]
+
+Only the soft prompt embeddings are updated via backpropagation.
+
+\subsubsection{Prefix Tuning}
+
+\textbf{Paper}: Li \& Liang (2021), ``Prefix-Tuning: Optimizing Continuous Prompts for Generation''
+
+\textbf{Method}: Insert trainable prefix vectors into the hidden states of \textit{every layer} of the Transformer, not just the input layer.
+
+\textbf{Advantage}: Provides more fine-grained control over the model's activations at each processing stage. Prompt Tuning is considered a simplification of this more expressive approach.
+
+\subsubsection{The Intrusiveness Spectrum}
+
+These categories form a spectrum of how ``intrusively'' they modify the base model:
+
+\begin{center}
+% [Diagram source omitted from the public snapshot; the book uses independently drawn figures.]
+\end{center}
+
+\subsubsection{The Scaling Law for Prompt-Based Methods}
+
+\begin{tcolorbox}[colback=blue!5!white, colframe=blue!75!black, title=Critical Finding: Model Scale Dependency]
+Prompt-based methods exhibit strong dependence on model scale:
+
+\begin{itemize}
+\item \textbf{Small models}: Prompt Tuning significantly underperforms FFT
+\item \textbf{Large models ($>$10B params)}: Performance gap narrows
+\item \textbf{Very large models}: Prompt Tuning can match FFT performance
+\end{itemize}
+
+\textbf{Scaling law interpretation}: The larger and more capable the frozen model's internal knowledge base, the more effectively it can be steered by a small, externally learned prompt.
+\end{tcolorbox}
+
+\section{Pedagogical Synthesis: A Comparative Framework}
+
+\subsection{Comparative Analysis Table}
+
+\begin{center}
+\small
+\begin{tabular}{p{2cm}p{3cm}p{2cm}p{2cm}p{2cm}}
+\toprule
+\textbf{Method} & \textbf{Core Hypothesis} & \textbf{Trainable Params} & \textbf{Inference Latency} & \textbf{Storage per Task} \\
+\midrule
+\textbf{Adapters} & Bottleneck modules & 0.1--4\% & \textcolor{red}{Adds latency} (serial) & Small \\
+\midrule
+\textbf{LoRA} & Low-rank updates & 0.1--2\% & \textcolor{green!60!black}{Zero overhead} (merge) & Small \\
+\midrule
+\textbf{BitFit} & Bias-centric & $<$0.1\% & Zero overhead & Extremely small \\
+\midrule
+\textbf{Prompt Tuning} & External steering (input) & $<$0.01\% & Slight (longer seq) & Extremely small \\
+\midrule
+\textbf{Prefix Tuning} & External steering (all layers) & $<$0.1\% & Slight (longer seq) & Extremely small \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Key Trade-offs for Practitioners}
+
+\subsubsection{1. The Latency vs Modularity Dilemma}
+
+\textbf{Adapters}:
+\begin{itemize}
+\item[$+$] High modularity---easy to stack or combine for multi-task learning
+\item[$-$] Increased inference latency (unavoidable due to serial architecture)
+\end{itemize}
+
+\textbf{LoRA}:
+\begin{itemize}
+\item[$+$] Zero latency after weight merging
+\item[$-$] Creates monolithic model---dynamic task combination is complex
+\end{itemize}
+
+\subsubsection{2. The Performance vs Efficiency Frontier}
+
+\textbf{BitFit}: Extreme parameter efficiency, good for low-data regimes, but may underperform on complex tasks.
+
+\textbf{LoRA}: Uses more parameters but typically achieves performance closest to FFT. \textbf{Robust default choice} for most applications.
+
+\subsubsection{3. The Intrusiveness vs Scale Dependency}
+
+\textbf{Prompt-based methods}:
+\begin{itemize}
+\item[$+$] Non-intrusive---ideal for multi-tenant serving (one frozen model, many tasks)
+\item[$-$] Strong dependency on very large model scales ($>$10B parameters)
+\item[$-$] For smaller models, performance substantially lower than LoRA/Adapters
+\end{itemize}
+
+\subsection{Decision Framework for Practitioners}
+
+\begin{center}
+% [Diagram source omitted from the public snapshot; the book uses independently drawn figures.]
+\end{center}
+
+\section{Conclusion: Enduring Principles for an Evolving Field}
+
+\subsection{The Conceptual Framework}
+
+This review organized PEFT methods around a three-category taxonomy based on \textit{how they modify parameters}:
+
+\begin{enumerate}
+\item \textbf{Additive}: Add new parameters (Adapters, LoRA)
+\item \textbf{Selective}: Train subset of existing parameters (BitFit)
+\item \textbf{Prompt-Based}: Optimize input steering signals (Prompt/Prefix Tuning)
+\end{enumerate}
+
+By understanding the \textbf{core hypothesis} of each canonical method, we move beyond rote memorization to conceptual understanding. New methods can almost always be understood as innovations upon or combinations of these foundational ideas.
+
+\subsection{The Analytical Toolkit}
+
+When encountering new PEFT methods, ask these questions:
+
+\begin{enumerate}
+\item \textbf{Taxonomy}: Which category---Additive, Selective, or Prompt-Based?
+\item \textbf{Hypothesis}: What is its core principle? How does it refine existing hypotheses?
+\item \textbf{Architecture}: Serial or parallel? What are the inference implications?
+\item \textbf{Trade-offs}: How does it balance trainable parameters, inference latency, and storage cost?
+\item \textbf{Scale dependency}: Does it require very large base models to be effective?
+\end{enumerate}
+
+\subsection{Practical Recommendations}
+
+\textbf{Default choice for most applications}: \textbf{LoRA}
+\begin{itemize}
+\item Excellent performance (approaches FFT)
+\item Zero inference latency (can merge weights)
+\item Modest parameter overhead (0.1--2\%)
+\item Well-understood and widely supported
+\end{itemize}
+
+\textbf{Starting hyperparameters}:
+\begin{itemize}
+\item Rank: $r = 16$ or $r = 64$
+\item Alpha: $\alpha = 16$ (fixed)
+\item Dropout: 0.1 (small models), 0.05 (large models)
+\item Apply to: $W_Q$ and $W_V$ in all layers (minimum)
+\item Learning rate: $1$--$2 \times 10^{-4}$
+\end{itemize}
+
+\subsection{Looking Forward}
+
+Understanding these foundational principles provides the intellectual tools to:
+\begin{itemize}
+\item Analyze and situate future work
+\item Make informed decisions for specific applications
+\item Reason from first principles about efficient adaptation
+\item Navigate the evolving landscape of LLM fine-tuning
+\end{itemize}
+
+The ``zoo'' of new methods will continue to grow, but the fundamental principles remain durable. A deep understanding of these principles provides lasting value beyond familiarity with any specific technique.
+
+
+
+\section{Reinforcement Learning for Fine-Tuning (Brief Overview)}
+
+\subsection{Motivation: Why Not Just Supervised Fine-Tuning?}
+
+Supervised Fine-Tuning (SFT) trains models to mimic demonstrations. Given input-output pairs $(x, y)$, we minimize:
+
+\begin{equation}
+\mathcal{L}_{\text{SFT}} = -\mathbb{E}_{(x,y) \sim \mathcal{D}} \left[ \log p_\theta(y \mid x) \right]
+\end{equation}
+
+\textbf{Problem:} SFT teaches the model ``what good outputs look like'' but not ``what makes an output better than another.''
+
+\begin{tcolorbox}[colback=yellow!5!white, colframe=orange!50!black, title=SFT Limitations]
+\textbf{Example:} You want a helpful, harmless assistant.
+
+\textbf{SFT approach:} Train on demonstrations of helpful responses.
+
+\textbf{Issue:} Model learns the \textit{format} of helpfulness but may still generate:
+\begin{itemize}
+\item Plausible but incorrect answers (hallucinations)
+\item Responses that are technically correct but unhelpful
+\item Content that follows the style but violates safety guidelines
+\end{itemize}
+
+\textbf{What's missing?} Explicit optimization for desirable properties (helpfulness, truthfulness, safety).
+\end{tcolorbox}
+
+\subsection{High-Level Idea: Reinforcement Learning from Human Feedback (RLHF)}
+
+Instead of only imitating demonstrations, we can:
+
+\begin{enumerate}
+\item \textbf{Learn what humans prefer} (train a reward model)
+\item \textbf{Optimize the language model} to generate high-reward outputs
+\end{enumerate}
+
+\textbf{Three-stage pipeline:}
+
+\begin{center}
+% [Diagram source omitted from the public snapshot; the book uses independently drawn figures.]
+\end{center}
+
+\textbf{Stage 1 (SFT):} Train base model on demonstrations $\rightarrow$ produces $\pi_{\text{SFT}}$
+
+\textbf{Stage 2 (Reward Modeling):} Collect human preferences on pairs of outputs $(y_1, y_2)$ for the same prompt $x$. Train a reward model $r_\phi(x, y)$ to predict which output humans prefer:
+
+\begin{equation}
+\mathcal{L}_{\text{RM}} = -\mathbb{E} \left[ \log \sigma\left(r_\phi(x, y_{\text{win}}) - r_\phi(x, y_{\text{lose}})\right) \right]
+\end{equation}
+
+where $\sigma$ is the sigmoid function and $y_{\text{win}}$ is the preferred output.
+
+\textbf{Stage 3 (RL Optimization):} Optimize the language model policy $\pi_\theta$ to maximize expected reward while staying close to the SFT model (to prevent collapse):
+
+\begin{equation}
+\mathcal{L}_{\text{RL}} = \mathbb{E}_{x \sim \mathcal{D}, y \sim \pi_\theta} \left[ r_\phi(x, y) - \beta \cdot D_{\text{KL}}\left(\pi_\theta(y|x) \| \pi_{\text{SFT}}(y|x)\right) \right]
+\end{equation}
+
+The KL penalty term prevents the model from drifting too far from the SFT initialization.
+
+\begin{tcolorbox}[colback=blue!5!white, colframe=blue!50!black, title=Intuition Without RL Theory]
+Think of the reward model as a ``critic'' that scores outputs. The RL stage adjusts the language model to generate outputs that the critic rates highly, but with a constraint: don't change so much that you lose the knowledge from SFT.
+
+\textbf{You don't need to understand PPO internals} to use this in practice. Libraries like TRL handle the RL algorithm for you.
+\end{tcolorbox}
+
+\subsection{Direct Preference Optimization (DPO): Simpler Alternative}
+
+\textbf{Problem with RLHF:} Requires training a separate reward model and then running RL (complex, unstable).
+
+\textbf{DPO insight:} You can optimize directly on preference pairs without an explicit reward model!
+
+Given preference data $\{x, y_{\text{win}}, y_{\text{lose}}\}$, DPO minimizes:
+
+\begin{equation}
+\mathcal{L}_{\text{DPO}} = -\mathbb{E} \left[ \log \sigma\left( \beta \log \frac{\pi_\theta(y_{\text{win}}|x)}{\pi_{\text{ref}}(y_{\text{win}}|x)} - \beta \log \frac{\pi_\theta(y_{\text{lose}}|x)}{\pi_{\text{ref}}(y_{\text{lose}}|x)} \right) \right]
+\end{equation}
+
+where $\pi_{\text{ref}}$ is the reference policy (usually the SFT model).
+
+\textbf{Advantage:} No reward model, no RL algorithm. Just a classification-like loss on preference pairs.
+
+\textbf{When to use DPO:}
+\begin{itemize}
+\item You have preference data (A vs B comparisons)
+\item You want simplicity over the full RLHF pipeline
+\item You're working with smaller models or limited compute
+\end{itemize}
+
+\subsection{The TRL Library}
+
+\textbf{TRL (Transformer Reinforcement Learning)} is a Hugging Face library that implements RLHF, DPO, and related algorithms.
+
+\textbf{What TRL provides:}
+\begin{itemize}
+\item \texttt{PPOTrainer}: For RLHF Stage 3 (policy optimization)
+\item \texttt{RewardTrainer}: For training reward models
+\item \texttt{DPOTrainer}: For Direct Preference Optimization
+\item \texttt{SFTTrainer}: For supervised fine-tuning (we used this earlier!)
+\end{itemize}
+
+\textbf{Typical workflow with TRL:}
+
+% [Implementation omitted from the public snapshot: independent provenance was not established. See sources/README.md.]
+
+\textbf{That's it!} TRL handles the complex RL mechanics internally.
+
+\subsection{When to Use Each Method}
+
+\begin{center}
+\begin{tabular}{|l|p{10cm}|}
+\hline
+\textbf{Method} & \textbf{Use When...} \\
+\hline
+SFT & You have demonstrations; task is well-defined; format matters \\
+\hline
+RLHF (PPO) & You have human preferences; want to optimize complex objectives (helpfulness + safety); have compute for reward model + RL \\
+\hline
+DPO & You have preference pairs; want simpler pipeline; smaller models \\
+\hline
+\end{tabular}
+\end{center}
+
+\begin{tcolorbox}[colback=green!5!white, colframe=green!50!black, title=Practical Recommendation]
+\textbf{For this course:} Start with SFT (Sections 3-5). If you need alignment:
+\begin{enumerate}
+\item Collect preference data (have humans rank outputs)
+\item Try DPO first (simpler)
+\item Use RLHF only if DPO is insufficient
+\end{enumerate}
+
+\textbf{For production systems:} Modern LLMs (GPT-4, Claude, Gemini) all use some form of RLHF. It's essential for safety and quality.
+\end{tcolorbox}
+
+\subsection{Example: DPO with TRL (Minimal Code)}
+
+The original note pointed to a separate implementation file; that reference and the
+uncleared implementation are omitted from this public snapshot.
+
+% [Implementation omitted from the public snapshot: independent provenance was not established. See sources/README.md.]
+
+\textbf{Key points:}
+\begin{itemize}
+\item \texttt{ref\_model} is frozen (usually the SFT model)
+\item \texttt{model} is optimized to prefer ``chosen'' over ``rejected''
+\item \texttt{beta} controls how much the model can deviate from reference
+\end{itemize}
+
+\subsection{What We're Not Covering (But You Can Learn More)}
+
+This course focuses on deep learning fundamentals, not RL theory. We're \textit{not} covering:
+
+\begin{itemize}
+\item Markov Decision Processes (MDPs)
+\item Policy gradient derivations
+\item Value functions and Q-learning
+\item PPO algorithm internals (clipped objective, advantage estimation)
+\item Variance reduction techniques
+\end{itemize}
+
+\textbf{If you want to learn RL for LLMs:}
+\begin{itemize}
+\item \textbf{TRL Documentation:} \url{https://huggingface.co/docs/trl}
+\item \textbf{RLHF Paper:} Ouyang et al., ``Training language models to follow instructions with human feedback'' (2022)
+\item \textbf{DPO Paper:} Rafailov et al., ``Direct Preference Optimization'' (2023)
+\item \textbf{Spinning Up in Deep RL:} \url{https://spinningup.openai.com} (for RL foundations)
+\end{itemize}
+
+\subsection{Summary: The Alignment Stack}
+
+\begin{center}
+% [Diagram source omitted from the public snapshot; the book uses independently drawn figures.]
+\end{center}
+
+\textbf{For this course:} Focus on SFT (Sections 3-5). Treat RLHF/DPO as ``optional advanced topics'' that you can explore with TRL when needed.
+
+\textbf{Key takeaway:} You don't need to be an RL expert to use these methods in practice. TRL abstracts away the complexity.
+\end{document}

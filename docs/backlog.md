@@ -53,20 +53,22 @@ chapter stub's draft-sources; revisit during the planned outline session with th
 - Extend course-site `bookChapters` mappings as Chapters 12–19 become reviewed and
   substantive.
 
-## 5. GPU experiment queue (backlog-only; revised after Chapter 16, July 13, 2026)
+## 5. GPU experiment queue (backlog-only; revised after Chapter 17, July 14, 2026)
 
 Do not place project-management placeholders in the published chapters. Keep these
 experiments here until GPU access is available; then run them on Rivanna/Colab, pin the
 numbers, and fold only completed results back into the relevant chapter.
 
-Chapters 12–16 audit: the fixed-kernel, scaling, date-attention, tiny Transformer
+Chapters 12–17 audit: the fixed-kernel, scaling, date-attention, tiny Transformer
 book-corpus, controlled MLM-transfer, and five-seed CNN/ViT rematch experiments are
-CPU-complete. They require no GPU dependency or project-management placeholder in
-the published chapters; the queue below remains the private reminder for later
+CPU-complete, as are Chapter 17's frozen-context, planted-rank LoRA, and controlled
+quantization audits. They require no GPU dependency or project-management placeholder
+in the published chapters; the queue below remains the private reminder for later
 access. Chapters 13–14 discuss the structure of dense matrix operations but make no
 unmeasured hardware-speed claim. Chapter 16 reports its tiny scratch regime as a
-mechanism study, not as an architecture verdict; the full-scale regime test belongs
-here.
+mechanism study, not as an architecture verdict. Chapter 17 separates payload and
+metadata but makes no kernel-speed or natural-language quality claim; both full-scale
+regime tests belong here.
 
 - **Ch. 9 scorecard, full scale**: LeNet / VGG / NiN / deep ResNet on all 60k
   Fashion-MNIST images — reproduce the lecture frontier (≈89% / >90% / ≈90% @ 30k
@@ -94,3 +96,10 @@ here.
   examples seen, wall-clock cost, and clean/shifted per-seed results. Do not call a
   parameter match a compute match, and do not let a pretrained-versus-scratch gap
   stand in for an architecture effect.
+- **Ch. 17 natural-language adaptation and deployment ladder**: choose a licensed
+  checkpoint and dataset, then compare a fixed prompt, retrieval, LoRA, and full
+  fine-tuning under a predeclared coverage and label-budget ladder. Add quantized
+  storage variants only with real kernels and supported hardware. Pin checkpoint,
+  tokenizer, dataset license, task-state bytes, peak memory, realized quality,
+  latency, throughput, and wall-clock cost separately; do not infer deployment speed
+  from parameter count, nominal bit width, or the CPU mechanism studies.

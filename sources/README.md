@@ -4,6 +4,12 @@ This directory preserves the instructor's lecture-source snapshots so the book's
 provenance can be audited. The snapshots are inputs for traceability, not a pool of
 publishable code or prose.
 
+Instructor-authored prose retained in these snapshots is covered by the repository's
+CC BY-NC-SA 4.0 text license (`LICENSE-text.md`). Material carrying a separate
+upstream license is not relicensed here; it is either omitted or identified in
+`THIRD_PARTY_NOTICES.md`. Product names and paper citations are references, not
+redistributed implementations or endorsements.
+
 Some original lecture files contained examples explicitly copied from or adapted from
 *Dive into Deep Learning* (D2L). D2L book prose is CC BY-SA 4.0, while its
 sample/reference code is distributed under a modified MIT license. Regardless of that

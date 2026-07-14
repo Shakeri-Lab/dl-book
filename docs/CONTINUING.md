@@ -1,6 +1,6 @@
 # Continuing the Book — Handoff & Roadmap
 
-*Written 2026-07-09 after Chapter 11 shipped; updated 2026-07-13 after Chapter 16
+*Written 2026-07-09 after Chapter 11 shipped; updated 2026-07-14 after Chapter 17
 shipped. This is the master handoff document:
 everything a fresh collaborator (human or Claude session, on any account) needs to
 continue the project without the original conversation history. Read `CLAUDE.md`
@@ -20,7 +20,7 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 | II · Vision | 7–9 | **Shipped; repair pass complete and verified** (July 11, 2026) |
 | III · Sequences | 10–11 | **Shipped; repair pass complete and verified** (July 11, 2026) |
 | IV · Attention | 12–16 | **Shipped and two-format verified** (July 13, 2026) |
-| V · Pretrained Era | 17–19 | Stubs with contracts |
+| V · Pretrained Era | 17–19 | **Chapter 17 shipped and two-format verified** (July 14, 2026); 18–19 stubs with contracts |
 | Appendices | a1–a4 | Stubs (a4 floating-point queued in backlog) |
 
 **Milestone 1** (Part I complete + skeleton) is met. The July 11 quantitative,
@@ -69,19 +69,33 @@ HTML and TeX outputs matched exactly. A clean full-book render, browser
 asset/layout checks, and complete Chapter 16 PDF visual QA also passed before
 publication.
 
+Chapter 17 is complete: prompting, retrieval as a separate context path, soft
+prompts and prefixes, adapters and BitFit, LoRA, quantization, and QLoRA are
+organized by backbone storage, incremental task state, and transient work. A
+39,268-parameter frozen-context Transformer reaches its exact information ceilings
+of 0.25/0.50/0.75/1.00 accuracy at zero through three demonstrations while every
+evaluation weight remains bitwise fixed. A five-seed planted rank-six audit shows
+the LoRA capacity break exactly at rank six, with merged and unmerged paths agreeing
+to `1.43e-06`. A controlled unequal-row quantization audit separates bit width from
+granularity and metadata: at 8 bits, relative layer-output error is 0.0213 with one
+scale and 0.0069 with per-row scales; at 4 bits it is 0.2695 and 0.1223. The chapter
+makes no hardware-runtime claim. Corrected HTML and PDF outputs match exactly; the
+full-book PDF, all six original figures, browser assets/layout, and the complete
+Chapter 17 page range passed visual QA before publication.
+
 **Decisions still gated on the author:**
-- The author's own edit pass over Chapters 1–16 remains pending.
+- The author's own edit pass over Chapters 1–17 remains pending.
 - Course-site integration was approved, implemented, and shipped July 11, 2026. It uses
   a plural `bookChapters` field because modules and chapters do not map one-to-one;
   only reviewed, substantive chapters are linked. The production build passes.
-  Chapters 12–16's course-site links wait for the author's edit pass.
+  Chapters 12–17's course-site links wait for the author's edit pass.
 - "Deeper dive" collapsed sections: piloted in ch. 6; his verdict pending ("let us
   get back to deeper dive later"). Do not retrofit chs. 1/5.
 - GPU experiments remain backlog-only until access is available. Do not publish
   placeholder callouts in chapters; run the queued experiments on Rivanna/Colab and
   fold real results back into the relevant chapters later.
 
-## 2. The working protocol (refined over chapters 7–16)
+## 2. The working protocol (refined over chapters 7–17)
 
 The single most important lesson of this project: **pre-test every experiment
 regime before writing a word of prose.** Roughly half of all planned experiments
@@ -422,13 +436,53 @@ Each stub carries its contract; specifics accumulated so far:
   where full-backbone storage, movement, adaptation, and inference costs become
   the problem rather than the training allocation alone.
 
-### Ch. 17 — Prompting, PEFT, and Quantization (NEXT)
-- Harvest ch. 16's “training-optimal is not serving-optimal” handoff together with
-  ch. 15's full-backbone fine-tuning cost. Per the stub, cover prompting, PEFT,
-  and quantization; the quantization thread connects to appendices a2 and a4.
+### Ch. 17 — Adapting Pretrained Models: Prompting, PEFT, Quantization (SHIPPED)
+- **Seeds and provenance**: sanitized public snapshots
+  `sources/11.1-before-fine-tuning.tex`, `sources/11.2-peft.tex`, and
+  `sources/11.3-quantization.tex`; Module 11 course sources; primary prompting,
+  RAG, PEFT, LoRA, quantization, and QLoRA papers. Source code, paper figures,
+  private links, and material without a clear reuse boundary were removed; all
+  executable implementations and six figures are book-original.
+- **Harvests completed by name**: ch. 16's “training-optimal is not
+  serving-optimal,” ch. 15's full-backbone fine-tuning cost, and ch. 9's transfer
+  decision rule. The chapter keeps transfer coverage as the upstream gate: no
+  adaptation method creates missing source knowledge for free.
+- **Adaptation ledger shipped**: hard prompting and in-context learning, retrieval
+  as a distinct context path, prompt and prefix tuning, adapters, BitFit, LoRA,
+  full fine-tuning, PTQ, and QLoRA are separated by backbone storage, incremental
+  task state, permitted writes, and transient work. Storage precision, compute
+  precision, trainable state, and measured runtime are explicitly distinct.
+- **Pinned frozen-context audit**: a 39,268-parameter causal Transformer evaluated
+  over five seeds and 8,192 nested episodes per seed reaches mean accuracy
+  0.252/0.500/0.749/1.000/1.000 for zero through four demonstrations, matching the
+  0.25/0.50/0.75/1.00 information ceilings; every evaluation pass leaves weights
+  bitwise unchanged.
+- **Pinned LoRA and quantization audits**: on a planted rank-six 32-by-32 update,
+  ranks one/two/four leave validation MSE 0.04535140/0.02021863/0.00188776, while
+  ranks six/eight reach the printed numerical floor; merged and unmerged outputs
+  differ by at most `1.43e-06`. On unequal-scale rows, 8-bit per-tensor/per-row
+  output error is 0.0213/0.0069 and 4-bit error is 0.2695/0.1223. Payload and scale
+  metadata are counted separately; no kernel-speed claim is inferred.
+- **Verification state**: both execution freezes are present with byte-identical
+  printed outputs. The full-book render, browser asset/alt/layout checks, all six
+  original figures, and every Chapter 17 PDF page passed QA.
+- **Forward seed planted**: “where the update lives is not what the update
+  optimizes” into ch. 18.
 
-### Chs. 18–19 — Alignment and Generation
-- Per the stubs: ch. 18 alignment; ch. 19 generation
+### Ch. 18 — Alignment and RL Fine-Tuning (NEXT)
+- Harvest ch. 17's “where the update lives is not what the update optimizes” by
+  separating the supervision interface from permitted parameter writes. Build the
+  durable spine around response-masked instruction SFT, preference pairs,
+  Bradley–Terry reward modeling, KL-regularized policy optimization, PPO's distinct
+  old-policy and reference-policy anchors, DPO's reference-relative margin, and
+  evaluation under feedback coverage.
+- Pretest CPU mechanism studies before prose: scalar-reward consistency, the exact
+  finite-response Gibbs policy/DPO identity under its assumptions, and proxy
+  optimization where measured reward rises after true utility turns over. Treat
+  alignment as a stated evaluation contract, not a certificate.
+
+### Ch. 19 — Generative Models: From PCA to Diffusion
+- Per the stub: generation
   (PCA→AE→VAE→diffusion — **the m06 autoencoder spine lives here**: PCA as
   linear autoencoder, bottleneck, manifold learning; see
   `ds6050_06_autoencoders/MODULE_NOTES.md` spine #4–8, deliberately NOT used in

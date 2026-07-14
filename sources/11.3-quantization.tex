@@ -1,0 +1,656 @@
+% Public source snapshot of the instructor's Module 11 lecture notes. Executable
+% implementations, diagram source, and external images are omitted under the
+% boundary in sources/README.md. Headings and claims are preserved for provenance,
+% not endorsed as reproduced results; the book re-derives equations and checks
+% numerical claims against primary papers before use.
+\documentclass{article}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{listings}
+\usepackage[margin=1in]{geometry}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{shapes, arrows, positioning, calc}
+\usepackage{tcolorbox}
+\usepackage{booktabs}
+
+% Define colors for syntax highlighting
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+
+% Python style for highlighting
+\lstdefinestyle{pythonstyle}{
+    backgroundcolor=\color{backcolour},
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,
+    breaklines=true,
+    captionpos=b,
+    keepspaces=true,
+    numbers=left,
+    numbersep=5pt,
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    tabsize=2
+}
+\lstset{style=pythonstyle}
+
+\title{Lecture 11.3: Efficient LLM Deployment\\
+Quantization, QLoRA, and Running Models at Home}
+\author{Deep Learning Class}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{tcolorbox}[colback=gray!5!white, colframe=gray!60!black, title=Public Snapshot Boundary]
+This provenance snapshot preserves the instructor-authored lecture spine. Executable
+implementations, diagram source, and external images have been omitted; their original
+locations remain marked in the source. Product and numerical claims are historical
+lecture notes and are independently checked before publication in the book.
+\end{tcolorbox}
+
+\begin{tcolorbox}[colback=blue!5!white, colframe=blue!75!black, title=Lecture Overview]
+\textbf{The democratization challenge}: From billion-parameter models to your laptop
+
+\begin{enumerate}
+\item \textbf{The memory bottleneck}: Why 7B models need 66+ GB for training
+\item \textbf{Quantization fundamentals}: Representing weights with 4 bits instead of 16
+\item \textbf{QLoRA}: Fine-tuning 7B models on consumer GPUs (8--12 GB)
+\item \textbf{Deployment strategies}: vLLM, llama.cpp, and MLX for different hardware
+\item \textbf{Hands-on}: Fine-tune and deploy Qwen2.5-7B on your machine
+\item \textbf{Trade-offs}: Speed, quality, and hardware constraints
+\end{enumerate}
+
+\textbf{Practical outcome}: By the end, you will fine-tune and serve a 7B model on consumer hardware!
+\end{tcolorbox}
+
+\section{The Memory Problem}
+
+\subsection{The Billion-Parameter Reality}
+
+Modern language models are remarkably capable but extraordinarily large:
+
+\begin{itemize}
+\item \textbf{GPT-3}: 175 billion parameters
+\item \textbf{LLaMA 2}: 7B, 13B, 70B variants
+\item \textbf{Mistral}: 7B parameters (Apache-2.0 license)
+\item \textbf{Qwen 2.5}: 7B and 14B variants (Apache-2.0); 72B (Qwen license)
+\end{itemize}
+
+\textbf{Question}: Can you run these on your laptop? Let us do the math.
+
+\subsection{Memory Requirements: The Calculation}
+
+A model with $N$ parameters needs memory for:
+\begin{enumerate}
+\item \textbf{Weights} (the model parameters)
+\item \textbf{Activations} (intermediate computations)
+\item \textbf{Gradients} (for backpropagation, if training)
+\item \textbf{Optimizer states} (momentum, variance for Adam, if training)
+\end{enumerate}
+
+\subsubsection{Just Storing Weights}
+
+Each parameter is a number. Standard storage formats:
+
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Format} & \textbf{Bits/param} & \textbf{Bytes/param} & \textbf{7B model} \\
+\midrule
+FP32 (float32) & 32 & 4 & 28 GB \\
+FP16 (float16) & 16 & 2 & 14 GB \\
+BF16 (bfloat16) & 16 & 2 & 14 GB \\
+INT8 & 8 & 1 & 7 GB \\
+INT4 & 4 & 0.5 & \textbf{3.5 GB} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Example}: 7 billion parameters in FP16:
+\[
+7 \times 10^9 \text{ params} \times 2 \text{ bytes/param} = 14 \times 10^9 \text{ bytes} = 14 \text{ GB}
+\]
+
+\textbf{Your hardware}:
+\begin{itemize}
+\item Consumer laptop: 8--16 GB RAM (shared with OS, browser)
+\item RTX 3060/4060 GPU: 8--12 GB VRAM
+\item MacBook Pro M3: 16--32 GB unified memory
+\end{itemize}
+
+\textbf{Conclusion}: A 7B model in FP16 barely fits for \textit{inference}, and definitely not for training!
+
+\subsection{Training Makes It Worse}
+
+During training, memory requirements explode:
+
+\begin{center}
+% [Diagram source omitted from the public snapshot; the book uses independently drawn figures.]
+\end{center}
+
+\textbf{Why so much}?
+
+\begin{itemize}
+\item \textbf{Gradients}: Same size as weights (14 GB for FP16)
+\item \textbf{Optimizer states}: Adam stores first and second moments:
+\[
+\mathbf{m}_t = \beta_1 \mathbf{m}_{t-1} + (1-\beta_1)\mathbf{g}_t, \quad
+\mathbf{v}_t = \beta_2 \mathbf{v}_{t-1} + (1-\beta_2)\mathbf{g}_t^2
+\]
+That is 2 extra copies in FP32 (28 GB!)
+\item \textbf{Activations}: Stored during forward pass for backpropagation (10+ GB depending on batch size and sequence length)
+\end{itemize}
+
+\textbf{Total for training 7B with Adam in FP16}: $\sim$66 GB
+
+This requires enterprise GPUs (A100 80GB, H100 80GB) costing \$10,000--\$40,000!
+
+\begin{tcolorbox}[colback=red!5!white, colframe=red!50!black, title=The Challenge]
+\textbf{Goal}: Enable researchers and practitioners to:
+\begin{itemize}
+\item \textbf{Run} 7B models for inference on 8 GB GPUs
+\item \textbf{Fine-tune} 7B models on 12 GB GPUs
+\item \textbf{Deploy} models on CPUs and consumer hardware
+\end{itemize}
+
+\textbf{Solution}: Quantization + efficient fine-tuning + optimized serving!
+\end{tcolorbox}
+
+\section{Quantization: Fewer Bits, Less Memory}
+
+\subsection{The Core Idea}
+
+\textbf{Quantization}: Represent weights with fewer bits while preserving performance.
+
+\textbf{Analogy}: Image compression
+\begin{itemize}
+\item Raw photo: 24 bits per pixel (16 million colors)
+\item JPEG: Approximate values, much smaller file
+\item Visual quality: Often indistinguishable
+\end{itemize}
+
+For neural networks:
+\begin{itemize}
+\item Original weights: FP16 or FP32 (continuous values)
+\item Quantized weights: INT8 or INT4 (discrete levels)
+\item Model quality: Minimal degradation with proper techniques!
+\end{itemize}
+
+\subsection{How Quantization Works}
+
+\textbf{Basic quantization} maps floating-point weights to integers.
+
+\begin{center}
+% [Diagram source omitted from the public snapshot; the book uses independently drawn figures.]
+\end{center}
+
+\subsubsection{The Quantization Formula}
+
+Given a floating-point weight $w \in \mathbb{R}$, quantize to integer:
+\[
+w_{\text{quant}} = \text{round}\left(\frac{w - z}{s}\right)
+\]
+
+where:
+\begin{itemize}
+\item $s$ = \textbf{scale} (controls range)
+\item $z$ = \textbf{zero-point} (controls offset)
+\end{itemize}
+
+To reconstruct (dequantize):
+\[
+\hat{w} = w_{\text{quant}} \cdot s + z
+\]
+
+\subsubsection{Example: 8-bit Quantization}
+
+Weights in range $[-0.5, 0.5]$, quantize to INT8 (256 values):
+
+\begin{enumerate}
+\item \textbf{Determine range}: $w_{\min} = -0.5$, $w_{\max} = 0.5$
+\item \textbf{Compute scale}:
+\[
+s = \frac{w_{\max} - w_{\min}}{2^8 - 1} = \frac{1.0}{255} \approx 0.00392
+\]
+\item \textbf{Quantize} $w = 0.12$:
+\[
+w_{\text{quant}} = \text{round}\left(\frac{0.12}{0.00392}\right) = \text{round}(30.6) = 31
+\]
+\item \textbf{Dequantize}:
+\[
+\hat{w} = 31 \times 0.00392 \approx 0.1215
+\]
+\end{enumerate}
+
+\textbf{Error}: $|0.12 - 0.1215| = 0.0015$ (very small!)
+
+\subsection{Quantization Strategies}
+
+\begin{center}
+\begin{tabular}{lp{5cm}l}
+\toprule
+\textbf{Method} & \textbf{Description} & \textbf{Bits} \\
+\midrule
+\textbf{Post-Training (PTQ)} & Quantize after training & 4--8 \\
+\textbf{Quantization-Aware (QAT)} & Train with quantization & 4--8 \\
+\textbf{Weight-Only} & Quantize weights, keep activations FP16 & 3--4 \\
+\textbf{Weight + Activation} & Quantize both & 8 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+For LLMs, \textbf{weight-only quantization} dominates:
+\begin{itemize}
+\item Quantize weights to INT4 (16 values)
+\item Keep activations in FP16 during computation
+\item \textbf{4$\times$ memory reduction} with minimal quality loss!
+\end{itemize}
+
+\subsection{NF4: Normal Float 4}
+
+Standard INT4 uses uniform spacing: $\{0, 1, 2, \ldots, 15\}$.
+
+But neural network weights follow a \textbf{normal distribution}!
+
+\textbf{NF4} (used in QLoRA) optimally spaces quantization levels:
+
+\begin{center}
+% [Diagram source omitted from the public snapshot; the book uses independently drawn figures.]
+\end{center}
+
+\textbf{Key insight}: More quantization levels near zero (high density), fewer in tails (low density).
+
+This gives \textbf{better precision where it matters}!
+
+\subsection{Quantization Methods for LLMs}
+
+\begin{center}
+\begin{tabular}{lp{6cm}l}
+\toprule
+\textbf{Method} & \textbf{Description} & \textbf{Use} \\
+\midrule
+\textbf{GPTQ} & Post-training using Hessian info & 3--4 bit inference \\
+\textbf{AWQ} & Activation-aware (protects salient weights) & Fast inference \\
+\textbf{GGUF} & Format for llama.cpp (CPU/Metal) & Laptops, no GPU \\
+\textbf{bitsandbytes} & On-the-fly 4/8-bit with NF4 & Training and inference \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Bottom line}: With 4-bit quantization, 7B model: 14 GB $\rightarrow$ \textbf{3.5 GB}!
+
+\section{QLoRA: Fine-Tuning on Consumer GPUs}
+
+\subsection{Recall: LoRA from the Pretraining Lecture}
+
+In the previous lecture, we learned about \textbf{LoRA} (Low-Rank Adaptation):
+
+\begin{itemize}
+\item Freeze pre-trained weights $\mathbf{W} \in \mathbb{R}^{d \times d}$
+\item Add trainable low-rank adapters: $\Delta \mathbf{W} = \mathbf{B}\mathbf{A}$, where $\mathbf{B} \in \mathbb{R}^{d \times r}$, $\mathbf{A} \in \mathbb{R}^{r \times d}$, and $r \ll d$
+\item Forward pass: $\mathbf{h} = \mathbf{W}\mathbf{x} + \mathbf{B}\mathbf{A}\mathbf{x}$
+\item Only train $\mathbf{B}$ and $\mathbf{A}$ (tiny fraction of parameters!)
+\end{itemize}
+
+\textbf{Memory savings}:
+\begin{itemize}
+\item Original params: $d^2$
+\item LoRA params: $2dr$ (typically $r=8$ or $r=16$, so $2dr \ll d^2$)
+\end{itemize}
+
+\textbf{The problem}: Even with LoRA, the base model needs 14 GB in FP16!
+
+\subsection{QLoRA: The Best of Both Worlds}
+
+\textbf{QLoRA} = \textbf{Quantized} base model + \textbf{LoRA} adapters
+
+\begin{center}
+% [Diagram source omitted from the public snapshot; the book uses independently drawn figures.]
+\end{center}
+
+\textbf{Key innovations in QLoRA}:
+
+\begin{enumerate}
+\item \textbf{4-bit NormalFloat (NF4)}: Quantize base to 4 bits optimally
+\item \textbf{Double Quantization}: Quantize the quantization constants (extra savings)
+\item \textbf{Paged Optimizers}: Handle memory spikes via unified memory
+\item \textbf{LoRA adapters in FP16}: Keep trainable params in high precision
+\end{enumerate}
+
+\subsection{Memory Breakdown}
+
+For 7B model with QLoRA (rank $r=16$):
+
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Component} & \textbf{Size} & \textbf{Precision} & \textbf{Trainable?} \\
+\midrule
+Base weights & 3.5 GB & NF4 (4-bit) & No \\
+LoRA adapters & $\sim$50 MB & FP16 & Yes \\
+Gradients (adapters) & $\sim$50 MB & FP16 & -- \\
+Optimizer states & $\sim$200 MB & FP32 & -- \\
+Activations (batch=1) & $\sim$1 GB & FP16 & -- \\
+\midrule
+\textbf{Total} & \textbf{5--6 GB} & & \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Comparison}:
+\begin{itemize}
+\item Full fine-tuning (FP16): 66 GB (requires A100 80GB)
+\item QLoRA: 5--6 GB (runs on RTX 3060!)
+\end{itemize}
+
+\textbf{Performance}: QLoRA achieves 99\% of full fine-tuning quality with \textbf{10$\times$ less memory}!
+
+\subsection{Implementation: Fine-tuning Qwen2.5-7B with QLoRA}
+
+Let us walk through fine-tuning a 7B model on consumer hardware.
+
+\subsubsection{Step 1: Setup and Model Selection}
+
+% [Implementation omitted from the public snapshot: independent provenance was not established. See sources/README.md.]
+
+\textbf{Why Qwen2.5-7B}?
+\begin{itemize}
+\item Apache-2.0 licensed; redistribution remains subject to its notice and license conditions
+\item Strong multilingual capabilities
+\item Good long-context performance
+\item Active development and community
+\end{itemize}
+
+\subsubsection{Step 2: Configure 4-bit Quantization}
+
+% [Implementation omitted from the public snapshot: independent provenance was not established. See sources/README.md.]
+
+\begin{tcolorbox}[colback=yellow!5!white, colframe=orange!50!black, title=What is Double Quantization?]
+The quantization parameters (scales $s$) themselves take memory!
+
+\textbf{Double quantization}: Quantize the scales from FP32 to INT8.
+
+For 7B model:
+\begin{itemize}
+\item Scales in FP32: $\sim$500 MB
+\item Scales in INT8: $\sim$125 MB
+\item \textbf{Savings}: $\sim$375 MB
+\end{itemize}
+
+Small but meaningful when every MB counts!
+\end{tcolorbox}
+
+\subsubsection{Step 3: Load Model and Apply LoRA}
+
+% [Implementation omitted from the public snapshot: independent provenance was not established. See sources/README.md.]
+
+\textbf{Observation}: We are training only \textbf{0.55\%} of parameters! Yet this is enough for effective adaptation.
+
+\subsubsection{Step 4: Prepare Dataset}
+
+% [Implementation omitted from the public snapshot: independent provenance was not established. See sources/README.md.]
+
+\subsubsection{Step 5: Train with QLoRA}
+
+% [Implementation omitted from the public snapshot: independent provenance was not established. See sources/README.md.]
+
+\textit{The original implementation and its unverified run-result narration are
+omitted from this public snapshot.}
+
+\begin{tcolorbox}[colback=green!5!white, colframe=green!50!black, title=Why QLoRA Works: The Key Insight]
+\textbf{Observation}: You do not need high precision everywhere!
+
+\begin{itemize}
+\item \textbf{Base weights (frozen)}: Can be 4-bit
+\begin{itemize}
+\item Fixed during training
+\item Dequantized to FP16 for computation
+\item 4-bit sufficient for storage
+\end{itemize}
+
+\item \textbf{LoRA adapters (trainable)}: Must be FP16
+\begin{itemize}
+\item Updated by gradients
+\item Need precision for training stability
+\item But tiny ($<$1\% of parameters)
+\end{itemize}
+\end{itemize}
+
+\textbf{Result}: 10$\times$ memory reduction, $<$1\% quality loss!
+\end{tcolorbox}
+
+\section{Summary and Key Takeaways}
+
+\begin{tcolorbox}[colback=purple!5!white, colframe=purple!50!black, title=What We Learned]
+\textbf{Memory bottleneck}:
+\begin{itemize}
+\item 7B model in FP16: 14 GB (inference), 66+ GB (training)
+\item Consumer hardware: 8--16 GB (not enough!)
+\end{itemize}
+
+\textbf{Quantization}:
+\begin{itemize}
+\item FP16 $\rightarrow$ INT4: 4$\times$ memory reduction
+\item NF4: Optimal spacing for normal distributions
+\item Quality loss: $<$2\% with smart quantization
+\end{itemize}
+
+\textbf{QLoRA}:
+\begin{itemize}
+\item 4-bit base + FP16 LoRA adapters
+\item Train 7B models on 8--12 GB GPUs
+\item 10$\times$ memory savings, 99\% quality retention
+\end{itemize}
+
+\textbf{Deployment}:
+\begin{itemize}
+\item \textbf{vLLM}: High-throughput GPU serving with PagedAttention
+\item \textbf{llama.cpp}: CPU/edge deployment with GGUF format
+\item \textbf{MLX-LM}: Optimized for Apple Silicon
+\item \textbf{AWQ}: Fast GPU inference with activation-aware quantization
+\end{itemize}
+\end{tcolorbox}
+
+\subsection{Practical Guidelines}
+
+\textbf{For training}:
+\begin{enumerate}
+\item Use QLoRA with rank $r=16$ as default
+\item Enable gradient checkpointing to save memory
+\item Use paged\_adamw\_8bit optimizer
+\item Start with learning rate 2e-4 for LoRA
+\end{enumerate}
+
+\textbf{For deployment}:
+\begin{enumerate}
+\item Profile your use case (latency vs throughput)
+\item Choose quantization level (Q4\_K\_M is good default)
+\item Benchmark on your specific hardware
+\item Monitor quality degradation on held-out test set
+\end{enumerate}
+
+\subsection{Common Pitfalls}
+
+\begin{itemize}
+\item \textbf{Over-quantization}: 3-bit often too aggressive, stick to 4-bit
+\item \textbf{Wrong target modules}: Always include Q, K, V, O projections in LoRA
+\item \textbf{Insufficient calibration data}: AWQ needs representative samples
+\item \textbf{Memory leaks}: Clear KV-cache between generation batches
+\item \textbf{Ignoring gradient checkpointing}: Can save 30--50\% memory during training
+\end{itemize}
+
+\section{Exercises and Further Exploration}
+
+\subsection{Exercise 1: Quantization Trade-offs}
+
+Quantize Qwen2.5-7B to different precisions and evaluate:
+
+\begin{enumerate}
+\item Quantize to: FP16, INT8, INT4 (NF4), INT4 (uniform), INT3
+\item Evaluate perplexity on held-out test set
+\item Measure inference speed (tokens/second)
+\item Plot: bits per parameter vs. perplexity
+\end{enumerate}
+
+\textbf{Question}: Where is the sweet spot for your application?
+
+\textbf{Deliverable}: Report with plots and recommendations.
+
+\subsection{Exercise 2: LoRA Rank Ablation}
+
+Fine-tune with different ranks: $r \in \{4, 8, 16, 32, 64\}$
+
+Measure:
+\begin{itemize}
+\item Training time per epoch
+\item Peak memory usage
+\item Validation loss
+\item Task-specific metrics (accuracy, F1, etc.)
+\end{itemize}
+
+\textbf{Question}: What is the optimal rank for your task? Does it depend on model size?
+
+\subsection{Exercise 3: Deployment Comparison}
+
+Deploy your fine-tuned model with multiple methods:
+
+\begin{center}
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Method} & \textbf{Setup time} & \textbf{Latency} & \textbf{Throughput} & \textbf{Memory} \\
+\midrule
+HF + bitsandbytes & ? & ? & ? & ? \\
+vLLM & ? & ? & ? & ? \\
+llama.cpp (CPU) & ? & ? & ? & ? \\
+llama.cpp (Metal) & ? & ? & ? & ? \\
+MLX-LM & ? & ? & ? & ? \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Test conditions}:
+\begin{itemize}
+\item Single request latency (time to first token, total time)
+\item Batch throughput (tokens/second with batch sizes 1, 8, 32)
+\item Memory usage (idle, during inference)
+\end{itemize}
+
+\textbf{Deliverable}: Comprehensive benchmark report with recommendations for different use cases.
+
+\subsection{Further Reading}
+
+\textbf{Core papers}:
+\begin{itemize}
+\item Dettmers et al., ``QLoRA: Efficient Finetuning of Quantized LLMs'' (2023)
+\item Frantar et al., ``GPTQ: Accurate Post-Training Quantization for GPT Models'' (2022)
+\item Lin et al., ``AWQ: Activation-aware Weight Quantization for LLM Compression'' (2023)
+\item Kwon et al., ``Efficient Memory Management for Large Language Model Serving with PagedAttention'' (2023)
+\item Dettmers et al., ``LLM.int8(): 8-bit Matrix Multiplication for Transformers at Scale'' (2022)
+\end{itemize}
+
+\textbf{Tools and frameworks}:
+\begin{itemize}
+\item vLLM documentation: \texttt{docs.vllm.ai}
+\item llama.cpp: \texttt{github.com/ggerganov/llama.cpp}
+\item AutoAWQ: \texttt{github.com/casper-hansen/AutoAWQ}
+\item MLX: \texttt{ml-explore.github.io/mlx}
+\item bitsandbytes: \texttt{github.com/TimDettmers/bitsandbytes}
+\end{itemize}
+
+\section{Looking Ahead}
+
+\subsection{Emerging Techniques}
+
+The field is rapidly evolving. Recent developments include:
+
+\begin{itemize}
+\item \textbf{GPTQ-R}: Refined GPTQ with better Hessian approximation
+\item \textbf{QuIP}: Quantization with Incoherence Processing (2-bit!)
+\item \textbf{SpQR}: Sparse Quantized Representation
+\item \textbf{SmoothQuant}: Migrate difficulty from activations to weights
+\item \textbf{EETQ}: Efficient 8-bit quantization for training
+\end{itemize}
+
+\subsection{Hardware Trends}
+
+New hardware is making efficient inference easier:
+
+\begin{itemize}
+\item \textbf{NPUs}: Neural Processing Units in consumer devices
+\item \textbf{Qualcomm AI Engine}: On-device LLM inference on phones
+\item \textbf{Apple Neural Engine}: M-series optimizations
+\item \textbf{AMD ROCm}: Expanding GPU ecosystem beyond NVIDIA
+\end{itemize}
+
+\subsection{The Democratization Vision}
+
+\begin{tcolorbox}[colback=blue!5!white, colframe=blue!50!black, title=The Future is Accessible]
+\textbf{Three years ago}: Running LLMs required million-dollar infrastructure.
+
+\textbf{Today}: With the techniques you learned:
+\begin{itemize}
+\item Run 7B models on \$300 consumer GPUs
+\item Fine-tune on laptops with 16 GB RAM
+\item Deploy on edge devices and phones
+\end{itemize}
+
+\textbf{Tomorrow}: Even more efficient methods will emerge!
+\begin{itemize}
+\item Better quantization (sub-4-bit without quality loss)
+\item Sparse models (Mixture-of-Experts at edge)
+\item Neural architecture search for efficiency
+\item Hardware-software co-design
+\end{itemize}
+
+\textbf{Your opportunity}: Use these tools to build LLM applications that were impossible just a few years ago!
+\end{tcolorbox}
+
+\section{Final Thoughts}
+
+The techniques you learned today are not just academic exercises---they are \textbf{actively used in production}:
+
+\begin{itemize}
+\item \textbf{Startups}: Deploy LLM services without massive GPU clusters
+\item \textbf{Research labs}: Enable more scientists to experiment with large models
+\item \textbf{Edge AI}: Run models on robots, drones, IoT devices
+\item \textbf{Privacy applications}: Keep sensitive data local with on-device inference
+\item \textbf{Developing regions}: Access AI without expensive cloud services
+\end{itemize}
+
+As models grow even larger (GPT-4 rumored at 1.7T parameters, future models may reach 10T+), efficiency techniques become \textit{more} critical, not less. The race is not just about bigger models---it is about making powerful models accessible, deployable, and sustainable.
+
+\vspace{1cm}
+
+\begin{center}
+\textit{``The best model is not the largest model---}\\
+\textit{it is the model you can actually deploy and use.''}
+\end{center}
+
+\vspace{1cm}
+
+\hrule
+
+\vspace{0.5cm}
+
+\textbf{Next lecture}: Generative Models and Future Frontiers (VAEs, GANs, Diffusion Models)
+
+\textbf{Lab assignment}:
+\begin{enumerate}
+\item Fine-tune Qwen2.5-7B on instruction-following task using QLoRA
+\item Convert to GGUF and test on CPU
+\item Deploy with vLLM and benchmark performance
+\item Submit: Code, benchmarking report, and deployment guide
+\end{enumerate}
+
+\textbf{Due}: Two weeks from today
+
+\end{document}
