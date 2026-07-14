@@ -1,6 +1,6 @@
 # Continuing the Book — Handoff & Roadmap
 
-*Written 2026-07-09 after Chapter 11 shipped; updated 2026-07-14 after Chapter 18
+*Written 2026-07-09 after Chapter 11 shipped; updated 2026-07-14 after Chapter 19
 shipped. This is the master handoff document:
 everything a fresh collaborator (human or Claude session, on any account) needs to
 continue the project without the original conversation history. Read `CLAUDE.md`
@@ -20,7 +20,7 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 | II · Vision | 7–9 | **Shipped; repair pass complete and verified** (July 11, 2026) |
 | III · Sequences | 10–11 | **Shipped; repair pass complete and verified** (July 11, 2026) |
 | IV · Attention | 12–16 | **Shipped and two-format verified** (July 13, 2026) |
-| V · Pretrained Era | 17–19 | **Chapters 17–18 shipped and two-format verified** (July 14, 2026); Chapter 19 stub with contract |
+| V · Pretrained Era | 17–19 | **Shipped and two-format verified** (July 14, 2026) |
 | Appendices | a1–a4 | Stubs (a4 floating-point queued in backlog) |
 
 **Milestone 1** (Part I complete + skeleton) is met. The July 11 quantitative,
@@ -97,19 +97,34 @@ natural-language alignment results. Both execution freezes, all seven original
 figures, browser layout/assets, and the complete PDF chapter range passed QA before
 publication.
 
+Chapter 19 is complete: it harvests “A judge is not a generator” and the saved Module
+6 autoencoder spine, then connects PCA, deterministic autoencoders, VAEs, GANs, and
+diffusion through explicit sampling, training, and evaluation contracts. Its provenance
+is pinned to the Module 6 spine and transcript, sanitized Module 6/12 source snapshots,
+and primary papers; all executable studies and seven figures are book-original. On the
+curved-data audit, PCA and the tied linear autoencoder both have held-out MSE 0.100000,
+while the five-seed nonlinear mean is 0.000002815 (SD 0.000001223) with mean absolute
+latent correlation 0.992802 (SD 0.005513). The scalar Gaussian audit pins log evidence
+-1.602093 and a mismatched-ELBO gap of 0.931250, exactly equal to posterior KL. The
+finite GAN audit separates covered/collapsed JSD 0.003253/0.183270 and exposes the
+0.002473-versus-0.997527 saturating/non-saturating gradient magnitudes. In the scalar
+diffusion study, time conditioning reaches noise MSE 0.429707, central mass 0.019470,
+and Wasserstein distance 0.058570, versus 0.750634/0.222760/0.375321 without time. The
+chapter makes no natural-image or hardware claim; both formats are verified.
+
 **Decisions still gated on the author:**
-- The author's own edit pass over Chapters 1–18 remains pending.
+- The author's own edit pass over Chapters 1–19 remains pending.
 - Course-site integration was approved, implemented, and shipped July 11, 2026. It uses
   a plural `bookChapters` field because modules and chapters do not map one-to-one;
   only reviewed, substantive chapters are linked. The production build passes.
-  Chapters 12–18's course-site links wait for the author's edit pass.
+  Chapters 12–19's course-site links wait for the author's edit pass.
 - "Deeper dive" collapsed sections: piloted in ch. 6; his verdict pending ("let us
   get back to deeper dive later"). Do not retrofit chs. 1/5.
 - GPU experiments remain backlog-only until access is available. Do not publish
   placeholder callouts in chapters; run the queued experiments on Rivanna/Colab and
   fold real results back into the relevant chapters later.
 
-## 2. The working protocol (refined over chapters 7–18)
+## 2. The working protocol (refined over chapters 7–19)
 
 The single most important lesson of this project: **pre-test every experiment
 regime before writing a word of prose.** Roughly half of all planned experiments
@@ -286,10 +301,10 @@ These are precedents; when a new experiment misbehaves, check here first.
 | `data/squeezenet1_1-imagenet.pt` | torchvision SqueezeNet 1.1 ImageNet weights | upstream enum, URL, license note, and checksum in `data/README.md` |
 | (ch. 10 corpus) | the book's own chapters 1–9 | not a file — `glob("../part*/0*.qmd")` at render, code cells stripped |
 
-## 7. Roadmap: the remaining chapters
+## 7. Roadmap: completed numbered chapters and remaining appendices
 
-Work order: 17 → 18 → 19, appendices opportunistically.
-Each stub carries its contract; specifics accumulated so far:
+The numbered chapter sequence is complete; appendices remain opportunistic. Each
+chapter record preserves its source, harvest, experiment, and verification contract:
 
 ### Ch. 12 — Kernel Regression: Attention Before It Was Learnable (SHIPPED)
 - **Seeds**: `sources/8.1-Attention.tex` (the "Kernel Regression: The Conceptual
@@ -513,18 +528,54 @@ Each stub carries its contract; specifics accumulated so far:
   PDF chapter range passed QA.
 - **Forward seed planted**: “A judge is not a generator” into ch. 19.
 
-### Ch. 19 — Generative Models: From PCA to Diffusion
-- Harvest ch. 18's “A judge is not a generator” by separating evaluation of completed
-  samples from learning the distribution that produces them. Per the stub: generation
-  (PCA→AE→VAE→diffusion — **the m06 autoencoder spine lives here**: PCA as
-  linear autoencoder, bottleneck, manifold learning; see
-  `ds6050_06_autoencoders/MODULE_NOTES.md` spine #4–8, deliberately NOT used in
-  ch. 11).
+### Ch. 19 — Generative Models: From PCA to Diffusion (SHIPPED)
+- **Seeds and provenance**: Module 6's `MODULE_NOTES.md` spine #4–8 at pinned
+  course-code commit, its SHA-pinned lecture transcript, and sanitized public snapshots
+  `sources/6-AE-slides.tex`, `sources/12.diffusion.tex`,
+  `sources/12.2S-Diffusion.tex`, `sources/12.3S-VAE.tex`, and
+  `sources/12.4S-GAN.tex`; primary PCA/denoising-AE/VAE/GAN/diffusion/latent-diffusion
+  papers. Course-deck code, D2L-linked code, external figures, and product-era
+  comparisons were not reproduced; all eight executable cells and seven figures are
+  book-original.
+- **Harvests completed by name**: ch. 18's “A judge is not a generator” separates
+  completed-sample evaluation from the law that produces samples. The saved m06
+  autoencoder spine closes through PCA as a linear autoencoder, the bottleneck,
+  nonlinear curved reconstruction, and the manifold-learning qualification.
+- **Reconstruction audits**: on alternating held-out points from a planted curve,
+  rank-one PCA and the tied linear autoencoder both have MSE 0.100000 and their
+  projectors agree to displayed precision. Across seeds 6050–6054, the nonlinear
+  autoencoder has mean MSE 0.000002815 (SD 0.000001223) and mean absolute code-to-curve
+  correlation 0.992802 (SD 0.005513). A separate three-code construction proves that
+  zero reconstruction error does not identify either a decoder away from observed
+  codes or a latent sampling law.
+- **Pinned VAE and GAN identities**: the scalar Gaussian model has posterior
+  mean/variance 0.882353/0.264706 and log evidence -1.602093. A mismatched posterior's
+  ELBO is -2.533343; the 0.931250 evidence gap exactly equals its posterior KL. In the
+  finite three-mode GAN, covered/collapsed JSD is 0.003253/0.183270 and the optimal-
+  discriminator values satisfy $V(D^*,G)=-\log 4+2\operatorname{JSD}$; at fake logit
+  -6, minimax versus non-saturating generator-gradient magnitude is
+  0.002473/0.997527.
+- **Pinned diffusion audits**: the 100-step forward schedule has
+  $\bar\alpha_{100}=0.005618761019$, signal coefficient 0.074958395256, and noise
+  coefficient 0.997186662055; iterative and direct noising agree to floating-point
+  precision, and the exact $t=1$ posterior-variance branch adds no noise. Across five
+  seeds, time conditioning yields noise MSE 0.429707 (SD 0.000927), generated standard
+  deviation 2.062095, central mass 0.019470, and Wasserstein distance 0.058570. Removing
+  time raises MSE/central mass/Wasserstein distance to 0.750634/0.222760/0.375321.
+- **Evaluation and verification state**: the chapter separates fidelity, coverage,
+  memorization, condition adherence, distributional fit, sampling cost, seed
+  uncertainty, and data/use context. The experiments are finite CPU mechanism tests,
+  not natural-image or hardware claims. Both execution freezes are present and their
+  printed outputs match exactly; the two-format book render is verified.
+- **Forward seed planted**: “a small schedule coefficient is not a zero coefficient”
+  into Appendix a4, distinguishing mathematical smallness, underflow, and a
+  rounded-away update.
 
 ### Appendices
 - a4 floating-point: queued in backlog; ch. 5 (float-zero), ch. 9 (underflow
-  figure), ch. 10 (σ(0)^80) all point to it — gather those as its motivating
-  examples. a1 (LinAlg/SVD) seeds: `misc/LinAlg,svd` in Box.
+  figure), ch. 10 (σ(0)^80), and ch. 19 (long schedule products) all point to it —
+  gather those as its motivating examples. a1 (LinAlg/SVD) seeds:
+  `misc/LinAlg,svd` in Box.
 
 ## 8. Document map
 

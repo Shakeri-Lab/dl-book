@@ -8,7 +8,7 @@ new rows here. The pedagogical-efficiency rule (drafting-template) depends on
 this file: a concept with no payoff chapter listed here should be an exercise or
 a cut.*
 
-*Updated: 2026-07-14, after Chapter 18 shipped.*
+*Updated: 2026-07-14, after Chapter 19 shipped.*
 
 ## 1. Seeds planted and their harvest contracts
 
@@ -22,6 +22,7 @@ a cut.*
 | Compositional hierarchy: features of features | ch. 3 | ch. 8 ✓ (receptive fields make it architectural) | done |
 | Gradient superhighway (ReLU's open gate) | ch. 5 | ch. 9 ✓ (residual = the highway as infrastructure), ch. 10 ✓ (cell state = highway through time) | done |
 | Float-precision death (tiny signals can become numerically unusable) | ch. 5 | ch. 9 ✓ (norm underflow + update-resolution diagnostic), ch. 10 ✓ (σ(0)^80); appendix a4 (gather all three) | a4 due |
+| A small schedule coefficient is not a zero coefficient | ch. 19 | appendix a4 — distinguish mathematical smallness, underflow, rounded-away updates | a4 due |
 | Constraints are knowledge / inductive bias prescription | ch. 6 | ch. 7–8 ✓; ch. 16 ✓ (ViT trades the bias away — "inductive bias strikes again, this time as a trade") | done |
 | Shift cliff (MLP collapses under 2px shift) | ch. 6 | ch. 8 ✓ (rematch), ch. 9 ✓ (GAP flattens it) — the book's first running benchmark | done |
 | Global templates figure (fig-templates) | ch. 6 | ch. 8 ✓ (learned local kernels vs. global smears) | done |
@@ -49,8 +50,8 @@ a cut.*
 | Training-optimal is not serving-optimal | ch. 16 | ch. 17 — harvested by name: Chinchilla allocates training compute, not storage, inference, or adaptation cost; the mismatch motivates prompting, PEFT, and quantization | done |
 | Fine-tuning changes every encoder weight; what if the backbone is too large? | ch. 15 | ch. 17 (prompting, PEFT, quantization) | done |
 | Where the update lives is not what the update optimizes | ch. 17 | ch. 18 — harvest by name: adaptation chooses permitted writes and representation; instruction or preference objectives choose rewarded behavior | done |
-| A judge is not a generator | ch. 18 | ch. 19 — harvest by name: reward models and preference losses evaluate completed samples; generative modeling learns the distribution that produces them | ch. 19 due |
-| m06 autoencoder spine (PCA = linear AE, bottleneck, manifolds) | (unused by design in ch. 11) | ch. 19 | due |
+| A judge is not a generator | ch. 18 | ch. 19 — harvested by name: reward models and preference losses evaluate completed samples; generative modeling learns the distribution that produces them | done |
+| m06 autoencoder spine (PCA = linear AE, bottleneck, manifolds) | (unused by design in ch. 11) | ch. 19 | done |
 
 ## 2. Cross-chapter running benchmarks
 
@@ -117,6 +118,7 @@ optimizers or `backward()` before Chapter 5.
 | 16 | image patch tokens (`F.unfold` and stride-$P$ `nn.Conv2d` equivalence), ViT encoder classifier (learned image positions and `[CLS]`, pre-LN blocks), patch-size/attention-cost arithmetic, paired schedule-hash audits, CNN–ViT inductive-bias regimes; compound depth/width/resolution scaling, empirical power-law scaling, compute-optimal parameter/data allocation, Chinchilla joint loss fit |
 | 17 | hard/few-shot prompting and frozen-weight in-context learning; retrieval as a separate context path; soft prompts, prefix tuning, adapters, and BitFit; LoRA equations, initialization, rank-capacity, merge, and freeze audits; symmetric versus affine quantization, per-tensor versus per-row scales, PTQ/QAT/GPTQ/AWQ concepts; QLoRA, NF4, and double quantization; `nn.TransformerEncoderLayer` convenience wrapper |
 | 18 | response-masked SFT and instruction tuning; preference records and Bradley–Terry reward models; reward-shift and cyclic-consistency audits; reward model versus value function; finite KL-regularized Gibbs policy; PPO old-policy versus fixed-reference anchors; proxy-coverage audit; DPO reference-relative margin and exact finite identity; alignment evaluation contracts and model cards |
+| 19 | PCA and rank-$k$ reconstruction; deterministic autoencoders; bottleneck and manifold audits; Gaussian latent-variable models; ELBO and reparameterization; GAN minimax games and Jensen–Shannon divergence; diffusion schedules, noise prediction, score, and reverse sampling; generative evaluation contracts |
 
 ## 4. His signature analogies (use them; don't invent competitors)
 
@@ -126,5 +128,6 @@ superhighway (ch. 5/9/10 relay), ball rolling (momentum), house-and-foundation
 (channels, ch. 8), conveyor belt + valves / ball-valve (LSTM), gold rail
 (teacher forcing, coined ch. 11), "Okay, so —" (recaps), "what if X were
 learnable?" (the book's refrain — every part pivots on it), “train a judge, then try
-to please the judge” (reward model then policy, ch. 18), and model card as nutritional
-label (ch. 18).
+to please the judge” (reward model then policy, ch. 18), model card as nutritional
+label (ch. 18), and “PCA on steroids” (nonlinear autoencoders bend the reconstruction
+class, ch. 19).

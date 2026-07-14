@@ -1,29 +1,1662 @@
 # Generative Models: From PCA to Diffusion {#sec-19-generative}
 
+<!-- lecture-source:
+     Module 6 is transcript-backed; its prose spine comes from
+     ~/dl-course-code/ds6050_06_autoencoders/MODULE_NOTES.md sections 4--8
+     at course-code commit 05ed810ef6ecc1f8c81746928cdeabef7615ad01,
+     the transcript ~/Library/CloudStorage/Box-Box/Teaching/6050/dl-course-site/transcripts/m06_lecture-6-encoder-decoder-architectures_XxePU8jubto.txt
+     (SHA-256 e26520f19a97d7ed77284dad508d63a3a5ce67c914b0b5a986c88ac1d61e9f9c),
+     and the sanitized sources/6-AE-slides.tex.
+     Module 12 is slide-only; its mathematical spine comes from the sanitized
+     sources/12.diffusion.tex, sources/12.2S-Diffusion.tex,
+     sources/12.3S-VAE.tex, and sources/12.4S-GAN.tex.
+     primary sources: Baldi and Hornik 1989; Vincent et al. 2008;
+                      Kingma and Welling 2013; Goodfellow et al. 2014;
+                      Ho et al. 2020; Song et al. 2021; Rombach et al. 2022
+     provenance note: all executable studies and figures are independently derived
+     from displayed equations. External paper figures, course-deck code, D2L-linked
+     code, and product-era comparisons were not reproduced. The curved-manifold,
+     finite-Gaussian, finite-mode, schedule, and one-dimensional diffusion studies
+     are book-original mechanism demonstrations, not image-quality benchmarks. -->
+
+Chapter 18 promised you **a judge is not a generator**. A reward model can score a
+completed response, and a preference loss can move probability among compared
+responses. Both begin with a generator already in hand. Neither explains how a model
+first learns a distribution from which a new sample can be drawn.
+
+This chapter builds that missing side. We will begin somewhere that may look
+surprising: principal component analysis (PCA). The course's Module 6 made a second
+promise that we deliberately saved until now—**PCA is a linear autoencoder**. Once
+that statement is precise, one progression becomes visible:
+
+$$
+\text{flat compression}
+\;\longrightarrow\;
+\text{nonlinear compression}
+\;\longrightarrow\;
+\text{probabilistic latent variables}
+\;\longrightarrow\;
+\text{learned denoising}.
+$$
+
+Variational autoencoders (VAEs), generative adversarial networks (GANs), and diffusion
+models make different choices along that route. Each supplies a sampling rule, a
+training signal, and a characteristic way to fail. A high training score does not
+make those choices interchangeable.
+
+<!-- NOVEL: needs sign-off -->
+
+```{python}
+#| label: fig-judge-generator
+#| fig-cap: "A judge and a generator solve different problems. A judge maps a completed object to a score. A generator maps a random source through a learned sampling rule to a new object. A GAN connects the two during training, but the discriminator still does not become the sampler."
+#| fig-alt: "The left panel sends a completed sample through a judge to a scalar score. The right panel sends random noise through a learned generator to a new sample. A dashed training-only arrow connects judge feedback to generator parameters."
+#| fig-width: 10
+#| fig-height: 4.1
+#| code-summary: "Figure code: separate evaluation from generation"
+
+import math
+
+import matplotlib.pyplot as plt
+from matplotlib.axes import Axes
+from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
+import torch
+from torch import Tensor, nn
+import torch.nn.functional as F
+
+torch.set_default_dtype(torch.float64)
+torch.set_num_threads(6)
+torch.manual_seed(6050)
+
+navy, orange, green, wine = "#232D4B", "#E57200", "#2E7D32", "#722F37"
+
+fig, ax = plt.subplots(figsize=(10, 4.1))
+ax.set_xlim(0, 11)
+ax.set_ylim(0, 4.4)
+ax.axis("off")
+
+def contract_box(
+    axis: Axes, x: float, y: float, width: float, height: float,
+    title: str, detail: str, color: str
+) -> None:
+    axis.add_patch(FancyBboxPatch(
+        (x, y), width, height, boxstyle="round,pad=0.05,rounding_size=0.10",
+        facecolor=color, edgecolor=color, alpha=0.11, lw=1.4,
+    ))
+    axis.text(x + width / 2, y + 0.63 * height, title, ha="center", va="center",
+              color=color, fontsize=10.0, weight="bold")
+    axis.text(x + width / 2, y + 0.29 * height, detail, ha="center", va="center",
+              color="#444444", fontsize=8.3)
+
+
+def contract_arrow(
+    axis: Axes, start: tuple[float, float], end: tuple[float, float],
+    color: str = "#777777", style: str = "->"
+) -> None:
+    axis.add_patch(FancyArrowPatch(
+        start, end, arrowstyle=style, mutation_scale=13, color=color, lw=1.6,
+    ))
+
+
+contract_box(ax, 0.25, 2.05, 1.65, 1.05, "COMPLETED $x$", "already produced", navy)
+contract_box(ax, 2.35, 2.05, 1.65, 1.05, r"JUDGE $J_\phi$", "evaluate or rank", orange)
+contract_box(ax, 4.45, 2.05, 1.15, 1.05, "SCORE", r"$J_\phi(x)\in\mathbb{R}$", wine)
+contract_arrow(ax, (1.90, 2.58), (2.35, 2.58))
+contract_arrow(ax, (4.00, 2.58), (4.45, 2.58))
+
+contract_box(ax, 5.95, 2.05, 1.45, 1.05, "RANDOM SOURCE", r"$z\sim p(z)$", navy)
+contract_box(ax, 7.85, 2.05, 1.45, 1.05, r"GENERATOR $G_\theta$", "learned sampler", green)
+contract_box(ax, 9.75, 2.05, 1.00, 1.05, "NEW $x$", r"$x\sim p_\theta$", wine)
+contract_arrow(ax, (7.40, 2.58), (7.85, 2.58))
+contract_arrow(ax, (9.30, 2.58), (9.75, 2.58))
+
+ax.add_patch(FancyArrowPatch(
+    (3.18, 1.92), (8.58, 1.92), arrowstyle="->", mutation_scale=12,
+    connectionstyle="arc3,rad=0.28", color=orange, lw=1.5, linestyle="--",
+))
+ax.text(5.88, 0.91, "GAN: judge feedback can train the generator",
+        ha="center", color=orange, fontsize=9.0, weight="bold")
+ax.text(5.5, 3.85, r"EVALUATION RULE  $\neq$  SAMPLING RULE", ha="center",
+        color=navy, fontsize=12.2, weight="bold")
+ax.text(5.5, 0.30,
+        "a complete generative claim names the sampler, training signal, and evaluation contract",
+        ha="center", color=wine, fontsize=9.7, weight="bold")
+plt.tight_layout()
+plt.show()
+```
+
+## Compress, then reconstruct
+
+Let us postpone random sampling for a moment and ask a simpler question. If an input
+has $d$ coordinates, can a network preserve its important structure using only $k<d$
+numbers?
+
+An **autoencoder** contains two maps. For one input
+$\vect{x}\in\mathbb{R}^{d}$, the encoder produces a code
+$\vect{z}\in\mathbb{R}^{k}$ and the decoder reconstructs the input:
+
+$$
+\vect{z}=f_\phi(\vect{x}),
+\qquad
+\widehat{\vect{x}}=g_\theta(\vect{z}).
+$$ {#eq-ae-contract}
+
+The narrow code is the **bottleneck**. For $n$ examples stored as rows of
+$\matr{X}\in\mathbb{R}^{n\times d}$, a squared reconstruction objective is
+
+$$
+\mathcal{L}_{\mathrm{AE}}(\phi,\theta)
+=\frac{1}{nd}\sum_{i=1}^{n}
+\norm{\vect{x}_i-g_\theta(f_\phi(\vect{x}_i))}_2^2.
+$$ {#eq-ae-mse}
+
+The target is available for free—the input supplies it—but the objective is still
+specific: preserve enough information to reconstruct the input. This is commonly
+called **self-supervised** because each input supplies its own target—the course lecture
+also groups it under unsupervised representation learning. Mean squared error is one
+choice—suitable when independent, equal-variance Gaussian error is a reasonable model.
+It is not the universal autoencoder loss.
+
+The hourglass shape creates pressure. If $k$ is small and the maps have controlled
+capacity, useful regularities may be cheaper to preserve than individual accidents.
+But pressure is not proof.
+
 ::: {.callout-warning}
-**Chapter stub.** This chapter is planned but not yet written. The abstract below is its
-contract; drafting sources are listed for provenance.
+## A bottleneck is pressure, not a certificate
+
+A real-valued low-dimensional code can still carry surprising information—and a
+high-capacity network can memorize a finite training set. Check held-out reconstruction,
+latent behavior, and the decoder between observed codes. “The bottleneck learned
+meaning” is an empirical claim, not a consequence of $k<d$.
 :::
 
-*One more make-it-learnable arc: PCA → autoencoder → VAE → diffusion (and GANs as the adversarial detour). Latents, ELBO, noise schedules.*
+## PCA is the linear autoencoder
 
-**Harvest contract.** Chapter 18 planted **“A judge is not a generator.”** A reward
-model or preference loss evaluates completed samples; this chapter must explain how a
-model learns the distribution that produces them. Its second inherited spine is Module
-6: PCA as a linear autoencoder, bottlenecks, and nonlinear manifold representations.
-Build the progression in that order before introducing probabilistic latents or reverse
-diffusion.
+Now we can make the Module 6 promise precise. Let the training rows be centered, so
+their mean is zero. Let $\matr{V}_k\in\mathbb{R}^{d\times k}$ contain $k$
+orthonormal principal directions:
 
-<!-- draft-sources
-seeds:
-- `Module 12 decks; Module 6-AE slides`
-- `sources/12.diffusion.tex`
-- `dl-course-code/ds6050_06_autoencoders/MODULE_NOTES.md` spine 4–8
-transcripts:
-- `m06 lectures (autoencoders)`
-planned pretests:
-- linear PCA reconstruction versus a tied linear autoencoder
-- bottleneck geometry and a controlled nonlinear-manifold rematch
-- finite Gaussian VAE/ELBO identity checks before stochastic optimization
-- forward noising and reverse denoising schedule audits with every coefficient pinned
--->
+$$
+\matr{V}_k^\top\matr{V}_k=\matr{I}_k.
+$$
+
+PCA encodes and decodes by
+
+$$
+\vect{z}=\matr{V}_k^\top\vect{x},
+\qquad
+\widehat{\vect{x}}
+=\matr{V}_k\vect{z}
+=\matr{V}_k\matr{V}_k^\top\vect{x}.
+$$ {#eq-pca-autoencoder}
+
+The product $\matr{P}_k=\matr{V}_k\matr{V}_k^\top\in\mathbb{R}^{d\times d}$
+is the orthogonal projector onto the principal $k$-dimensional subspace. Among all
+linear reconstruction maps of rank at most $k$, this projector minimizes squared
+reconstruction error. A tied linear autoencoder uses one matrix
+$\matr{W}\in\mathbb{R}^{d\times k}$ in both directions:
+
+$$
+\vect{z}=\matr{W}^\top\vect{x},
+\qquad
+\widehat{\vect{x}}=\matr{W}\matr{W}^\top\vect{x}.
+$$
+
+At a global optimum under the centered, squared-loss, undercomplete conditions, it can
+recover the same principal reconstruction subspace. That is the accurate content of
+“PCA is a linear autoencoder”—not a claim that every optimizer run succeeds or
+that every learned weight equals a particular PCA basis.
+
+::: {.callout-note}
+## Same subspace, not the same coordinates
+
+For any orthogonal $\matr{Q}\in\mathbb{R}^{k\times k}$,
+
+$$
+(\matr{V}_k\matr{Q})(\matr{V}_k\matr{Q})^\top
+=\matr{V}_k\matr{V}_k^\top.
+$$
+
+The latent axes may rotate or reflect—the reconstruction projector stays fixed.
+For an untied encoder and decoder, any invertible latent change of basis can cancel
+between the two maps. Compare reconstruction products, projectors, or principal angles,
+not raw latent coordinates.
+:::
+
+## What if the map could bend?
+
+PCA gives the best **flat** rank-$k$ reconstruction. What if the encoder and decoder
+were learnable nonlinear maps that could bend with the data?
+
+Let us use a controlled curve with a known one-dimensional coordinate. For
+$t\in[-1,1]$, define
+
+$$
+\vect{x}(t)
+=\left(t,\;1.5\left(t^2-\frac{1}{3}\right)\right)^\top.
+$$ {#eq-parabola-manifold}
+
+The alternating grid points form train and held-out sets. PCA and a tied linear
+autoencoder receive a one-dimensional bottleneck, as does a nonlinear
+$2\rightarrow24\rightarrow1\rightarrow24\rightarrow2$ autoencoder. The comparison
+is intentionally about representational shape, not parameter efficiency—the nonlinear
+model has far more adjustable knobs.
+
+<!-- NOVEL: needs sign-off -->
+
+```{python}
+#| label: fig-linear-nonlinear-ae
+#| fig-cap: "A one-dimensional bottleneck behaves differently when its maps may bend. On the alternating held-out grid, rank-one PCA and the tied linear autoencoder both have MSE 0.100000 and their projectors agree to displayed precision. Across seeds 6050–6054, the nonlinear autoencoder has mean held-out MSE 0.000002815 (SD 0.000001223); the absolute Pearson correlation between its code and the planted coordinate has mean 0.992802 (SD 0.005513). This controlled curve and capacity-mismatched model show a mechanism, not a universal nonlinear-autoencoder advantage."
+#| fig-alt: "The left panel shows parabola points, their PCA projections onto a horizontal line, and a nonlinear reconstruction following the curve. The middle panel plots held-out mean squared error for PCA, the tied linear autoencoder, and five nonlinear runs. The right panel shows the nonlinear latent coordinate ordered almost monotonically with the planted curve coordinate."
+#| fig-width: 10
+#| fig-height: 4.1
+#| code-summary: "Experiment: rematch PCA and linear and nonlinear autoencoders on a planted curve"
+
+def planted_curve(t: Tensor) -> Tensor:
+    return torch.stack((t, 1.5 * (t.square() - 1.0 / 3.0)), dim=1)
+
+
+def principal_projection(train_x: Tensor) -> tuple[Tensor, Tensor]:
+    mean = train_x.mean(dim=0)
+    _, _, vh = torch.linalg.svd(train_x - mean, full_matrices=False)
+    return mean, vh[:1].T
+
+
+class CurveAutoencoder(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.encoder = nn.Sequential(nn.Linear(2, 24), nn.Tanh(), nn.Linear(24, 1))
+        self.decoder = nn.Sequential(nn.Linear(1, 24), nn.Tanh(), nn.Linear(24, 2))
+
+    def forward(self, x: Tensor) -> tuple[Tensor, Tensor]:
+        z = self.encoder(x)
+        return self.decoder(z), z
+
+
+def fit_curve(seed: int) -> tuple[float, float, float, float, float, CurveAutoencoder]:
+    torch.manual_seed(seed)
+    t_all = torch.linspace(-1.0, 1.0, 513)
+    train_t, test_t = t_all[::2], t_all[1::2]
+    train_x, test_x = planted_curve(train_t), planted_curve(test_t)
+    mean, basis = principal_projection(train_x)
+
+    pca_reconstruction = (test_x - mean) @ basis @ basis.T + mean
+    pca_mse = F.mse_loss(pca_reconstruction, test_x).item()
+
+    tied_weight = nn.Parameter(torch.randn(2, 1) * 0.2)
+    tied_optimizer = torch.optim.Adam([tied_weight], lr=0.03)
+    centered_train = train_x - mean
+    for _ in range(1800):
+        tied_reconstruction = centered_train @ tied_weight @ tied_weight.T
+        tied_loss = F.mse_loss(tied_reconstruction, centered_train)
+        tied_optimizer.zero_grad()
+        tied_loss.backward()
+        tied_optimizer.step()
+
+    tied_test = (test_x - mean) @ tied_weight @ tied_weight.T + mean
+    tied_mse = F.mse_loss(tied_test, test_x).item()
+    projector_gap = torch.linalg.norm(
+        tied_weight @ tied_weight.T - basis @ basis.T
+    ).item()
+
+    model = CurveAutoencoder()
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.012)
+    for step in range(4000):
+        reconstruction, _ = model(train_x)
+        loss = F.mse_loss(reconstruction, train_x)
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        if step == 2500:
+            for group in optimizer.param_groups:
+                group["lr"] = 0.003
+
+    with torch.no_grad():
+        nonlinear_reconstruction, z = model(test_x)
+        nonlinear_mse = F.mse_loss(nonlinear_reconstruction, test_x).item()
+        centered_z = z[:, 0] - z[:, 0].mean()
+        centered_t = test_t - test_t.mean()
+        latent_correlation = (
+            centered_z @ centered_t
+            / torch.sqrt((centered_z @ centered_z) * (centered_t @ centered_t))
+        ).abs().item()
+    return pca_mse, tied_mse, projector_gap, nonlinear_mse, latent_correlation, model
+
+
+curve_rows = []
+curve_models = []
+for curve_seed in range(6050, 6055):
+    *curve_metrics, curve_model = fit_curve(curve_seed)
+    curve_rows.append(curve_metrics)
+    curve_models.append(curve_model)
+
+curve_table = torch.tensor(curve_rows)
+t_plot = torch.linspace(-1.0, 1.0, 257)
+x_plot = planted_curve(t_plot)
+plot_mean, plot_basis = principal_projection(planted_curve(torch.linspace(-1, 1, 257)))
+pca_plot = (x_plot - plot_mean) @ plot_basis @ plot_basis.T + plot_mean
+with torch.no_grad():
+    nonlinear_plot, z_plot = curve_models[0](x_plot)
+
+fig, axes = plt.subplots(1, 3, figsize=(10, 4.1))
+axes[0].plot(x_plot[:, 0], x_plot[:, 1], color="#B8BCC4", lw=4.0,
+             label="planted curve")
+axes[0].plot(pca_plot[:, 0], pca_plot[:, 1], color=orange, lw=2.4,
+             label="PCA reconstruction")
+axes[0].plot(nonlinear_plot[:, 0], nonlinear_plot[:, 1], color=green, lw=2.0,
+             label="nonlinear AE")
+for index in range(0, x_plot.shape[0], 24):
+    axes[0].plot([x_plot[index, 0], pca_plot[index, 0]],
+                 [x_plot[index, 1], pca_plot[index, 1]],
+                 color=orange, alpha=0.35, lw=0.8)
+axes[0].set_aspect("equal")
+axes[0].set_title("flat projection or curved map", color=navy, weight="bold")
+axes[0].legend(frameon=False, fontsize=7.4, loc="upper center")
+axes[0].grid(alpha=0.15)
+
+method_values = [curve_table[:, 0].mean(), curve_table[:, 1].mean(),
+                 curve_table[:, 3].mean()]
+axes[1].bar([0, 1, 2], method_values, color=[orange, navy, green], width=0.62)
+axes[1].scatter(torch.full((5,), 2.0), curve_table[:, 3], color=wine, s=24, zorder=3)
+axes[1].set_yscale("log")
+axes[1].set_xticks([0, 1, 2], ["PCA", "tied\nlinear AE", "nonlinear\nAE"])
+axes[1].set_ylabel("held-out MSE (log scale)")
+axes[1].set_title("same bottleneck, larger map class", color=navy, weight="bold")
+axes[1].grid(axis="y", alpha=0.18)
+
+axes[2].scatter(t_plot, z_plot[:, 0], c=t_plot, cmap="viridis", s=10)
+axes[2].set_xlabel("planted coordinate $t$")
+axes[2].set_ylabel("learned code $z$")
+axes[2].set_title("the curve is nearly unrolled", color=navy, weight="bold")
+axes[2].grid(alpha=0.15)
+plt.tight_layout()
+plt.show()
+
+print("seed  PCA MSE    tied MSE   projector gap  nonlinear MSE  |corr(z,t)|")
+for seed, row in zip(range(6050, 6055), curve_rows):
+    print(seed, *(f"{value:.9f}" for value in row))
+print("mean", *(f"{value:.9f}" for value in curve_table.mean(dim=0).tolist()))
+print("SD  ", *(f"{value:.9f}" for value in curve_table.std(dim=0).tolist()))
+```
+
+All five linear runs recover the principal projector at the displayed precision. The
+nonlinear decoder follows the curve between alternating training points, and its one
+dimensional code is almost monotone in the coordinate that generated the data. This is
+the lecture's **“PCA on steroids”** picture—with an important qualification:
+nonlinearity enlarges the reconstruction class from flat subspaces to curved maps. It
+does not guarantee that the chosen code is semantic, stable outside the observed
+region, or unique.
+
+Learning a lower-dimensional coordinate system for data concentrated near a curved
+set is one form of **manifold learning**. The phrase names the goal—not a guarantee
+that every bottleneck recovers a true manifold or its preferred coordinates.
+
+## A code is not yet a distribution
+
+The nonlinear autoencoder can reconstruct held-out points on this curve. Can we now
+generate by drawing an arbitrary random $z$ and passing it through the decoder?
+
+Nothing in @eq-ae-mse tells us which distribution to draw from. Reconstruction trains
+the decoder on codes produced by the encoder. Between those codes—and especially
+outside their range—many decoder functions can fit the same targets. A small algebraic
+example makes the missing contract visible. Suppose observed codes are
+$z\in\{-1,0,1\}$ and one decoder is $g_1(z)=z^2$. A second decoder can add any multiple
+of a function that vanishes at all three codes:
+
+$$
+g_2(z)=z^2+0.8z(z^2-1).
+$$
+
+The reconstructions agree on every observed code—yet disagree elsewhere.
+
+<!-- NOVEL: needs sign-off -->
+
+```{python}
+#| label: fig-decoder-ambiguity
+#| fig-cap: "Reconstruction does not identify a latent sampler or a unique decoder away from observed codes. The two displayed decoders agree exactly at z equal to -1, 0, and 1, so both have zero reconstruction error on the three targets. They disagree between and beyond those codes; at z = 0.5 their outputs are 0.25 and -0.05."
+#| fig-alt: "Two curves intersect at all three observed latent codes but separate between them and outside their range. The observed codes are marked with large points, and an unsupported random draw at one half has two different decoded values."
+#| fig-width: 8.5
+#| fig-height: 3.8
+#| code-summary: "Figure code: show why reconstruction alone does not identify latent sampling"
+
+latent_grid = torch.linspace(-1.45, 1.45, 400)
+decoder_one = latent_grid.square()
+decoder_two = latent_grid.square() + 0.8 * latent_grid * (latent_grid.square() - 1.0)
+observed_codes = torch.tensor([-1.0, 0.0, 1.0])
+observed_targets = observed_codes.square()
+random_code = torch.tensor(0.5)
+
+fig, ax = plt.subplots(figsize=(8.5, 3.8))
+ax.plot(latent_grid, decoder_one, color=navy, lw=2.2, label="$g_1(z)$")
+ax.plot(latent_grid, decoder_two, color=orange, lw=2.2, label="$g_2(z)$")
+ax.scatter(observed_codes, observed_targets, s=65, color=green, edgecolor="white",
+           linewidth=0.8, zorder=4, label="encoded observations")
+ax.axvline(random_code.item(), color=wine, ls="--", lw=1.2)
+ax.scatter([random_code, random_code],
+           [random_code.square(), random_code.square()
+            + 0.8 * random_code * (random_code.square() - 1.0)],
+           color=wine, s=42, zorder=4)
+ax.text(0.53, 1.70, "unsupported draw $z=0.5$", color=wine, fontsize=8.8)
+ax.set_xlabel("latent code $z$")
+ax.set_ylabel("decoded value")
+ax.set_title("equal reconstruction does not fix behavior between codes",
+             color=navy, weight="bold")
+ax.legend(frameon=False, fontsize=8)
+ax.grid(alpha=0.16)
+plt.tight_layout()
+plt.show()
+
+training_gap = (
+    observed_codes.square()
+    - (observed_codes.square() + 0.8 * observed_codes * (observed_codes.square() - 1))
+).abs().max()
+print(f"largest decoder gap at observed codes: {training_gap.item():.1f}")
+print(f"g1(0.5): {random_code.square().item():.2f}")
+print(
+    "g2(0.5):",
+    f"{(random_code.square() + 0.8 * random_code * (random_code.square() - 1)).item():.2f}",
+)
+```
+
+::: {.callout-warning}
+## Reconstruction does not specify a sampler
+
+A deterministic autoencoder may still be used inside a generative system, and one can
+fit a separate distribution to its codes. The narrower statement is the important
+one—ordinary reconstruction training supplies no built-in latent prior and no principled
+rule for arbitrary random draws. A code is not yet a probability distribution.
+:::
+
+The lecture provides one useful intermediate move: **same architecture, different
+training**. A denoising autoencoder corrupts an input to $\widetilde{\vect{x}}$ and
+asks the network to recover the clean $\vect{x}$:
+
+$$
+\mathcal{L}_{\mathrm{DAE}}
+=\E_{\vect{x}\sim p_{\mathrm{data}},\,
+\widetilde{\vect{x}}\sim q(\widetilde{\vect{x}}\mid\vect{x})}
+\left[
+\norm{\vect{x}-g_\theta(f_\phi(\widetilde{\vect{x}}))}_2^2
+\right].
+$$ {#eq-denoising-ae}
+
+Clean $\rightarrow$ clean learns reconstruction. Under squared loss, noisy
+$\rightarrow$ clean trains the output toward the conditional mean of clean inputs
+compatible with the corrupted observation—same architecture, different training.
+Diffusion will repeat this denoising problem over many calibrated noise levels. First,
+however, let us put an explicit probability model around the bottleneck.
+
+## Put probability around the code
+
+A **variational autoencoder (VAE)** begins by defining generation—not reconstruction.
+Let $\vect{z}\in\mathbb{R}^{k}$ be a latent variable with a chosen prior, commonly
+
+$$
+p(\vect{z})=\mathcal{N}(\vect{0},\matr{I}_k).
+$$
+
+A decoder with parameters $\theta$ specifies a conditional distribution
+$p_\theta(\vect{x}\mid\vect{z})$. Together they define the joint density
+
+$$
+p_\theta(\vect{x},\vect{z})
+=p(\vect{z})p_\theta(\vect{x}\mid\vect{z})
+$$
+
+and the marginal model
+
+$$
+p_\theta(\vect{x})
+=\int p(\vect{z})p_\theta(\vect{x}\mid\vect{z})\,d\vect{z}.
+$$ {#eq-vae-marginal}
+
+Generation is now a declared procedure—draw $\vect{z}\sim p(\vect{z})$, then draw
+or decode $\vect{x}\sim p_\theta(\vect{x}\mid\vect{z})$. The encoder is not used
+on this path—it belongs to inference and training.
+
+Training is harder because the posterior
+$p_\theta(\vect{z}\mid\vect{x})$ in Bayes' rule contains the integral in
+@eq-vae-marginal. A VAE introduces an **approximate posterior**, or inference model,
+whose parameters come from an encoder:
+
+$$
+q_\phi(\vect{z}\mid\vect{x})
+=\mathcal{N}\!\left(
+\vect{\mu}_\phi(\vect{x}),
+\operatorname{diag}\vect{\sigma}_\phi^2(\vect{x})
+\right).
+$$ {#eq-vae-encoder}
+
+The decoder $p_\theta$ defines the generative model. The encoder $q_\phi$ makes
+latent inference and training practical. Their arrows point in opposite directions—their
+probabilistic roles are not symmetric.
+
+### The ELBO is an exact gap identity
+
+Why does this approximate posterior give us a trainable objective? Start from the log
+evidence and add a quantity that equals zero:
+
+$$
+\begin{aligned}
+\log p_\theta(\vect{x})
+&=\E_{q_\phi(\vect{z}\mid\vect{x})}
+\left[
+\log\frac{p_\theta(\vect{x},\vect{z})}
+{q_\phi(\vect{z}\mid\vect{x})}
+\right] \\
+&\quad+
+D_{\mathrm{KL}}\!\left(
+q_\phi(\vect{z}\mid\vect{x})
+\,\|\,
+p_\theta(\vect{z}\mid\vect{x})
+\right).
+\end{aligned}
+$$ {#eq-elbo-gap}
+
+The expectation in the first line expands into
+
+$$
+\mathcal{L}_{\mathrm{ELBO}}(\theta,\phi;\vect{x})
+=
+\underbrace{
+\E_{q_\phi(\vect{z}\mid\vect{x})}
+\left[\log p_\theta(\vect{x}\mid\vect{z})\right]
+}_{\text{expected reconstruction log likelihood}}
+-
+\underbrace{
+D_{\mathrm{KL}}\!\left(
+q_\phi(\vect{z}\mid\vect{x})\,\|\,p(\vect{z})
+\right)
+}_{\text{prior regularization}}.
+$$ {#eq-vae-elbo}
+
+KL divergence is nonnegative, so the **evidence lower bound (ELBO)** is no larger than
+$\log p_\theta(\vect{x})$. More importantly, @eq-elbo-gap says exactly how loose it
+is—the gap is the KL divergence from the approximate posterior to the model's true
+posterior. This is not merely a convenient inequality—it is an identity.
+
+For the diagonal Gaussian in @eq-vae-encoder and a standard-normal prior, the
+regularizer is available coordinate by coordinate:
+
+$$
+D_{\mathrm{KL}}\!\left(q_\phi(\vect{z}\mid\vect{x})\,\|\,p(\vect{z})\right)
+=\frac{1}{2}\sum_{j=1}^{k}
+\left(
+\mu_{\phi,j}(\vect{x})^2
++\sigma_{\phi,j}(\vect{x})^2
+-\log\sigma_{\phi,j}(\vect{x})^2
+-1
+\right).
+$$ {#eq-vae-diagonal-kl}
+
+This closed form is why an encoder commonly returns $\vect{\mu}$ and
+$\log\vect{\sigma}^2$: the KL does not need Monte Carlo estimation.
+
+Let us pin every term in a case where the true posterior is available. Take
+
+$$
+z\sim\mathcal{N}(0,1),
+\qquad
+x\mid z\sim\mathcal{N}(z,0.36),
+\qquad x=1.2.
+$$
+
+Gaussian conditioning gives
+
+$$
+p(z\mid x)
+=\mathcal{N}\!\left(
+\frac{x}{1+0.36},\frac{0.36}{1+0.36}
+\right)
+=\mathcal{N}(0.882353,0.264706).
+$$
+
+The next audit compares the exact posterior with a deliberately mismatched
+$q(z\mid x)=\mathcal{N}(0.35,0.75)$.
+
+<!-- NOVEL: needs sign-off -->
+
+```{python}
+#| label: fig-vae-gap
+#| fig-cap: "The VAE lower bound is audited in a one-dimensional Gaussian model. For x = 1.2 and observation variance 0.36, the exact posterior has mean 0.882353 and variance 0.264706. The log evidence and exact-posterior ELBO are both -1.602093. For q = N(0.35, 0.75), the ELBO is -2.533343; its 0.931250 gap to the evidence exactly matches KL(q || p(z | x))."
+#| fig-alt: "The left panel separates the prior-to-decoder generation path from the input-to-encoder inference path. The middle panel plots the prior, exact posterior, and mismatched approximate posterior densities. The right panel shows the exact posterior bound touching the log evidence and the mismatched bound lying lower by the posterior KL gap."
+#| fig-width: 10
+#| fig-height: 4.2
+#| code-summary: "Identity test: verify the exact Gaussian ELBO gap"
+
+def gaussian_kl(
+    mean_q: float, variance_q: float, mean_p: float, variance_p: float
+) -> float:
+    return 0.5 * (
+        math.log(variance_p / variance_q)
+        + (variance_q + (mean_q - mean_p) ** 2) / variance_p
+        - 1.0
+    )
+
+
+def gaussian_elbo(
+    x: float, likelihood_variance: float, mean_q: float, variance_q: float
+) -> float:
+    expected_log_likelihood = -0.5 * (
+        math.log(2.0 * math.pi * likelihood_variance)
+        + ((x - mean_q) ** 2 + variance_q) / likelihood_variance
+    )
+    return expected_log_likelihood - gaussian_kl(mean_q, variance_q, 0.0, 1.0)
+
+
+x_observed = 1.2
+likelihood_variance = 0.36
+posterior_mean = x_observed / (1.0 + likelihood_variance)
+posterior_variance = likelihood_variance / (1.0 + likelihood_variance)
+log_evidence = -0.5 * (
+    math.log(2.0 * math.pi * (1.0 + likelihood_variance))
+    + x_observed**2 / (1.0 + likelihood_variance)
+)
+exact_elbo = gaussian_elbo(
+    x_observed, likelihood_variance, posterior_mean, posterior_variance
+)
+mismatch_mean, mismatch_variance = 0.35, 0.75
+mismatch_elbo = gaussian_elbo(
+    x_observed, likelihood_variance, mismatch_mean, mismatch_variance
+)
+posterior_gap = gaussian_kl(
+    mismatch_mean, mismatch_variance, posterior_mean, posterior_variance
+)
+
+fig, axes = plt.subplots(1, 3, figsize=(10, 4.2))
+axes[0].axis("off")
+axes[0].set_xlim(0, 1)
+axes[0].set_ylim(0, 1)
+contract_box(axes[0], 0.05, 0.61, 0.34, 0.22, "PRIOR", r"$z\sim p(z)$", navy)
+contract_box(axes[0], 0.61, 0.61, 0.34, 0.22, "DECODER", r"$p_\theta(x\mid z)$", green)
+contract_arrow(axes[0], (0.39, 0.72), (0.61, 0.72))
+contract_box(axes[0], 0.05, 0.19, 0.34, 0.22, "INPUT", "$x$", wine)
+contract_box(axes[0], 0.61, 0.19, 0.34, 0.22, "ENCODER", r"$q_\phi(z\mid x)$", orange)
+contract_arrow(axes[0], (0.39, 0.30), (0.61, 0.30))
+axes[0].text(0.50, 0.93, "generation and inference", ha="center", color=navy,
+             fontsize=10, weight="bold")
+axes[0].text(0.50, 0.51, "sample path", ha="center", color=green, fontsize=8.2)
+axes[0].text(0.50, 0.08, "training-time approximation", ha="center",
+             color=orange, fontsize=8.2)
+
+z_grid = torch.linspace(-2.5, 3.0, 500)
+
+def gaussian_density(grid: Tensor, mean: float, variance: float) -> Tensor:
+    return torch.exp(-(grid - mean).square() / (2.0 * variance)) / math.sqrt(
+        2.0 * math.pi * variance
+    )
+
+
+axes[1].plot(z_grid, gaussian_density(z_grid, 0.0, 1.0), color=navy,
+             lw=1.7, label="prior $p(z)$")
+axes[1].plot(z_grid, gaussian_density(z_grid, posterior_mean, posterior_variance),
+             color=green, lw=2.2, label=r"exact $p(z\mid x)$")
+axes[1].plot(z_grid, gaussian_density(z_grid, mismatch_mean, mismatch_variance),
+             color=orange, lw=2.0, ls="--", label="mismatched $q$")
+axes[1].set_xlabel("latent value $z$")
+axes[1].set_ylabel("density")
+axes[1].set_title("the approximate posterior can miss", color=navy, weight="bold")
+axes[1].legend(frameon=False, fontsize=7.5)
+axes[1].grid(alpha=0.15)
+
+axes[2].axhline(log_evidence, color=wine, lw=2.1, label="log evidence")
+axes[2].scatter([0, 1], [exact_elbo, mismatch_elbo], s=65,
+                color=[green, orange], zorder=3)
+axes[2].vlines(1, mismatch_elbo, log_evidence, color=orange, lw=4, alpha=0.45)
+axes[2].text(1.04, (mismatch_elbo + log_evidence) / 2,
+             f"gap = {posterior_gap:.6f}", va="center", fontsize=8.2, color=orange)
+axes[2].set_xticks([0, 1], ["exact\nposterior", "mismatched\n$q$"])
+axes[2].set_ylabel("log value")
+axes[2].set_xlim(-0.45, 1.65)
+axes[2].set_ylim(-2.72, -1.42)
+axes[2].set_title("evidence = ELBO + posterior KL", color=navy, weight="bold")
+axes[2].grid(axis="y", alpha=0.15)
+plt.tight_layout()
+plt.show()
+
+print(f"posterior mean:     {posterior_mean:.12f}")
+print(f"posterior variance: {posterior_variance:.12f}")
+print(f"log evidence:       {log_evidence:.12f}")
+print(f"exact ELBO:         {exact_elbo:.12f}")
+print(f"mismatched ELBO:    {mismatch_elbo:.12f}")
+print(f"evidence - ELBO:    {log_evidence - mismatch_elbo:.12f}")
+print(f"KL(q || posterior): {posterior_gap:.12f}")
+```
+
+When $q$ equals the true posterior, the gap vanishes to floating-point tolerance. The
+mismatched $q$ leaves almost one nat of evidence unexplained—we can improve the ELBO
+by improving the decoder likelihood, the approximate posterior, or both—one scalar
+objective couples those jobs.
+
+If $p_\theta(\vect{x}\mid\vect{z})$ is an isotropic Gaussian with fixed variance,
+its negative log likelihood is a scaled squared reconstruction term plus a constant.
+This explains the familiar VAE shorthand “reconstruction plus KL.” The variance fixes
+the relative scale—treating the coefficient as decoration changes the model.
+
+A $\beta$-weighted variant deliberately multiplies the KL term by
+$\beta\ne1$. That defines a different optimization objective from the ordinary ELBO
+for the same decoder model. It can change the reconstruction–regularization trade-off;
+it does not guarantee discovery of independent true factors.
+
+### Move randomness outside the learned map
+
+Sampling $\vect{z}\sim q_\phi(\vect{z}\mid\vect{x})$ appears to interrupt
+backpropagation. The **reparameterization trick** writes the same draw as
+
+$$
+\vect{\epsilon}\sim\mathcal{N}(\vect{0},\matr{I}_k),
+\qquad
+\vect{z}
+=\vect{\mu}_\phi(\vect{x})
++\vect{\sigma}_\phi(\vect{x})\odot\vect{\epsilon}.
+$$ {#eq-vae-reparameterization}
+
+Randomness has not disappeared—it has moved into a parameter-independent input, while
+the path from $\vect{\mu}_\phi$ and $\vect{\sigma}_\phi$ to $\vect{z}$ is now
+differentiable.
+
+::: {.callout-tip}
+## Reparameterization hygiene
+
+For a batch, `mu`, `log_variance`, `epsilon`, and `z` should all have shape
+$(B,k)$. Compute `standard_deviation = exp(0.5 * log_variance)` and then
+`z = mu + standard_deviation * epsilon`. Predicting log variance keeps the variance
+positive without clipping and avoids confusing variance with standard deviation.
+:::
+
+The KL term pressures each approximate posterior toward the prior—but it does not prove
+that every prior draw decodes to a valid sample, that latent distance equals semantic
+distance, or that coordinates recover independent true factors. Too much pressure can
+also make $q_\phi(\vect{z}\mid\vect{x})$ ignore $\vect{x}$, a failure called
+**posterior collapse**. A VAE supplies a probability contract; its fit and coverage
+still need evaluation.
+
+## An adversarial detour: let the judge move
+
+A VAE writes down a latent-variable likelihood and optimizes a lower bound. A
+**generative adversarial network (GAN)** takes a different route—a generator
+$G_\theta$ turns noise $\vect{z}\sim p_z$ into samples. A discriminator
+$D_\phi(\vect{x})\in[0,1]$ tries to separate data from generated samples (a finite
+sigmoid parameterization stays inside that interval):
+
+$$
+\min_\theta\max_\phi
+\left\{
+\E_{\vect{x}\sim p_{\mathrm{data}}}\log D_\phi(\vect{x})
++
+\E_{\vect{z}\sim p_z}\log\left(1-D_\phi(G_\theta(\vect{z}))\right)
+\right\}.
+$$ {#eq-gan-minimax}
+
+Here the Chapter 18 distinction returns with a twist—the judge and generator both
+move. The discriminator is not a fixed reward model, and its score is not a stationary
+evaluation metric.
+
+Training therefore alternates roles. Hold $G_\theta$ fixed while updating
+$D_\phi$ on real and generated examples; then hold the discriminator parameters fixed
+while gradients pass through the current $D_\phi$ to update $G_\theta$. Each player
+learns against a moving opponent.
+
+For fixed generator density $p_g$ and an unrestricted discriminator, the maximizer can
+be found point by point:
+
+$$
+D^*(\vect{x})
+=\frac{p_{\mathrm{data}}(\vect{x})}
+{p_{\mathrm{data}}(\vect{x})+p_g(\vect{x})}.
+$$ {#eq-gan-optimal-discriminator}
+
+This expression applies where $p_{\mathrm{data}}(\vect{x})+p_g(\vect{x})>0$.
+Outside their combined support, the objective does not identify $D^*$.
+
+Substituting $D^*$ into the value gives
+
+$$
+V(D^*,G)
+=-\log 4
++2D_{\mathrm{JS}}(p_{\mathrm{data}}\,\|\,p_g),
+$$ {#eq-gan-js}
+
+where $D_{\mathrm{JS}}$ is Jensen--Shannon divergence. The ideal function-space
+minimum occurs at $p_g=p_{\mathrm{data}}$, where $D^*=1/2$—an observed neural
+discriminator near one half does not certify that equilibrium; it may also be weak,
+undertrained, or locally confused.
+
+<!-- NOVEL: needs sign-off -->
+
+```{python}
+#| label: fig-gan-finite
+#| fig-cap: "A finite three-mode GAN audit. The covered generator q = (0.40, 0.45, 0.15) has Jensen–Shannon divergence 0.003253 and optimal-discriminator value -1.379789. The collapsed q = (0.02, 0.96, 0.02) has divergence 0.183270 and value -1.019755; both satisfy V(D*,G) = -log 4 + 2 JSD to floating-point precision. When the discriminator assigns a fake logit -6, its output is 0.002473: the original minimax generator's logit-gradient magnitude is 0.002473, versus 0.997527 for the non-saturating loss."
+#| fig-alt: "The first panel compares data mass with a well-covered generator over three modes. The second compares it with a generator concentrated on the middle mode and shows the optimal discriminator values. The third plots generator gradient magnitudes against discriminator logits, showing saturation of the original minimax loss when fake samples are confidently rejected."
+#| fig-width: 10
+#| fig-height: 4.0
+#| code-summary: "Identity test: audit finite GAN coverage and generator saturation"
+
+def js_divergence(p: Tensor, q: Tensor) -> Tensor:
+    midpoint = 0.5 * (p + q)
+    return 0.5 * (
+        (p * torch.log(p / midpoint)).sum()
+        + (q * torch.log(q / midpoint)).sum()
+    )
+
+
+data_mass = torch.tensor([0.45, 0.45, 0.10])
+generator_masses = {
+    "covered": torch.tensor([0.40, 0.45, 0.15]),
+    "collapsed": torch.tensor([0.02, 0.96, 0.02]),
+}
+gan_rows = {}
+for name, generator_mass in generator_masses.items():
+    optimal_discriminator = data_mass / (data_mass + generator_mass)
+    value = (
+        (data_mass * torch.log(optimal_discriminator)).sum()
+        + (generator_mass * torch.log(1.0 - optimal_discriminator)).sum()
+    )
+    divergence = js_divergence(data_mass, generator_mass)
+    identity = -math.log(4.0) + 2.0 * divergence
+    gan_rows[name] = optimal_discriminator, divergence, value, identity
+
+fig, axes = plt.subplots(1, 3, figsize=(10, 4.0))
+mode_positions = torch.arange(3).numpy()
+for axis, (name, generator_mass), color in zip(
+    axes[:2], generator_masses.items(), [green, wine]
+):
+    axis.bar(mode_positions - 0.18, data_mass, 0.36, color=navy, label="data")
+    axis.bar(mode_positions + 0.18, generator_mass, 0.36, color=color,
+             label=f"{name} generator")
+    optimal_discriminator = gan_rows[name][0]
+    for mode, value in enumerate(optimal_discriminator):
+        axis.text(mode, 1.02, f"$D^*={value.item():.2f}$", ha="center",
+                  fontsize=7.5, color=orange)
+    axis.set_xticks(mode_positions, ["A", "B", "C"])
+    axis.set_ylim(0, 1.12)
+    axis.set_ylabel("probability mass")
+    axis.set_title(f"{name}: JSD = {gan_rows[name][1].item():.4f}",
+                   color=navy, weight="bold")
+    axis.legend(frameon=False, fontsize=7.5)
+    axis.grid(axis="y", alpha=0.15)
+
+logit_grid = torch.linspace(-6.0, 6.0, 300)
+discriminator_output = torch.sigmoid(logit_grid)
+minimax_magnitude = discriminator_output
+nonsaturating_magnitude = 1.0 - discriminator_output
+axes[2].plot(logit_grid, minimax_magnitude, color=orange, lw=2.1,
+             label=r"minimax: $|\partial\log(1-D)/\partial a|$")
+axes[2].plot(logit_grid, nonsaturating_magnitude, color=green, lw=2.1,
+             label=r"non-saturating: $|\partial(-\log D)/\partial a|$")
+axes[2].axvline(-6.0, color=wine, ls="--", lw=1.0)
+axes[2].set_xlabel("discriminator logit $a$ on a fake")
+axes[2].set_ylabel(r"magnitude w.r.t. fake logit $a$")
+axes[2].set_title("a strong early judge can starve minimax", color=navy,
+                  weight="bold")
+axes[2].legend(frameon=False, fontsize=6.8, loc="center right")
+axes[2].grid(alpha=0.15)
+plt.tight_layout()
+plt.show()
+
+print("candidate  JSD            V(D*,G)        -log(4)+2JSD    error")
+for name, (_, divergence, value, identity) in gan_rows.items():
+    print(
+        f"{name:9s}  {divergence.item():.12f}  {value.item():.12f}  "
+        f"{identity.item():.12f}  {(value - identity).abs().item():.2e}"
+    )
+for logit in [-6.0, -2.0, 0.0, 2.0]:
+    probability = torch.sigmoid(torch.tensor(logit)).item()
+    print(
+        f"logit {logit:4.1f}: D={probability:.6f}, "
+        f"minimax |grad|={probability:.6f}, "
+        f"non-saturating |grad|={1.0 - probability:.6f}"
+    )
+```
+
+The non-saturating generator loss $-\E_{\vect{z}}\log D(G(\vect{z}))$ changes the
+early gradient signal without changing the ideal target. GANs can produce a sample in
+one generator pass and need not expose a tractable density. Their coupled optimization
+can be delicate—a generator may map many inputs into only a few data modes. That
+**mode collapse** is a coverage failure. A discriminator loss alone will not tell us
+which modes are missing.
+
+## Destroy data on purpose
+
+Diffusion begins with a procedure that looks backward—add noise until structure is
+almost gone. The **forward process** is fixed, not learned. Choose a schedule
+$0<\beta_t<1$ for $t=1,\ldots,T$, and define
+
+$$
+\alpha_t=1-\beta_t,
+\qquad
+\bar\alpha_t=\prod_{s=1}^{t}\alpha_s.
+$$ {#eq-diffusion-schedule}
+
+For $\vect{x}_t\in\mathbb{R}^{d}$, one forward transition is
+
+$$
+q(\vect{x}_t\mid\vect{x}_{t-1})
+=\mathcal{N}\!\left(
+\sqrt{\alpha_t}\vect{x}_{t-1},
+\beta_t\matr{I}_d
+\right).
+$$ {#eq-diffusion-forward-step}
+
+Repeated substitution combines all earlier Gaussian noise into one standard-normal
+vector:
+
+$$
+q(\vect{x}_t\mid\vect{x}_0)
+=\mathcal{N}\!\left(
+\sqrt{\bar\alpha_t}\vect{x}_0,
+(1-\bar\alpha_t)\matr{I}_d
+\right),
+$$ {#eq-diffusion-forward-marginal}
+
+or, equivalently,
+
+$$
+\vect{x}_t
+=\sqrt{\bar\alpha_t}\vect{x}_0
++\sqrt{1-\bar\alpha_t}\vect{\epsilon},
+\qquad
+\vect{\epsilon}\sim\mathcal{N}(\vect{0},\matr{I}_d).
+$$ {#eq-diffusion-direct-sample}
+
+This direct form is the training shortcut—choose a clean example, choose a timestep,
+draw one noise vector, and jump there without simulating all previous transitions.
+
+Let us watch a balanced one-dimensional mixture
+
+$$
+p_0(x)=\tfrac12\mathcal{N}(-2,0.25)+\tfrac12\mathcal{N}(2,0.25)
+$$
+
+under a 100-step linear schedule from $\beta_1=10^{-4}$ to $\beta_{100}=0.1$.
+Its two component means shrink by $\sqrt{\bar\alpha_t}$, while each component
+variance becomes $0.25\bar\alpha_t+(1-\bar\alpha_t)$.
+
+<!-- NOVEL: needs sign-off -->
+
+```{python}
+#| label: fig-forward-diffusion
+#| fig-cap: "Forward diffusion replaces a two-mode distribution by an almost standard-normal endpoint. Under the displayed 100-step schedule, alpha-bar is 0.954508 at t = 10, 0.282981 at t = 50, and 0.005619 at t = 100. The final signal and noise coefficients are 0.074958 and 0.997187. The lower chain is learned in the opposite direction; it is not the algebraic inverse of one realized forward chain."
+#| fig-alt: "The left panel shows a red forward chain from clean data toward noise and a green learned reverse chain from noise toward data. The middle panel shows the analytic two-mode density merging toward a standard normal across timesteps zero, ten, fifty, and one hundred. The right panel plots decreasing signal coefficient and increasing noise coefficient over time."
+#| fig-width: 10
+#| fig-height: 4.2
+#| code-summary: "Figure code: audit a forward noise schedule and its direct marginal"
+
+diffusion_steps = 100
+diffusion_beta = torch.linspace(1e-4, 0.1, diffusion_steps)
+diffusion_alpha = 1.0 - diffusion_beta
+diffusion_alpha_bar = torch.cumprod(diffusion_alpha, dim=0)
+diffusion_bars_with_zero = torch.cat((torch.ones(1), diffusion_alpha_bar))
+
+fig, axes = plt.subplots(1, 3, figsize=(10, 4.2))
+axes[0].axis("off")
+axes[0].set_xlim(0, 1)
+axes[0].set_ylim(0, 1)
+chain_x = [0.05, 0.30, 0.55, 0.80]
+forward_labels = [r"$x_0$", r"$x_{10}$", r"$x_{50}$", r"$x_{100}$"]
+reverse_labels = [r"$\widehat{x}_0$", r"$x_{10}$", r"$x_{50}$", r"$x_T$"]
+for x_position, label in zip(chain_x, forward_labels):
+    contract_box(axes[0], x_position, 0.64, 0.15, 0.15, label, "", wine)
+for left, right in zip(chain_x[:-1], chain_x[1:]):
+    contract_arrow(axes[0], (left + 0.15, 0.715), (right, 0.715), wine)
+for x_position, label in zip(chain_x, reverse_labels):
+    contract_box(axes[0], x_position, 0.20, 0.15, 0.15, label, "", green)
+for left, right in zip(reversed(chain_x[1:]), reversed(chain_x[:-1])):
+    contract_arrow(axes[0], (left, 0.275), (right + 0.15, 0.275), green)
+axes[0].text(0.50, 0.91, "fixed forward corruption", ha="center", color=wine,
+             fontsize=9.7, weight="bold")
+axes[0].text(0.50, 0.08, "learned reverse transitions", ha="center", color=green,
+             fontsize=9.7, weight="bold")
+axes[0].text(0.50, 0.49, "same time grid, different contracts", ha="center",
+             color=navy, fontsize=8.3)
+
+density_grid = torch.linspace(-4.5, 4.5, 600)
+schedule_times = [0, 10, 50, 100]
+schedule_colors = [navy, orange, wine, green]
+for time_index, color in zip(schedule_times, schedule_colors):
+    alpha_bar_at_time = diffusion_bars_with_zero[time_index]
+    component_variance = 0.25 * alpha_bar_at_time + 1.0 - alpha_bar_at_time
+    component_mean = 2.0 * torch.sqrt(alpha_bar_at_time)
+    density = 0.5 * gaussian_density(
+        density_grid, -component_mean.item(), component_variance.item()
+    ) + 0.5 * gaussian_density(
+        density_grid, component_mean.item(), component_variance.item()
+    )
+    axes[1].plot(density_grid, density, color=color, lw=2.0,
+                 label=f"$t={time_index}$")
+axes[1].set_xlabel("state $x_t$")
+axes[1].set_ylabel("density")
+axes[1].set_title("a mixture fades toward noise", color=navy, weight="bold")
+axes[1].legend(frameon=False, fontsize=7.5)
+axes[1].grid(alpha=0.15)
+
+time_axis = torch.arange(diffusion_steps + 1)
+axes[2].plot(time_axis, torch.sqrt(diffusion_bars_with_zero), color=navy, lw=2.2,
+             label=r"signal $\sqrt{\bar\alpha_t}$")
+axes[2].plot(time_axis, torch.sqrt(1.0 - diffusion_bars_with_zero), color=orange,
+             lw=2.2, label=r"noise $\sqrt{1-\bar\alpha_t}$")
+for time_index in schedule_times[1:]:
+    axes[2].axvline(time_index, color="#B8BCC4", lw=0.8, ls="--")
+axes[2].set_xlabel("timestep $t$")
+axes[2].set_ylabel("coefficient")
+axes[2].set_ylim(-0.03, 1.05)
+axes[2].set_title("schedule coefficients", color=navy, weight="bold")
+axes[2].legend(frameon=False, fontsize=7.4)
+axes[2].grid(alpha=0.15)
+plt.tight_layout()
+plt.show()
+
+torch.manual_seed(6050)
+audit_x0 = torch.randn(10_000)
+step_noises = torch.randn(diffusion_steps, audit_x0.numel())
+sequential_state = audit_x0.clone()
+accumulated_noise = torch.zeros_like(audit_x0)
+for step in range(diffusion_steps):
+    sequential_state = (
+        torch.sqrt(diffusion_alpha[step]) * sequential_state
+        + torch.sqrt(diffusion_beta[step]) * step_noises[step]
+    )
+    accumulated_noise = (
+        torch.sqrt(diffusion_alpha[step]) * accumulated_noise
+        + torch.sqrt(diffusion_beta[step]) * step_noises[step]
+    )
+direct_state = (
+    torch.sqrt(diffusion_alpha_bar[-1]) * audit_x0 + accumulated_noise
+)
+effective_epsilon = accumulated_noise / torch.sqrt(
+    1.0 - diffusion_alpha_bar[-1]
+)
+
+print("t  alpha_bar      signal          noise")
+for time_index in [1, 10, 50, 100]:
+    alpha_bar_at_time = diffusion_alpha_bar[time_index - 1]
+    print(
+        f"{time_index:3d}  {alpha_bar_at_time.item():.12f}  "
+        f"{torch.sqrt(alpha_bar_at_time).item():.12f}  "
+        f"{torch.sqrt(1.0 - alpha_bar_at_time).item():.12f}"
+    )
+print(
+    "largest sequential/direct difference at T:",
+    f"{(sequential_state - direct_state).abs().max().item():.2e}",
+)
+print(
+    "effective epsilon mean / variance:",
+    f"{effective_epsilon.mean().item():.6f}",
+    f"{effective_epsilon.var(unbiased=False).item():.6f}",
+)
+```
+
+At $t=100$, a trace of the original mixture remains because
+$\bar\alpha_T>0$. The endpoint is close to—but not exactly—a standard normal. That
+detail matters when generation starts from $p(\vect{x}_T)=\mathcal{N}(\vect{0},
+\matr{I})$: the schedule must make this starting law a good approximation to the
+actual forward marginal $q(\vect{x}_T)$.
+
+## Learn the path back
+
+If the clean $\vect{x}_0$ were known, Gaussian conditioning would give the exact
+posterior for one reverse step:
+
+$$
+q(\vect{x}_{t-1}\mid\vect{x}_t,\vect{x}_0)
+=\mathcal{N}\!\left(
+\widetilde{\vect{\mu}}_t(\vect{x}_t,\vect{x}_0),
+\widetilde\beta_t\matr{I}_d
+\right),
+$$ {#eq-diffusion-posterior}
+
+where, with $\bar\alpha_0=1$,
+
+$$
+\begin{aligned}
+\widetilde{\vect{\mu}}_t
+&=
+\frac{\sqrt{\bar\alpha_{t-1}}\beta_t}{1-\bar\alpha_t}\vect{x}_0
++
+\frac{\sqrt{\alpha_t}(1-\bar\alpha_{t-1})}{1-\bar\alpha_t}\vect{x}_t,\\
+\widetilde\beta_t
+&=\beta_t\frac{1-\bar\alpha_{t-1}}{1-\bar\alpha_t}.
+\end{aligned}
+$$ {#eq-diffusion-posterior-coefficients}
+
+During generation—of course—$\vect{x}_0$ is the unknown destination. A neural
+network $\vect{\epsilon}_\theta(\vect{x}_t,t)$ instead predicts the noise coordinate
+in @eq-diffusion-direct-sample. The common reverse-mean parameterization is
+
+$$
+\vect{\mu}_\theta(\vect{x}_t,t)
+=\frac{1}{\sqrt{\alpha_t}}
+\left(
+\vect{x}_t
+-\frac{\beta_t}{\sqrt{1-\bar\alpha_t}}
+\vect{\epsilon}_\theta(\vect{x}_t,t)
+\right).
+$$ {#eq-diffusion-reverse-mean}
+
+One widely used training objective samples $t$, $\vect{x}_0$, and
+$\vect{\epsilon}$, builds $\vect{x}_t$ directly, and minimizes
+
+$$
+\mathcal{L}_{\mathrm{simple}}(\theta)
+=\E
+\left[
+\norm{
+\vect{\epsilon}
+-\vect{\epsilon}_\theta(\vect{x}_t,t)
+}_2^2
+\right].
+$$ {#eq-diffusion-simple-loss}
+
+At the population MSE optimum, the network predicts
+$\E[\vect{\epsilon}\mid\vect{x}_t,t]$. It cannot recover the unknowable realized
+noise perfectly when several clean examples could have produced the same noisy point.
+For Gaussian corruption, that conditional mean is also related to the score of the
+noisy marginal:
+
+$$
+\nabla_{\vect{x}_t}\log p_t(\vect{x}_t)
+=-
+\frac{1}{\sqrt{1-\bar\alpha_t}}
+\E[\vect{\epsilon}\mid\vect{x}_t,t].
+$$ {#eq-diffusion-score}
+
+The score points locally toward higher noisy-data density—generation is not simple
+gradient ascent and not literal subtraction of one predicted noise image. It follows a
+time-dependent sequence of learned means plus calibrated stochastic terms.
+
+The coefficients deserve their own audit before any sampler runs.
+
+<!-- NOVEL: needs sign-off -->
+
+```{python}
+#| code-summary: "Coding hygiene: pin reverse-posterior coefficients and the final no-noise branch"
+
+previous_alpha_bar = torch.cat((torch.ones(1), diffusion_alpha_bar[:-1]))
+posterior_variance = (
+    diffusion_beta * (1.0 - previous_alpha_bar)
+    / (1.0 - diffusion_alpha_bar)
+)
+x0_coefficient = (
+    torch.sqrt(previous_alpha_bar) * diffusion_beta
+    / (1.0 - diffusion_alpha_bar)
+)
+xt_coefficient = (
+    torch.sqrt(diffusion_alpha) * (1.0 - previous_alpha_bar)
+    / (1.0 - diffusion_alpha_bar)
+)
+
+print("t  x0 coefficient  xt coefficient  posterior variance")
+for time_index in [1, 2, 10, 50, 100]:
+    index = time_index - 1
+    print(
+        f"{time_index:3d}  {x0_coefficient[index].item():.12f}  "
+        f"{xt_coefficient[index].item():.12f}  "
+        f"{posterior_variance[index].item():.12f}"
+    )
+assert posterior_variance[0].item() == 0.0
+print("t=1 stochastic-noise coefficient:", f"{posterior_variance[0].sqrt().item():.1f}")
+```
+
+At $t=1$, the exact posterior conditioned on $\vect{x}_0$ has zero variance. With the
+fixed reverse-variance choice $\sigma_t^2=\widetilde\beta_t$ used below, the sampler
+therefore adds no fresh random noise after computing its final mean. That edge case is
+easy to miss in code.
+
+::: {.callout-warning}
+## Name the diffusion approximations
+
+A finite forward endpoint is only approximately normal. The learned reverse transition
+approximates an unknown marginal reverse law. The simple noise MSE is a particular
+weighting and simplification of the variational objective, and reverse variance may be
+fixed or learned. State the schedule, parameterization, variance choice, and starting
+law before treating “diffusion loss” as one universal object.
+:::
+
+### Why the denoiser needs time
+
+The same observed value can mean different things at different noise levels. Near the
+first noising step, a point beside $+2$ is probably a lightly perturbed right-mode
+example. Near $t=T$, the same coordinate carries much less evidence about its origin.
+This is why a diffusion denoiser receives the timestep along with $\vect{x}_t$.
+
+We can test that claim without images or a large network. The target is the known
+two-Gaussian mixture used above. An MLP with two 64-unit SiLU hidden layers predicts
+scalar noise for the 100-step schedule. The time-conditioned version receives
+$(x_t,t)$; the ablation sees only $x_t$. Both train for 5,000 updates on the same
+generated-data protocol over seeds 6050--6054. Each sampler then draws 20,000 points
+from a standard-normal endpoint and takes 100 reverse steps with variance
+$\widetilde\beta_t$.
+
+The equations count timesteps from $t=1$, while arrays use zero-based index
+$j=t-1$. Model index zero therefore represents the equation's first noising step.
+
+<!-- NOVEL: needs sign-off -->
+
+```{python}
+#| label: fig-time-conditioned-diffusion
+#| fig-cap: "A designed one-dimensional diffusion sampler isolates the value of time conditioning. Across seeds 6050–6054, the time-conditioned denoiser has evaluation noise MSE 0.429707 (SD 0.000927), close to the analytic conditional-mean oracle's fixed-evaluation MSE of 0.425920. Its generated samples have mean standard deviation 2.062095, central mass 0.019470, and Wasserstein-1 distance 0.058570 from a matched target sample; the population targets are 2.061553 and 0.022750 for standard deviation and central mass. Removing t raises noise MSE to 0.750634, central mass to 0.222760, and Wasserstein distance to 0.375321. This is a CPU mechanism study of a planted scalar mixture, not an image-generation result."
+#| fig-alt: "The first histogram shows time-conditioned generated samples matching two target modes near minus two and plus two. The second shows the no-time ablation placing too much mass between modes. The third panel compares five-seed noise error, central mass, and Wasserstein distance, with target or oracle reference lines."
+#| fig-width: 10
+#| fig-height: 4.1
+#| code-summary: "Experiment: train a tiny diffusion denoiser with and without timestep conditioning"
+
+training_beta = diffusion_beta.float()
+training_alpha = 1.0 - training_beta
+training_alpha_bar = torch.cumprod(training_alpha, dim=0)
+training_previous_bar = torch.cat((
+    torch.ones_like(training_alpha_bar[:1]), training_alpha_bar[:-1]
+))
+training_posterior_variance = (
+    training_beta * (1.0 - training_previous_bar)
+    / (1.0 - training_alpha_bar)
+)
+
+
+class ScalarNoisePredictor(nn.Module):
+    def __init__(self, time_conditioned: bool) -> None:
+        super().__init__()
+        self.time_conditioned = time_conditioned
+        self.network = nn.Sequential(
+            nn.Linear(2 if time_conditioned else 1, 64),
+            nn.SiLU(),
+            nn.Linear(64, 64),
+            nn.SiLU(),
+            nn.Linear(64, 1),
+        )
+
+    def forward(self, x_t: Tensor, timestep: Tensor) -> Tensor:
+        if self.time_conditioned:
+            scaled_time = 2.0 * timestep[:, None].float() / (diffusion_steps - 1) - 1.0
+            model_input = torch.cat((x_t, scaled_time), dim=1)
+        else:
+            model_input = x_t
+        return self.network(model_input)
+
+
+def mixture_batch(generator: torch.Generator, batch_size: int) -> Tensor:
+    component = 2 * torch.randint(0, 2, (batch_size, 1), generator=generator) - 1
+    noise = torch.randn(batch_size, 1, generator=generator, dtype=torch.float32)
+    return 2.0 * component.float() + 0.5 * noise
+
+
+def oracle_noise_mean(x_t: Tensor, timestep: Tensor) -> Tensor:
+    alpha_bar_at_time = training_alpha_bar[timestep, None]
+    root_bar = torch.sqrt(alpha_bar_at_time)
+    noisy_variance = 0.25 * alpha_bar_at_time + 1.0 - alpha_bar_at_time
+    component_means = torch.cat((-2.0 * root_bar, 2.0 * root_bar), dim=1)
+    log_weights = -0.5 * (x_t - component_means).square() / noisy_variance
+    weights = torch.softmax(log_weights, dim=1)
+    posterior_gain = 0.25 * root_bar / noisy_variance
+    clean_component_means = torch.cat((
+        -2.0 + posterior_gain * (x_t + 2.0 * root_bar),
+        2.0 + posterior_gain * (x_t - 2.0 * root_bar),
+    ), dim=1)
+    expected_x0 = (weights * clean_component_means).sum(dim=1, keepdim=True)
+    return (x_t - root_bar * expected_x0) / torch.sqrt(1.0 - alpha_bar_at_time)
+
+
+def fit_diffusion_ablation(
+    seed: int, time_conditioned: bool
+) -> tuple[dict[str, float], Tensor]:
+    torch.manual_seed(seed)
+    train_generator = torch.Generator().manual_seed(seed + 19_000)
+    model = ScalarNoisePredictor(time_conditioned).float()
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.002)
+
+    for _ in range(5_000):
+        clean = mixture_batch(train_generator, 512)
+        timestep = torch.randint(diffusion_steps, (512,), generator=train_generator)
+        epsilon = torch.randn(512, 1, generator=train_generator, dtype=torch.float32)
+        alpha_bar_at_time = training_alpha_bar[timestep, None]
+        noisy = (
+            torch.sqrt(alpha_bar_at_time) * clean
+            + torch.sqrt(1.0 - alpha_bar_at_time) * epsilon
+        )
+        loss = (model(noisy, timestep) - epsilon).square().mean()
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+    evaluation_generator = torch.Generator().manual_seed(91_900)
+    evaluation_clean = mixture_batch(evaluation_generator, 50_000)
+    evaluation_timestep = torch.randint(
+        diffusion_steps, (50_000,), generator=evaluation_generator
+    )
+    evaluation_epsilon = torch.randn(
+        50_000, 1, generator=evaluation_generator, dtype=torch.float32
+    )
+    evaluation_bar = training_alpha_bar[evaluation_timestep, None]
+    evaluation_noisy = (
+        torch.sqrt(evaluation_bar) * evaluation_clean
+        + torch.sqrt(1.0 - evaluation_bar) * evaluation_epsilon
+    )
+
+    sampling_generator = torch.Generator().manual_seed(seed + 29_000)
+    generated = torch.randn(
+        20_000, 1, generator=sampling_generator, dtype=torch.float32
+    )
+    with torch.no_grad():
+        evaluation_prediction = model(evaluation_noisy, evaluation_timestep)
+        evaluation_mse = (
+            evaluation_prediction - evaluation_epsilon
+        ).square().mean().item()
+        oracle_mse = (
+            oracle_noise_mean(evaluation_noisy, evaluation_timestep)
+            - evaluation_epsilon
+        ).square().mean().item()
+
+        for index in range(diffusion_steps - 1, -1, -1):
+            timestep = torch.full((generated.shape[0],), index, dtype=torch.long)
+            predicted_epsilon = model(generated, timestep)
+            reverse_mean = (
+                generated
+                - training_beta[index]
+                / torch.sqrt(1.0 - training_alpha_bar[index])
+                * predicted_epsilon
+            ) / torch.sqrt(training_alpha[index])
+            if index > 0:
+                reverse_noise = torch.randn(
+                    generated.shape, generator=sampling_generator,
+                    dtype=torch.float32,
+                )
+            else:
+                reverse_noise = torch.zeros_like(generated)
+            generated = (
+                reverse_mean
+                + torch.sqrt(training_posterior_variance[index]) * reverse_noise
+            )
+
+    target_generator = torch.Generator().manual_seed(seed + 39_000)
+    target = mixture_batch(target_generator, 20_000)[:, 0]
+    generated_vector = generated[:, 0]
+    wasserstein_one = (
+        torch.sort(generated_vector).values - torch.sort(target).values
+    ).abs().mean().item()
+    metrics = {
+        "noise MSE": evaluation_mse,
+        "oracle MSE": oracle_mse,
+        "mean": generated_vector.mean().item(),
+        "standard deviation": generated_vector.std(unbiased=False).item(),
+        "positive mass": (generated_vector > 0).float().mean().item(),
+        "central mass": (generated_vector.abs() < 1).float().mean().item(),
+        "Wasserstein-1": wasserstein_one,
+    }
+    return metrics, generated_vector
+
+
+torch.set_num_threads(1)
+diffusion_results: dict[str, list[dict[str, float]]] = {
+    "time conditioned": [], "no time": []
+}
+example_samples = {}
+for condition_name, time_conditioned in [("time conditioned", True), ("no time", False)]:
+    for diffusion_seed in range(6050, 6055):
+        metrics, generated_samples = fit_diffusion_ablation(
+            diffusion_seed, time_conditioned
+        )
+        diffusion_results[condition_name].append(metrics)
+        if diffusion_seed == 6050:
+            example_samples[condition_name] = generated_samples
+torch.set_num_threads(6)
+
+true_standard_deviation = math.sqrt(4.25)
+normal_cdf = lambda value: 0.5 * (1.0 + math.erf(value / math.sqrt(2.0)))
+true_central_mass = normal_cdf(-2.0) - normal_cdf(-6.0)
+
+fig, axes = plt.subplots(1, 3, figsize=(10, 4.1))
+histogram_grid = torch.linspace(-4.2, 4.2, 500)
+target_density = 0.5 * gaussian_density(
+    histogram_grid, -2.0, 0.25
+) + 0.5 * gaussian_density(histogram_grid, 2.0, 0.25)
+for axis, condition_name, color in zip(
+    axes[:2], ["time conditioned", "no time"], [green, wine]
+):
+    axis.hist(example_samples[condition_name].numpy(), bins=80, density=True,
+              color=color, alpha=0.45, label="generated")
+    axis.plot(histogram_grid, target_density, color=navy, lw=2.0, label="target")
+    axis.axvspan(-1, 1, color=orange, alpha=0.08)
+    axis.set_xlim(-4.2, 4.2)
+    axis.set_xlabel("sample $x_0$")
+    axis.set_ylabel("density")
+    axis.set_title(condition_name, color=navy, weight="bold")
+    axis.legend(frameon=False, fontsize=7.5)
+    axis.grid(alpha=0.12)
+
+summary_metrics = ["noise MSE", "central mass", "Wasserstein-1"]
+summary_targets = [
+    sum(row["oracle MSE"] for row in diffusion_results["time conditioned"]) / 5,
+    true_central_mass,
+    0.0,
+]
+x_summary = torch.arange(3).numpy()
+for offset, condition_name, color in [
+    (-0.16, "time conditioned", green), (0.16, "no time", wine)
+]:
+    values = torch.tensor([
+        [row[metric] for row in diffusion_results[condition_name]]
+        for metric in summary_metrics
+    ])
+    axes[2].bar(x_summary + offset, values.mean(dim=1), 0.30,
+                yerr=values.std(dim=1), capsize=3, color=color,
+                label=condition_name)
+    for metric_index in range(3):
+        axes[2].scatter(
+            torch.full((5,), x_summary[metric_index] + offset),
+            values[metric_index], color=navy, s=10, alpha=0.6, zorder=3,
+        )
+for metric_index, target_value in enumerate(summary_targets):
+    axes[2].hlines(target_value, metric_index - 0.38, metric_index + 0.38,
+                   color=orange, lw=1.6, linestyles="--")
+axes[2].set_xticks(x_summary, ["noise\nMSE", "central\nmass", "$W_1$"])
+axes[2].set_ylabel("metric value")
+axes[2].set_title("five seeded runs", color=navy, weight="bold")
+axes[2].legend(frameon=False, fontsize=6.9)
+axes[2].grid(axis="y", alpha=0.15)
+plt.tight_layout()
+plt.show()
+
+print("condition          metric              mean         sample SD")
+for condition_name, rows in diffusion_results.items():
+    for metric_name in [
+        "noise MSE", "oracle MSE", "mean", "standard deviation",
+        "positive mass", "central mass", "Wasserstein-1",
+    ]:
+        values = torch.tensor([row[metric_name] for row in rows])
+        print(
+            f"{condition_name:17s}  {metric_name:18s}  "
+            f"{values.mean().item():.9f}  {values.std().item():.9f}"
+        )
+print(f"target standard deviation: {true_standard_deviation:.9f}")
+print(f"target positive mass:      {0.5:.9f}")
+print(f"target central mass:       {true_central_mass:.9f}")
+print(f"alpha_bar_T:               {training_alpha_bar[-1].item():.12f}")
+```
+
+The time-conditioned network nearly matches the fixed-evaluation MSE of the analytic
+conditional-mean oracle and recovers the mixture's two-mode geometry. Without time,
+the same network must use one answer for incompatible noise regimes. It places about
+ten times too much mass in the low-density interval $|x|<1$. The experiment isolates
+one design requirement; it does not rank diffusion against VAEs or GANs.
+
+## From a scalar denoiser to structured data
+
+The scalar network makes the learning problem visible—yet image, audio, and video
+models must predict arrays with spatial or temporal structure. A diffusion network
+usually receives three kinds of information:
+
+1. the noisy state $\vect{x}_t$;
+2. an embedding of the timestep or noise level; and
+3. optional conditioning information $\vect{c}$, such as a class, text representation,
+   or another observed modality.
+
+When the condition is a sequence, cross-attention reopens the routing machinery from
+@sec-13-attention and @sec-14-self-attention-transformer. Let noisy-state features be
+$\matr{H}_t\in\mathbb{R}^{n_x\times d}$, condition features be
+$\matr{H}_c\in\mathbb{R}^{n_c\times d}$, and each projection matrix have shape
+$d\times d_h$. Then
+
+$$
+\matr{Q}=\matr{H}_t\matr{W}_Q,\qquad
+\matr{K}=\matr{H}_c\matr{W}_K,\qquad
+\matr{V}=\matr{H}_c\matr{W}_V.
+$$
+
+The noisy representation supplies the queries; the condition supplies keys and values.
+Guidance schemes can further combine conditional and unconditional predictions, but
+their scale convention and empirical trade-off must be stated.
+
+For images, a U-Net is a natural denoiser. Its contracting path gathers broad
+context—its expanding path returns to the original resolution. Skip connections carry
+fine-resolution features across the bottleneck so that global and local evidence can
+meet. This is the same architectural issue we met in @sec-11-encoder-decoder: a fixed
+summary alone can discard detail that the output still needs. The diffusion-specific
+addition is time conditioning throughout the network.
+
+Conditioning changes the target from $p_\theta(\vect{x})$ to
+$p_\theta(\vect{x}\mid\vect{c})$. It does not remove the need to test the unconditional
+support, the quality of the conditioning data, or whether the sampler follows
+$\vect{c}$ for the intended population. A strong condition score can coexist with
+repeated, memorized, or low-coverage samples.
+
+There is also a clean composition of this chapter's two halves. A pretrained
+autoencoder can map high-dimensional observations into a lower-dimensional latent
+space. Diffusion then learns a distribution over those codes, and the decoder maps a
+sampled code back to observation space:
+
+$$
+\vect{x}
+\xrightarrow{\;f_\phi\;}
+\vect{z}_0
+\xrightarrow{\;\text{forward noise / learned reverse}\;}
+\widetilde{\vect{z}}_0
+\xrightarrow{\;g_\theta\;}
+\widetilde{\vect{x}}.
+$$
+
+This is the mechanism behind **latent diffusion**. It separates two approximation
+bills: the autoencoder may discard information, and the latent diffusion model may
+miss parts of the code distribution. Running the reverse process in a smaller space
+changes the computational problem, but no unmeasured speed ratio follows from the
+diagram.
+
+## A generator needs an evaluation contract too
+
+The original data distribution is unknown; that is why we are learning it. No single
+training loss can therefore certify generation. A useful evaluation contract separates
+at least these questions:
+
+- **Fidelity:** do samples lie near supported data regions and satisfy domain-specific
+  constraints?
+- **Coverage:** are important modes, subgroups, or rare cases missing?
+- **Memorization:** are outputs new combinations or near-copies of training examples?
+- **Condition adherence:** for conditional models, does the sample match the supplied
+  context without sacrificing the first three properties?
+- **Distributional fit:** when a likelihood, ELBO, or other bound is available, on
+  which held-out data and under which measurement assumptions was it computed?
+- **Sampling cost and uncertainty:** how many sequential steps, what decoding choices,
+  and how much variation across training and sampling seeds?
+- **Data and use context:** whose data supplied the distribution, with what license,
+  consent, provenance, and known bias; what misuse risks and disclosure or watermarking
+  limits remain?
+
+Our finite studies made some of these quantities observable by design. The GAN example
+had three named modes, so missing mass was visible. The diffusion mixture had an exact
+central probability and a one-dimensional Wasserstein distance. Natural data needs
+domain-appropriate measurements and human inspection, with sample counts and
+uncertainty. A favorable metric is evidence under its own scope, not a declaration
+that $p_\theta=p_{\mathrm{data}}$.
+
+| Family | What training fits | How a new sample begins | Density information | Characteristic audit |
+|---|---|---|---|---|
+| PCA / deterministic AE | Reconstruction on encoded observations | No built-in random start | None by itself | Held-out reconstruction; behavior between and outside codes |
+| VAE | ELBO: expected decoder log likelihood minus posterior-to-prior KL | $\vect{z}\sim p(\vect{z})$, then decoder | A latent-variable density, commonly evaluated through a bound | Held-out ELBO, prior-sample quality, collapse, coverage; exact gap only when the true posterior is known |
+| GAN | A moving discriminator--generator game | $\vect{z}\sim p_z$, then one generator pass | Usually implicit rather than tractable | Mode coverage, optimization balance, memorization |
+| Diffusion | Denoising or score predictions across a noise schedule | $\vect{x}_T$ from a declared terminal law, then reverse steps | Variational or score-based connections; simple MSE is not itself likelihood | Terminal match, schedule coefficients, reverse calibration, coverage, step cost |
+
+Generation and judgment are separate contracts. A generator tells us how to draw a
+sample; a judge or metric tells us how that draw will be evaluated. A complete system
+may need both, but neither makes the other correct.
+
+::: {.callout-note}
+## Designed studies are measuring instruments
+
+The curve, three-code decoder, finite GAN, Gaussian ELBO, and scalar diffusion mixture
+were chosen so that reconstruction, bound gaps, mode mass, and schedule coefficients
+could be checked exactly. They expose mechanisms and failure boundaries. They do not
+estimate natural-image quality, settle model-family rankings, or substitute for an
+application-specific evaluation contract.
+:::
+
+One final numerical seed belongs in @sec-a4-floating-point: **a small schedule
+coefficient is not a zero coefficient**. Long products such as
+$\bar\alpha_t=\prod_{s\le t}\alpha_s$ must be audited in the dtype that will carry
+them. Mathematical smallness, floating-point underflow, and a rounded-away update are
+different failures. For long schedules, accumulate log coefficients when appropriate
+and test the endpoint actually used by the sampler.
+
+## Okay, so—
+
+1. **A judge is not a generator.** Scoring completed samples and defining a law that
+   produces new samples are different contracts.
+2. **PCA is a linear autoencoder under stated conditions.** Centered data, squared
+   loss, an undercomplete linear map, and a global rank-$k$ optimum identify the
+   principal reconstruction subspace, not unique latent coordinates.
+3. **Nonlinearity lets the reconstruction bend.** A nonlinear bottleneck can follow a
+   curved manifold, but low dimension alone does not prevent memorization or guarantee
+   semantic structure.
+4. **Reconstruction does not specify a random start.** A deterministic autoencoder
+   constrains its decoder on encoded regions; a generative model must add a latent law
+   or another sampling procedure.
+5. **A VAE supplies a probability contract.** Its ELBO is expected decoder log
+   likelihood minus prior KL, and the exact gap to log evidence is posterior KL.
+   Reparameterization moves randomness outside the learned map; it does not remove it.
+6. **A GAN lets a judge train a sampler.** The ideal discriminator yields a
+   Jensen--Shannon identity, while finite networks still face saturation, coupled
+   optimization, and mode-coverage failures.
+7. **Diffusion learns denoising across calibrated noise levels.** The forward marginal
+   is available in closed form, the reverse coefficients must be pinned, and the
+   denoiser needs the timestep. A finite endpoint and learned reverse law remain
+   approximations that must be audited.
+8. **Generation needs external evaluation.** Fidelity, coverage, memorization,
+   conditioning, distributional fit, cost, and seed uncertainty answer different
+   questions; no one score certifies them all.
+
+## Sources and further reading {.unnumbered}
+
+- [Baldi and Hornik, *Neural Networks and Principal Component Analysis: Learning from Examples without Local Minima*](https://doi.org/10.1016/0893-6080(89)90014-2): linear autoassociative networks and principal subspaces.
+- [Vincent et al., *Extracting and Composing Robust Features with Denoising Autoencoders*](https://www.cs.toronto.edu/~larocheh/publications/icml-2008-denoising-autoencoders.pdf): noisy-input, clean-target representation learning.
+- [Kingma and Welling, *Auto-Encoding Variational Bayes*](https://arxiv.org/abs/1312.6114): variational latent models and reparameterized gradient estimation.
+- [Higgins et al., *beta-VAE: Learning Basic Visual Concepts with a Constrained Variational Framework*](https://openreview.net/forum?id=Sy2fzU9gl): deliberate KL reweighting.
+- [Locatello et al., *Challenging Common Assumptions in the Unsupervised Learning of Disentangled Representations*](https://proceedings.mlr.press/v97/locatello19a.html): identifiability limits without additional inductive biases.
+- [Goodfellow et al., *Generative Adversarial Nets*](https://proceedings.neurips.cc/paper/2014/hash/f033ed80deb0234979a61f95710dbe25-Abstract.html): the original minimax game, optimal discriminator, and divergence result.
+- [Ho, Jain, and Abbeel, *Denoising Diffusion Probabilistic Models*](https://arxiv.org/abs/2006.11239): Gaussian diffusion transitions, reverse parameterization, and the simplified noise objective.
+- [Song et al., *Score-Based Generative Modeling through Stochastic Differential Equations*](https://openreview.net/forum?id=PxTIG12RRHS): the score perspective and continuous-time forward/reverse processes.
+- [Rombach et al., *High-Resolution Image Synthesis with Latent Diffusion Models*](https://openaccess.thecvf.com/content/CVPR2022/html/Rombach_High-Resolution_Image_Synthesis_With_Latent_Diffusion_Models_CVPR_2022_paper.html): composing learned compression with diffusion in latent space.
+
+## Exercises {.unnumbered}
+
+1. **(Pencil.)** For centered data and orthonormal
+   $\matr{V}_k\in\mathbb{R}^{d\times k}$, prove that
+   $\matr{P}=\matr{V}_k\matr{V}_k^\top$ is symmetric and idempotent. Then show
+   how an orthogonal latent rotation changes the encoder and decoder bases without
+   changing $\matr{P}$. Extend the argument to an invertible change of basis for an
+   untied linear autoencoder.
+2. **(Code and interpretation.)** Reproduce the curved-manifold study over five seeds.
+   Add an out-of-range interval for $t$ that the autoencoder never sees during
+   training. Report held-out reconstruction, latent-order correlation, and decoded
+   behavior inside and outside coverage. Treat inconsistent seeds as a result rather
+   than removing them.
+3. **(Proof and code.)** Derive the posterior and marginal evidence for the scalar
+   Gaussian VAE audit. Verify @eq-elbo-gap for three approximate posteriors. Then use
+   reparameterized samples to estimate its gradient with respect to the approximate
+   posterior mean; compare it with the analytic gradient and report Monte Carlo
+   uncertainty.
+4. **(Code and hygiene.)** Implement @eq-diffusion-direct-sample for a batch whose
+   timesteps have shape $(B,)$. Gather coefficients into shape $(B,1)$ before
+   multiplying data of shape $(B,d)$. Compare iterative and direct moments, verify
+   @eq-diffusion-posterior-coefficients, and test the $t=1$ no-noise branch. Compare
+   two schedules without promising which will train better.
+5. **(Pencil and evaluation audit.)** Derive @eq-gan-optimal-discriminator for one
+   finite mode. Explain why an observed $D\approx0.5$ does not prove convergence.
+   Then design separate fidelity, coverage, and memorization checks for supplied
+   samples from a VAE, GAN, and diffusion model; state what evidence would make each
+   check fail.

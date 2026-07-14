@@ -8,10 +8,13 @@ them or a chapter naturally touches them.
 Stub exists (`chapters/appendices/a4-floating-point.qmd`). Motivating hooks already in
 the book: Chapter 5's depth experiment (sigmoid gradients remain nonzero in float64,
 yet the corresponding float32 parameter updates can round away), `torch.linalg.solve` vs explicit
-inverse in Chapter 1, and forward: fp16/bf16/quantization in Chapter 17. Content sketch:
-what a float is (sign/exponent/mantissa), machine epsilon, why $0.1 + 0.2 \neq 0.3$,
-catastrophic cancellation, log-sum-exp as the fix pattern (ties to softmax in Ch. 2),
-mixed precision in training.
+inverse in Chapter 1, fp16/bf16/quantization in Chapter 17, and Chapter 19's long
+schedule product $\bar\alpha_t=\prod_{s\le t}\alpha_s$. The Chapter 19 hook should
+distinguish a mathematically small coefficient from underflow and from an update that
+rounds away. Content sketch: what a float is (sign/exponent/mantissa), machine epsilon,
+why $0.1 + 0.2 \neq 0.3$, catastrophic cancellation, log-sum-exp as the fix pattern
+(ties to softmax in Ch. 2), stable product accumulation, and mixed precision in
+training.
 
 ## 2. Per-chapter "Deeper dive" section (collapsed by default) — PILOTED in ch. 6 (2026-07-08)
 
@@ -53,24 +56,27 @@ chapter stub's draft-sources; revisit during the planned outline session with th
 - Extend course-site `bookChapters` mappings as Chapters 12–19 become reviewed and
   substantive.
 
-## 5. GPU experiment queue (backlog-only; revised after Chapter 18, July 14, 2026)
+## 5. GPU experiment queue (backlog-only; revised after Chapter 19, July 14, 2026)
 
 Do not place project-management placeholders in the published chapters. Keep these
 experiments here until GPU access is available; then run them on Rivanna/Colab, pin the
 numbers, and fold only completed results back into the relevant chapter.
 
-Chapters 12–18 audit: the fixed-kernel, scaling, date-attention, tiny Transformer
+Chapters 12–19 audit: the fixed-kernel, scaling, date-attention, tiny Transformer
 book-corpus, controlled MLM-transfer, and five-seed CNN/ViT rematch experiments are
 CPU-complete, as are Chapter 17's frozen-context, planted-rank LoRA, and controlled
 quantization audits, and Chapter 18's completion-mask, scalar-preference, exact-policy,
-DPO-identity, and five-seed proxy-coverage audits. They require no GPU dependency or
+DPO-identity, and five-seed proxy-coverage audits. Chapter 19's PCA/autoencoder,
+decoder-ambiguity, Gaussian-ELBO, finite-GAN, schedule-coefficient, and five-seed scalar
+diffusion studies are also CPU-complete. They require no GPU dependency or
 project-management placeholder in the published chapters; the queue below remains the
 private reminder for later access. Chapters 13–14 discuss the structure of dense matrix
 operations but make no unmeasured hardware-speed claim. Chapter 16 reports its tiny
 scratch regime as a mechanism study, not as an architecture verdict. Chapter 17
 separates payload and metadata but makes no kernel-speed or natural-language quality
 claim. Chapter 18 calls its designed-utility study a finite planted mechanism, not
-evidence that a natural-language model is aligned; all full-scale regime tests belong
+evidence that a natural-language model is aligned. Chapter 19 makes no natural-image
+quality, family-ranking, or hardware-cost claim; all full-scale regime tests belong
 here.
 
 - **Ch. 9 scorecard, full scale**: LeNet / VGG / NiN / deep ResNet on all 60k
@@ -117,3 +123,13 @@ here.
   seeds, decoding settings, versions, licenses, sample counts, wall-clock cost, and
   per-run results; do not treat a rising proxy, judge score, or win rate as universal
   alignment.
+- **Ch. 19 natural-image generative comparison, full scale**: choose a licensed
+  natural-image dataset and declared train/validation/test split, then compare selected
+  VAE, GAN, and diffusion families only under a predeclared, defensible regime. Audit
+  fidelity, mode and subgroup coverage, memorization or nearest-neighbor overlap,
+  conditioning adherence where applicable, and sampling/training cost separately.
+  Repeat training and sampling seeds; pin dataset and checkpoint licenses, architecture
+  and objective details, schedules, sample counts, evaluation-model provenance,
+  wall-clock and hardware cost, and per-run uncertainty. Do not promote one metric into
+  a family ranking, compare unmatched pretrained and scratch systems as though the
+  difference were architectural, or add a chapter placeholder before results exist.

@@ -48,3 +48,34 @@ When adding a snapshot:
 The snapshots retain primary-paper citations and instructor-authored equations for
 traceability. Their boundary notices make clear that technical and empirical claims
 must still be independently checked before they enter the book.
+
+## Modules 6 and 12 generative-model snapshots
+
+- `6-AE-slides.tex` preserves the Module 6 autoencoder lecture spine, including the
+  encoder--decoder contract, the linear-autoencoder connection to PCA, reconstruction
+  objectives, and denoising variants. The local preamble, diagrams, executable code,
+  private and assignment links, external assets, and associated D2L-linked coding
+  material are omitted.
+- `12.diffusion.tex` preserves the long Module 12 diffusion article's forward and
+  reverse processes, noise-prediction objective, time conditioning, latent diffusion,
+  cross-attention, and classifier-free guidance. Its diagrams, external-library
+  workflows, runtime downloads, hardware and product claims, and a broken simplified
+  U-Net implementation are omitted.
+- `12.2S-Diffusion.tex` preserves the dedicated diffusion deck's self-supervised
+  through-line, score connection, training and sampling equations, multi-resolution
+  denoiser, latent formulation, and conditioning mechanisms. The deck's creativity
+  segment is omitted in full because it closely tracks a primary-paper result without
+  a sufficiently clear independent provenance boundary; the snapshot points readers
+  to that paper instead.
+- `12.3S-VAE.tex` preserves the VAE deck's probabilistic encoder, ELBO, diagonal-Gaussian
+  KL, reparameterization estimator, weighted-KL objective, and sampling contract. Its
+  diagrams, code, product references, and categorical claims about valid prior samples
+  or guaranteed disentanglement are omitted.
+- `12.4S-GAN.tex` preserves the GAN deck's minimax and non-saturating objectives,
+  alternating optimization, idealized discriminator, common failure modes, and
+  cycle-consistency equation. Its diagrams, practical recipes, unverified quotations,
+  and release-era method rankings are omitted.
+
+Each snapshot begins with the exact machine-local upstream path and its SHA-256 digest.
+These files are provenance records only: book prose, derivations, code, experiments,
+and figures must be produced and verified independently.
