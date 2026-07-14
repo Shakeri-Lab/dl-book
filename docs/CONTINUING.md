@@ -485,12 +485,12 @@ Each stub carries its contract; specifics accumulated so far:
 
 ### Ch. 18 — Alignment and RL Fine-Tuning (SHIPPED)
 - **Seeds and provenance**: sanitized public snapshots
-  `sources/11.4-reinforcement-learning.tex` and `sources/11L-llm-alignment.tex`, with
-  the model-card material in the original `11.4S.tex` checked privately; primary SFT,
-  human-preference, PPO, DPO, reward-overoptimization, model-card, and judge-audit
-  papers. External diagrams, paper figures, private links, executable library code,
-  and product-current claims were removed; every executable study and figure is
-  book-original.
+  `sources/11.4-reinforcement-learning.tex`, `sources/11L-llm-alignment.tex`, and
+  `sources/11.4S.tex`; primary SFT, human-preference, PPO, DPO,
+  reward-overoptimization, model-card, and judge-audit papers. External diagrams,
+  paper figures, private links, executable library code, and product-current claims
+  were removed; every executable study and figure is book-original and carries the
+  source-level `NOVEL` sign-off marker.
 - **Harvest completed by name**: ch. 17's “where the update lives is not what the
   update optimizes.” The opening map separates demonstration, preference, and sampled
   reward signals from full-weight, low-rank, and prompt-state write surfaces.

@@ -39,7 +39,12 @@ When adding a snapshot:
   standalone Beamer handout. The private Colab link, local preamble dependency,
   diagram source, external images and paper figures, product-current ecosystem survey,
   and product-specific adoption claims are omitted.
+- `11.4S.tex` preserves the model-card and slice-aware-evaluation portion of the
+  assignment-oriented slide deck. The overlapping RLHF/DPO survey, local preamble,
+  diagrams, external-library code, assignment-specific product configuration,
+  product-current claims, and template listing are represented by explicit omission
+  markers.
 
-Both snapshots retain primary-paper citations and instructor-authored equations for
+The snapshots retain primary-paper citations and instructor-authored equations for
 traceability. Their boundary notices make clear that technical and empirical claims
 must still be independently checked before they enter the book.
