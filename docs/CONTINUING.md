@@ -72,9 +72,9 @@ publication.
 Chapter 17 is complete: prompting, retrieval as a separate context path, soft
 prompts and prefixes, adapters and BitFit, LoRA, quantization, and QLoRA are
 organized by backbone storage, incremental task state, and transient work. A
-39,268-parameter frozen-context Transformer reaches its exact information ceilings
-of 0.25/0.50/0.75/1.00 accuracy at zero through three demonstrations while every
-evaluation weight remains bitwise fixed. A five-seed planted rank-six audit shows
+39,268-parameter frozen-context Transformer closely tracks the analytical information
+ceilings of 0.25/0.50/0.75/1.00 accuracy at zero through three demonstrations while
+every evaluation weight remains bitwise fixed. A five-seed planted rank-six audit shows
 the LoRA capacity break exactly at rank six, with merged and unmerged paths agreeing
 to `1.43e-06`. A controlled unequal-row quantization audit separates bit width from
 granularity and metadata: at 8 bits, relative layer-output error is 0.0213 with one
@@ -468,8 +468,8 @@ Each stub carries its contract; specifics accumulated so far:
   precision, trainable state, and measured runtime are explicitly distinct.
 - **Pinned frozen-context audit**: a 39,268-parameter causal Transformer evaluated
   over five seeds and 8,192 nested episodes per seed reaches mean accuracy
-  0.252/0.500/0.749/1.000/1.000 for zero through four demonstrations, matching the
-  0.25/0.50/0.75/1.00 information ceilings; every evaluation pass leaves weights
+  0.252/0.500/0.749/1.000/1.000 for zero through four demonstrations, closely tracking
+  the 0.25/0.50/0.75/1.00 information ceilings; every evaluation pass leaves weights
   bitwise unchanged.
 - **Pinned LoRA and quantization audits**: on a planted rank-six 32-by-32 update,
   ranks one/two/four leave validation MSE 0.04535140/0.02021863/0.00188776, while
