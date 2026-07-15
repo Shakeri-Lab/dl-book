@@ -79,3 +79,25 @@ must still be independently checked before they enter the book.
 Each snapshot begins with the exact machine-local upstream path and its SHA-256 digest.
 These files are provenance records only: book prose, derivations, code, experiments,
 and figures must be produced and verified independently.
+
+## Appendix A and B topic-map snapshots
+
+- `misc_LinAlg.tex` records the vectors, span, basis, linear-map, composition, and
+  batching boundary of the linear-algebra seed. The upstream deck's 3Blue1Brown-based
+  framing, diagrams, narration, and code are omitted.
+- `misc_svd.tex` records the standard SVD, rank-one expansion, truncation, and centered
+  PCA equations. Unattributed quotations, diagrams, code, incorrect shape/count
+  statements, and unsupported application claims are omitted.
+- `misc_tensor.tex` records the tensor-shape, batched affine-layer, broadcasting, and
+  vocabulary boundary. Channels-last examples, device/performance claims, diagrams,
+  and code are omitted.
+- `misc_tensor_operations.tex` is deliberately only a checked topic map because the
+  upstream file begins with a Google AI Studio prompt marker and contains malformed
+  examples and unsupported claims. None of its prose or code is retained.
+- `misc_layer_algebra.tex` records only the standard affine-layer equations. Its
+  3Blue1Brown-attributed framing, quotations, diagrams, code, and broad representational
+  claims are omitted.
+
+These appendix snapshots preserve no third-party audiovisual material or executable
+examples. The appendix implementations and figures are independently written and
+pre-tested against the documented mathematical contracts.

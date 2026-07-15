@@ -1,17 +1,568 @@
 # Tensors in Practice {#sec-a2-tensors}
 
-::: {.callout-warning}
-**Chapter stub.** This chapter is planned but not yet written. The abstract below is its
-contract; drafting sources are listed for provenance.
+<!-- lecture-source:
+     [coding]_m01_lecture-1-2-linear-regression-via-neural-network_WOFb8EKAy7I.txt,
+       SHA-256 d8b065fed97979ca08d77fb853fe40a0b4b7237cf9904add82ba798722a43220
+     [coding]_m04_dl4-2-coding-up-your-first-cnn_Dprs8jH13GA.txt,
+       SHA-256 d45cf122f93e62574cf1185dc76d9d126cf413690e79ca5c5ab69c506642d946
+     [coding]_m08_lecture-8-3-implementing-attention-in-seq2seq-de_nDcFkXXFzJs.txt,
+       SHA-256 669ec2784c559ff5f01b8bb773852bd96377744b1d601d542c5603a9ddd201a0
+     [coding]_m09_lecture-9-2-transformer-part-2_tG8b2eNm6Gg.txt
+       SHA-256 6abdd038e1b0684f44ff4e49628baaba2aa0051b1612db9de853b93db1b668bf
+     seeds (machine-local Box inputs):
+     LaTeX/misc/tensor.tex
+       sha256 d7392a91be71f02b8b21a7c15fb66e14fc1d770b02936894dc2cc23c3053fc61
+     LaTeX/misc/tensor_operations.tex
+       sha256 a07a107589823b815fcf1f66ccee980383f23a9d6eee07c1a1e608c157995257
+     LaTeX/misc/layer_algebra.tex
+       sha256 1f7c73cc994d967b60b1d32a13843ee2308627c5569348ca958d29158182c4b2
+     sanitized public topic maps:
+     sources/misc_tensor.tex, sources/misc_tensor_operations.tex,
+     sources/misc_layer_algebra.tex
+     provenance boundary:
+     tensor_operations.tex contains an AI Studio prompt marker and was treated only
+     as an idea inventory. Prose, equations, and executable examples below were
+     independently written and checked; no source code was ported. -->
+
+Here is a PyTorch bug that did not begin with an error message. In the Chapter 1
+coding lecture, a prediction had shape `(N,)` while a noise column had shape
+`(N, 1)`. Adding them did not produce `(N, 1)`. PyTorch compared the axes from the
+right, expanded both inputs, and legally returned `(N, N)`. The calculation ran—the
+meaning was wrong.
+
+That debugging pause contains the whole lesson of this appendix. A tensor is not just
+a box of numbers—and a shape is not enough unless we know what every axis means.
+Chapters 1–19 have already used dense batches, images, sequences, attention heads,
+masks, and parameter tensors. Here we gather the habits that make those objects
+predictable: state the contract, name the axes, and make every operation account for
+the axes it changes.
+
+## The six-part tensor contract
+
+Before operating on a tensor `x`, you should be able to answer six questions.
+
+| Part of the contract | Question to ask | PyTorch evidence |
+|---|---|---|
+| **Values** | What does each number represent? | Inspect a small slice; check its range and invariants |
+| **Shape and axes** | What does each position in the shape mean? | `x.shape`, `x.ndim`, plus names in prose or comments |
+| **Data type** | Are these real values, integer indices, or Boolean decisions? | `x.dtype` |
+| **Device** | Where does the storage live, and do interacting tensors agree? | `x.device` |
+| **Layout** | How does an index step through storage? | `x.stride()`, `x.is_contiguous()` |
+| **Gradient role** | Is autograd recording how this value was produced? | `x.requires_grad`, `x.grad_fn`, `x.is_leaf` |
+
+The values and their axis meanings are the *modeling* contract—dtype, device, and
+layout are the *representation* contract. Gradient status is the *learning* contract.
+One PyTorch object carries all three—changing any one can change which operations are
+valid.
+
+::: {.callout-note}
+## Dimension, order, and rank are not synonyms
+
+A scalar tensor has shape `()` and zero axes. A vector-shaped tensor such as `(7,)`
+has one axis; a matrix-shaped tensor such as `(5, 7)` has two. In code, call this
+`ndim` rather than “rank.” **Matrix rank** means the number of linearly independent
+directions and is computed by `torch.linalg.matrix_rank`. In geometry and physics,
+*tensor* has a further coordinate-transformation meaning. A PyTorch tensor can store
+the coordinates of such an object, but an arbitrary multidimensional array is not
+automatically that mathematical tensor.
 :::
 
-*Shapes, broadcasting, indexing, and the layer-algebra habits that prevent 90% of PyTorch bugs.*
+Autograd deserves the same precision. A tensor does not track history merely because
+it is a tensor. Operations are recorded when gradient mode is active and at least one
+relevant input requires gradients; a scalar loss then seeds the reverse pass. Chapter
+5 develops that machinery in @sec-05-backpropagation. Here, `requires_grad` is one
+field to audit rather than a promise that `backward()` will always be meaningful.
 
-<!-- draft-sources
-seeds:
-- `sources/misc_tensor.tex`
-- `sources/misc_tensor_operations.tex`
-- `sources/misc_layer_algebra.tex`
-transcripts:
-- (none)
--->
+## The book's shape dictionary
+
+We use an **examples-as-rows batch convention**: the first axis indexes examples,
+while the final axis usually carries features. Spatial tensors are the important
+exception because they retain named channel, height, and width axes.
+
+| Object | Shape used in this book | Axis meaning |
+|---|---:|---|
+| Dense batch | `(B, D)` | batch, features |
+| Dense weight | `(D_out, D_in)` | output features, input features |
+| Image batch | `(B, C, H, W)` | batch, channels, height, width |
+| Convolution weight | `(C_out, C_in, K_h, K_w)` | output channels, input channels, kernel height, kernel width |
+| Sequence batch | `(B, T, D)` | batch, time or tokens, features |
+| Multi-head states | `(B, N_h, T, D_h)` | batch, heads, positions, width per head |
+| Attention scores | `(B, N_h, T, S)` | batch, heads, query positions, key positions |
+| Token logits | `(B, T, V)` | batch, positions, vocabulary classes |
+
+These are contracts—not universal laws. An external library or dataset may choose a
+different order. Convert once at the boundary—assert the result, and then follow one
+convention internally. Chapter 8 establishes NCHW for images
+(@sec-08-cnn); Chapter 10 establishes batch-first sequences
+(@sec-10-sequences-rnn); Chapters 13–16 extend that sequence convention to source
+positions, heads, masks, and image patches.
+
+Keep the batch axis explicit even when `B=1`. For a token-level loss, logits
+`(B,T,V)` become `(B*T,V)` and labels `(B,T)` become `(B*T,)` only at the loss
+boundary; `reshape(-1, V)` and `reshape(-1)` must flatten the same batch-time order.
+Until then, preserving `B` and `T` keeps examples and positions recoverable.
+
+### The `nn.Linear` storage convention
+
+Let one example be a column vector
+$\vect{x}\in\mathbb{R}^{D_{\mathrm{in}}}$. A dense layer stores
+$\matr{W}\in\mathbb{R}^{D_{\mathrm{out}}\times D_{\mathrm{in}}}$ and
+$\vect{b}\in\mathbb{R}^{D_{\mathrm{out}}}$, so
+
+$$
+\vect{y}=\matr{W}\vect{x}+\vect{b}.
+$$
+
+PyTorch batches examples as rows:
+$\matr{X}\in\mathbb{R}^{B\times D_{\mathrm{in}}}$. The same stored weight therefore
+appears transposed in the batch expression. Let
+$\mathbf{1}_B\in\mathbb{R}^{B}$ be an all-ones vector. Then
+
+$$
+\matr{Y}=\matr{X}\matr{W}^{\top}+\mathbf{1}_B\vect{b}^{\top},
+\qquad
+\matr{Y}\in\mathbb{R}^{B\times D_{\mathrm{out}}}.
+$$
+
+PyTorch writes the same broadcast compactly as `X @ W.T + b`. The bias matches the
+trailing output-feature axis—it is reused across the batch.
+Let us pin that convention against `nn.Linear` rather than trusting memory.
+
+<!-- NOVEL: needs sign-off -->
+```{python}
+#| label: a2-linear-contract
+#| code-summary: "Code: verify the nn.Linear weight and bias shape contract"
+import torch
+from torch import nn
+
+_ = torch.manual_seed(6050)
+
+B, D_IN, D_OUT = 3, 4, 2
+X = torch.arange(B * D_IN, dtype=torch.float64).reshape(B, D_IN) / 10
+W = torch.tensor(
+    [[1.0, -1.0, 0.5, 2.0], [-0.5, 1.5, 1.0, 0.0]],
+    dtype=torch.float64,
+)
+b = torch.tensor([0.25, -0.75], dtype=torch.float64)
+
+manual = X @ W.T + b
+layer = nn.Linear(D_IN, D_OUT, dtype=torch.float64)
+with torch.no_grad():
+    layer.weight.copy_(W)
+    layer.bias.copy_(b)
+output = layer(X)
+
+assert output.shape == (B, D_OUT)
+assert torch.allclose(output, manual)
+gap = (output - manual).detach().abs().max().item()
+print(f"X {tuple(X.shape)}, W {tuple(W.shape)}, b {tuple(b.shape)}")
+print(f"output {tuple(output.shape)}, max gap {gap:.1f}")
+```
+
+The output is `(3, 2)`, and `allclose` confirms agreement at its default tolerances;
+this run's maximum gap is `0.0`. Notice where the transpose lives: `layer.weight`
+itself is `(D_out, D_in)`. We transpose it only when writing the row-batch calculation
+by hand.
+
+## Broadcasting: convenient, but not semantic
+
+Broadcasting lets an elementwise operation combine different shapes without manually
+copying the smaller tensor. Compare shapes from the trailing axis toward the left. At
+each position, two sizes are compatible when they are equal, one is 1, or one axis is
+missing. The result takes the larger compatible size.
+
+For example, `(B, D_out) + (D_out,)` is exactly the dense-layer bias operation. The
+bias's only axis aligns with the final feature axis. PyTorch knows sizes—it
+does not know that one axis means channels and another means image width.
+
+Let us build the more dangerous version of the lecture's bug. This NCHW image batch
+has three channels *and* width three. A bare `(3,)` channel mean can therefore attach
+to the wrong axis and still return the expected overall shape.
+
+<!-- NOVEL: needs sign-off -->
+```{python}
+#| label: a2-broadcast-trap
+#| code-summary: "Code: expose a silent channel-versus-width broadcasting error"
+images = torch.tensor(
+    [[[[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]],
+      [[2.0, 2.0, 2.0], [2.0, 2.0, 2.0]],
+      [[3.0, 3.0, 3.0], [3.0, 3.0, 3.0]]]]
+)  # (B=1, C=3, H=2, W=3)
+
+channel_mean = images.mean(dim=(0, 2, 3), keepdim=True)
+centered = images - channel_mean
+wrong = images - channel_mean.reshape(3)
+
+correct_check = centered.mean(dim=(0, 2, 3))
+wrong_check = wrong.mean(dim=(0, 2, 3))
+assert torch.equal(correct_check, torch.zeros(3))
+assert not torch.equal(wrong_check, torch.zeros(3))
+
+print(f"images {tuple(images.shape)}, mean {tuple(channel_mean.shape)}")
+print("correct channel means:", correct_check.tolist())
+print("wrong channel means:  ", wrong_check.tolist())
+```
+
+Both subtractions return shape `(1, 3, 2, 3)`—only the invariant reveals the bug:
+the correct result has channel means `[0, 0, 0]`, while the accidental width
+subtraction leaves `[-1, 0, 1]`. The mistake ran because `C=W=3`—a symmetric test
+shape hid the axis meaning.
+
+::: {.callout-warning}
+## Broadcasting hygiene
+
+1. Write reductions with named `dim` values.
+2. Use `keepdim=True` when the result will broadcast back to the original tensor.
+3. Test with deliberately unequal axis sizes: `C=3`, `H=5`, `W=7` rather than three
+   convenient equal numbers.
+4. Check a semantic invariant after the operation. Shape equality alone is weak
+   evidence.
+:::
+
+### `expand` and `repeat` are different promises
+
+Ordinary broadcasting is usually enough. When you need an explicitly expanded shape,
+`expand` returns a **view** and can enlarge singleton axes (or prepend new axes). It
+sets the expanded axis's stride to zero—several logical positions refer to the same
+stored value.
+`repeat`, in contrast, materializes a tiled result with separate stored entries.
+
+<!-- NOVEL: needs sign-off -->
+```{python}
+#| label: a2-expand-repeat
+#| code-summary: "Code: contrast an expanded view with repeated storage"
+base = torch.tensor([[10.0], [20.0]])       # (2, 1)
+expanded = base.expand(2, 3)                # view: stride 0 on the new width
+repeated = base.repeat(1, 3)                # materialized tiled values
+
+base[0, 0] = 99.0
+assert expanded[0].tolist() == [99.0, 99.0, 99.0]
+assert repeated[0].tolist() == [10.0, 10.0, 10.0]
+
+print("expanded stride:", expanded.stride())
+print("repeated stride:", repeated.stride())
+print("after editing base:", expanded[0].tolist(), repeated[0].tolist())
+```
+
+The expanded view has stride `(1, 0)`: moving along its second axis does not move in
+storage. That aliasing is why an expanded view should not receive in-place writes.
+Clone it first if independent writable entries are required. Use `repeat` only when
+you genuinely intend to materialize copies—using it merely to make elementwise
+arithmetic work wastes the abstraction that broadcasting already provides.
+
+## Shape is not layout
+
+For the layout question, a dense strided tensor interprets storage through shape,
+stride, and an offset; dtype determines how the stored bits are read. The stride for
+an axis says how many storage positions to move when that index increases by one. A
+contiguous `(2, 3, 4)` tensor has stride `(12, 4, 1)`: move twelve entries for the
+first axis, four for the second, and one for the last.
+
+`transpose` and `permute` reorder axes by changing metadata; they normally return
+views rather than moving values. The result can be non-contiguous. That is where
+`view`, `reshape`, and `contiguous` part company.
+
+<!-- NOVEL: needs sign-off -->
+```{python}
+#| label: a2-layout
+#| code-summary: "Code: follow shape and stride through a permutation"
+original = torch.arange(24).reshape(2, 3, 4)
+permuted = original.permute(0, 2, 1)
+
+try:
+    permuted.view(2, -1)
+except RuntimeError:
+    view_result = "view rejected the incompatible strides"
+else:
+    raise AssertionError("view unexpectedly succeeded")
+
+reshaped = permuted.reshape(2, -1)
+materialized = permuted.contiguous().view(2, -1)
+assert torch.equal(reshaped, materialized)
+reshape_copied = (
+    reshaped.untyped_storage().data_ptr()
+    != permuted.untyped_storage().data_ptr()
+)
+
+print("original:", tuple(original.shape), original.stride())
+print("permuted:", tuple(permuted.shape), permuted.stride(),
+      permuted.is_contiguous())
+print(view_result)
+print("reshape copied in this case:", reshape_copied)
+```
+
+The permutation changes `(2, 3, 4)` with stride `(12, 4, 1)` into `(2, 4, 3)` with
+stride `(12, 1, 4)`. No values moved—the desired flattening no longer follows one
+compatible run through storage—`view` refuses to pretend otherwise. `reshape` may
+return a view when strides permit it or a copy when they do not; code should never
+depend on which one it chooses. `contiguous` makes the copy explicit when a contiguous
+consumer requires one.
+
+The pointer comparison above is a diagnostic for this fixed example, not a control
+flow technique. Program logic should depend on values and documented contracts—not on
+whether one particular `reshape` happened to share storage.
+
+| Operation | Axis effect | Storage promise |
+|---|---|---|
+| `unsqueeze(dim)` | insert a size-one axis | view |
+| `squeeze(dim)` | remove that axis if its size is one | view |
+| `transpose(a, b)` | swap two axes | view |
+| `permute(order)` | reorder all axes | view |
+| `flatten(start_dim=...)` | merge a consecutive axis range | view or copy |
+| `view(shape)` | reinterpret compatible strides | view or error |
+| `reshape(shape)` | request a shape | view or copy |
+| `contiguous()` | preserve shape and values | original if already contiguous, otherwise copy |
+
+Specify the axis in `squeeze(dim)`. An unrestricted `squeeze()` can silently remove
+the batch axis when `B=1`. Likewise, reserve `.T` for ordinary 2-D matrices. For a
+batch of matrices, use `transpose(-2, -1)` to say that only the final two axes swap.
+That is the pattern used by attention throughout the book.
+
+## Products: which axes meet?
+
+Elementwise multiplication and matrix multiplication answer different questions.
+`A * B` multiplies corresponding broadcastable entries. `A @ B` contracts axes:
+
+- two vectors `(D,) @ (D,)` produce a scalar;
+- `(M, D) @ (D, N)` produces `(M, N)`;
+- when both operands have at least two axes, `@` treats the final two as matrix axes
+  and broadcasts compatible leading batch axes.
+
+Appendix A develops the geometry of these products in
+@sec-a1-linear-algebra. Here our concern is executable bookkeeping. Consider the
+multi-head attention product from @sec-14-self-attention-transformer. Let
+
+$$
+\matr{Q}\in\mathbb{R}^{B\times N_h\times T\times D_h},
+\qquad
+\matr{K}\in\mathbb{R}^{B\times N_h\times S\times D_h}.
+$$
+
+For each batch, head, query position, and key position, we contract only the shared
+feature axis:
+
+$$
+R_{bhts}=\sum_{d=1}^{D_h}Q_{bhtd}K_{bhsd}.
+$$
+
+The direct matrix expression and Einstein notation should agree.
+
+<!-- NOVEL: needs sign-off -->
+```{python}
+#| label: a2-products
+#| code-summary: "Code: verify batched matmul against an indexed contraction"
+generator = torch.Generator().manual_seed(6050)
+B, N_HEADS, T, S, D_HEAD = 2, 3, 4, 5, 6
+queries = torch.randn(
+    B, N_HEADS, T, D_HEAD, generator=generator, dtype=torch.float64
+)
+keys = torch.randn(
+    B, N_HEADS, S, D_HEAD, generator=generator, dtype=torch.float64
+)
+
+by_matmul = queries @ keys.transpose(-2, -1)
+by_indices = torch.einsum("bhtd,bhsd->bhts", queries, keys)
+
+assert by_matmul.shape == (B, N_HEADS, T, S)
+assert torch.allclose(by_matmul, by_indices, rtol=0, atol=1e-12)
+gap = (by_matmul - by_indices).abs().max().item()
+print(
+    f"Q {tuple(queries.shape)}, K {tuple(keys.shape)}, "
+    f"scores {tuple(by_matmul.shape)}"
+)
+print(f"matmul/einsum max gap: {gap:.1f}")
+```
+
+The unscaled result shape is `(B,N_h,T,S)`. After scaling and masking, attention
+softmax belongs on `dim=-1`: each query distributes weight over its `S` keys. A
+key-validity mask `(B,S)` becomes
+`(B,1,1,S)` so it broadcasts across heads and queries. A causal mask `(T,S)`
+broadcasts across batch and heads—changing either mask axis changes which information
+the model may use. Chapters 13–15 derive those modeling choices in
+@sec-13-attention, @sec-14-self-attention-transformer, and
+@sec-15-bert-pretraining.
+
+Read the `einsum` string as an axis audit. The letters `b`, `h`, `t`, and `s` appear
+in the output—the axes survive. The feature letter `d` appears in both inputs
+but not the output, so it is multiplied and summed away. This is often the clearest
+way to check a new contraction—even when the final implementation uses the more
+familiar `@`.
+
+::: {.callout-tip}
+## Translate the operation into one sentence
+
+Before typing a product, say: “For every batch and head, compare every query with
+every key by summing over features.” That sentence predicts `(B, N_h, T, S)`. If the
+code produces a different order, fix the contract before adding another `reshape`.
+:::
+
+## Indexing and masks
+
+Indexing can either preserve a coordinate system or collapse it. Basic slicing such
+as `x[:, 1:3]` normally returns a view. Advanced indexing with integer tensors or
+Boolean masks returns selected values in a new tensor. Both are useful—the mistake is
+expecting one shape behavior while asking for the other.
+
+Suppose token states have shape `(B, T, D)` and a visibility mask has shape `(B, T)`.
+Direct Boolean selection collects the visible rows and drops their original batch-time
+grid. `masked_fill` keeps the grid—its mask needs a singleton feature axis so it
+can broadcast across `D`.
+
+<!-- NOVEL: needs sign-off -->
+```{python}
+#| label: a2-masks
+#| code-summary: "Code: contrast Boolean selection with shape-preserving masking"
+tokens = torch.arange(2 * 4 * 3).reshape(2, 4, 3)
+visible = torch.tensor(
+    [[True, True, False, False], [True, False, True, False]]
+)
+
+selected = tokens[visible]
+masked = tokens.masked_fill(~visible[..., None], -1)
+
+assert selected.shape == (4, 3)
+assert masked.shape == tokens.shape
+assert torch.equal(masked[visible], selected)
+print(f"tokens {tuple(tokens.shape)}, mask {tuple(visible.shape)}")
+print(f"selection {tuple(selected.shape)}, masked tensor {tuple(masked.shape)}")
+```
+
+Use selection when the desired object really is “all valid rows,” as when flattening
+only supervised positions for a loss. Use `masked_fill` or `torch.where` when later
+operations still need the original axes. Attention masks in Chapters 13–15 preserve
+the score grid; padding-aware token losses often select or flatten supervised rows.
+The operation should follow the question, not habit.
+
+## Dtype- and device-aware construction
+
+A factory call creates another contract. `torch.zeros(shape)` chooses defaults; those
+defaults may not match the tensor already moving through a model. When a new tensor
+should follow a reference, use a `*_like` factory or a `new_*` method:
+
+- `torch.zeros_like(x)` inherits shape, dtype, layout, and device;
+- `x.new_full(shape, value)` inherits dtype and device while choosing a new shape;
+- `torch.arange(..., device=x.device)` makes placement explicit for indices.
+
+Gradient status is deliberately separate—a fresh `zeros_like(x)` does not require
+gradients by default even when `x` does. And not every tensor *should* inherit the
+reference dtype: masks are Boolean, while class and position indices are normally
+`torch.int64`.
+
+<!-- NOVEL: needs sign-off -->
+```{python}
+#| label: a2-aware-factories
+#| code-summary: "Code: construct values, masks, and indices from one reference"
+reference = torch.linspace(-1, 1, 6, dtype=torch.float64).reshape(2, 3)
+reference.requires_grad_(True)
+
+accumulator = torch.zeros_like(reference)
+thresholds = reference.new_full((1, 3), 0.25)
+valid = torch.ones(
+    reference.shape[0], dtype=torch.bool, device=reference.device
+)
+indices = torch.arange(reference.shape[0], device=reference.device)
+
+assert accumulator.dtype == thresholds.dtype == reference.dtype
+assert accumulator.device == thresholds.device == reference.device
+assert not accumulator.requires_grad
+assert valid.dtype == torch.bool and indices.dtype == torch.int64
+
+print("reference:", reference.dtype, reference.device, reference.requires_grad)
+print("accumulator:", accumulator.dtype, accumulator.device,
+      accumulator.requires_grad)
+print("semantic dtypes:", valid.dtype, indices.dtype)
+```
+
+The code prints matching floating-point dtypes and devices for the numerical values,
+then `bool` and `int64` for the mask and indices. This is the rule—inherit the
+representation when the new tensor plays the same numerical role; choose explicitly
+when its semantics differ. Chapter 17 applies that distinction to stored and computed
+weights (@sec-17-peft-quantization), while @sec-a4-floating-point explains what a
+floating-point dtype can actually represent.
+
+## A debugging routine
+
+When a shape error—or worse, a suspicious result—appears, resist the urge to add
+`squeeze` and `reshape` until the exception disappears. Walk the contract instead.
+
+The lecture's impossible downstream shape was a clue, not the place to patch. The
+diagnosis traced upstream, stated the expected matrix product, applied the
+right-alignment rules, reshaped the intended column explicitly, and asserted its
+shape. That order matters—the downstream failure was only the symptom.
+
+::: {.callout-tip}
+## Six questions before the next edit
+
+1. **Name the axes.** Write `# (B, T, D)`, not merely `# 3-D tensor`.
+2. **Inspect the full representation.** Check `shape`, `dtype`, `device`, `stride()`,
+   `is_contiguous()`, and `requires_grad`.
+3. **State the operation in words.** Which axes survive, broadcast, reduce, contract,
+   or reorder?
+4. **Check the boundary.** Assert the input and output shapes at module interfaces.
+5. **Use awkward test sizes.** Include `B=1`, make unrelated axes unequal, and use
+   `T\ne S` for attention.
+6. **Check meaning, not only shape.** Probabilities sum to one over the intended axis;
+   centered channels have zero channel means; masks hide exactly the forbidden
+   positions.
+:::
+
+The original `(N,) + (N,1)` bug becomes straightforward under this routine. Name the
+prediction axis, decide whether the target is `(N,)` or `(N,1)`, make every term follow
+that choice, and assert the result before computing a loss. Do not ask PyTorch to infer
+meaning from matching integers—it cannot.
+
+Okay, so the practical bridge is now complete. Shape tells you how many positions
+exist—axis names tell you what they mean; strides tell you how those positions map to
+storage. Broadcasting, indexing, and matrix products are then not mysterious rules.
+Each is an explicit decision about which axes remain and which disappear.
+
+## Exercises {.unnumbered}
+
+1. **(Pencil.)** Let `scores` have shape `(B, T, V)`. Determine the result shape of
+   each operation and name every remaining axis:
+   `scores.mean(dim=1)`, `scores.mean(dim=1, keepdim=True)`,
+   `scores.argmax(dim=-1)`, and `scores.reshape(-1, V)`. Which operations lose the
+   original time coordinates, and how do reduction and axis merging lose them
+   differently?
+
+2. **(Code.)** Write `standardize_channels(x)` for an NCHW tensor. Compute one mean and
+   standard deviation per channel with `keepdim=True`, return the standardized tensor,
+   clamp the standard deviation away from zero, and assert that its per-channel means
+   are zero. Test `(B,C,H,W)=(2,3,5,7)` and the deceptive case `(1,3,2,3)`.
+
+3. **(Code.)** Start with a sequence tensor of shape `(B,T,N_hD_h)`. Reshape and
+   permute it into `(B,N_h,T,D_h)`, then reverse the operation. Assert exact equality
+   with the input for `B=2`, `T=5`, `N_h=3`, and `D_h=4`. Print the stride after every
+   step and identify where a copy may occur.
+
+4. **(Pencil + code.)** For `x` shaped `(4,1)`, compare
+   `x.expand(4,1000)` and `x.repeat(1,1000)`. Predict their strides and how editing the
+   base changes each result, then verify. Explain why an in-place write through the
+   expanded view is unsafe.
+
+5. **(Code.)** Let logits have shape `(B,T,V)` and a validity mask have shape `(B,T)`.
+   Produce (a) selected logits shaped `(N_valid,V)` and (b) shape-preserving logits in
+   which invalid rows are all zero. Test with `B=2`, `T=4`, and `V=5`, and assert that
+   both forms agree on the valid rows.
+
+## Sources and further reading {.unnumbered}
+
+- Instructor coding transcripts for the Chapter 1 broadcasting diagnosis, the Chapter
+  8 NCHW convention, the Chapter 13 batch-attention calculation, and the Chapter 14
+  batch-first Transformer and mask shapes; filenames are recorded in the provenance
+  comment above.
+- Instructor lecture seeds `tensor.tex`, `tensor_operations.tex`, and
+  `layer_algebra.tex` supplied the computational-bridge and layer-algebra framing—
+  all technical content here was independently checked, and no seed implementation
+  was reproduced.
+- [PyTorch broadcasting semantics](https://docs.pytorch.org/docs/stable/notes/broadcasting.html):
+  the exact trailing-axis compatibility rules.
+- [PyTorch tensor views](https://docs.pytorch.org/docs/stable/tensor_view.html):
+  views, strides, contiguity, basic versus advanced indexing, and the conditional
+  copy behavior of `reshape`.
+- [`torch.nn.Linear`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Linear.html):
+  the official input, output, weight, and bias shape contract.
+- [`torch.einsum`](https://docs.pytorch.org/docs/stable/generated/torch.einsum.html):
+  executable indexed contractions.
+- [PyTorch tensor attributes](https://docs.pytorch.org/docs/stable/tensor_attributes.html):
+  dtype, device, and layout references.

@@ -1,7 +1,7 @@
 # Continuing the Book — Handoff & Roadmap
 
-*Written 2026-07-09 after Chapter 11 shipped; updated 2026-07-14 after Chapter 19
-shipped. This is the master handoff document:
+*Written 2026-07-09 after Chapter 11 shipped; updated 2026-07-14 after Appendices A
+and B shipped. This is the master handoff document:
 everything a fresh collaborator (human or Claude session, on any account) needs to
 continue the project without the original conversation history. Read `CLAUDE.md`
 (repo root) first for environment setup; read this second; read
@@ -21,7 +21,7 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 | III · Sequences | 10–11 | **Shipped; repair pass complete and verified** (July 11, 2026) |
 | IV · Attention | 12–16 | **Shipped and two-format verified** (July 13, 2026) |
 | V · Pretrained Era | 17–19 | **Shipped and two-format verified** (July 14, 2026) |
-| Appendices | a1–a4 | Stubs (a4 floating-point queued in backlog) |
+| Appendices | A–D | **A–B shipped and two-format verified**; C–D remain stubs (D floating-point queued in backlog) |
 
 **Milestone 1** (Part I complete + skeleton) is met. The July 11 quantitative,
 mathematical, licensing, evaluation-hygiene, and two-format repair pass over Chapters
@@ -112,6 +112,25 @@ diffusion study, time conditioning reaches noise MSE 0.429707, central mass 0.01
 and Wasserstein distance 0.058570, versus 0.750634/0.222760/0.375321 without time. The
 chapter makes no natural-image or hardware claim; both formats are verified.
 
+Appendix A is complete: it consolidates matrix maps, affine bias, projection geometry,
+`solve`, `lstsq`, condition-number squaring, reduced and batched SVD, low-rank
+approximation, and centered PCA. Five deterministic PyTorch cells and three figures
+pin the row-batch convention, a $(0.9,0.9)$ least-squares solution with orthogonal
+residual, the $\kappa(A^\top A)\approx\kappa(A)^2$ trap, rank-one error, batched
+reconstruction, and the PCA centering failure. The raw Box seeds' attributed framing
+and quotations were not reused; sanitized topic-map snapshots and transcript hashes
+record the provenance boundary. HTML and TeX stdout match exactly, and the complete
+Appendix A PDF range and browser layout passed visual QA.
+
+Appendix B is complete: it harvests Chapter 17's promise to gather tensor shape, dtype,
+stride, and physical layout, beginning with the instructor's real
+`(N,) + (N,1) -> (N,N)` broadcasting diagnosis. Seven deterministic PyTorch cells
+verify `nn.Linear` storage, NCHW broadcasting, `expand` versus `repeat`,
+views/strides/contiguity, batched `@` versus `einsum`, Boolean selection versus
+shape-preserving masking, and dtype-aware factories. It makes no hardware claim and
+contains no GPU placeholder. HTML and TeX stdout match exactly, and the complete
+Appendix B PDF range and browser layout passed visual QA.
+
 **Decisions still gated on the author:**
 - The author's own edit pass over Chapters 1–19 remains pending.
 - Course-site integration was approved, implemented, and shipped July 11, 2026. It uses
@@ -124,7 +143,7 @@ chapter makes no natural-image or hardware claim; both formats are verified.
   placeholder callouts in chapters; run the queued experiments on Rivanna/Colab and
   fold real results back into the relevant chapters later.
 
-## 2. The working protocol (refined over chapters 7–19)
+## 2. The working protocol (refined over chapters 7–19 and Appendices A–B)
 
 The single most important lesson of this project: **pre-test every experiment
 regime before writing a word of prose.** Roughly half of all planned experiments
@@ -572,10 +591,21 @@ chapter record preserves its source, harvest, experiment, and verification contr
   rounded-away update.
 
 ### Appendices
-- a4 floating-point: queued in backlog; ch. 5 (float-zero), ch. 9 (underflow
-  figure), ch. 10 (σ(0)^80), and ch. 19 (long schedule products) all point to it —
-  gather those as its motivating examples. a1 (LinAlg/SVD) seeds:
-  `misc/LinAlg,svd` in Box.
+- **Appendix A — Linear Algebra and the SVD (SHIPPED):** sanitized
+  `sources/misc_LinAlg.tex` and `sources/misc_svd.tex`; Module 1/6 transcript bridges;
+  matrices as maps, row batches, projection and least squares, solve-don't-invert,
+  conditioning, reduced/batched SVD, truncation, and centered PCA. Five cells, three
+  figures, two exact freezes, and full PDF/browser QA passed.
+- **Appendix B — Tensors in Practice (SHIPPED):** sanitized
+  `sources/misc_tensor.tex`, `sources/misc_tensor_operations.tex`, and
+  `sources/misc_layer_algebra.tex`; Module 1/4/8/9 coding-transcript bridges; tensor
+  contracts, book-wide axis dictionary, broadcasting, storage/stride, contractions,
+  masking, and dtype/device-aware construction. Seven cells, two exact freezes, and
+  full PDF/browser QA passed.
+- **Appendix C — Notation:** stub remains.
+- **Appendix D — Floating Point and Machine Precision:** queued in backlog; ch. 5
+  (float-zero), ch. 9 (underflow figure), ch. 10 ($\sigma(0)^{80}$), and ch. 19
+  (long schedule products) all point to it. Gather those as its motivating examples.
 
 ## 8. Document map
 
@@ -590,5 +620,5 @@ chapter record preserves its source, harvest, experiment, and verification contr
 | `docs/dl-course-code.md` | how to use his Manim repo (module spines, scenes) |
 | `docs/enhancement-proposal.md` (in dl-course-site repo) | course-site history |
 
-*After every shipped chapter, update §1's table, the arc-seeds ledger, and the
-GPU queue. These documents are the project's memory now.*
+*After every shipped chapter or appendix, update §1's table, the arc-seeds ledger,
+and the GPU queue. These documents are the project's memory now.*

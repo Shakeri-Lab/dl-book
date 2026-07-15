@@ -8,7 +8,7 @@ new rows here. The pedagogical-efficiency rule (drafting-template) depends on
 this file: a concept with no payoff chapter listed here should be an exercise or
 a cut.*
 
-*Updated: 2026-07-14, after Chapter 19 shipped.*
+*Updated: 2026-07-14, after Appendices A and B shipped.*
 
 ## 1. Seeds planted and their harvest contracts
 
@@ -52,6 +52,8 @@ a cut.*
 | Where the update lives is not what the update optimizes | ch. 17 | ch. 18 — harvest by name: adaptation chooses permitted writes and representation; instruction or preference objectives choose rewarded behavior | done |
 | A judge is not a generator | ch. 18 | ch. 19 — harvested by name: reward models and preference losses evaluate completed samples; generative modeling learns the distribution that produces them | done |
 | m06 autoencoder spine (PCA = linear AE, bottleneck, manifolds) | (unused by design in ch. 11) | ch. 19 | done |
+| Solve, don't invert | ch. 1 | Appendix A — `solve` for square systems; `lstsq` for rectangular projection; forming normal equations squares the condition number | done |
+| A tensor's dtype becomes more than a software label; gather dtype, shape, stride, and physical layout | ch. 17 | Appendix B — six-part tensor contract, shape dictionary, broadcasting, views, strides, and dtype-aware construction | done |
 
 ## 2. Cross-chapter running benchmarks
 
@@ -119,6 +121,8 @@ optimizers or `backward()` before Chapter 5.
 | 17 | hard/few-shot prompting and frozen-weight in-context learning; retrieval as a separate context path; soft prompts, prefix tuning, adapters, and BitFit; LoRA equations, initialization, rank-capacity, merge, and freeze audits; symmetric versus affine quantization, per-tensor versus per-row scales, PTQ/QAT/GPTQ/AWQ concepts; QLoRA, NF4, and double quantization; `nn.TransformerEncoderLayer` convenience wrapper |
 | 18 | response-masked SFT and instruction tuning; preference records and Bradley–Terry reward models; reward-shift and cyclic-consistency audits; reward model versus value function; finite KL-regularized Gibbs policy; PPO old-policy versus fixed-reference anchors; proxy-coverage audit; DPO reference-relative margin and exact finite identity; alignment evaluation contracts and model cards |
 | 19 | PCA and rank-$k$ reconstruction; deterministic autoencoders; bottleneck and manifold audits; Gaussian latent-variable models; ELBO and reparameterization; GAN minimax games and Jensen–Shannon divergence; diffusion schedules, noise prediction, score, and reverse sampling; generative evaluation contracts |
+| A | matrix maps and affine bias; span, rank, orthogonality, projectors; `torch.linalg.solve`, `lstsq`, conditioning, `eigh`/SVD contracts, low-rank approximation, batched SVD, centered PCA |
+| B | six-part tensor contract; book-wide axis dictionary; `nn.Linear` row batches; broadcasting; `expand`/`repeat`; views, strides, contiguity; batched `@`/`einsum`; indexing, masks, and dtype-aware factories |
 
 ## 4. His signature analogies (use them; don't invent competitors)
 

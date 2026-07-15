@@ -56,7 +56,7 @@ chapter stub's draft-sources; revisit during the planned outline session with th
 - Extend course-site `bookChapters` mappings as Chapters 12–19 become reviewed and
   substantive.
 
-## 5. GPU experiment queue (backlog-only; revised after Chapter 19, July 14, 2026)
+## 5. GPU experiment queue (backlog-only; revised after Appendices A–B, July 14, 2026)
 
 Do not place project-management placeholders in the published chapters. Keep these
 experiments here until GPU access is available; then run them on Rivanna/Colab, pin the
@@ -70,8 +70,10 @@ DPO-identity, and five-seed proxy-coverage audits. Chapter 19's PCA/autoencoder,
 decoder-ambiguity, Gaussian-ELBO, finite-GAN, schedule-coefficient, and five-seed scalar
 diffusion studies are also CPU-complete. They require no GPU dependency or
 project-management placeholder in the published chapters; the queue below remains the
-private reminder for later access. Chapters 13–14 discuss the structure of dense matrix
-operations but make no unmeasured hardware-speed claim. Chapter 16 reports its tiny
+private reminder for later access. Appendix A's linear-algebra demonstrations and
+Appendix B's tensor-contract demonstrations are also CPU-complete; neither publishes a
+GPU placeholder or infers hardware behavior. Chapters 13–14 discuss the structure of
+dense matrix operations but make no unmeasured hardware-speed claim. Chapter 16 reports its tiny
 scratch regime as a mechanism study, not as an architecture verdict. Chapter 17
 separates payload and metadata but makes no kernel-speed or natural-language quality
 claim. Chapter 18 calls its designed-utility study a finite planted mechanism, not
