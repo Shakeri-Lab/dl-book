@@ -101,3 +101,19 @@ and figures must be produced and verified independently.
 These appendix snapshots preserve no third-party audiovisual material or executable
 examples. The appendix implementations and figures are independently written and
 pre-tested against the documented mathematical contracts.
+
+## Appendix C precision and performance boundary
+
+Appendix C draws its course-specific motivation from `8.1-Attention.tex`,
+`9.1-self-attention.tex`, `10.1.scaling.tex`, and `11.3-quantization.tex`, plus the
+Module 8–10 lecture transcripts named and hashed in the appendix source. Those files
+are provenance inputs only. In particular, the categorical memory-bound/compute-bound
+labels in the attention seed and the scaling seed's claim that FlashAttention reduces
+dense compute were not carried into the book.
+
+The floating-point examples, mixed-precision policy, synthetic Roofline, online-
+softmax derivation, attention I/O ledger, code, and diagrams were independently
+produced and checked against primary papers and official framework documentation.
+No D2L code or prose, third-party FlashAttention implementation, paper figure, or
+vendor benchmark number is reproduced. The appendix makes analytical and CPU
+mechanism claims only; it does not report a hardware speedup.

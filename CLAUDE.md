@@ -140,9 +140,10 @@ More case law: `docs/CONTINUING.md` §5.
 
 ## Backlog
 
-Author-requested future work lives in `docs/backlog.md` (floating-point appendix — stub
-at a4; per-chapter collapsed "Deeper dive" sections with further-reading papers; ch. 6
-3Blue1Brown-inspired pacing). Check it before proposing new structural ideas.
+Author-requested future work lives in `docs/backlog.md` (Appendix C's future
+device-profiling queue; per-chapter collapsed "Deeper dive" sections with
+further-reading papers; ch. 6 3Blue1Brown-inspired pacing). Appendix D is the remaining
+Notation stub. Check the backlog before proposing new structural ideas.
 
 ## Course website integration
 

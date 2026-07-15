@@ -8,7 +8,7 @@ new rows here. The pedagogical-efficiency rule (drafting-template) depends on
 this file: a concept with no payoff chapter listed here should be an exercise or
 a cut.*
 
-*Updated: 2026-07-14, after Appendices A and B shipped.*
+*Updated: 2026-07-15, after Appendix C shipped.*
 
 ## 1. Seeds planted and their harvest contracts
 
@@ -21,8 +21,8 @@ a cut.*
 | Temperature dial between hard max and uniform | ch. 2 | ch. 10 ✓ (sampling); ch. 13 (√d as temperature) | done |
 | Compositional hierarchy: features of features | ch. 3 | ch. 8 ✓ (receptive fields make it architectural) | done |
 | Gradient superhighway (ReLU's open gate) | ch. 5 | ch. 9 ✓ (residual = the highway as infrastructure), ch. 10 ✓ (cell state = highway through time) | done |
-| Float-precision death (tiny signals can become numerically unusable) | ch. 5 | ch. 9 ✓ (norm underflow + update-resolution diagnostic), ch. 10 ✓ (σ(0)^80); appendix a4 (gather all three) | a4 due |
-| A small schedule coefficient is not a zero coefficient | ch. 19 | appendix a4 — distinguish mathematical smallness, underflow, rounded-away updates | a4 due |
+| Float-precision death (tiny signals can become numerically unusable) | ch. 5 | ch. 9 ✓ (norm underflow + update-resolution diagnostic), ch. 10 ✓ (σ(0)^80); Appendix C (range, local spacing, accumulator dtype, stable algorithms) | done |
+| A small schedule coefficient is not a zero coefficient | ch. 19 | Appendix C — mathematical smallness, underflow, and rounded-away updates are separated | done |
 | Constraints are knowledge / inductive bias prescription | ch. 6 | ch. 7–8 ✓; ch. 16 ✓ (ViT trades the bias away — "inductive bias strikes again, this time as a trade") | done |
 | Shift cliff (MLP collapses under 2px shift) | ch. 6 | ch. 8 ✓ (rematch), ch. 9 ✓ (GAP flattens it) — the book's first running benchmark | done |
 | Global templates figure (fig-templates) | ch. 6 | ch. 8 ✓ (learned local kernels vs. global smears) | done |
@@ -45,15 +45,18 @@ a cut.*
 | Book-corpus char-LM (held-out fixed-window loss 1.89; sampled training minibatch 1.42; babble) | ch. 10 | ch. 14 (exact corpus/split/evaluation and historical window schedule; positional transformer 1.9190, no-position 2.3405) | done |
 | Visibility is a modeling decision | ch. 14 | ch. 15 (causal generation versus bidirectional masked-token representation learning) | done |
 | Global routing trades away locality bias | ch. 14 | ch. 16 ✓ (patch-token ViT rematches convolution's built-in geometry in a five-seed scratch regime) | done |
+| Short paths, dense work; global access is not free memory | ch. 14 | Appendix C — the $Bhn^2$ ledger becomes the FlashAttention I/O case study | done |
 | A learned summary token can gather a sequence for a downstream head | ch. 15 | ch. 16 ✓ (`[CLS]` becomes a learned meeting place over image patches, not a summary by birth) | done |
 | Pretraining is a regime, not an architecture | ch. 15 | ch. 16 ✓ (the same encoder pattern crosses from text to vision; data scale can reverse the CNN–ViT ranking) | done |
 | Training-optimal is not serving-optimal | ch. 16 | ch. 17 — harvested by name: Chinchilla allocates training compute, not storage, inference, or adaptation cost; the mismatch motivates prompting, PEFT, and quantization | done |
+| A smaller checkpoint is not automatically faster | ch. 17 | Appendix C — Roofline and the measurement contract separate bytes, FLOPs, latency, and throughput | done |
 | Fine-tuning changes every encoder weight; what if the backbone is too large? | ch. 15 | ch. 17 (prompting, PEFT, quantization) | done |
 | Where the update lives is not what the update optimizes | ch. 17 | ch. 18 — harvest by name: adaptation chooses permitted writes and representation; instruction or preference objectives choose rewarded behavior | done |
 | A judge is not a generator | ch. 18 | ch. 19 — harvested by name: reward models and preference losses evaluate completed samples; generative modeling learns the distribution that produces them | done |
 | m06 autoencoder spine (PCA = linear AE, bottleneck, manifolds) | (unused by design in ch. 11) | ch. 19 | done |
 | Solve, don't invert | ch. 1 | Appendix A — `solve` for square systems; `lstsq` for rectangular projection; forming normal equations squares the condition number | done |
 | A tensor's dtype becomes more than a software label; gather dtype, shape, stride, and physical layout | ch. 17 | Appendix B — six-part tensor contract, shape dictionary, broadcasting, views, strides, and dtype-aware construction | done |
+| Storage precision ≠ compute precision ≠ trainable state | ch. 17 | Appendix C — operand, evaluation, accumulation, output, gradient, and optimizer roles are audited separately | done |
 
 ## 2. Cross-chapter running benchmarks
 
@@ -123,6 +126,7 @@ optimizers or `backward()` before Chapter 5.
 | 19 | PCA and rank-$k$ reconstruction; deterministic autoencoders; bottleneck and manifold audits; Gaussian latent-variable models; ELBO and reparameterization; GAN minimax games and Jensen–Shannon divergence; diffusion schedules, noise prediction, score, and reverse sampling; generative evaluation contracts |
 | A | matrix maps and affine bias; span, rank, orthogonality, projectors; `torch.linalg.solve`, `lstsq`, conditioning, `eigh`/SVD contracts, low-rank approximation, batched SVD, centered PCA |
 | B | six-part tensor contract; book-wide axis dictionary; `nn.Linear` row batches; broadcasting; `expand`/`repeat`; views, strides, contiguity; batched `@`/`einsum`; indexing, masks, and dtype-aware factories |
+| C | binary floating-point range and resolution; `torch.finfo`/`nextafter`; rounded-away updates, cancellation, stable softmax, and log-domain products; mixed-precision and loss-scaling contracts; operational intensity, Roofline bounds, and ridge points; I/O-aware exact attention and online softmax; performance-measurement contracts |
 
 ## 4. His signature analogies (use them; don't invent competitors)
 
@@ -130,7 +134,8 @@ Blindfolded descent (GD), knobs (parameters), blame (gradients), gradient
 superhighway (ch. 5/9/10 relay), ball rolling (momentum), house-and-foundation
 (pretrain/finetune), magnifying glass (kernels), detectives + cross-talk
 (channels, ch. 8), conveyor belt + valves / ball-valve (LSTM), gold rail
-(teacher forcing, coined ch. 11), "Okay, so —" (recaps), "what if X were
+(teacher forcing, coined ch. 11), chef and ingredient doorway (compute versus data
+movement, Appendix C), "Okay, so —" (recaps), "what if X were
 learnable?" (the book's refrain — every part pivots on it), “train a judge, then try
 to please the judge” (reward model then policy, ch. 18), model card as nutritional
 label (ch. 18), and “PCA on steroids” (nonlinear autoencoders bend the reconstruction

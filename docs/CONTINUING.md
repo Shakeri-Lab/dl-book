@@ -1,7 +1,7 @@
 # Continuing the Book — Handoff & Roadmap
 
-*Written 2026-07-09 after Chapter 11 shipped; updated 2026-07-14 after Appendices A
-and B shipped. This is the master handoff document:
+*Written 2026-07-09 after Chapter 11 shipped; updated 2026-07-15 after Appendix C
+shipped. This is the master handoff document:
 everything a fresh collaborator (human or Claude session, on any account) needs to
 continue the project without the original conversation history. Read `CLAUDE.md`
 (repo root) first for environment setup; read this second; read
@@ -21,7 +21,7 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 | III · Sequences | 10–11 | **Shipped; repair pass complete and verified** (July 11, 2026) |
 | IV · Attention | 12–16 | **Shipped and two-format verified** (July 13, 2026) |
 | V · Pretrained Era | 17–19 | **Shipped and two-format verified** (July 14, 2026) |
-| Appendices | A–D | **A–B shipped and two-format verified**; C–D remain stubs (D floating-point queued in backlog) |
+| Appendices | A–D | **A–C shipped and two-format verified**; D remains the Notation stub |
 
 **Milestone 1** (Part I complete + skeleton) is met. The July 11 quantitative,
 mathematical, licensing, evaluation-hygiene, and two-format repair pass over Chapters
@@ -131,6 +131,18 @@ shape-preserving masking, and dtype-aware factories. It makes no hardware claim 
 contains no GPU placeholder. HTML and TeX stdout match exactly, and the complete
 Appendix B PDF range and browser layout passed visual QA.
 
+Appendix C is complete: it harvests the book's floating-point failures and separates
+operand storage, evaluation, accumulation, and output precision. Seven deterministic
+CPU cells pin FP16/BF16/FP32/FP64 range and spacing, rounded-away updates, accumulation
+and cancellation order, stable softmax versus representational collapse, loss
+scaling, and operation-specific autocast. A synthetic 100-TFLOP/s, 2-TB/s Roofline
+establishes a 50-FLOP/byte ridge without making a device claim. The FlashAttention
+recap derives online softmax, matches materialized attention to
+`4.441e-16` in FP64, and distinguishes reduced I/O and working storage from unchanged
+dense quadratic arithmetic. Both freezes and all printed outputs match; the complete
+Appendix C PDF range, both original figures, and browser layout passed QA. It contains
+no GPU placeholder or unmeasured speedup.
+
 **Decisions still gated on the author:**
 - The author's own edit pass over Chapters 1–19 remains pending.
 - Course-site integration was approved, implemented, and shipped July 11, 2026. It uses
@@ -143,7 +155,7 @@ Appendix B PDF range and browser layout passed visual QA.
   placeholder callouts in chapters; run the queued experiments on Rivanna/Colab and
   fold real results back into the relevant chapters later.
 
-## 2. The working protocol (refined over chapters 7–19 and Appendices A–B)
+## 2. The working protocol (refined over chapters 7–19 and Appendices A–C)
 
 The single most important lesson of this project: **pre-test every experiment
 regime before writing a word of prose.** Roughly half of all planned experiments
@@ -267,7 +279,8 @@ These are precedents; when a new experiment misbehaves, check here first.
   entries can underflow even when every entry is nonzero; parameter updates can also
   round away when they are smaller than the local spacing. Diagnose with maximum
   absolute entries, a float64 norm, and realized parameter changes. Chapters 5 and 9
-  use this distinction; Appendix a4 should gather it.
+  use this distinction; Appendix C now gathers it and separates local spacing,
+  underflow, and accumulator dtype.
 - **Transfer at toy scale is a draw** (ch. 9): five designs, one verdict — scratch
   ties ImageNet probes at 28px/30 labels; own-trunk transfer loses ("pretraining
   is curriculum"). Presented honestly with a three-regime decision rule; do not
@@ -586,9 +599,9 @@ chapter record preserves its source, harvest, experiment, and verification contr
   uncertainty, and data/use context. The experiments are finite CPU mechanism tests,
   not natural-image or hardware claims. Both execution freezes are present and their
   printed outputs match exactly; the two-format book render is verified.
-- **Forward seed planted**: “a small schedule coefficient is not a zero coefficient”
-  into Appendix a4, distinguishing mathematical smallness, underflow, and a
-  rounded-away update.
+- **Forward seed harvested**: “a small schedule coefficient is not a zero coefficient”
+  is now gathered in Appendix C, distinguishing mathematical smallness, underflow,
+  and a rounded-away update.
 
 ### Appendices
 - **Appendix A — Linear Algebra and the SVD (SHIPPED):** sanitized
@@ -602,10 +615,15 @@ chapter record preserves its source, harvest, experiment, and verification contr
   contracts, book-wide axis dictionary, broadcasting, storage/stride, contractions,
   masking, and dtype/device-aware construction. Seven cells, two exact freezes, and
   full PDF/browser QA passed.
-- **Appendix C — Notation:** stub remains.
-- **Appendix D — Floating Point and Machine Precision:** queued in backlog; ch. 5
-  (float-zero), ch. 9 (underflow figure), ch. 10 ($\sigma(0)^{80}$), and ch. 19
-  (long schedule products) all point to it. Gather those as its motivating examples.
+- **Appendix C — Numerical Precision and Hardware Efficiency (SHIPPED):** the
+  four-part precision contract; FP64/FP32/FP16/BF16 range and resolution; rounding,
+  cancellation, stable softmax, mixed precision and loss scaling; synthetic Roofline
+  analysis; exact tiled online attention and a FlashAttention recap; seven cells, two
+  original figures, two exact freezes, and full PDF/browser QA passed. Roofline values
+  are explicitly synthetic and no hardware-runtime claim is made.
+- **Appendix D — Notation:** stub remains. Its future inventory must be derived from
+  `tex/macros.tex`, `mathjax-config.html`, and actual manuscript usage rather than the
+  nonexistent legacy `sources/notation.tex` reference.
 
 ## 8. Document map
 
