@@ -5,6 +5,9 @@
      (spine via ds6050_10_foundation_models/MODULE_NOTES.md; scene concepts
      checked against that module's Manim source)
      seeds: sources/bert.tex, sources/10.2_pretrained.tex
+     subword bridge: machine-local course seed
+                     LaTeX/Module 8,9-Transformer/8S.tex, BPE section only;
+                     the mechanism code below is independently written
      primary sources: Peters et al. 2018; Howard and Ruder 2018;
                       Radford et al. 2018; Devlin et al. 2019;
                       Liu et al. 2019; Raffel et al. 2020
@@ -62,6 +65,7 @@ There are four distinct decisions in play.
 ```{python}
 #| label: fig-visibility-corruption
 #| fig-cap: "Visibility and supervision are separate controls. A causal decoder sees a lower triangle (left); BERT-style attention sees every nonpadding key (center). The MLM selector marks one selected target position (right)."
+#| fig-alt: "Three aligned matrices for the tokens CLS, the, bank, rose, SEP, and PAD. Causal visibility forms a dark lower triangle and excludes PAD; full nonpadding visibility forms a dark rectangle over the first five key columns for every query; the separate one-column loss selector highlights only the token bank."
 #| fig-width: 10
 #| fig-height: 3.2
 #| code-summary: "Figure code: separate attention visibility from MLM selection"
@@ -236,6 +240,7 @@ which normal-looking tokens were selected.
 ```{python}
 #| label: fig-mlm-policy
 #| fig-cap: "BERT's 80/10/10 policy is conditional on the selected 15%. All three branches retain the original token as the prediction target."
+#| fig-alt: "Two-stage bar chart for 1,000 eligible positions. The first panel divides them into 850 not selected and 150 selected. The second divides those 150 selected positions into 120 replaced by MASK, 15 replaced randomly, and 15 left unchanged."
 #| fig-width: 9
 #| fig-height: 3.2
 #| code-summary: "Figure code: trace the two-stage MLM selection policy"
@@ -292,6 +297,73 @@ $$
 
 The token comes from a **WordPiece** vocabulary: frequent character sequences are
 stored whole, while rarer words can be assembled from reusable subword pieces.
+
+<!-- NOVEL: needs sign-off - original BPE mechanism bridge requested in the course review. -->
+::: {.callout-tip}
+## Practice bridge (non-examinable): make the vocabulary learnable
+
+Chapter 10 fixed its vocabulary at individual characters
+(@sec-10-sequences-rnn). A full-word vocabulary shortens sequences but gives every
+rare spelling its own entry. Subword tokenization chooses a middle contract. **Byte
+Pair Encoding (BPE)** begins with small symbols, counts adjacent pairs in the training
+corpus, merges the most frequent pair, and repeats until it reaches a chosen vocabulary
+budget.
+
+This original toy implementation starts from characters plus an end-of-word marker.
+Corpus frequencies weight the pair counts; lexicographic order breaks exact ties so
+the result is reproducible.
+:::
+
+```{python}
+#| label: bpe-mechanism
+#| code-summary: "Code: learn five subword merges from weighted word counts"
+from collections import Counter
+
+def merge_pair(
+    symbols: tuple[str, ...], pair: tuple[str, str]
+) -> tuple[str, ...]:
+    merged: list[str] = []
+    index = 0
+    while index < len(symbols):
+        if index + 1 < len(symbols) and symbols[index:index + 2] == pair:
+            merged.append("".join(pair))
+            index += 2
+        else:
+            merged.append(symbols[index])
+            index += 1
+    return tuple(merged)
+
+corpus = {"low": 5, "lower": 2, "newest": 6, "widest": 3}
+words = {tuple(word) + ("</w>",): count for word, count in corpus.items()}
+merges: list[tuple[tuple[str, str], int]] = []
+for _ in range(5):
+    counts: Counter[tuple[str, str]] = Counter()
+    for symbols, frequency in words.items():
+        for pair in zip(symbols, symbols[1:]):
+            counts[pair] += frequency
+    maximum = max(counts.values())
+    best = min(pair for pair, count in counts.items() if count == maximum)
+    merges.append((best, maximum))
+    words = {merge_pair(symbols, best): count for symbols, count in words.items()}
+
+print("merges:", [("+".join(pair), count) for pair, count in merges])
+print("lower:", " | ".join(next(word for word in words if "r" in word)))
+```
+
+::: {.callout-note}
+## Reading the learned pieces (non-examinable)
+
+The first three merges build `est</w>` from nine weighted occurrences; the next two
+build `low` from seven. The word `lower` is therefore represented as
+`low | e | r | </w>` even though the whole word was never granted its own token.
+This is the mechanism, not BERT's tokenizer: WordPiece uses a different merge-scoring
+criterion, and practical byte-level tokenizers begin from bytes rather than the toy
+character alphabet. The shared idea is the important one: the vocabulary becomes a
+learned compromise between sequence length and reusable coverage.
+
+:::
+<!-- /NOVEL -->
+
 Learned absolute position
 embeddings replace Chapter 14's fixed sinusoidal table. Segment A/B embeddings
 mark which of two packed text spans supplied a token; they do not block
@@ -370,6 +442,7 @@ when the task needs the representation itself to move.
 ```{python}
 #| label: fig-bert-adaptation
 #| fig-cap: "One pretrained encoder supports several task interfaces. In standard fine-tuning, task-loss gradients pass through the new head and continue through the encoder; stopping them at the head would make the run a frozen probe."
+#| fig-alt: "Flow diagram from a tokenized CLS-to-SEP input into a large pretrained BERT encoder, then out to three alternatives: a sequence-classification head from the CLS state, token tags from all states, or span start and end scores. A red arrow points backward from task loss through the encoder to show that all layers update."
 #| fig-width: 10
 #| fig-height: 3.8
 #| code-summary: "Figure code: show task heads and full-backbone update paths"
@@ -942,6 +1015,7 @@ set? The task, control, and geometry answer different parts.
 ```{python}
 #| label: fig-pretraining-pays
 #| fig-cap: "Five paired end-to-end seeds in the synthetic transfer lab. MLM initialization separates covered latent families and improves every covered-type comparison (left and center); both arms stay near chance on input-vocabulary controls withheld from MLM inputs, replacements, and targets (left). Centered cosine similarity is a representation diagnostic, not a task metric (right)."
+#| fig-alt: "Three-panel transfer audit. Covered-token accuracy after MLM stays near one for one, two, and four labeled words per family, while scratch and both unexposed controls remain around chance. All 15 paired MLM-minus-scratch gains are positive, roughly 0.37 to 0.62. For seed 6050, centered cosine similarity changes from near zero for both pair types to positive within-family and negative between-family values after MLM."
 #| fig-width: 11
 #| fig-height: 3.7
 #| code-summary: "Figure code: audit paired transfer, source coverage, and representation geometry"
@@ -1111,7 +1185,10 @@ objective determine what a model can learn—and how it will later be used.
 | GPT-style decoder | Causal prefix | Predict the next token | Autoregressive generation and adaptation |
 | T5-style encoder–decoder | Full encoder; causal decoder with cross-attention | Generate removed spans separated by sentinel tokens | Text-to-text conditional generation |
 
-A GPT-style decoder can train all next-token positions in parallel under teacher
+: Three pretraining families separate visibility, objective, and characteristic use. {#tbl-pretraining-families}
+
+The separation in @tbl-pretraining-families matters during execution too. A GPT-style
+decoder can train all next-token positions in parallel under teacher
 forcing because the causal mask exposes only each prefix. Generation is still
 sequential: the model must emit a token before that token can join the next
 prefix. Training and inference share a factorization and visibility rule, not an
@@ -1163,7 +1240,7 @@ center stage. Fine-tuning changed every encoder weight here; @sec-17-peft-quanti
 will ask what adaptation remains when most, or all, of those weights must stay
 fixed.
 
-## Okay, so—
+## Okay, so — pretraining manufactures supervision
 
 1. **Visibility, selection, corruption, and padding are separate.** BERT removes
    the causal triangle, selects loss targets, then applies the 80/10/10 treatment
@@ -1190,6 +1267,7 @@ fixed.
 - [Peters et al., *Deep Contextualized Word Representations*](https://aclanthology.org/N18-1202/): ELMo and fixed contextual features from forward and backward language models.
 - [Howard and Ruder, *Universal Language Model Fine-tuning for Text Classification*](https://aclanthology.org/P18-1031/): ULMFiT's full-model adaptation recipe.
 - [Radford et al., *Improving Language Understanding by Generative Pre-Training*](https://cdn.openai.com/research-covers/language-unsupervised/language_understanding_paper.pdf): causal Transformer pretraining followed by supervised adaptation.
+- [Sennrich, Haddow, and Birch, *Neural Machine Translation of Rare Words with Subword Units*](https://aclanthology.org/P16-1162/): the frequency-driven BPE adaptation for subword vocabularies.
 - [Devlin et al., *BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding*](https://aclanthology.org/N19-1423/): the original BERT architecture, MLM/NSP objectives, and fine-tuning results.
 - [Google Research, *BERT pretraining implementation*](https://github.com/google-research/bert/blob/master/run_pretraining.py): the released implementation documents the tied input/output embedding weights.
 - [Liu et al., *RoBERTa: A Robustly Optimized BERT Pretraining Approach*](https://arxiv.org/abs/1907.11692): a later study of BERT training choices, including removal of NSP.

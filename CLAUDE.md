@@ -7,7 +7,7 @@ read like his lectures.
 
 **Continuing the project (fresh session/account): read `docs/CONTINUING.md`** —
 project status, the refined working protocol (pre-testing!), all standing author
-rules, honesty-gate case law, and the remaining-chapter roadmap. Then
+rules, honesty-gate case law, and the completed-chapter maintenance roadmap. Then
 `docs/arc-seeds.md` — the seed/harvest ledger and reading-order toolbox that every
 chapter must respect. Those two files replace any account-local memory.
 
@@ -67,10 +67,10 @@ compositions for figures. Full guide: `docs/dl-course-code.md`.
 
 ## Writing a chapter, end to end
 
-1. **Pick the chapter.** For Chapters 12–19, follow the roadmap and status table in
-   `docs/CONTINUING.md`; the stub in `chapters/partN/XX-*.qmd` lists its seed files and
-   transcripts in the `draft-sources` comment. Chapters 1–11 are shipped and should
-   be changed only through an explicit review or correction pass.
+1. **Pick the chapter or review pass.** Follow the status table and roadmap in
+   `docs/CONTINUING.md`; every chapter lists its seed files and transcripts in the
+   `draft-sources` comment. Chapters 1–20 and Appendices A–D are complete; change them
+   only through an explicit review or correction pass, preserving planted harvests.
 2. **Snapshot seeds** from Box into `sources/` (spaces → underscores), then apply the
    licensing boundary in `sources/README.md`: remove explicitly third-party-derived
    blocks with an honest omission marker rather than publishing or silently rewriting
@@ -142,13 +142,13 @@ More case law: `docs/CONTINUING.md` §5.
 
 Author-requested future work lives in `docs/backlog.md` (Appendix C's future
 device-profiling queue; per-chapter collapsed "Deeper dive" sections with
-further-reading papers; ch. 6 3Blue1Brown-inspired pacing). Appendix D is the remaining
-Notation stub. Check the backlog before proposing new structural ideas.
+further-reading papers; ch. 6 3Blue1Brown-inspired pacing). Appendix D is complete.
+Check the backlog and `docs/arc-seeds.md` before proposing new structural ideas.
 
 ## Course website integration
 
 The course website (`…/6050/dl-course-site`, separate repo) links mature chapters as
 primary readings via a `bookChapters` array in `lib/module-extras.ts`; one course
-module can map to several book chapters. D2L remains an alternative reading. Add only
-chapters that have completed the author's review pass, and verify the site build after
-changing the mapping.
+module can map to several book chapters. D2L remains an alternative reading. Keep the
+author's edit gate distinct from the technical review/render gate, and verify the site
+build after changing any mapping.

@@ -168,6 +168,25 @@ Use **`callout-warning`** for:
 - Memory leaks from storing computation graphs unnecessarily
 - When NOT to use certain techniques (e.g., "Residual connections are designed for very deep networks. For shallow networks this is not necessary and maybe even not helpful.")
 
+### The collectible `Trap:` pattern
+
+Use the existing warning callout, with a level-two heading that begins exactly
+`Trap:`, for a compact misconception the reader should learn to recognize again in
+later chapters. This is a heading convention, not a new callout class:
+
+```markdown
+::: {.callout-warning}
+## Trap: validation accuracy is not test accuracy
+
+Name the tempting inference, explain why it fails, and give the corrective check.
+:::
+```
+
+Reserve `Trap:` for a false inference or recurring conceptual confusion. Keep an
+ordinary descriptive warning heading for local coding hazards, numerical caveats, or
+advice that is important but not a misconception. A trap should be short enough to
+retrieve from memory: title the mistaken inference, then state the repair.
+
 ## Book-Specific Writing Rules (author feedback, July 2026)
 
 1. **Fewer em dashes.** Use them sparingly, only where an aside genuinely helps. Prefer

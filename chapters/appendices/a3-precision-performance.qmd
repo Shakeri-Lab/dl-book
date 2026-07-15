@@ -19,6 +19,9 @@
        SHA-256 5518bb791eeade621dba104b787590960245083a39877e8eb6a100c8c8d2d94d
      sources/11.3-quantization.tex
        SHA-256 a11203eccd958042fdf1a64583d875de9ee638712aeefcae0f756682e7080347
+     Machine-local course bridge:
+     LaTeX/Module 8,9-Transformer/9.2-Faster-Transformers.tex
+       conceptual KV-cache contract only; no source code or external figure reused
      provenance boundary:
      The snapshots supplied topic boundaries only. Their categorical hardware labels
      and FlashAttention compute claim were not carried forward. Roofline, floating-
@@ -517,6 +520,49 @@ does not prove why it is below; it tells you which ceilings are still possible a
 where to investigate next.
 :::
 
+<!-- NOVEL: needs sign-off - concise KV-cache bridge requested in the course review. -->
+::: {.callout-note}
+## Systems bridge (non-examinable): cache the past at generation time
+
+Chapter 14's sampler confesses that it recomputes the whole visible prefix for every
+new character (@sec-14-self-attention-transformer). For an evaluation-mode causal
+Transformer decoding a growing prefix with stable position indices and no eviction,
+appending a token cannot change earlier positions: their masks forbid the suffix, and
+their keys and values are therefore reusable. A **key/value (KV) cache** stores those
+projected rows at every layer. At the next step, the layer computes the new token's
+query, key, and value, appends the new key and value, and forms only the new query's
+attention row against the stored prefix.
+
+Let $L$ be the layer count, $B$ the batch size, $h_{KV}$ the number of key/value
+heads, $t$ the cached length, $d_h$ the head width, and $s$ the bytes per stored
+element. The cache ledger is
+
+$$
+N_{KV}=2LBh_{KV}td_h\quad\text{elements},
+\qquad
+M_{KV}=2sLBh_{KV}td_h\quad\text{bytes}.
+$$
+
+Thus caching spends storage that grows linearly with context length. For one new
+token, dense attention reads a growing $1\times t$ score row at each head; summed over
+generation, attention arithmetic is still quadratic in the final length. What the
+cache avoids is re-projecting old states and rebuilding their old-to-old score grids.
+That is an arithmetic-and-storage statement, not a latency measurement.
+
+That reuse rule does not apply unchanged to Chapter 14's exact toy loop. The loop
+evicts old characters from a sliding window and reindexes the retained positions, so
+the retained states no longer have the same past or positional inputs. A cached version
+needs a cache-compatible eviction and position policy; otherwise it must recompute the
+window.
+
+This is a different bargain from FlashAttention below. KV caching **keeps** linear-size
+past state to reuse it during autoregressive inference. FlashAttention avoids writing
+full quadratic score and probability grids, and may recompute blocks during training's
+backward pass. Put both in the I/O ledger before timing either one; Chapter 17 adds the
+cache to the total-memory bill (@sec-17-peft-quantization).
+:::
+<!-- /NOVEL -->
+
 ## FlashAttention through the Roofline lens
 
 For one dense attention head, @sec-13-attention and
@@ -760,6 +806,9 @@ for full quadratic intermediates in slow memory.
 
 ## Sources and further reading {.unnumbered}
 
+- Instructor course seed `9.2-Faster-Transformers.tex` supplied the KV-cache
+  generation contract; the bridge above re-derives its storage ledger and does not
+  reproduce the seed's implementation or external figure.
 - [IEEE 754-2019, *Standard for Floating-Point Arithmetic*](https://standards.ieee.org/ieee/754/6210/): binary floating-point formats, exceptional values, rounding, and arithmetic semantics.
 - [PyTorch, `torch.finfo`](https://docs.pytorch.org/docs/stable/type_info.html): dtype-specific bit counts, spacing, normal range, and finite range used in the executable audit.
 - [Kalamkar et al., *A Study of BFLOAT16 for Deep Learning Training*](https://arxiv.org/abs/1905.12322): BF16's range-resolution design and mixed-precision training study.

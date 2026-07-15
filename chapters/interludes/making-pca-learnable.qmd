@@ -1,0 +1,797 @@
+# Interlude: Making PCA Learnable {#sec-interlude-autoencoders .unnumbered}
+
+<!-- lecture-source:
+     Module 6 spine via ~/dl-course-code/ds6050_06_autoencoders/MODULE_NOTES.md
+     at course-code commit 05ed810ef6ecc1f8c81746928cdeabef7615ad01;
+     main transcript: m06_lecture-6-encoder-decoder-architectures_XxePU8jubto.txt
+     SHA-256
+     e26520f19a97d7ed77284dad508d63a3a5ce67c914b0b5a986c88ac1d61e9f9c;
+     coding transcript: [coding]_m06_lecture-6-2-encoder-decoder-architectures-part-2_RkOjUjdbKbg.txt
+     SHA-256
+     3c4416ee4dab7f7cd6b1e6977b476d7e80aa1aa516e9e27d458b84b598efd552 and
+     coding transcript: [coding]_m06_lecture-6-3-encoder-decoder-architectures-part-3_7faFnaelya0.txt
+     SHA-256
+     f024170fde1a40ddd73a0618561fc43ad4c67a1bb358595ab1a8839e2d6fc5cc;
+     sanitized source: sources/6-AE-slides.tex.
+     Primary sources: Baldi and Hornik 1989; Vincent et al. 2008.
+     Provenance note: the executable studies and figures are independently derived
+     from displayed equations. D2L-linked course code and external figures were not
+     reproduced. -->
+
+Part II gave neural networks a spatial prior: local kernels share one rule across an
+image. The next part must handle objects whose length is not known in advance. Before
+we add a loop, the course takes a revealing detour—one that begins with a fixed-size
+object. Could an encoder compress an
+object into a fixed-size code and a decoder recover what mattered?
+
+That question makes three ideas line up. Principal component analysis (PCA) is a
+closed-form linear encoder–decoder. Gradient descent can make the same map learnable.
+Nonlinearity then lets the map bend around curved data. The result is an
+**autoencoder**—and its success will expose why a one-shot encoder is not yet a
+variable-length process.
+
+<!-- NOVEL: needs sign-off -->
+
+```{python}
+#| label: fig-fixed-code-bridge
+#| fig-cap: "The encoder–decoder detour solves one problem and reveals the next. A fixed-size object can be compressed into a code and reconstructed. Variable-length sequences can also be forced through one code, but the code's width does not grow when the evidence does. Chapter 10 replaces that one-shot handoff with a state updated step by step."
+#| fig-alt: "A fixed image passes through an encoder to a small code and then a decoder. Below it, short and long sequences are both squeezed into the same-width code; the long path is marked as a fixed-code bottleneck and points toward step-by-step recurrence."
+#| fig-width: 10
+#| fig-height: 4.2
+#| code-summary: "Figure code: connect fixed-size models, autoencoders, and recurrence"
+
+from copy import deepcopy
+import math
+
+import matplotlib.pyplot as plt
+from matplotlib.axes import Axes
+from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
+import torch
+from torch import Tensor, nn
+import torch.nn.functional as F
+
+torch.set_default_dtype(torch.float64)
+torch.set_num_threads(6)
+torch.manual_seed(6050)
+
+navy, orange, green, wine = "#232D4B", "#E57200", "#2E7D32", "#722F37"
+
+fig, ax = plt.subplots(figsize=(10, 4.2))
+ax.set_xlim(0, 11)
+ax.set_ylim(0, 5)
+ax.axis("off")
+
+
+def bridge_box(
+    axis: Axes, x: float, y: float, width: float, height: float,
+    title: str, detail: str, color: str
+) -> None:
+    axis.add_patch(FancyBboxPatch(
+        (x, y), width, height, boxstyle="round,pad=0.05,rounding_size=0.10",
+        facecolor=color, edgecolor=color, alpha=0.11, lw=1.4,
+    ))
+    axis.text(x + width / 2, y + 0.62 * height, title, ha="center", va="center",
+              color=color, fontsize=9.3, weight="bold")
+    axis.text(x + width / 2, y + 0.27 * height, detail, ha="center", va="center",
+              color="#444444", fontsize=7.7)
+
+
+def bridge_arrow(
+    axis: Axes, start: tuple[float, float], end: tuple[float, float],
+    color: str = "#777777"
+) -> None:
+    axis.add_patch(FancyArrowPatch(
+        start, end, arrowstyle="->", mutation_scale=13, color=color, lw=1.5,
+    ))
+
+
+bridge_box(ax, 0.15, 3.15, 2.0, 1.0, "FIXED OBJECT", r"$x\in\mathbb{R}^{28\times28}$", navy)
+bridge_box(ax, 2.70, 3.15, 1.7, 1.0, "ENCODER", r"$z=f_\phi(x)$", orange)
+bridge_box(ax, 4.95, 3.15, 1.1, 1.0, "CODE", r"$z\in\mathbb{R}^k$", wine)
+bridge_box(ax, 6.60, 3.15, 1.7, 1.0, "DECODER", r"$\hat{x}=g_\theta(z)$", green)
+bridge_box(ax, 8.85, 3.15, 2.0, 1.0, "RECONSTRUCTION", r"$\hat{x}\approx x$", navy)
+for left, right in [(2.15, 2.70), (4.40, 4.95), (6.05, 6.60), (8.30, 8.85)]:
+    bridge_arrow(ax, (left, 3.65), (right, 3.65))
+
+for row_y, count, label in [(1.75, 4, "short"), (0.55, 9, "long")]:
+    for index in range(count):
+        x = 0.22 + 0.25 * index
+        ax.add_patch(FancyBboxPatch(
+            (x, row_y), 0.19, 0.42, boxstyle="round,pad=0.02",
+            facecolor=navy, edgecolor=navy, alpha=0.14,
+        ))
+    ax.text(0.22, row_y - 0.18, f"{label} sequence", color="#555555", fontsize=7.6)
+    bridge_arrow(ax, (2.65, row_y + 0.21), (4.45, row_y + 0.21), orange)
+    bridge_box(ax, 4.45, row_y - 0.05, 1.20, 0.52, "SAME $z$", "fixed width", wine)
+    bridge_arrow(ax, (5.65, row_y + 0.21), (7.45, row_y + 0.21), green)
+    ax.text(7.55, row_y + 0.21, "reconstruct / translate", va="center",
+            color=green, fontsize=8.3, weight="bold")
+
+ax.text(9.10, 1.62, "more evidence", ha="center", color=navy, fontsize=8.2)
+ax.text(9.10, 1.24, r"$\not\Rightarrow$ more memory", ha="center", color=wine,
+        fontsize=9.2, weight="bold")
+ax.text(9.10, 0.64, "update memory\nstep by step", ha="center", va="center",
+        color=green, fontsize=9.0, weight="bold")
+bridge_arrow(ax, (8.30, 1.05), (8.30, 0.70), green)
+ax.text(5.5, 4.65, "COMPRESS FIRST; THEN ASK WHAT THE CODE CANNOT DO",
+        ha="center", color=navy, fontsize=11.2, weight="bold")
+plt.tight_layout()
+plt.show()
+```
+
+## Compress, then reconstruct
+
+Let us postpone random sampling for a moment and ask a simpler question. If an input
+has $d$ coordinates, can a network preserve its important structure using only $k<d$
+numbers?
+
+An **autoencoder** contains two maps. For one input
+$\vect{x}\in\mathbb{R}^{d}$, the encoder produces a code
+$\vect{z}\in\mathbb{R}^{k}$ and the decoder reconstructs the input:
+
+$$
+\vect{z}=f_\phi(\vect{x}),
+\qquad
+\widehat{\vect{x}}=g_\theta(\vect{z}).
+$$ {#eq-ae-contract}
+
+The narrow code is the **bottleneck**. For $n$ examples stored as rows of
+$\matr{X}\in\mathbb{R}^{n\times d}$, a squared reconstruction objective is
+
+$$
+\mathcal{L}_{\mathrm{AE}}(\phi,\theta)
+=\frac{1}{nd}\sum_{i=1}^{n}
+\norm{\vect{x}_i-g_\theta(f_\phi(\vect{x}_i))}_2^2.
+$$ {#eq-ae-mse}
+
+The target is available for free—the input supplies it—but the objective is still
+specific: preserve enough information to reconstruct the input. This is commonly
+called **self-supervised** because each input supplies its own target—the course lecture
+also groups it under unsupervised representation learning. Mean squared error is one
+choice—suitable when independent, equal-variance Gaussian error is a reasonable model.
+It is not the universal autoencoder loss.
+
+The hourglass shape creates pressure. If $k$ is small and the maps have controlled
+capacity, useful regularities may be cheaper to preserve than individual accidents.
+But pressure is not proof.
+
+::: {.callout-warning}
+## A bottleneck is pressure, not a certificate
+
+A real-valued low-dimensional code can still carry surprising information—and a
+high-capacity network can memorize a finite training set. Check held-out reconstruction,
+latent behavior, and the decoder between observed codes. “The bottleneck learned
+meaning” is an empirical claim—not a consequence of $k<d$.
+:::
+
+## Make PCA learnable
+
+Appendix A computes PCA from a centered singular value decomposition. Module 6 asks
+the more neural-network-shaped question: what if we replace that closed-form solve
+with weights and a reconstruction loss? The answer begins with the precise statement
+**PCA is a linear autoencoder**. Let the training rows be centered, so their mean is
+zero. Let $\matr{V}_k\in\mathbb{R}^{d\times k}$ contain $k$ orthonormal principal
+directions:
+
+$$
+\matr{V}_k^\top\matr{V}_k=\matr{I}_k.
+$$
+
+PCA encodes and decodes by
+
+$$
+\vect{z}=\matr{V}_k^\top\vect{x},
+\qquad
+\widehat{\vect{x}}
+=\matr{V}_k\vect{z}
+=\matr{V}_k\matr{V}_k^\top\vect{x}.
+$$ {#eq-pca-autoencoder}
+
+The product $\matr{P}_k=\matr{V}_k\matr{V}_k^\top\in\mathbb{R}^{d\times d}$
+is the orthogonal projector onto the principal $k$-dimensional subspace. Among all
+linear reconstruction maps of rank at most $k$, this projector minimizes squared
+reconstruction error. Now replace the SVD with gradient descent. A tied linear
+autoencoder uses one trainable matrix
+$\matr{W}\in\mathbb{R}^{d\times k}$ in both directions:
+
+$$
+\vect{z}=\matr{W}^\top\vect{x},
+\qquad
+\widehat{\vect{x}}=\matr{W}\matr{W}^\top\vect{x}.
+$$
+
+At a global optimum under the centered, squared-loss, undercomplete conditions, it can
+recover the same principal reconstruction subspace. That is the accurate content of
+“PCA is a linear autoencoder”—not a claim that every optimizer run succeeds or
+that every learned weight equals a particular PCA basis.
+
+::: {.callout-note}
+## Same subspace, not the same coordinates
+
+For any orthogonal $\matr{Q}\in\mathbb{R}^{k\times k}$,
+
+$$
+(\matr{V}_k\matr{Q})(\matr{V}_k\matr{Q})^\top
+=\matr{V}_k\matr{V}_k^\top.
+$$
+
+The latent axes may rotate or reflect—the reconstruction projector stays fixed.
+For an untied encoder and decoder, any invertible latent change of basis can cancel
+between the two maps. Compare reconstruction products, projectors, or principal angles,
+not raw latent coordinates.
+:::
+
+::: {.callout-note}
+## Framework previews: SVD and $\tanh$
+
+The experiment uses `torch.linalg.svd` only to compute PCA's closed-form reference
+after the projection has been derived above; Appendix A opens that decomposition and
+its shape/centering contract. It also uses $\tanh$, the smooth pointwise map
+$\tanh(u)\in(-1,1)$, as the nonlinear activation inside the curved autoencoder.
+Chapter 3 already supplied the activation-layer idea; Chapter 10 returns to $\tanh$
+and its derivative when recurrence needs a bounded state. Neither preview grants a
+new unexplained black box to the intervening chapters.
+:::
+
+## What if the map could bend?
+
+PCA gives the best **flat** rank-$k$ reconstruction. What if the encoder and decoder
+were learnable nonlinear maps that could bend with the data?
+
+Let us use a controlled curve with a known one-dimensional coordinate. For
+$t\in[-1,1]$, define
+
+$$
+\vect{x}(t)
+=\left(t,\;1.5\left(t^2-\frac{1}{3}\right)\right)^\top.
+$$ {#eq-parabola-manifold}
+
+The alternating grid points form train and held-out sets. PCA and a tied linear
+autoencoder receive a one-dimensional bottleneck, as does a nonlinear
+$2\rightarrow24\rightarrow1\rightarrow24\rightarrow2$ autoencoder. The comparison
+is intentionally about representational shape, not parameter efficiency—the nonlinear
+model has far more adjustable knobs.
+
+<!-- NOVEL: needs sign-off -->
+
+```{python}
+#| label: fig-linear-nonlinear-ae
+#| fig-cap: "A one-dimensional bottleneck behaves differently when its maps may bend. On the alternating held-out grid, rank-one PCA and the tied linear autoencoder both have MSE 0.100000 and their projectors agree to displayed precision. Across seeds 6050–6054, the nonlinear autoencoder has mean held-out MSE 0.000002815 (SD 0.000001223); the absolute Pearson correlation between its code and the planted coordinate has mean 0.992802 (SD 0.005513). This controlled curve and capacity-mismatched model show a mechanism, not a universal nonlinear-autoencoder advantage."
+#| fig-alt: "The left panel shows parabola points, their PCA projections onto a horizontal line, and a nonlinear reconstruction following the curve. The middle panel plots held-out mean squared error for PCA, the tied linear autoencoder, and five nonlinear runs. The right panel shows the nonlinear latent coordinate ordered almost monotonically with the planted curve coordinate."
+#| fig-width: 10
+#| fig-height: 4.1
+#| code-summary: "Experiment: rematch PCA and linear and nonlinear autoencoders on a planted curve"
+
+def planted_curve(t: Tensor) -> Tensor:
+    return torch.stack((t, 1.5 * (t.square() - 1.0 / 3.0)), dim=1)
+
+
+def principal_projection(train_x: Tensor) -> tuple[Tensor, Tensor]:
+    mean = train_x.mean(dim=0)
+    _, _, vh = torch.linalg.svd(train_x - mean, full_matrices=False)
+    return mean, vh[:1].T
+
+
+class CurveAutoencoder(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.encoder = nn.Sequential(nn.Linear(2, 24), nn.Tanh(), nn.Linear(24, 1))
+        self.decoder = nn.Sequential(nn.Linear(1, 24), nn.Tanh(), nn.Linear(24, 2))
+
+    def forward(self, x: Tensor) -> tuple[Tensor, Tensor]:
+        z = self.encoder(x)
+        return self.decoder(z), z
+
+
+def fit_curve(seed: int) -> tuple[float, float, float, float, float, CurveAutoencoder]:
+    torch.manual_seed(seed)
+    t_all = torch.linspace(-1.0, 1.0, 513)
+    train_t, test_t = t_all[::2], t_all[1::2]
+    train_x, test_x = planted_curve(train_t), planted_curve(test_t)
+    mean, basis = principal_projection(train_x)
+
+    pca_reconstruction = (test_x - mean) @ basis @ basis.T + mean
+    pca_mse = F.mse_loss(pca_reconstruction, test_x).item()
+
+    tied_weight = nn.Parameter(torch.randn(2, 1) * 0.2)
+    tied_optimizer = torch.optim.Adam([tied_weight], lr=0.03)
+    centered_train = train_x - mean
+    for _ in range(1800):
+        tied_reconstruction = centered_train @ tied_weight @ tied_weight.T
+        tied_loss = F.mse_loss(tied_reconstruction, centered_train)
+        tied_optimizer.zero_grad()
+        tied_loss.backward()
+        tied_optimizer.step()
+
+    tied_test = (test_x - mean) @ tied_weight @ tied_weight.T + mean
+    tied_mse = F.mse_loss(tied_test, test_x).item()
+    projector_gap = torch.linalg.norm(
+        tied_weight @ tied_weight.T - basis @ basis.T
+    ).item()
+
+    model = CurveAutoencoder()
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.012)
+    for step in range(4000):
+        reconstruction, _ = model(train_x)
+        loss = F.mse_loss(reconstruction, train_x)
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        if step == 2500:
+            for group in optimizer.param_groups:
+                group["lr"] = 0.003
+
+    with torch.no_grad():
+        nonlinear_reconstruction, z = model(test_x)
+        nonlinear_mse = F.mse_loss(nonlinear_reconstruction, test_x).item()
+        centered_z = z[:, 0] - z[:, 0].mean()
+        centered_t = test_t - test_t.mean()
+        latent_correlation = (
+            centered_z @ centered_t
+            / torch.sqrt((centered_z @ centered_z) * (centered_t @ centered_t))
+        ).abs().item()
+    return pca_mse, tied_mse, projector_gap, nonlinear_mse, latent_correlation, model
+
+
+curve_rows = []
+curve_models = []
+for curve_seed in range(6050, 6055):
+    *curve_metrics, curve_model = fit_curve(curve_seed)
+    curve_rows.append(curve_metrics)
+    curve_models.append(curve_model)
+
+curve_table = torch.tensor(curve_rows)
+t_plot = torch.linspace(-1.0, 1.0, 257)
+x_plot = planted_curve(t_plot)
+plot_mean, plot_basis = principal_projection(planted_curve(torch.linspace(-1, 1, 257)))
+pca_plot = (x_plot - plot_mean) @ plot_basis @ plot_basis.T + plot_mean
+with torch.no_grad():
+    nonlinear_plot, z_plot = curve_models[0](x_plot)
+
+fig, axes = plt.subplots(1, 3, figsize=(10, 4.1))
+axes[0].plot(x_plot[:, 0], x_plot[:, 1], color="#B8BCC4", lw=4.0,
+             label="planted curve")
+axes[0].plot(pca_plot[:, 0], pca_plot[:, 1], color=orange, lw=2.4,
+             label="PCA reconstruction")
+axes[0].plot(nonlinear_plot[:, 0], nonlinear_plot[:, 1], color=green, lw=2.0,
+             label="nonlinear AE")
+for index in range(0, x_plot.shape[0], 24):
+    axes[0].plot([x_plot[index, 0], pca_plot[index, 0]],
+                 [x_plot[index, 1], pca_plot[index, 1]],
+                 color=orange, alpha=0.35, lw=0.8)
+axes[0].set_aspect("equal")
+axes[0].set_title("flat projection or curved map", color=navy, weight="bold")
+axes[0].legend(frameon=False, fontsize=7.4, loc="upper center")
+axes[0].grid(alpha=0.15)
+
+method_values = [curve_table[:, 0].mean(), curve_table[:, 1].mean(),
+                 curve_table[:, 3].mean()]
+axes[1].bar([0, 1, 2], method_values, color=[orange, navy, green], width=0.62)
+axes[1].scatter(torch.full((5,), 2.0), curve_table[:, 3], color=wine, s=24, zorder=3)
+axes[1].set_yscale("log")
+axes[1].set_xticks([0, 1, 2], ["PCA", "tied\nlinear AE", "nonlinear\nAE"])
+axes[1].set_ylabel("held-out MSE (log scale)")
+axes[1].set_title("same bottleneck, larger map class", color=navy, weight="bold")
+axes[1].grid(axis="y", alpha=0.18)
+
+axes[2].scatter(t_plot, z_plot[:, 0], c=t_plot, cmap="viridis", s=10)
+axes[2].set_xlabel("planted coordinate $t$")
+axes[2].set_ylabel("learned code $z$")
+axes[2].set_title("the curve is nearly unrolled", color=navy, weight="bold")
+axes[2].grid(alpha=0.15)
+plt.tight_layout()
+plt.show()
+
+print("seed  PCA MSE    tied MSE   projector gap  nonlinear MSE  |corr(z,t)|")
+for seed, row in zip(range(6050, 6055), curve_rows):
+    print(seed, *(f"{value:.9f}" for value in row))
+print("mean", *(f"{value:.9f}" for value in curve_table.mean(dim=0).tolist()))
+print("SD  ", *(f"{value:.9f}" for value in curve_table.std(dim=0).tolist()))
+```
+
+All five linear runs recover the principal projector at the displayed precision. The
+nonlinear decoder follows the curve between alternating training points, and its one
+dimensional code is almost monotone in the coordinate that generated the data. This is
+the lecture's **“PCA on steroids”** picture—with an important qualification:
+nonlinearity enlarges the reconstruction class from flat subspaces to curved maps. It
+does not guarantee that the chosen code is semantic, stable outside the observed
+region, or unique.
+
+The lecture makes the same point with a rolled two-dimensional surface in three
+dimensions. The smaller curve here makes the estimand visible and leaves us a true
+held-out interleaving test: did the decoder learn to follow the bend between training
+points? The geometry changes; the claim does not.
+
+Learning a lower-dimensional coordinate system for data concentrated near a curved
+set is one form of **manifold learning**. The phrase names the goal—not a guarantee
+that every bottleneck recovers a true manifold or its preferred coordinates.
+
+## A code is not yet a distribution
+
+The nonlinear autoencoder can reconstruct held-out points on this curve. Can we now
+generate by drawing an arbitrary random $z$ and passing it through the decoder?
+
+Nothing in @eq-ae-mse tells us which distribution to draw from. Reconstruction trains
+the decoder on codes produced by the encoder. Between those codes—and especially
+outside their range—many decoder functions can fit the same targets. A small algebraic
+example makes the missing contract visible. Suppose observed codes are
+$z\in\{-1,0,1\}$ and one decoder is $g_1(z)=z^2$. A second decoder can add any multiple
+of a function that vanishes at all three codes:
+
+$$
+g_2(z)=z^2+0.8z(z^2-1).
+$$
+
+The reconstructions agree on every observed code—yet disagree elsewhere.
+
+<!-- NOVEL: needs sign-off -->
+
+```{python}
+#| label: fig-decoder-ambiguity
+#| fig-cap: "Reconstruction does not identify a latent sampler or a unique decoder away from observed codes. The two displayed decoders agree exactly at z equal to -1, 0, and 1, so both have zero reconstruction error on the three targets. They disagree between and beyond those codes; at z = 0.5 their outputs are 0.25 and -0.05."
+#| fig-alt: "Two curves intersect at all three observed latent codes but separate between them and outside their range. The observed codes are marked with large points, and an unsupported random draw at one half has two different decoded values."
+#| fig-width: 8.5
+#| fig-height: 3.8
+#| code-summary: "Figure code: show why reconstruction alone does not identify latent sampling"
+
+latent_grid = torch.linspace(-1.45, 1.45, 400)
+decoder_one = latent_grid.square()
+decoder_two = latent_grid.square() + 0.8 * latent_grid * (latent_grid.square() - 1.0)
+observed_codes = torch.tensor([-1.0, 0.0, 1.0])
+observed_targets = observed_codes.square()
+random_code = torch.tensor(0.5)
+
+fig, ax = plt.subplots(figsize=(8.5, 3.8))
+ax.plot(latent_grid, decoder_one, color=navy, lw=2.2, label="$g_1(z)$")
+ax.plot(latent_grid, decoder_two, color=orange, lw=2.2, label="$g_2(z)$")
+ax.scatter(observed_codes, observed_targets, s=65, color=green, edgecolor="white",
+           linewidth=0.8, zorder=4, label="encoded observations")
+ax.axvline(random_code.item(), color=wine, ls="--", lw=1.2)
+ax.scatter([random_code, random_code],
+           [random_code.square(), random_code.square()
+            + 0.8 * random_code * (random_code.square() - 1.0)],
+           color=wine, s=42, zorder=4)
+ax.text(0.53, 1.70, "unsupported draw $z=0.5$", color=wine, fontsize=8.8)
+ax.set_xlabel("latent code $z$")
+ax.set_ylabel("decoded value")
+ax.set_title("equal reconstruction does not fix behavior between codes",
+             color=navy, weight="bold")
+ax.legend(frameon=False, fontsize=8)
+ax.grid(alpha=0.16)
+plt.tight_layout()
+plt.show()
+
+training_gap = (
+    observed_codes.square()
+    - (observed_codes.square() + 0.8 * observed_codes * (observed_codes.square() - 1))
+).abs().max()
+print(f"largest decoder gap at observed codes: {training_gap.item():.1f}")
+print(f"g1(0.5): {random_code.square().item():.2f}")
+print(
+    "g2(0.5):",
+    f"{(random_code.square() + 0.8 * random_code * (random_code.square() - 1)).item():.2f}",
+)
+```
+
+::: {.callout-warning}
+## Reconstruction does not specify a sampler
+
+A deterministic autoencoder may still be used inside a generative system, and one can
+fit a separate distribution to its codes. The narrower statement is the important
+one—ordinary reconstruction training supplies no built-in latent prior and no principled
+rule for arbitrary random draws. A code is not yet a probability distribution.
+:::
+
+The lecture provides one useful intermediate move: **same architecture, different
+training**. A denoising autoencoder corrupts an input to $\widetilde{\vect{x}}$ and
+asks the network to recover the clean $\vect{x}$:
+
+$$
+\mathcal{L}_{\mathrm{DAE}}
+=\E_{\vect{x}\sim p_{\mathrm{data}},\,
+\widetilde{\vect{x}}\sim q(\widetilde{\vect{x}}\mid\vect{x})}
+\left[
+\norm{\vect{x}-g_\theta(f_\phi(\widetilde{\vect{x}}))}_2^2
+\right].
+$$ {#eq-denoising-ae}
+
+Clean $\rightarrow$ clean learns reconstruction. Under squared loss, noisy
+$\rightarrow$ clean trains the output toward the conditional mean of clean inputs
+compatible with the corrupted observation—same architecture, different training.
+Different-domain input $\rightarrow$ target uses the same contract for translation.
+Changing the input–target contract changes what the code must preserve.
+
+## Let the autoencoder see locally
+
+A fully connected autoencoder flattens an image and forgets the spatial prior that
+Part II worked so hard to earn. A **convolutional autoencoder** keeps it. Its encoder
+uses learned local filters and stride to reduce spatial resolution; its decoder expands
+the code back into an image.
+
+Here is one shape ledger. The example is deliberately small enough to train during the
+book build:
+
+| Stage | Shape for one example | Role |
+|---|---:|---|
+| image | $1\times28\times28$ | $784$ observed pixel values |
+| stride-2 convolution | $8\times14\times14$ | local features, half resolution |
+| stride-2 convolution | $16\times7\times7$ | broader local features |
+| learned code | $16$ | a $49{:}1$ value-count bottleneck |
+| linear expansion | $16\times7\times7$ | seed the spatial decoder |
+| transposed convolutions | $8\times14\times14\rightarrow1\times28\times28$ | reconstruct resolution |
+
+The expanding operator is called a **transposed convolution** because it is the
+transpose, or adjoint, of the linear map implemented by a convolution. If
+$\mathcal{C}_{\matr{W}}$ denotes convolution with fixed weights, then
+
+$$
+\left\langle \mathcal{C}_{\matr{W}}(\vect{x}),\vect{y}\right\rangle
+=
+\left\langle \vect{x},\mathcal{C}_{\matr{W}}^{\top}(\vect{y})\right\rangle.
+$$ {#eq-transposed-conv-adjoint}
+
+That equation says **adjoint**, not **inverse**. Stride may discard information, and
+learned filters need not be invertible. A transposed convolution provides the right
+learnable shape-changing map for the decoder; it does not mechanically undo the
+encoder.
+
+We can now make “same architecture, different training” measurable. Both models below
+use exactly the ledger above. One sees clean images and reconstructs clean images. The
+other receives Gaussian-corrupted images but is scored against the clean targets. The
+development file is split into 900 fit and 300 validation examples; the committed
+600-example shared benchmark is evaluated only after validation has selected each
+checkpoint. Earlier chapters already use that benchmark, so this is an endpoint reuse,
+not a newly sealed test. Five seeds repeat training. Labels never enter the experiment.
+
+<!-- NOVEL: needs sign-off -->
+
+```{python}
+#| label: fig-convolutional-denoising-ae
+#| fig-cap: "The input–target contract determines what the same convolutional autoencoder learns to preserve. Before reconstruction, Gaussian corruption has test MSE 0.068601. Across seeds 6050–6054, the clean-trained autoencoder has mean clean/noisy-input test MSE 0.020701/0.033263 (SD 0.000565/0.003642). The denoising autoencoder has 0.026294/0.023810 (SD 0.001445/0.000775): it gives up some clean reconstruction accuracy to become better at the corruption it was trained to remove. This CPU Fashion-MNIST-subset study isolates a change in the training contract; it is not a universal ranking of denoisers."
+#| fig-alt: "Two rows show clean garment images, Gaussian-corrupted versions, reconstructions from a clean-trained convolutional autoencoder, and reconstructions from a denoising autoencoder. The denoising outputs suppress more of the specified noise while remaining blurrier on fine detail."
+#| fig-width: 10
+#| fig-height: 4.5
+#| code-summary: "Experiment: compare clean and denoising input–target contracts with the same convolutional autoencoder"
+
+torch.set_default_dtype(torch.float32)
+fashion_development = torch.load("../../data/fashion-train.pt")
+fashion_holdout = torch.load("../../data/fashion-test.pt")
+development_images = fashion_development["X"].float().unsqueeze(1) / 255.0
+holdout_images = fashion_holdout["X"].float().unsqueeze(1) / 255.0
+
+split = torch.randperm(
+    len(development_images), generator=torch.Generator().manual_seed(6050)
+)
+fit_indices, validation_indices = split[:900], split[900:]
+fit_images = development_images[fit_indices]
+validation_images = development_images[validation_indices]
+
+noise_sd = 0.35
+validation_noise = torch.randn(
+    validation_images.shape, generator=torch.Generator().manual_seed(70_050)
+)
+holdout_noise = torch.randn(
+    holdout_images.shape, generator=torch.Generator().manual_seed(70_051)
+)
+noisy_validation = (validation_images + noise_sd * validation_noise).clamp(0.0, 1.0)
+noisy_holdout = (holdout_images + noise_sd * holdout_noise).clamp(0.0, 1.0)
+
+
+class ConvolutionalAutoencoder(nn.Module):
+    def __init__(self, latent_dim: int = 16) -> None:
+        super().__init__()
+        self.encoder_map = nn.Sequential(
+            nn.Conv2d(1, 8, kernel_size=3, stride=2, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(8, 16, kernel_size=3, stride=2, padding=1),
+            nn.ReLU(),
+        )
+        self.to_code = nn.Linear(16 * 7 * 7, latent_dim)
+        self.from_code = nn.Linear(latent_dim, 16 * 7 * 7)
+        self.decoder_map = nn.Sequential(
+            nn.ConvTranspose2d(16, 8, kernel_size=4, stride=2, padding=1),
+            nn.ReLU(),
+            nn.ConvTranspose2d(8, 1, kernel_size=4, stride=2, padding=1),
+            nn.Sigmoid(),
+        )
+
+    def forward(self, x: Tensor) -> tuple[Tensor, Tensor]:
+        z = self.to_code(self.encoder_map(x).flatten(1))
+        features = F.relu(self.from_code(z)).reshape(-1, 16, 7, 7)
+        return self.decoder_map(features), z
+
+
+@torch.no_grad()
+def reconstruction_mse(
+    model: nn.Module, inputs: Tensor, targets: Tensor
+) -> float:
+    model.eval()
+    reconstruction, _ = model(inputs)
+    return F.mse_loss(reconstruction, targets).item()
+
+
+def fit_convolutional_autoencoder(
+    seed: int, denoising: bool, epochs: int = 30
+) -> tuple[float, float, float, ConvolutionalAutoencoder]:
+    torch.manual_seed(seed)
+    model = ConvolutionalAutoencoder()
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.003)
+    order_generator = torch.Generator().manual_seed(seed + 100_000)
+    noise_generator = torch.Generator().manual_seed(seed + 200_000)
+    best_validation = float("inf")
+    best_state = deepcopy(model.state_dict())
+
+    for _ in range(epochs):
+        model.train()
+        order = torch.randperm(len(fit_images), generator=order_generator)
+        for indices in order.split(100):
+            targets = fit_images[indices]
+            if denoising:
+                noise = torch.randn(targets.shape, generator=noise_generator)
+                inputs = (targets + noise_sd * noise).clamp(0.0, 1.0)
+            else:
+                inputs = targets
+            reconstruction, _ = model(inputs)
+            loss = F.mse_loss(reconstruction, targets)
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+        validation_inputs = noisy_validation if denoising else validation_images
+        validation_loss = reconstruction_mse(
+            model, validation_inputs, validation_images
+        )
+        if validation_loss < best_validation:
+            best_validation = validation_loss
+            best_state = deepcopy(model.state_dict())
+
+    model.load_state_dict(best_state)
+    clean_mse = reconstruction_mse(model, holdout_images, holdout_images)
+    noisy_mse = reconstruction_mse(model, noisy_holdout, holdout_images)
+    return best_validation, clean_mse, noisy_mse, model
+
+
+conv_rows: dict[bool, Tensor] = {}
+conv_models: dict[bool, list[ConvolutionalAutoencoder]] = {}
+for denoising in (False, True):
+    fitted = [
+        fit_convolutional_autoencoder(seed, denoising)
+        for seed in range(6050, 6055)
+    ]
+    conv_rows[denoising] = torch.tensor([row[:3] for row in fitted])
+    conv_models[denoising] = [row[3] for row in fitted]
+
+plain_model = conv_models[False][0]
+denoising_model = conv_models[True][0]
+example_indices = [7, 22]
+with torch.no_grad():
+    plain_noisy_reconstruction, _ = plain_model(noisy_holdout[example_indices])
+    denoised_reconstruction, _ = denoising_model(noisy_holdout[example_indices])
+
+fig, axes = plt.subplots(2, 4, figsize=(10, 4.5))
+columns = [
+    (holdout_images[example_indices], "clean target"),
+    (noisy_holdout[example_indices], "corrupted input"),
+    (plain_noisy_reconstruction, "clean-trained AE"),
+    (denoised_reconstruction, "denoising AE"),
+]
+for column, (images, title) in enumerate(columns):
+    axes[0, column].set_title(title, color=navy, fontsize=9.0, weight="bold")
+    for row in range(2):
+        axes[row, column].imshow(images[row, 0].cpu(), cmap="gray", vmin=0, vmax=1)
+        axes[row, column].axis("off")
+fig.text(
+    0.5, 0.02,
+    "same architecture  ·  different input–target contract  ·  different behavior",
+    ha="center", color=wine, fontsize=9.2, weight="bold",
+)
+plt.tight_layout(rect=(0, 0.05, 1, 1))
+plt.show()
+
+# A separate operator check: transposed convolution is the convolution's adjoint.
+probe_x = torch.randn(2, 1, 13, 13, dtype=torch.float64)
+probe_weight = torch.randn(3, 1, 3, 3, dtype=torch.float64)
+probe_y = torch.randn(2, 3, 7, 7, dtype=torch.float64)
+conv_x = F.conv2d(probe_x, probe_weight, stride=2, padding=1)
+transpose_y = F.conv_transpose2d(
+    probe_y, probe_weight, stride=2, padding=1
+)
+left_inner_product = (conv_x * probe_y).sum()
+right_inner_product = (probe_x * transpose_y).sum()
+adjoint_relative_gap = (
+    (left_inner_product - right_inner_product).abs()
+    / torch.maximum(left_inner_product.abs(), right_inner_product.abs())
+)
+
+print("arm       validation   clean test  noisy-input test")
+for denoising, label in [(False, "plain"), (True, "denoising")]:
+    table = conv_rows[denoising]
+    print(label, "mean", *(f"{value:.6f}" for value in table.mean(0).tolist()))
+    print(label, "SD  ", *(f"{value:.6f}" for value in table.std(0).tolist()))
+print("corrupted-input test MSE", f"{F.mse_loss(noisy_holdout, holdout_images):.6f}")
+print("transposed-convolution adjoint relative gap", f"{adjoint_relative_gap:.2e}")
+```
+
+The denoising arm wins only the question it was trained to answer. It restores this
+specified corruption better, while the clean-trained arm reconstructs clean inputs
+better. Calling either model “the better autoencoder” would erase the experimental
+contract. Chapter 19 will return to denoising at many calibrated noise levels; that is
+where repeated, level-conditioned corruption reversal becomes one learned component of
+diffusion's generative path.
+
+## Why a one-shot encoder cannot be the whole sequence model
+
+The detour has earned a useful machine—an encoder can learn a code; a decoder can be
+trained to reconstruct, denoise, or translate from it. Why not encode an entire
+sentence into one $k$-dimensional vector and decode the translation?
+
+For short, bounded objects, that design may work. The trouble is the contract:
+
+- every input must be available before the one-shot encoder can finish;
+- the code has the same width for four tokens and four thousand;
+- every distinction in content and order must survive the same handoff;
+- the decoder cannot revisit an earlier input detail that the code discarded.
+
+Making $k$ larger postpones the argument; it does not remove the fixed maximum or give
+the computation a streaming rule. The next chapter changes the shape of the problem.
+It shares one update across time,
+
+$$
+\vect{h}_t=f_\theta(\vect{h}_{t-1},\vect{x}_t),
+$$
+
+so the model can accept one element at a time and stop whenever the sequence stops.
+Recurrence still has a finite state—later chapters will expose that bottleneck—but it
+turns a fixed-input network into a variable-length process. The autoencoder did not
+fail us. It made the missing operation visible.
+
+::: {.callout-note}
+## Two different limitations, two different next chapters
+
+“A one-shot encoder is not a variable-length process” motivates recurrence in Chapter
+10.
+“A code is not yet a probability distribution” motivates the generative models in
+Chapter 19. Do not collapse them: one is about how evidence arrives; the other is
+about how new samples begin.
+:::
+
+## Okay, so — PCA became a network, then the code became a bottleneck
+
+1. **An autoencoder learns an input–code–reconstruction contract.** The target says
+   what information the code is rewarded for preserving.
+2. **PCA is the linear case under stated conditions.** Center the data, use an
+   undercomplete linear map and squared loss, and compare subspaces or projectors—not
+   arbitrary latent coordinates.
+3. **Gradient descent makes the projection learnable.** Add depth and nonlinearity and
+   the reconstruction map can follow curved structure; it gains capacity, not a
+   semantic guarantee.
+4. **Convolution preserves the spatial prior.** Transposed convolution is the adjoint
+   shape-changing operator used by the decoder, not an inverse of the encoder.
+5. **Same architecture, different contracts, different behavior.** Clean reconstruction,
+   denoising, and translation pair inputs and targets in distinct ways.
+6. **A one-shot handoff plants two questions.** Variable-length evidence leads next to
+   recurrence. Unsupported latent sampling waits for Chapter 19.
+
+## Sources and further reading {.unnumbered}
+
+- [Baldi and Hornik, *Neural Networks and Principal Component Analysis*](https://doi.org/10.1016/0893-6080(89)90014-2): the qualified principal-subspace result for linear autoencoders.
+- [Vincent et al., *Extracting and Composing Robust Features with Denoising Autoencoders*](https://www.cs.toronto.edu/~larocheh/publications/icml-2008-denoising-autoencoders.pdf): noisy-input, clean-target representation learning.
+- [PyTorch, `ConvTranspose2d`](https://pytorch.org/docs/stable/generated/torch.nn.ConvTranspose2d.html): the framework operator and output-shape conventions used in the independently derived implementation.
+
+## Exercises {.unnumbered}
+
+1. **Untie the linear maps.** Replace $\matr{W}\matr{W}^{\top}$ with an encoder
+   $\matr{W}_e$ and decoder $\matr{W}_d$. Construct an invertible change of latent
+   coordinates that changes both matrices but leaves their product unchanged.
+2. **Audit the bend.** Extend the planted curve's test interval beyond the range used
+   for training. Compare interpolation with extrapolation and state which claim the
+   original interleaving split earned.
+3. **Change the corruption.** Train the convolutional autoencoder with masking noise
+   instead of Gaussian noise. Evaluate both corruptions without retuning and explain
+   why “denoising ability” is not one scalar property.
+4. **Prove the adjoint check.** Write a one-channel convolution as an explicit matrix
+   for a tiny input. Verify that applying its matrix transpose matches a transposed
+   convolution with the corresponding stride and padding.
+5. **Stress the one-shot code.** Design two sequence families that share the same final
+   tokens but require remembering increasingly old information. Predict how a one-shot
+   encoder and a recurrent state will fail differently as length grows.

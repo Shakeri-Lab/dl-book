@@ -19,9 +19,13 @@ replays that one move, in his course's order and voice.
 - **Part I · From Lines to Networks** — linear/logistic regression, MLPs, training,
   backprop, and the signature chapter: *generalization failure in pictures → inductive bias*.
 - **Part II · Vision** — filters → learnable filters (CNNs) → modern CNNs & transfer.
+- **Interludes** — experimentation as a method; PCA → learnable linear and nonlinear
+  autoencoders as the bridge from fixed-size vision to sequences.
 - **Part III · Sequences** — RNNs, encoder–decoder.
 - **Part IV · Attention** — kernel regression → attention → self-attention → BERT → ViT/scaling.
-- **Part V · The Pretrained Era** — PEFT/quantization, alignment, generative models.
+- **Part V · The Pretrained Era** — PEFT/quantization, alignment, generative models,
+  and multimodal contrastive learning, followed by an epilogue that hands the book's
+  question to the reader.
 
 ## Building locally
 
@@ -44,8 +48,8 @@ quality gates, failure modes) is in [CLAUDE.md](CLAUDE.md) — it is auto-loaded
 Code sessions working in this repo.
 
 **Continuing or contributing?** Start with [docs/CONTINUING.md](docs/CONTINUING.md)
-(project status, working protocol, standing author rules, roadmap for the remaining
-chapters) and [docs/arc-seeds.md](docs/arc-seeds.md) (the cross-chapter seed/harvest
+(project status, working protocol, standing author rules, and roadmap) and
+[docs/arc-seeds.md](docs/arc-seeds.md) (the cross-chapter seed/harvest
 ledger every new chapter must respect). These documents are the project's persistent
 memory and are updated after every shipped chapter.
 

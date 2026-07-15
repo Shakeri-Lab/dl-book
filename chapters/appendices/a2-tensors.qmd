@@ -32,7 +32,7 @@ meaning was wrong.
 
 That debugging pause contains the whole lesson of this appendix. A tensor is not just
 a box of numbers—and a shape is not enough unless we know what every axis means.
-Chapters 1–19 have already used dense batches, images, sequences, attention heads,
+Chapters 1–20 have already used dense batches, images, sequences, attention heads,
 masks, and parameter tensors. Here we gather the habits that make those objects
 predictable: state the contract, name the axes, and make every operation account for
 the axes it changes.
@@ -250,7 +250,16 @@ Clone it first if independent writable entries are required. Use `repeat` only w
 you genuinely intend to materialize copies—using it merely to make elementwise
 arithmetic work wastes the abstraction that broadcasting already provides.
 
-## Shape is not layout
+::: {.callout-warning}
+## Trap: shape is not layout
+
+A tensor can keep the same shape and values while its strides and storage layout
+change. `transpose` and `permute` normally return views, so a result can be
+non-contiguous even when it looks ordinary. Audit the strides before assuming that
+`view` is legal; use `reshape` or `contiguous` according to the consumer's contract.
+:::
+
+## Shape, stride, and contiguity
 
 For the layout question, a dense strided tensor interprets storage through shape,
 stride, and an offset; dtype determines how the stored bits are read. The stride for
@@ -511,6 +520,30 @@ prediction axis, decide whether the target is `(N,)` or `(N,1)`, make every term
 that choice, and assert the result before computing a loss. Do not ask PyTorch to infer
 meaning from matching integers—it cannot.
 
+<!-- NOVEL: needs sign-off - concise framework bridge requested in the course review. -->
+::: {.callout-tip}
+## Practice bridge (non-examinable): from samples to batches
+
+A map-style `Dataset` owns the sample contract: what one index means and which tensors
+or labels it returns; an `IterableDataset` instead owns a sample stream. A
+`DataLoader` owns iteration around either contract: sampling order where applicable,
+batching, collation, and optionally worker processes. That separation turns Chapter
+4's minibatch symbol $B$ into an explicit software boundary
+(@sec-04-training-loss-sgd).
+
+Start with `num_workers=0`. The dataset then runs in the main process, so exceptions
+and random-state mistakes are easiest to diagnose. A positive value asks subprocesses
+to prepare samples. PyTorch assigns each worker a seed, but other random libraries and
+iterable streams still need worker-aware initialization or sharding; every dataset or
+collation object must also work under the platform's process-start rules.
+`pin_memory=True` asks the loader to return tensors in pinned host memory. It does not
+move a batch to an accelerator, and the flag alone is not evidence of a faster
+pipeline. Treat worker count and pinning as workload settings, then apply the
+measurement contract in @sec-a3-precision-performance before making a performance
+claim.
+:::
+<!-- /NOVEL -->
+
 Okay, so the practical bridge is now complete. Shape tells you how many positions
 exist—axis names tell you what they mean; strides tell you how those positions map to
 storage. Broadcasting, indexing, and matrix products are then not mysterious rules.
@@ -560,6 +593,9 @@ Each is an explicit decision about which axes remain and which disappear.
 - [PyTorch tensor views](https://docs.pytorch.org/docs/stable/tensor_view.html):
   views, strides, contiguity, basic versus advanced indexing, and the conditional
   copy behavior of `reshape`.
+- [PyTorch data loading](https://docs.pytorch.org/docs/stable/data.html): the
+  `Dataset` and `DataLoader` contracts, worker processes, collation, and memory
+  pinning.
 - [`torch.nn.Linear`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Linear.html):
   the official input, output, weight, and bias shape contract.
 - [`torch.einsum`](https://docs.pytorch.org/docs/stable/generated/torch.einsum.html):

@@ -7,22 +7,36 @@
      seeds: sources/7.1-RNN-v3.tex (§Naive/Shared-weight RNN, §VEGP, §Truncated BPTT,
             §From RNN to LSTM: design-by-constraints, §Case Study long-term
             dependency, §GRU)
-     note: the lecture motivates RNNs against Module 6's autoencoders; the book has
-           not met autoencoders yet (@sec-19-generative), so the opening motivates
-           from the book's own Part II toolkit instead. Same destination. -->
+     historical bridge: machine-local course seed
+                        LaTeX/Module 8,9-Transformer/8.L.word2vec.tex
+                        (static-to-contextual framing only; no implementation ported)
+     harvested bridge: @sec-interlude-autoencoders restores Module 6's intended
+                       PCA -> learnable/nonlinear autoencoder -> fixed-code limit
+                       -> recurrence sequence. -->
 
-Part II taught machines to see, and every trick in it leaned on one fact about
-images: an image arrives *all at once*, at a fixed size. This part is about data
-that refuses both conditions. Text, audio, sensor streams, stock prices — they come
-one piece at a time, they stop whenever they please, and their meaning lives in the
-*order* of the pieces.
+The autoencoder interlude promised you **a one-shot encoder is not a variable-length
+process**. We began with PCA's closed-form projection, made its encoder and decoder
+learnable, and added nonlinearity so the reconstruction could bend. For a bounded
+object such as a $28\times28$ image, that is a coherent contract: see the whole object,
+compress it to $\vect{z}\in\mathbb{R}^k$, then decode.
+
+Now let the object keep arriving. A four-token message and a four-thousand-token report
+are both squeezed through the same $k$ numbers; the encoder cannot finish before the
+last item appears; the decoder cannot revisit evidence discarded from the code.
+Increasing $k$ postpones the pressure, but it does not tell a fixed-input network how
+to accept an unknown number of pieces.
+
+This part is about data that refuses the fixed-size contract. Text, audio, sensor
+streams, stock prices—they come one piece at a time, stop whenever they please, and
+carry meaning in the *order* of the pieces. We need a computation that can update as
+the evidence arrives.
 
 Order deserves a moment, because the book has been here before with the opposite
 verdict. Chapter 6 shuffled every pixel with one fixed permutation and retrained the
 MLP to the same accuracy: because that coordinate map was invertible, the first-layer
 weights could absorb it. The trained MLP was still position-specific; it was not a bag
 model. Now shuffle the words of *this sentence* and read it back. For sequences, no
-single compensating remap preserves arbitrary order — order is most of the signal. We
+single compensating remap preserves arbitrary order—order is most of the signal. We
 need models whose computation represents it explicitly.
 
 ## Stretching the old toolkit
@@ -160,6 +174,7 @@ depth experiment:
 ```{python}
 #| label: fig-vanishing-time
 #| fig-cap: "How much a freshly initialized vanilla RNN's output can blame its first input, as the lag between them grows. Fifteen orders of magnitude gone by sixty steps: the same exponential decay Chapter 5 measured down a deep network, now measured across time — because an unrolled RNN *is* a deep network with tied weights."
+#| fig-alt: "Log-scale line chart of the norm of the output gradient with respect to the first input versus lag. The vanilla RNN curve falls almost linearly on the log axis, from above one at lag 1 to roughly 10 to the minus 15 at lag 60."
 #| code-summary: "Code: gradient reaching the first input vs. lag"
 def grad_at_first_input(rec: nn.Module, lags: list[int],
                         vocab: int = 4) -> list[float]:
@@ -265,6 +280,7 @@ $$ {#eq-lstm}
 ```{python}
 #| label: fig-lstm-conveyor
 #| fig-cap: "The LSTM cell as a conveyor belt with valves. The forget gate $f_t$ controls how much old cell state continues; the input gate $i_t$ controls how much candidate content is added; the output gate $o_t$ controls what becomes visible as $h_t$. The upper additive route is the long-memory highway."
+#| fig-alt: "LSTM flow diagram. The previous cell state passes across a horizontal orange highway through multiplication by the forget gate, then receives the input-gated candidate at an addition node to form the new cell state. A tanh branch from that state is multiplied by the output gate to form the hidden state."
 #| code-summary: "Code: draw the LSTM conveyor belt and its three gates"
 from matplotlib.patches import FancyBboxPatch, Circle
 
@@ -346,6 +362,7 @@ Watch what that buys, on the same axes as before:
 ```{python}
 #| label: fig-highway-time
 #| fig-cap: "The gradient-vs-lag experiment, rerun with an LSTM whose effective forget-gate bias is initialized to +1. The vanilla RNN's blame signal dies exponentially; the LSTM's rides the cell-state conveyor belt and arrives at lag 60 attenuated but alive, about ten orders of magnitude stronger. Chapter 9 built this highway across layers; the LSTM builds it across time, with a learned valve on the on-ramp."
+#| fig-alt: "Log-scale comparison of input-gradient norm versus lag. The vanilla RNN falls from above one to about 10 to the minus 15 by lag 60, while the LSTM with forget bias plus one declines much more slowly and remains near 10 to the minus 5."
 #| code-summary: "Code: gradient vs. lag, vanilla RNN against LSTM"
 torch.manual_seed(0)
 lstm = nn.LSTM(4, 32, batch_first=True)
@@ -474,6 +491,25 @@ $\tanh(W_{in}x+b_{in}+r\odot(W_{hn}h+b_{hn}))$, for implementation efficiency.
 The gates serve the same purpose, but the two cells are not algebraically identical
 for the same weights. An exact manual-loop verification must implement PyTorch's
 ordering rather than @eq-gru's.
+
+<!-- NOVEL: needs sign-off - concise historical bridge requested in the course review. -->
+::: {.callout-note}
+## Historical bridge (non-examinable): before contextual states
+
+**Word2Vec** learned a fixed vector for each word type through local prediction:
+skip-gram predicts nearby words from a center word, while CBOW predicts the center
+from its neighborhood. **GloVe** used corpus-wide co-occurrence counts, fitting
+vector dot products and biases to their logarithmic structure. Both made
+distributional meaning learnable, but both returned a static lookup: the stored
+vector for *bank* did not change between a river and a loan.
+
+The recurrent state in this chapter changes that contract. Its $h_t$ depends on the
+visible prefix, so the representation at a position is contextual even when its input
+token embedding began as a lookup. Self-attention later makes that contextual mixing
+direct in @sec-14-self-attention-transformer, and @sec-15-bert-pretraining turns it
+into a large-scale pretraining regime.
+:::
+<!-- /NOVEL -->
 
 ## The book reads itself
 
@@ -608,7 +644,7 @@ computation you have been prepared for since Chapter 1's dot products. That is
 attention (@sec-12-kernel-regression, @sec-13-attention), and it is two chapters
 away.
 
-## Okay, so —
+## Okay, so — weight sharing moved into time
 
 1. **Order is the signal.** Chapter 6's MLP could absorb one fixed pixel permutation
    when retrained; shuffle a sentence into arbitrary orders and its meaning changes.
@@ -642,6 +678,8 @@ away.
 - [Hochreiter & Schmidhuber, *Long Short-Term Memory*](https://doi.org/10.1162/neco.1997.9.8.1735): the original gated-memory architecture and constant-error pathway.
 - [Cho et al., *Learning Phrase Representations using RNN Encoder–Decoder for Statistical Machine Translation*](https://aclanthology.org/D14-1179/): introduces the gated recurrent unit in its encoder–decoder setting.
 - [Pascanu, Mikolov, & Bengio, *On the Difficulty of Training Recurrent Neural Networks*](https://proceedings.mlr.press/v28/pascanu13.html): geometric analysis of vanishing/exploding gradients and gradient clipping.
+- [Mikolov et al., *Efficient Estimation of Word Representations in Vector Space*](https://arxiv.org/abs/1301.3781): the CBOW and skip-gram predictive objectives.
+- [Pennington, Socher, & Manning, *GloVe: Global Vectors for Word Representation*](https://aclanthology.org/D14-1162/): static embeddings learned from global word co-occurrence statistics.
 
 ## Exercises {.unnumbered}
 

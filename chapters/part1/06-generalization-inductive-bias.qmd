@@ -67,6 +67,11 @@ print(f"train accuracy: {accuracy(net, X_tr, y_tr):.1%}")
 print(f"validation accuracy: {accuracy(net, X_val, y_val):.1%}")
 ```
 
+<!-- NOVEL: needs sign-off -->
+The present MLP has no mode-dependent layer, but keep the `net.eval()` line: it disables
+training-only behavior such as the dropout mechanism from
+@sec-04-training-loss-sgd before evaluation.
+
 Seventy-six percent on held-out validation images, from one thousand fitting examples
 and a few seconds of CPU. The split was fixed before any experiment, and the separate
 test set remains sealed until the end of the chapter. By every metric we have learned
@@ -103,6 +108,7 @@ completes:
 
 ```{python}
 #| label: fig-shift-cliff
+#| fig-alt: "Validation accuracy falls sharply with each additional pixel of right shift, moving from a strong clean score toward the dotted ten-class chance line by four pixels."
 #| fig-cap: "The validation cliff. Each pixel of horizontal shift destroys accuracy although the garments themselves never changed. By four pixels the model is approaching guesswork."
 #| code-summary: "Code: accuracy vs. shift"
 import matplotlib.pyplot as plt
@@ -157,16 +163,25 @@ input by dot product.
 
 ```{python}
 #| label: fig-templates
-#| fig-cap: "Sixteen first-layer templates, reshaped into images. Each is a global, full-frame pattern; many are diffuse rather than recognizable garment detectors. A template that spans the whole frame changes its score when the input pattern moves."
+#| fig-alt: "Sixteen full-frame weight maps fill a two-by-eight grid. Dark red cells mark positive weights, dark blue cells mark negative weights, and pale cells are near zero; broad diffuse patterns span most of each frame."
+#| fig-cap: "Sixteen first-layer templates, reshaped into images. The labeled scale runs from negative weights at the blue end through pale zero to positive weights at the red end; magnitude grows darker away from zero. Each template is a global, full-frame pattern, and many are diffuse rather than recognizable garment detectors. A template that spans the whole frame changes its score when the input pattern moves."
 #| code-summary: "Code: first-layer weights as images"
 W1 = net[0].weight.detach()               # (256, 784)
 order = W1.norm(dim=1).argsort(descending=True)[:16]
 
 fig, axes = plt.subplots(2, 8, figsize=(7.6, 2.2))
+scale = float(W1[order].abs().max())
 for ax, i in zip(axes.ravel(), order):
-    ax.imshow(W1[i].reshape(28, 28), cmap="RdBu_r")
+    image = ax.imshow(W1[i].reshape(28, 28), cmap="RdBu_r",
+                      vmin=-scale, vmax=scale)
     ax.set_xticks([]); ax.set_yticks([])
-plt.tight_layout(); plt.show()
+fig.subplots_adjust(left=0.02, right=0.87, bottom=0.04, top=0.96,
+                    wspace=0.05, hspace=0.08)
+color_axis = fig.add_axes([0.89, 0.17, 0.018, 0.66])
+colorbar = fig.colorbar(image, cax=color_axis)
+colorbar.set_ticks([-scale, 0, scale], labels=["negative", "zero", "positive"])
+colorbar.ax.tick_params(labelsize=7)
+plt.show()
 ```
 
 There is the whole story in one figure. Every template is **global** — a pattern
@@ -196,6 +211,7 @@ sizes:
 
 ```{python}
 #| label: fig-ucurve
+#| fig-alt: "Both validation-error curves fall steeply as hidden width increases and then flatten. The smaller fitting set turns slightly upward at the widest models, while the larger fitting set does not."
 #| fig-cap: "Hunting the U-curve: validation error vs. hidden width at two fitting-set sizes. Error falls steeply as capacity grows, then flattens. In this one seeded sweep, n=300 shows a small late upturn while n=1000 does not. The result describes this regime; it does not estimate a scaling law."
 #| code-summary: "Code: the width sweep"
 widths = [2, 4, 8, 16, 64, 256]
@@ -235,6 +251,7 @@ High dimensionality also breaks the very idea of "similar examples":
 
 ```{python}
 #| label: fig-curse
+#| fig-alt: "The average nearest-to-farthest distance ratio rises toward one as dimension increases on a logarithmic horizontal axis. A vertical guide at dimension 784 meets the curve near 0.89."
 #| fig-cap: "Distance concentration for 300 points sampled uniformly from a unit cube: the average ratio of nearest-neighbor to farthest-neighbor distance, by ambient dimension. At d=784 the ratio reaches 0.89. This is a controlled geometry example, not a claim that natural images fill the 784-dimensional cube uniformly."
 #| code-summary: "Code: nearest/farthest ratio vs. dimension"
 torch.manual_seed(6050)
@@ -277,14 +294,57 @@ Say them out loud — the two principles from the lecture:
    small changes in position (**invariance**). The shift experiment showed that our
    fitted MLP did neither reliably.
 
-Here is the move that powers the rest of this book: **build these beliefs into the
-architecture itself** — as constraints. Constrain each template to look at a small
-local patch instead of the whole frame. Then *share* that template across every
+<!-- NOVEL: needs sign-off -->
+### Data augmentation: put the belief in the examples
+
+The shift cliff suggests another route. If moving a garment a little should not change
+its class, let $T$ be a random label-preserving transformation drawn from a declared
+distribution $\mathcal{A}$. Instead of training only on each observed pair
+$(\vect{x}_i,y_i)$, train on transformed versions:
+
+$$
+\min_{\vect{w}}\;
+\frac{1}{n}\sum_{i=1}^{n}
+\E_{T\sim\mathcal{A}}
+\left[\ell\!\left(f_{\vect{w}}(T(\vect{x}_i)),y_i\right)\right].
+$$ {#eq-data-augmentation}
+
+This is **data augmentation**, and its role is larger than making the dataset look
+bigger. It is a **data-side inductive bias**: the transformation distribution states
+which changes we believe should preserve the target. Sampling shifts from $-3$ to $+3$
+pixels says that location within that window is a nuisance. In practice, drawing one
+fresh $T$ when an example enters a batch gives a Monte Carlo estimate of the
+expectation in @eq-data-augmentation. Exercise 2 asks you to put that belief into the
+training batches and then measure both what it buys on the shift curve and what it
+costs on clean images.
+
+We can now place three familiar levers side by side:
+
+1. **Architecture-side bias** changes which functions are available or easy to learn.
+   Local connectivity and shared convolutional filters are the route Part II will take.
+2. **Objective- or training-side bias** changes which fitted solution is preferred.
+   Weight penalties, dropout, and early stopping from @sec-04-training-loss-sgd live
+   here.
+3. **Data-side bias** changes the examples the learner is asked to agree on.
+   Augmentation encodes a chosen family of label-preserving transformations.
+
+These routes can work together, but they do not make identical promises. A finite set
+of augmented shifts encourages consistency; it does not prove exact invariance. An
+architectural constraint can make a symmetry exact in a layer, but may exclude useful
+functions. A penalty prefers some solutions without specifying which input changes
+should preserve a label. And augmentation is only as honest as its transformation:
+flipping a garment may be harmless, while flipping a digit or a directional sign may
+change the answer.
+
+For Part II we begin with the architecture-side move: **build locality and translation
+structure into the network itself** as constraints. Constrain each template to look at
+a small local patch instead of the whole frame. Then *share* that template across every
 position, so the detection rule itself does not depend on where. Two constraints, and
 both pathologies are attacked at their root. The parameter count falls too: our MLP has
 203,530 parameters, while the LeNet model in @sec-08-cnn will have 61,706, less than a
 third as many. Sharing is a massive economy.
 
+<!-- NOVEL: needs sign-off -->
 ::: {.callout-tip}
 ## Constraints are knowledge
 
@@ -292,10 +352,11 @@ A constraint looks like a *reduction* in power: the constrained model is a stric
 subset of the MLP. That is exactly the point. By @sec-01-linear-regression's
 bias–variance lens, we are spending bias — assumptions we are confident of — to
 collapse the search space onto functions that respect the structure of images,
-slashing variance and sample complexity. Inductive bias is not a limitation of a
-model; done right, it is everything you know about the world, cast in architecture.
-And it is a dial, not a dogma: give a weakly-biased model enough data and it can win
-again — a trade we will meet at the frontier in @sec-16-vit-scaling.
+slashing variance and sample complexity. Inductive bias is not merely a limitation of
+a model; done right, it is what you know about the world, cast into architecture,
+objective, training procedure, or data. And it is a dial, not a dogma: give a
+weakly-biased model enough data and it can win again — a trade we will meet at the
+frontier in @sec-16-vit-scaling.
 :::
 
 ## The pivot
@@ -329,8 +390,19 @@ print(f"shift-2 test accuracy: "
 The sealed check confirms the diagnostic rather than creating it: 80.8% on clean test
 images becomes 42.0% after the predeclared two-pixel shift.
 
+::: {.callout-note}
+## Check yourself
+
+Close the book for one minute and retrieve the argument before reading the recap.
+
+- What two experiments reveal that the MLP learned coordinates rather than image structure?
+- Where can inductive bias enter: architecture, objective, or data? Give one example of each.
+- Why can high clean validation accuracy coexist with collapse after a two-pixel shift?
+:::
+
 ## Okay, so — the lesson of Part I
 
+<!-- NOVEL: needs sign-off -->
 1. **Every metric can say yes while the model has learned the wrong thing.** Our MLP
    scored well on clean held-out data while its hypothesis class showed no adjacency
    preference (fixed shuffle) and its fitted predictions were hypersensitive to a
@@ -339,8 +411,9 @@ images becomes 42.0% after the predeclared two-pixel shift.
 3. **Capacity is not the culprit in this experiment.** The U-curve barely appears in
    one seeded sweep, while the uniform-cube example shows why unconstrained ambient
    coverage becomes expensive.
-4. **The cure is inductive bias**: locality and translation structure, built in as
-   constraints. Knowledge, cast in architecture.
+4. **The cure is inductive bias**: encode knowledge through architecture, objective,
+   training procedure, or data. Part II chooses locality and translation structure as
+   architectural constraints; augmentation is the data-side alternative and companion.
 
 ## Deeper dive {.unnumbered}
 
@@ -384,8 +457,8 @@ underfit regime; the overparameterized regime plays by subtler rules.
    does no analogous argument work for the shift?
 2. **(Code.)** Augment the training set with random shifts of ±3 pixels and retrain.
    Re-plot the cliff. How much robustness did augmentation buy, what did it cost in
-   clean accuracy and compute, and — the real question — what *knowledge* did
-   augmentation encode, compared to building invariance into the architecture?
+   clean accuracy and compute, and — the real question — what data-side inductive bias
+   did augmentation encode, compared to building invariance into the architecture?
 3. **(Code.)** The U-curve hunt used widths up to 256. Push to 1024 and 4096 at
    $n = 300$, repeating each width across several seeds. Then compare Adam with
    minibatch SGD from @sec-04-training-loss-sgd. Which patterns are stable enough to

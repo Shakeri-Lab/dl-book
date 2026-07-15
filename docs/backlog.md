@@ -50,24 +50,27 @@ chapter stub's draft-sources; revisit during the planned outline session with th
 
 - Run `scripts/fetch_notebooks.py` for the remaining Colab notebooks (m02-03 fetched
   2026-07-07; others pending) — provenance for later chapters' code.
-- Extend course-site `bookChapters` mappings as Chapters 12–19 become reviewed and
-  substantive.
+- Course-site `bookChapters` mappings through Chapter 20 were completed in the July 15
+  course-alignment pass, alongside the syllabus's native-PyTorch wording repair.
 
-## 5. GPU experiment queue (backlog-only; revised after Appendix C, July 15, 2026)
+## 5. GPU experiment queue (backlog-only; revised after Chapter 20, July 15, 2026)
 
 Do not place project-management placeholders in the published chapters. Keep these
 experiments here until GPU access is available; then run them on Rivanna/Colab, pin the
 numbers, and fold only completed results back into the relevant chapter.
 
-Chapters 12–19 audit: the fixed-kernel, scaling, date-attention, tiny Transformer
-book-corpus, controlled MLM-transfer, and five-seed CNN/ViT rematch experiments are
-CPU-complete, as are Chapter 17's frozen-context, planted-rank LoRA, and controlled
-quantization audits, and Chapter 18's completion-mask, scalar-preference, exact-policy,
-DPO-identity, and five-seed proxy-coverage audits. Chapter 19's PCA/autoencoder,
-decoder-ambiguity, Gaussian-ELBO, finite-GAN, schedule-coefficient, and five-seed scalar
-diffusion studies are also CPU-complete. They require no GPU dependency or
-project-management placeholder in the published chapters; the queue below remains the
-private reminder for later access. Appendix A's linear-algebra demonstrations and
+The experimentation/HPO interlude's paired BatchNorm study is CPU-complete. The
+autoencoder interlude's curve/projector, decoder-ambiguity, convolutional
+reconstruction, and denoising studies are CPU-complete as well. Across Chapters 12–20,
+the fixed-kernel, scaling, date-attention, tiny Transformer book-corpus, controlled
+MLM-transfer, and five-seed CNN/ViT rematch experiments are CPU-complete, as are Chapter
+17's frozen-context, planted-rank LoRA, and controlled quantization audits; Chapter 18's
+completion-mask, scalar-preference, exact-policy, DPO-identity, and five-seed
+proxy-coverage audits; and Chapter 19's Gaussian-ELBO, finite-GAN,
+schedule-coefficient, and five-seed scalar-diffusion studies. They require no GPU
+dependency or project-management placeholder in the published chapters. Chapter 20's
+five-seed paired-versus-deranged cross-modal retrieval study is likewise CPU-complete.
+The queue below remains the private reminder for later access. Appendix A's linear-algebra demonstrations and
 Appendix B's tensor-contract demonstrations are also CPU-complete; neither publishes a
 GPU placeholder or infers hardware behavior. Appendix C's dtype probes, synthetic
 Roofline, attention tensor ledger, and online-softmax parity check are complete as CPU
@@ -143,3 +146,10 @@ here.
   wall-clock and hardware cost, and per-run uncertainty. Do not promote one metric into
   a family ranking, compare unmatched pretrained and scratch systems as though the
   difference were architectural, or add a chapter placeholder before results exist.
+- **Ch. 20 multimodal retrieval, full scale**: use one licensed paired image–text
+  corpus and predeclare entity-level deduplication, candidate pools, multi-positive
+  handling, prompt templates, subgroup slices, and both retrieval directions. Compare
+  true-pair training with a matched pair-breaking or nuisance-shortcut audit across
+  end-to-end seeds. Record data provenance, checkpoint licenses, filtering, batch
+  construction, measured compute, and per-seed results before adding any natural-data
+  claim.

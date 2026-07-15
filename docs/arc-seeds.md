@@ -8,15 +8,15 @@ new rows here. The pedagogical-efficiency rule (drafting-template) depends on
 this file: a concept with no payoff chapter listed here should be an exercise or
 a cut.*
 
-*Updated: 2026-07-15, after Appendix C shipped.*
+*Updated: 2026-07-15, after the course-alignment and structural-review pass.*
 
 ## 1. Seeds planted and their harvest contracts
 
 | Seed (phrase as planted) | Planted | Harvest | Status |
 |---|---|---|---|
-| Dot product = similarity score against a template | ch. 1 | ch. 7 (sliding template), ch. 12 (kernel similarity), ch. 13 (QK scores) | done |
+| Dot product = similarity score against a template | ch. 1 | ch. 7 (sliding template), ch. 12 (kernel similarity), ch. 13 (QK scores), ch. 20 (normalized cross-modal similarity) | done |
 | Prediction = weighted combination of training targets | ch. 1 | ch. 12 (Nadaraya–Watson IS this, made explicit) | done |
-| Softmax = the scores→weights machine | ch. 2 | ch. 12 (kernel weights), ch. 13 (attention weights) | done |
+| Softmax = the scores→weights machine | ch. 2 | ch. 12 (kernel weights), ch. 13 (attention weights), ch. 20 (row/column contrastive candidates) | done |
 | "Softening the hard" / differentiable lookup ("A differentiable lookup, it turns out, is precisely attention") | ch. 2 | ch. 13 — harvest by name | done |
 | Temperature dial between hard max and uniform | ch. 2 | ch. 10 ✓ (sampling); ch. 13 (√d as temperature) | done |
 | Compositional hierarchy: features of features | ch. 3 | ch. 8 ✓ (receptive fields make it architectural) | done |
@@ -53,7 +53,12 @@ a cut.*
 | Fine-tuning changes every encoder weight; what if the backbone is too large? | ch. 15 | ch. 17 (prompting, PEFT, quantization) | done |
 | Where the update lives is not what the update optimizes | ch. 17 | ch. 18 — harvest by name: adaptation chooses permitted writes and representation; instruction or preference objectives choose rewarded behavior | done |
 | A judge is not a generator | ch. 18 | ch. 19 — harvested by name: reward models and preference losses evaluate completed samples; generative modeling learns the distribution that produces them | done |
-| m06 autoencoder spine (PCA = linear AE, bottleneck, manifolds) | (unused by design in ch. 11) | ch. 19 | done |
+| Zero-shot names the missing task-specific update, not missing pretraining exposure | ch. 17 | ch. 20 — text-prototype classification is bounded retrieval over a declared candidate set | done |
+| A shared embedding is a comparison rule, not a generator | ch. 20 | epilogue — capability claims remain tied to objectives, candidate sets, and evaluation contracts | done |
+| “Weights learn inside a run; we learn about designs across runs” / “Tune the contender; ablate the claim” | experimentation interlude after ch. 6 | comparison-heavy studies in chs. 8–20; epilogue harvests the method by name | done |
+| m06 autoencoder spine: make PCA learnable, then nonlinear (“PCA on steroids”) | autoencoder interlude after ch. 9 | static encoder–decoder contract is available before recurrence | done |
+| A one-shot encoder is not a variable-length process | autoencoder interlude | ch. 10 — harvested by name as the motivation for a shared state update; ch. 11 turns both maps into recurrent processes | done |
+| A code is not yet a distribution | autoencoder interlude | ch. 19 — harvested by name: reconstruction supplies no principled random start | done |
 | Solve, don't invert | ch. 1 | Appendix A — `solve` for square systems; `lstsq` for rectangular projection; forming normal equations squares the condition number | done |
 | A tensor's dtype becomes more than a software label; gather dtype, shape, stride, and physical layout | ch. 17 | Appendix B — six-part tensor contract, shape dictionary, broadcasting, views, strides, and dtype-aware construction | done |
 | Storage precision ≠ compute precision ≠ trainable state | ch. 17 | Appendix C — operand, evaluation, accumulation, output, gradient, and optimizer roles are audited separately | done |
@@ -108,12 +113,14 @@ optimizers or `backward()` before Chapter 5.
 | 1 | linear regression, least squares, ridge; dot products; train/test split; `torch` tensors, matmul |
 | 2 | logistic/softmax, cross-entropy, logits discipline (`F.cross_entropy` on logits), one-hot |
 | 3 | MLP, ReLU, hidden layers, `nn.Module` subclassing, `nn.Sequential`, `nn.Linear` |
-| 4 | loss landscapes, (S)GD, minibatches, learning rates, Adam, `torch.optim`, LR schedules (basic) |
+| 4 | loss landscapes, (S)GD, minibatches, learning rates, Adam, `torch.optim`, LR schedules (basic); inverted dropout, `nn.Dropout`, and train/eval mode asymmetry |
 | 5 | backprop/chain rule, autograd (`backward`, `requires_grad`, `detach`), vanishing/exploding intuition, init scales, `grad_by_layer` figure family |
-| 6 | generalization, overfitting, capacity, inductive bias, Fashion-MNIST subset (`data/fashion-*.pt`), shift/shuffle experiments |
+| 6 | generalization, overfitting, capacity, inductive bias through architecture/objective/data, Fashion-MNIST subset (`data/fashion-*.pt`), shift/shuffle experiments, data augmentation as a declared transformation distribution |
+| Experiment interlude (after 6) | run versus experiment versus study; parameters versus hyperparameters; fixed-protocol and tuned estimands; paired-seed contrasts; ablation interactions; train/validation/test roles and validation overtuning; log-scale/random/multi-fidelity search; experiment ledger. `nn.BatchNorm1d` is a labeled measuring-instrument preview only; ch. 9 opens the mechanism. |
 | 7 | convolution/cross-correlation, kernels, `F.conv1d/2d`, equivariance, filter zoo |
 | 8 | `nn.Conv2d`, channels, padding/stride, `F.max_pool2d`, receptive fields, NCHW, LeNet, parameter audits |
 | 9 | BatchNorm (+train/eval modes), conv-BN-ReLU atom, 1×1 convs, GAP (`nn.AdaptiveAvgPool2d`), residual blocks, `weight_decay`, transfer mechanics (`requires_grad=False`, param groups/two LRs), `F.interpolate`, torchvision model loading from committed weights |
+| Autoencoder interlude (after 9) | encoder–code–decoder reconstruction contract; PCA as a tied undercomplete linear autoencoder; projector rather than basis comparison; nonlinear/manifold reconstruction; denoising input–target contracts; convolutional autoencoders; transposed convolution as adjoint, not inverse; fixed-code versus variable-length-process distinction. `torch.linalg.svd` is a labeled Appendix A baseline preview and `nn.Tanh` a labeled ch. 10 activation preview. |
 | 10 | `nn.RNN`/`nn.LSTM` (+GRU eqs), BPTT, truncated chunks, `clip_grad_norm_`, `F.one_hot` (in models), sampling with temperature, `torch.multinomial` |
 | 11 | encoder–decoder, `nn.Embedding`, PAD/BOS/EOS, `pad_sequence`, `pack_padded_sequence`, `ignore_index`, teacher forcing/free-running, exposure bias, scheduled sampling (concept), greedy/beam search, length normalization |
 | 12 | kernels/bandwidth, Nadaraya–Watson, queries/keys/values, row-softmax over log-kernel scores, attention-weight matrices (fixed) |
@@ -123,10 +130,12 @@ optimizers or `backward()` before Chapter 5.
 | 16 | image patch tokens (`F.unfold` and stride-$P$ `nn.Conv2d` equivalence), ViT encoder classifier (learned image positions and `[CLS]`, pre-LN blocks), patch-size/attention-cost arithmetic, paired schedule-hash audits, CNN–ViT inductive-bias regimes; compound depth/width/resolution scaling, empirical power-law scaling, compute-optimal parameter/data allocation, Chinchilla joint loss fit |
 | 17 | hard/few-shot prompting and frozen-weight in-context learning; retrieval as a separate context path; soft prompts, prefix tuning, adapters, and BitFit; LoRA equations, initialization, rank-capacity, merge, and freeze audits; symmetric versus affine quantization, per-tensor versus per-row scales, PTQ/QAT/GPTQ/AWQ concepts; QLoRA, NF4, and double quantization; `nn.TransformerEncoderLayer` convenience wrapper |
 | 18 | response-masked SFT and instruction tuning; preference records and Bradley–Terry reward models; reward-shift and cyclic-consistency audits; reward model versus value function; finite KL-regularized Gibbs policy; PPO old-policy versus fixed-reference anchors; proxy-coverage audit; DPO reference-relative margin and exact finite identity; alignment evaluation contracts and model cards |
-| 19 | PCA and rank-$k$ reconstruction; deterministic autoencoders; bottleneck and manifold audits; Gaussian latent-variable models; ELBO and reparameterization; GAN minimax games and Jensen–Shannon divergence; diffusion schedules, noise prediction, score, and reverse sampling; generative evaluation contracts |
+| 19 | Gaussian latent-variable models; ELBO and reparameterization; GAN minimax games and Jensen–Shannon divergence; diffusion schedules, noise prediction, score, and reverse sampling; generative evaluation contracts |
+| 20 | multimodal paired supervision; separate encoders into normalized shared coordinates; cosine score matrices; symmetric batch contrastive/InfoNCE-style loss; cross-modal Recall@$k$; text-prototype zero-shot classification; retrieval-versus-generation and pair/candidate evaluation contracts |
 | A | matrix maps and affine bias; span, rank, orthogonality, projectors; `torch.linalg.solve`, `lstsq`, conditioning, `eigh`/SVD contracts, low-rank approximation, batched SVD, centered PCA |
 | B | six-part tensor contract; book-wide axis dictionary; `nn.Linear` row batches; broadcasting; `expand`/`repeat`; views, strides, contiguity; batched `@`/`einsum`; indexing, masks, and dtype-aware factories |
 | C | binary floating-point range and resolution; `torch.finfo`/`nextafter`; rounded-away updates, cancellation, stable softmax, and log-domain products; mixed-precision and loss-scaling contracts; operational intensity, Roofline bounds, and ridge points; I/O-aware exact attention and online softmax; performance-measurement contracts |
+| D | book-wide typography, decorations, index/dimension dictionary, recurring tensor shapes, probability/optimization roles, and four-question notation audit |
 
 ## 4. His signature analogies (use them; don't invent competitors)
 
@@ -138,5 +147,6 @@ superhighway (ch. 5/9/10 relay), ball rolling (momentum), house-and-foundation
 movement, Appendix C), "Okay, so —" (recaps), "what if X were
 learnable?" (the book's refrain — every part pivots on it), “train a judge, then try
 to please the judge” (reward model then policy, ch. 18), model card as nutritional
-label (ch. 18), and “PCA on steroids” (nonlinear autoencoders bend the reconstruction
-class, ch. 19).
+label (ch. 18), the job interview for tuned contenders (experimentation interlude), and
+“PCA on steroids” (nonlinear autoencoders bend the reconstruction class, autoencoder
+interlude).

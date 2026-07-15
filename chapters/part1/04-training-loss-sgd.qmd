@@ -106,6 +106,7 @@ in what we will call the **region of confusion**:
 
 ```{python}
 #| label: fig-sgd-zones
+#| fig-alt: "On the same nested loss contours, the full-batch path approaches the optimum smoothly while the mini-batch path jitters and loops around the optimum after making similar early progress."
 #| fig-cap: "Full-batch descent (blue) against mini-batch SGD (orange, $B = 4$) on the same landscape. Far out, the noisy steps agree with the true direction; near the optimum they scatter — the region of confusion."
 #| code-summary: "Code: GD vs. SGD paths"
 import torch
@@ -160,6 +161,7 @@ overshoots the valley and diverges.
 
 ```{python}
 #| label: fig-lr
+#| fig-alt: "Three log-loss curves separate by learning rate: the smallest declines slowly, the middle rate falls rapidly to a floor, and the largest oscillates upward instead of converging."
 #| fig-cap: "Same problem, same steps, three learning rates. Too small crawls; too large overshoots back and forth and climbs; the middle one converges quickly."
 #| code-summary: "Code: the learning-rate triptych"
 def losses_for(lr: float, steps: int = 60) -> list[float]:
@@ -258,6 +260,7 @@ supplies gradients for the race; @sec-05-backpropagation opens that box next.
 
 ```{python}
 #| label: fig-race
+#| fig-alt: "On a logarithmic loss axis over the same step budget, Adam falls quickly toward the floor, momentum damps its early oscillation and outruns plain SGD, and plain SGD decreases most slowly."
 #| fig-cap: "The optimizer race on an ill-conditioned valley (feature scales 1 and 10), with an equal step budget and optimizer-appropriate learning rates ($0.003$ for SGD/momentum, $0.1$ for Adam). Plain SGD crawls along the shallow direction; momentum damps the zigzag; Adam's per-parameter scaling largely neutralizes the conditioning."
 #| code-summary: "Code: the optimizer race"
 torch.manual_seed(6050)
@@ -298,10 +301,12 @@ whispers a practical lesson from the live session: much of this valley's narrown
 from unscaled features $\rightarrow$ *normalize your inputs* and you fight the optimizer
 less (Exercise 5).
 
-## Two regularizers that live inside training
+<!-- NOVEL: needs sign-off -->
+## Three regularizers that live inside training
 
-Two ideas from @sec-01-linear-regression reappear here as training-loop citizens rather
-than loss-function algebra.
+Regularization can act on the update, the hidden computation, or the duration of
+training. Ridge from @sec-01-linear-regression returns as a training-loop citizen; the
+other two mechanisms make their contracts explicit here.
 
 **Weight decay.** Under plain SGD, adding an $L_2$ penalty is equivalent (up to whether
 the coefficient is written as $\lambda$ or $\lambda/2$) to one extra shrinkage term:
@@ -313,25 +318,89 @@ trajectory as multiplicative shrinkage. **AdamW** decouples the decay step expli
 Also, training recipes often exempt bias and normalization parameters rather than
 shrinking every parameter indiscriminately.
 
+<!-- NOVEL: needs sign-off -->
+**Dropout.** Weight decay changes the update. Dropout changes the network that receives
+the update. Let $h_i$ be one hidden activation, let $p$ be its drop probability, and
+write $q=1-p$ for the probability that it survives. During training, **inverted
+dropout** draws an independent mask $r_i\sim\operatorname{Bernoulli}(q)$ and sends
+
+$$
+\widetilde{h}_i = \frac{r_i}{q}h_i
+$$ {#eq-inverted-dropout}
+
+to the next layer. A dropped activation becomes zero; a surviving activation is scaled
+by $1/q$. The scaling is not cosmetic. Conditional on the unmasked activation,
+
+$$
+\E[\widetilde{h}_i\mid h_i]
+= \frac{\E[r_i]}{q}h_i
+= h_i.
+$$ {#eq-dropout-expectation}
+
+The training-time signal therefore has the same first moment as the full signal, while
+each step sees a different thinned network. At evaluation time we remove the masks and
+use $h_i$ itself. PyTorch's `nn.Dropout(p)` implements exactly this convention;
+`model.train()` turns masking on and `model.eval()` turns it off throughout the model.
+This train/evaluation asymmetry is part of dropout's definition, not an optional
+speed setting.
+
+Here is the mechanism written directly, followed by a small seeded check. The empirical
+training mean is close to the input, while evaluation is deterministic and leaves the
+input unchanged:
+
+```{python}
+#| label: dropout-check
+#| code-summary: "Code: implement inverted dropout and verify its scale"
+def inverted_dropout(
+    h: torch.Tensor, p: float, training: bool = True
+) -> torch.Tensor:
+    if not training:
+        return h
+    if not 0.0 <= p < 1.0:
+        raise ValueError("p must satisfy 0 <= p < 1")
+    q = 1.0 - p
+    mask = (torch.rand_like(h) < q).to(h.dtype)
+    return mask * h / q
+
+torch.manual_seed(6050)
+h = torch.tensor([1.0, -2.0, 4.0, 0.5])
+draws = torch.stack([inverted_dropout(h, p=0.25) for _ in range(20_000)])
+mean_output = draws.mean(0)
+print("training mean:", [round(v, 4) for v in mean_output.tolist()])
+print(f"max |mean - h|: {(mean_output - h).abs().max():.4f}")
+print("evaluation:", inverted_dropout(h, p=0.25, training=False).tolist())
+```
+
+There is a useful **ensemble intuition** here, with an important calibration. Training
+shares weights across many masked subnetworks; evaluation uses one full network whose
+activation scale matches their mean. That can resemble averaging many related
+predictors. It is not an exact ensemble identity, because nonlinear layers and shared
+weights prevent the output of the full network from being the literal average of all
+masked-network outputs.
+
 **Early stopping.** Track the validation loss during training and stop when it turns
 upward, even though the training loss is still falling:
 
 ![Training error keeps falling; validation error turns. Stopping at the turn is regularization by clock — no penalty term required.](../../figures/generated/1_1_lin_Recap-fig08.svg){#fig-early-stop width=70%}
 
-Both are cheap, both are everywhere, and both are previews: the full story of *why*
-constraining training improves generalization is the business of
-@sec-06-generalization-inductive-bias.
+<!-- NOVEL: needs sign-off -->
+All three are common, inexpensive relative to training the model, and previews: the
+full story of *why* constraining or randomizing training can improve generalization is
+the business of @sec-06-generalization-inductive-bias.
 
 ## Okay, so — the training loop
 
+<!-- NOVEL: needs sign-off -->
 Assemble the chapter into the loop you will run, in some form, for the rest of the book:
 
 1. Start from (well-initialized) random parameters.
 2. For each epoch: shuffle, split into mini-batches of size $B$.
-3. For each batch: forward pass $\rightarrow$ loss (your noise model in disguise)
+3. For each batch: training-mode forward pass (including dropout, if used)
+   $\rightarrow$ loss (your noise model in disguise)
    $\rightarrow$ backward pass for the gradients $\rightarrow$ optimizer step
    ($\alpha$, momentum or Adam, weight decay).
-4. Watch the validation curve; schedule the learning rate; stop early when it turns.
+4. Switch to evaluation mode for validation; watch the curve, schedule the learning
+   rate, and stop early when it turns.
 
 One box in that loop is still magic: "backward pass for the gradients." Computing
 millions of partial derivatives at the cost of roughly one extra forward pass is the
@@ -351,6 +420,9 @@ subject of @sec-05-backpropagation.
 - [Loshchilov and Hutter, “Decoupled Weight Decay Regularization”
   (2019)](https://openreview.net/forum?id=Bkg6RiCqY7) explains precisely why coupled
   $L_2$ regularization and weight decay separate under adaptive optimizers.
+- [Srivastava et al., “Dropout: A Simple Way to Prevent Neural Networks from
+  Overfitting” (2014)](https://www.jmlr.org/papers/v15/srivastava14a.html) introduces
+  dropout and its model-averaging motivation.
 
 ## Exercises {.unnumbered}
 
@@ -370,3 +442,7 @@ subject of @sec-05-backpropagation.
 5. **(Code.)** Standardize the race's features (divide each column of `Xr` by its
    standard deviation) and rerun all three optimizers. How much of Adam's advantage
    evaporates? State the practical moral in one sentence.
+6. **(Pencil and code.)** From @eq-inverted-dropout, show that
+   $\operatorname{Var}(\widetilde{h}_i\mid h_i)=p h_i^2/(1-p)$. Estimate that variance
+   for $p\in\{0.1,0.5,0.9\}$ using the seeded check. What happens to signal noise as
+   $p$ approaches one, and what evaluation bug appears if masking is left on?

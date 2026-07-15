@@ -1,7 +1,7 @@
 # Continuing the Book — Handoff & Roadmap
 
-*Written 2026-07-09 after Chapter 11 shipped; updated 2026-07-15 after Appendix C
-shipped. This is the master handoff document:
+*Written 2026-07-09 after Chapter 11 shipped; updated 2026-07-15 for the structural and
+course-alignment pass. This is the master handoff document:
 everything a fresh collaborator (human or Claude session, on any account) needs to
 continue the project without the original conversation history. Read `CLAUDE.md`
 (repo root) first for environment setup; read this second; read
@@ -20,8 +20,10 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 | II · Vision | 7–9 | **Shipped; repair pass complete and verified** (July 11, 2026) |
 | III · Sequences | 10–11 | **Shipped; repair pass complete and verified** (July 11, 2026) |
 | IV · Attention | 12–16 | **Shipped and two-format verified** (July 13, 2026) |
-| V · Pretrained Era | 17–19 | **Shipped and two-format verified** (July 14, 2026) |
-| Appendices | A–D | **A–C shipped and two-format verified**; D remains the Notation stub |
+| V · Pretrained Era | 17–20 | **Shipped and two-format verified** (July 15, 2026; ch. 19 revised, ch. 20 added) |
+| Unnumbered bridges | Experimentation/HPO after ch. 6; PCA/autoencoders after ch. 9 | **Shipped and two-format verified** (July 15, 2026) |
+| Epilogue | The Question Is Yours | **Shipped and two-format verified** (July 15, 2026) |
+| Appendices | A–D | **Shipped and verified** (Appendix D completed July 15, 2026) |
 
 **Milestone 1** (Part I complete + skeleton) is met. The July 11 quantitative,
 mathematical, licensing, evaluation-hygiene, and two-format repair pass over Chapters
@@ -30,6 +32,39 @@ match across formats, and selected figures were visually verified. Chapter 12 is
 complete, with its fixed-kernel experiments pre-tested, frozen in both formats, and
 verified in the full-book PDF. The author's own edit pass remains a separate gate rather
 than a condition of either release.
+
+The July 15 course-alignment pass adds two unnumbered bridges without renumbering any
+chapter or changing existing chapter URLs. **Who Trains the Trainer? Learning by
+Experiment** restores Module 3's empirical-science, HPO, and ablation spine. Its paired
+Fashion study separates fixed-recipe effects from a tuned comparison. Across the four
+predeclared shared learning rates, BatchNorm minus no BatchNorm is +22.800 percentage
+points (paired SD 1.643) at 0.003, +10.200 (SD 1.681) at 0.01, +4.200 (SD 1.681) at
+0.03, and -1.200 (SD 3.402) at 0.1. It is +0.300 (SD 1.095) after per-design
+validation tuning and -1.267 (SD 1.146) on the locked, already-opened shared endpoint.
+The reversal earns no winner; it teaches estimands, interactions, seed panels,
+budgeted search, validation overtuning, and the experiment ledger.
+
+**Making PCA Learnable** restores Module 6's intended order before recurrence:
+fixed-size contract → PCA as a tied linear autoencoder → gradient-trained projector →
+nonlinear curved reconstruction → convolutional/denoising autoencoders → the one-shot
+encoder's variable-length limitation → Chapter 10's shared state update. The original
+five-seed curve audit moved intact from Chapter 19. A new 16-dimensional-code convolutional
+autoencoder experiment uses 900 fit/300 validation/600 reused endpoint images. Plain
+clean training reaches mean clean/noisy endpoint MSE 0.020701/0.033263; denoising
+training reaches 0.026294/0.023810. The changed input–target contract changes the learned
+behavior. A separate
+FP64 check verifies transposed convolution's adjoint identity; the prose explicitly
+rejects the common “inverse convolution” interpretation.
+
+The same pass adds inverted dropout and train/evaluation mode to Chapter 4, names data
+augmentation as data-side inductive bias in Chapter 6, completes Appendix D's actual
+notation/shape contract, and adds the unnumbered epilogue. The release repair changes
+PDF `\vect`/`\matr` to `\symbf` and HTML MathJax to `\boldsymbol`, removes manual part
+numerals, completes all recap titles, and labels Chapter 15's pretraining-family table.
+The July 15 refresh executed all 28 book units in both formats, regenerated 26
+HTML/TeX freeze pairs, and matched all 127 printed-output blocks. A frozen full render,
+the 506-page PDF, and browser asset/alt/layout checks passed; publication remains the
+normal `main` → `gh-pages` operational step.
 
 Chapter 13 is also complete: additive and scaled dot-product attention are derived,
 source-padding masking is exercised, and the Chapter 11 date benchmark has a
@@ -97,20 +132,29 @@ natural-language alignment results. Both execution freezes, all seven original
 figures, browser layout/assets, and the complete PDF chapter range passed QA before
 publication.
 
-Chapter 19 is complete: it harvests “A judge is not a generator” and the saved Module
-6 autoencoder spine, then connects PCA, deterministic autoencoders, VAEs, GANs, and
-diffusion through explicit sampling, training, and evaluation contracts. Its provenance
-is pinned to the Module 6 spine and transcript, sanitized Module 6/12 source snapshots,
-and primary papers; all executable studies and seven figures are book-original. On the
-curved-data audit, PCA and the tied linear autoencoder both have held-out MSE 0.100000,
-while the five-seed nonlinear mean is 0.000002815 (SD 0.000001223) with mean absolute
-latent correlation 0.992802 (SD 0.005513). The scalar Gaussian audit pins log evidence
--1.602093 and a mismatched-ELBO gap of 0.931250, exactly equal to posterior KL. The
-finite GAN audit separates covered/collapsed JSD 0.003253/0.183270 and exposes the
-0.002473-versus-0.997527 saturating/non-saturating gradient magnitudes. In the scalar
-diffusion study, time conditioning reaches noise MSE 0.429707, central mass 0.019470,
-and Wasserstein distance 0.058570, versus 0.750634/0.222760/0.375321 without time. The
-chapter makes no natural-image or hardware claim; both formats are verified.
+Chapter 19 is retitled **Generative Models: From Codes to Samples** and now begins at
+the point the earlier autoencoder interlude promised: a code is not yet a distribution.
+It harvests “A judge is not a generator,” then compares VAEs, GANs, and diffusion
+through explicit sampling, training, and evaluation contracts. The scalar Gaussian
+audit pins log evidence -1.602093 and a mismatched-ELBO gap of 0.931250, exactly equal
+to posterior KL. The finite GAN audit separates covered/collapsed JSD
+0.003253/0.183270 and exposes the 0.002473-versus-0.997527 saturating/non-saturating
+gradient magnitudes. In the scalar diffusion study, time conditioning reaches noise
+MSE 0.429707, central mass 0.019470, and Wasserstein distance 0.058570, versus
+0.750689/0.223490/0.379806 with the identical network's time channel zeroed. The five remaining figures and executable
+studies are book-original finite CPU mechanism tests—not natural-image or hardware
+claims. Both execution freezes, the five figures, browser asset/layout checks, and the
+complete PDF chapter range passed the July 15 integrated verification.
+
+Chapter 20, **Multimodal Learning: One Space, Two Views**, closes Module 12's remaining
+book gap. It turns Chapter 2's scores-to-weights machine into a symmetric cross-modal
+contrastive objective, separates retrieval from generation, and bounds text-prototype
+zero-shot classification by its candidate and prompt contract. Its five-seed paired
+study reaches held-out image-to-text/text-to-image Recall@1 of 0.9747/0.9660; a matched
+study-wide derangement reaches 0.0027/0.0027. The paired top-1 contrasts are
+0.9720/0.9633. These are finite synthetic mechanism results, not natural image–language
+benchmarks. Both execution freezes, the two figures, browser asset/alt/layout checks,
+and the complete PDF chapter range passed the July 15 integrated verification.
 
 Appendix A is complete: it consolidates matrix maps, affine bias, projection geometry,
 `solve`, `lstsq`, condition-number squaring, reduced and batched SVD, low-rank
@@ -144,18 +188,21 @@ Appendix C PDF range, both original figures, and browser layout passed QA. It co
 no GPU placeholder or unmeasured speedup.
 
 **Decisions still gated on the author:**
-- The author's own edit pass over Chapters 1–19 remains pending.
-- Course-site integration was approved, implemented, and shipped July 11, 2026. It uses
-  a plural `bookChapters` field because modules and chapters do not map one-to-one;
-  only reviewed, substantive chapters are linked. The production build passes.
-  Chapters 12–19's course-site links wait for the author's edit pass.
+- The author's final prose/sign-off pass, including every `NOVEL` marker, remains a
+  separate gate even after this assessment-driven structural revision.
+- Course-site integration uses a plural `bookChapters` field because modules and
+  chapters do not map one-to-one. The July 15 pass adds the HPO and autoencoder
+  interludes plus Chapters 12–20 as primary module readings, keeps D2L alternatives,
+  fixes Module 7's prerequisite, and replaces the inaccurate NumPy-spine syllabus
+  language. A clean temporary install passes the production build; commit, deploy, and
+  live-link checks remain.
 - "Deeper dive" collapsed sections: piloted in ch. 6; his verdict pending ("let us
   get back to deeper dive later"). Do not retrofit chs. 1/5.
 - GPU experiments remain backlog-only until access is available. Do not publish
   placeholder callouts in chapters; run the queued experiments on Rivanna/Colab and
   fold real results back into the relevant chapters later.
 
-## 2. The working protocol (refined over chapters 7–19 and Appendices A–C)
+## 2. The working protocol (refined over chapters 7–20 and Appendices A–D)
 
 The single most important lesson of this project: **pre-test every experiment
 regime before writing a word of prose.** Roughly half of all planned experiments
@@ -333,10 +380,40 @@ These are precedents; when a new experiment misbehaves, check here first.
 | `data/squeezenet1_1-imagenet.pt` | torchvision SqueezeNet 1.1 ImageNet weights | upstream enum, URL, license note, and checksum in `data/README.md` |
 | (ch. 10 corpus) | the book's own chapters 1–9 | not a file — `glob("../part*/0*.qmd")` at render, code cells stripped |
 
-## 7. Roadmap: completed numbered chapters and remaining appendices
+## 7. Roadmap: completed manuscript units
 
-The numbered chapter sequence is complete; appendices remain opportunistic. Each
-chapter record preserves its source, harvest, experiment, and verification contract:
+The numbered sequence is complete through Chapter 20. The July 15 structural pass adds
+two unnumbered bridges, the multimodal continuation, and an epilogue while preserving
+every existing chapter number and URL. Each record preserves its source, harvest,
+experiment, and verification contract:
+
+### Interlude after ch. 6 — Who Trains the Trainer? Learning by Experiment
+- **Sources and provenance**: sanitized `sources/3-HPO-experimentation.tex`, the full
+  instructor HPO deck (SHA-256 `6deaf680...`), and the full September 18, 2025 live
+  VTT (SHA-256 `65a63bd...`). D2L-derived legacy planning files, product tutorials,
+  external assets, student dialogue, and unverified numerical claims are excluded.
+- **Content**: run/experiment/study; parameters versus hyperparameters; fixed-protocol
+  and tuned estimands; the instructor's job-interview analogy; controlled ablation and
+  interactions; search spaces, random search, successive halving, validation
+  overtuning, paired seeds, uncertainty naming, and the experiment ledger.
+- **Pinned study**: exact values and paired contrasts are recorded in §1 above. The
+  600-image benchmark is explicitly already opened by Chapter 6 and used only as a
+  decision-inert locked endpoint here—not relabeled as a sealed test.
+
+### Interlude after ch. 9 — Making PCA Learnable
+- **Sources and provenance**: Module 6 spine; SHA-pinned main, coding-6.2, and
+  coding-6.3 transcripts; sanitized `sources/6-AE-slides.tex`; primary linear- and
+  denoising-autoencoder papers. D2L-linked transposed-convolution code and external
+  figures do not cross the boundary.
+- **Content and harvest**: restores PCA → gradient-trained tied linear autoencoder →
+  nonlinear manifold map (“PCA on steroids”) → convolutional/denoising autoencoder →
+  one-shot/variable-length boundary. Chapter 10 now harvests that boundary by name;
+  Chapter 11 recalls the static encoder–decoder contract; Chapter 19 harvests “a code
+  is not yet a distribution.”
+- **Pinned studies**: the moved curve/projector/decoder-ambiguity audits and the new
+  Fashion denoising experiment are recorded in §1 above. `torch.linalg.svd` and
+  `nn.Tanh` are labeled previews; transposed convolution is verified as an adjoint,
+  never called an inverse.
 
 ### Ch. 12 — Kernel Regression: Attention Before It Was Learnable (SHIPPED)
 - **Seeds**: `sources/8.1-Attention.tex` (the "Kernel Regression: The Conceptual
@@ -560,26 +637,14 @@ chapter record preserves its source, harvest, experiment, and verification contr
   PDF chapter range passed QA.
 - **Forward seed planted**: “A judge is not a generator” into ch. 19.
 
-### Ch. 19 — Generative Models: From PCA to Diffusion (SHIPPED)
-- **Seeds and provenance**: Module 6's `MODULE_NOTES.md` spine #4–8 at pinned
-  course-code commit, its SHA-pinned lecture transcript, and sanitized public snapshots
-  `sources/6-AE-slides.tex`, `sources/12.diffusion.tex`,
-  `sources/12.2S-Diffusion.tex`, `sources/12.3S-VAE.tex`, and
-  `sources/12.4S-GAN.tex`; primary PCA/denoising-AE/VAE/GAN/diffusion/latent-diffusion
-  papers. Course-deck code, D2L-linked code, external figures, and product-era
-  comparisons were not reproduced; all eight executable cells and seven figures are
-  book-original.
+### Ch. 19 — Generative Models: From Codes to Samples (REVISED)
+- **Seeds and provenance**: sanitized Module 12 VAE/GAN/diffusion snapshots and primary
+  VAE, GAN, diffusion, score-model, and latent-diffusion papers. Module 6's
+  representation-learning ownership moved to the earlier autoencoder interlude.
+  Course-deck code, external figures, and product-era comparisons are not reproduced.
 - **Harvests completed by name**: ch. 18's “A judge is not a generator” separates
-  completed-sample evaluation from the law that produces samples. The saved m06
-  autoencoder spine closes through PCA as a linear autoencoder, the bottleneck,
-  nonlinear curved reconstruction, and the manifold-learning qualification.
-- **Reconstruction audits**: on alternating held-out points from a planted curve,
-  rank-one PCA and the tied linear autoencoder both have MSE 0.100000 and their
-  projectors agree to displayed precision. Across seeds 6050–6054, the nonlinear
-  autoencoder has mean MSE 0.000002815 (SD 0.000001223) and mean absolute code-to-curve
-  correlation 0.992802 (SD 0.005513). A separate three-code construction proves that
-  zero reconstruction error does not identify either a decoder away from observed
-  codes or a latent sampling law.
+  completed-sample evaluation from the law that produces samples; the interlude's “a
+  code is not yet a distribution” leads immediately to an explicit latent law.
 - **Pinned VAE and GAN identities**: the scalar Gaussian model has posterior
   mean/variance 0.882353/0.264706 and log evidence -1.602093. A mismatched posterior's
   ELBO is -2.533343; the 0.931250 evidence gap exactly equals its posterior KL. In the
@@ -592,16 +657,46 @@ chapter record preserves its source, harvest, experiment, and verification contr
   coefficient 0.997186662055; iterative and direct noising agree to floating-point
   precision, and the exact $t=1$ posterior-variance branch adds no noise. Across five
   seeds, time conditioning yields noise MSE 0.429707 (SD 0.000927), generated standard
-  deviation 2.062095, central mass 0.019470, and Wasserstein distance 0.058570. Removing
-  time raises MSE/central mass/Wasserstein distance to 0.750634/0.222760/0.375321.
-- **Evaluation and verification state**: the chapter separates fidelity, coverage,
-  memorization, condition adherence, distributional fit, sampling cost, seed
-  uncertainty, and data/use context. The experiments are finite CPU mechanism tests,
-  not natural-image or hardware claims. Both execution freezes are present and their
-  printed outputs match exactly; the two-format book render is verified.
-- **Forward seed harvested**: “a small schedule coefficient is not a zero coefficient”
-  is now gathered in Appendix C, distinguishing mathematical smallness, underflow,
-  and a rounded-away update.
+  deviation 2.062095, central mass 0.019470, and Wasserstein distance 0.058570. Zeroing
+  the identical 4,417-parameter network's time channel raises MSE/central
+  mass/Wasserstein distance to 0.750689/0.223490/0.379806.
+- **Verification state**: the chapter separates fidelity, coverage, memorization,
+  condition adherence, distributional fit, sampling cost, seed uncertainty, and
+  data/use context. Its five figures and remaining experiments are finite CPU mechanism
+  tests, not natural-image or hardware claims. HTML and TeX stdout match exactly;
+  both-format execution, the frozen full-book render, browser asset/layout checks, all
+  five figures, and the complete PDF chapter range passed QA.
+
+### Ch. 20 — Multimodal Learning: One Space, Two Views (NEW)
+- **Seeds and provenance**: sanitized `sources/12.1S-Multimodal.tex`, traced to the
+  instructor's Module 12.1 and 12.0 decks by SHA-256. The transcript archive has no
+  matching Module 12 recording. Deck code, external images, product examples,
+  benchmark tables, and D2L material are excluded; equations and implementation are
+  independently derived from the instructor spine and primary contrastive-learning
+  papers.
+- **Harvests completed by name**: Chapter 2's scores-to-weights machine becomes row-
+  and column-wise contrastive classification; Chapter 1's normalized dot product
+  becomes cross-modal cosine similarity; Chapter 17's zero-shot terminology is bounded
+  by a declared description set. Retrieval is explicitly separated from generation.
+- **Pinned paired study**: 1,200 synthetic paired views split into 720 fit, 180
+  validation, and 300 endpoint rows held out from model, hyperparameter, checkpoint,
+  stopping, and analysis-design decisions. Across seeds 6050–6054, paired
+  training reaches held-out image-to-text/text-to-image Recall@1 0.9747 (SD 0.0038) /
+  0.9660 (SD 0.0092); one study-wide fixed derangement reaches 0.0027 (SD 0.0028) /
+  0.0027 (SD 0.0043). Paired contrasts are 0.9720 (SD 0.0038) / 0.9633 (SD 0.0105), while paired
+  Recall@5 is 1.0000 in both directions. The experiment is a finite cross-view
+  mechanism test, not a CLIP/ALIGN benchmark.
+- **Verification state**: scratch execution, parser checks, and both execution freezes
+  pass with byte-identical printed outputs. The frozen full-book render, both figures,
+  browser asset/alt/layout checks, and the complete PDF chapter range passed QA.
+
+### Epilogue — The Question Is Yours
+- Replays the five-rung learnability ladder in one original figure, names objective,
+  data, and evaluation as choices no architecture makes for us, gathers the
+  experimentation discipline, marks roads outside scope, and hands the core question
+  back to the reader. It is unnumbered and carries no new examinable mechanism.
+- Both execution freezes, the figure, browser layout, and the complete PDF range passed
+  QA in the integrated July 15 build.
 
 ### Appendices
 - **Appendix A — Linear Algebra and the SVD (SHIPPED):** sanitized
@@ -621,9 +716,12 @@ chapter record preserves its source, harvest, experiment, and verification contr
   analysis; exact tiled online attention and a FlashAttention recap; seven cells, two
   original figures, two exact freezes, and full PDF/browser QA passed. Roofline values
   are explicitly synthetic and no hardware-runtime claim is made.
-- **Appendix D — Notation:** stub remains. Its future inventory must be derived from
-  `tex/macros.tex`, `mathjax-config.html`, and actual manuscript usage rather than the
-  nonexistent legacy `sources/notation.tex` reference.
+- **Appendix D — Notation (SHIPPED):** derived directly from
+  `tex/macros.tex`, `mathjax-config.html`, and actual manuscript usage. It records
+  typography, decorations, index/dimension roles, recurring dense/image/sequence/
+  attention shapes, probability and optimization conventions, and a four-question
+  notation audit. The old public stub/warning is gone; its HTML layout and complete PDF
+  range passed QA.
 
 ## 8. Document map
 

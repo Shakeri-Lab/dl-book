@@ -30,6 +30,20 @@ When adding a snapshot:
 3. Record any permissively licensed material retained in `THIRD_PARTY_NOTICES.md` and
    cite it at the point of use.
 
+## Module 3 experimentation snapshot
+
+- `3-HPO-experimentation.tex` preserves the instructor-authored empirical-science,
+  nested HPO, ablation, interaction, budgeted-search, seed-panel, and experiment-ledger
+  spine from the Module 3 HPO deck and its live-session transcript. The local preamble,
+  diagrams, executable and product-specific code, external assets, student dialogue,
+  private course details, unverified benchmark numbers, release-current tool claims,
+  and strong edge-of-stability-to-generalization claims are omitted.
+
+The older Module 3 planning files contain explicit D2L-derived passages and code and
+are not snapshotted. The book's Fashion-MNIST implementation, estimand formalization,
+results, and figures are independently written and pre-tested; primary HPO and model-
+selection papers are cited directly at the point of use.
+
 ## Module 11 alignment snapshots
 
 - `11.4-reinforcement-learning.tex` preserves the short SFT, reward-model, RLHF,
@@ -49,7 +63,7 @@ The snapshots retain primary-paper citations and instructor-authored equations f
 traceability. Their boundary notices make clear that technical and empirical claims
 must still be independently checked before they enter the book.
 
-## Modules 6 and 12 generative-model snapshots
+## Module 6 autoencoder and Module 12 generative-model snapshots
 
 - `6-AE-slides.tex` preserves the Module 6 autoencoder lecture spine, including the
   encoder--decoder contract, the linear-autoencoder connection to PCA, reconstruction
@@ -79,6 +93,23 @@ must still be independently checked before they enter the book.
 Each snapshot begins with the exact machine-local upstream path and its SHA-256 digest.
 These files are provenance records only: book prose, derivations, code, experiments,
 and figures must be produced and verified independently.
+
+## Module 12 multimodal snapshot
+
+- `12.1S-Multimodal.tex` records the instructor's two-encoder joint-embedding spine,
+  cosine-score matrix, directional and symmetric contrastive objectives, retrieval,
+  bounded zero-shot classification procedure, retrieval-versus-generation boundary,
+  and evaluation questions. The Module 12 course archive contains no corresponding
+  recorded-video transcript, so the snapshot names and hashes both the dedicated
+  12.1 slide deck and the matching multimodality section of the longer 12.0 article.
+  The local preamble, diagrams, external images, product examples, executable code,
+  Colab links, model surveys, unverified benchmark numbers, and categorical claims
+  about cognition, scale, robustness, generalization, or social impact are omitted.
+
+Chapter 20's mathematical derivation, synthetic paired-data study, typed PyTorch,
+figures, and evaluation contract are independently produced. No lecture-deck code,
+external asset, third-party model implementation, runtime download, or D2L material
+is reproduced.
 
 ## Appendix A and B topic-map snapshots
 
