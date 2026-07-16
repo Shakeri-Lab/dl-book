@@ -1,0 +1,2908 @@
+# Linear Regression, the Mother Model {#sec-01-linear-regression}
+
+
+
+The core task of everything we will do in this course is to teach a computer to learn a
+function from examples. Before we can appreciate what is *deep* about deep learning, we
+need one complete, honest example of learning — a model, a loss, and a way to improve.
+Linear regression is that example. It is the smallest model that contains the entire
+supervised learning story, and by the end of this chapter we will have built it three
+times: once in closed form, once by gradient descent, and once the way you will build
+everything else in this book — with PyTorch modules. All three will agree, and you will
+know exactly why.
+
+## Learning from examples
+
+We start with a dataset of examples,
+
+$$
+\mathcal{D} = \{(\vect{x}_i, y_i)\}_{i=1}^{n},
+$$
+
+where each $\vect{x}_i \in \R^d$ is an input with $d$ features and $y_i$ is the desired
+output — the *supervision signal*. Stack the inputs as rows and you get the data matrix
+$\matr{X} \in \R^{n \times d}$: $n$ samples down, $d$ features across, with the targets
+collected in a vector $\vect{y}$.
+
+Our goal is a flexible function $f$ such that
+
+$$
+f(\vect{x}_i) \approx y_i \quad \text{and, crucially, } f \text{ generalizes to unseen data.}
+$$
+
+That second clause is the whole game. We do not care how well $f$ recites the training
+examples; we care how it behaves on a new $\vect{x}$ it has never seen — one drawn from
+the same distribution as the training data.
+
+::: {.callout-note}
+## Supervised learning, three flavors
+
+The range of $y$ decides the task and, as we will see, the natural loss:
+
+| Task | Range of $y$ | Typical loss |
+|---|---|---|
+| Regression | $\R$ | Mean squared error |
+| Classification | $\{0, \dots, C-1\}$ | Cross-entropy |
+| Structured prediction | sequences, images, graphs | task-specific |
+
+This chapter is regression; @sec-02-logistic-softmax handles classification with the
+same machinery.
+:::
+
+### Why is this hard?
+
+This task sounds simple, but it is fundamentally hard: for any finite set of examples,
+there are *infinitely many* functions that fit them perfectly. We want the one that is
+most suited to our problem $\rightarrow$ the learning algorithm needs a nudge in the
+right direction. That guiding assumption is called its **inductive bias**, and it is a thread
+we will pull on for the rest of the book.
+
+- A **linear model** has a *strong* bias: it assumes the world is linear. Simple and
+  stable, but systematically wrong when the data is not linear (high bias, low variance).
+- A **deep neural network** has a *weak* bias. Its flexibility lets it learn complex
+  patterns, but it can memorize the training data instead of the underlying rule
+  (low bias, high variance). Some networks can memorize an entire training set — and
+  then perform poorly the day you deploy them.
+
+The key to modern deep learning is to use a flexible model and fight overfitting with
+data, regularization, and (the deepest idea of all) inductive biases matched to the
+task. That last idea gets its own chapter (@sec-06-generalization-inductive-bias).
+
+To make any of this concrete, we parameterize a family of functions $f_{\vect{w}}$ by a
+set of tuning parameters $\vect{w}$ — think of each parameter as a knob. *Learning* is
+finding a good setting $\hat{\vect{w}}$ of the knobs; *inference* is using
+$f_{\hat{\vect{w}}}$ to predict on unseen data. That is the vocabulary we will use all
+course.
+
+## The linear model and its geometry
+
+Linear regression assumes a linear relationship:
+
+$$
+y = \vect{w}^\top \vect{x} + b .
+$$
+
+Geometrically, $\vect{w}$ sets the orientation (the slope) of a hyperplane, and the
+bias $b$ shifts it away from the origin. In two dimensions this is the familiar line
+through a scatter of points; in $d$ dimensions it is a $d$-dimensional plane, but nothing
+about the algebra changes.
+
+
+There is a second way to read $\vect{w}^\top\vect{x}$, and it may be the most important
+sentence in this chapter: **a dot product is a similarity score.** More precisely,
+
+$$
+\vect{w}^\top\vect{x} = \norm{\vect{w}}_2\norm{\vect{x}}_2\cos\theta .
+$$
+
+For normalized vectors it measures directional similarity directly: positive when
+$\vect{x}$ points along $\vect{w}$, zero when they are orthogonal, and negative when
+they oppose. Without normalization, the two norms also control the score, so a large
+dot product can mean strong alignment, large magnitude, or both. A linear model is
+therefore a learned *pattern scorer*: $\vect{w}$ is a template, and its direction and
+scale both matter. Keep this reading close at hand. In Part II, an image filter's
+response will be this same dot product slid across an image; in Part IV, *attention*
+will be built out of learned similarity scores between queries and keys. Both are this
+one primitive, asked the question we will ask all book long: *what if the template were
+learnable?*
+
+### The augmentation trick
+
+Carrying $b$ separately clutters the algebra, so we will often fold it into the weights:
+append a column of ones to the data matrix, making $\matr{X} \in \R^{n \times (d+1)}$,
+and append $b$ to the weight vector, making $\vect{w} \in \R^{d+1}$. Then
+
+$$
+y = \vect{w}^\top \vect{x} \qquad \text{(bias included)}.
+$$
+
+Whenever *we use this augmented notation*, a missing $b$ is living inside
+$\vect{w}$. Do not assume that every bias-free formula or software layer is augmented,
+however: a model can deliberately constrain $b=0$ (for example, PyTorch layers created
+with `bias=False`).
+
+## The loss: what makes a hyperplane "bad"?
+
+To find the best hyperplane we must first quantify error. The standard choice for
+regression is the **mean squared error (MSE)**:
+
+$$
+\loss(\vect{w}) \;=\; \frac{1}{n} \sum_{i=1}^{n} \bigl(y_i - \vect{w}^\top\vect{x}_i\bigr)^2
+\;=\; \frac{1}{n}\,\norm{\vect{y} - \matr{X}\vect{w}}_2^2 .
+$$ {#eq-mse}
+
+The loss is the guiding principle of training: it is how we tell the model *you are a
+bad model, and here is by how much*; the model then has to find a way to improve. The
+choice of loss is not arbitrary, and we will justify this one honestly at the end of the
+chapter.
+
+::: {.callout-tip}
+## The first "make it learnable" seed
+
+Look closely at $y = \vect{w}^\top\vect{x} + b$. A single neuron in a neural network
+computes *exactly this*, followed by a nonlinear squashing function
+$\sigma(\vect{w}^\top\vect{x} + b)$. Linear regression **is** a neuron with the identity
+activation. Everything we learn here — loss, gradients, optimization — transfers
+directly. The rest of this book is, in a precise sense, the story of what happens when
+we take this fixed, simple recipe and progressively let more of it be *learned*.
+:::
+
+## Finding the best weights, method 1: solve it exactly
+
+For this one special problem we can find the exact minimizer. Set the gradient of
+@eq-mse to zero and you get the **normal equations**:
+
+$$
+\hat{\vect{w}}_{\text{OLS}} = (\matr{X}^\top\matr{X})^{-1}\matr{X}^\top\vect{y} .
+$$ {#eq-normal}
+
+There is a picture behind this formula worth carrying for the rest of your career. Our
+predictions $\hat{\vect{y}} = \matr{X}\vect{w}$ can only ever live in the **column
+space** of $\matr{X}$ — the span of its feature columns. If the true $\vect{y}$ lies
+outside that space (it almost always does), the best we can do is **project** $\vect{y}$
+onto it. The leftover error $\vect{e} = \vect{y} - \hat{\vect{y}}$ is what our model
+cannot explain, and at the optimum it is *perpendicular* to the column space — no
+adjustment of the knobs can reduce it further.
+
+One more observation to file away: substituting @eq-normal back in gives
+$\hat{\vect{y}} = \matr{X}(\matr{X}^\top\matr{X})^{-1}\matr{X}^\top\vect{y}$, so the
+fitted predictions are a *weighted combination of the training targets* $\vect{y}$.
+Linear regression predicts by mixing the answers it has already seen. Hold that thought:
+in Part IV an entire architecture — attention — grows out of choosing such mixing
+weights by *similarity*.
+
+![The normal equations, geometrically: the optimal prediction $\hat{\vect{y}} = \matr{X}\hat{\vect{w}}$ is the projection of $\vect{y}$ onto the column space of $\matr{X}$; the residual $\vect{e}$ is orthogonal to it.](../../figures/generated/1_1_lin_Recap-fig06.svg){#fig-projection width=62%}
+
+Elegant. So why is this formula almost absent from deep learning? Two reasons. Solving
+it costs $O(d^3)$, which is hopeless when $d$ runs to millions or billions. And it only
+exists because the model is linear; the moment we add a nonlinearity, there is no closed
+form to solve. Our datasets are large and our models are not linear $\rightarrow$ we
+have neither luxury. We need another way.
+
+## Finding the best weights, method 2: walk downhill
+
+Here is the geometric intuition. Picture the loss as a landscape over the parameter
+space, and imagine standing on it *blindfolded*, trying to find the lowest valley. You
+cannot see the valley, but you can feel the slope under your feet. So you feel the
+slope, take a small step downhill, and repeat.
+
+The mathematical form of this hill-descending intuition is **gradient descent**:
+
+$$
+\vect{w}^{(t+1)} = \vect{w}^{(t)} - \eta \, \nabla_{\vect{w}} \loss\bigl(\vect{w}^{(t)}\bigr),
+$$ {#eq-gd}
+
+where the *learning rate* $\eta$ sets the step size. For the MSE loss the gradient has a
+clean closed form — with $\matr{X} \in \R^{n\times d}$, $\vect{w} \in \R^{d}$, and
+$\vect{y} \in \R^{n}$:
+
+$$
+\nabla_{\vect{w}} \loss(\vect{w}) = \frac{2}{n}\,\matr{X}^\top(\matr{X}\vect{w} - \vect{y})
+\;\in\; \R^{d}.
+$$ {#eq-gd-grad}
+
+
+
+This iterative loop (predict $\rightarrow$ measure the loss $\rightarrow$ feel the
+gradient $\rightarrow$ step) is exactly what modern deep learning frameworks automate,
+at billion-parameter scale. When the dataset itself is huge we will not even use all of
+it per step: a small random *batch* gives a good-enough gradient. That refinement
+(stochastic gradient descent) matters enough to get its own treatment in
+@sec-04-training-loss-sgd.
+
+## Build it three times
+
+Enough theory: let us implement linear regression, and let us do it in PyTorch. You
+have already built this in NumPy in earlier courses, so we will use it as an excuse to
+get comfortable with tensors, while still doing everything from scratch.
+
+::: {.callout-tip}
+## Coding hygiene
+
+Two habits worth forming from the very first cell: **fix your seeds** so runs are
+reproducible, and **annotate your functions with types** — not critical for Python to
+run, but it makes code readable and debugging far easier.
+:::
+
+
+
+First, synthetic data. We control the ground truth (the true weights and bias), so we
+can check whether each method actually recovers them.
+
+
+
+### Take 1: the closed form
+
+The normal equations, @eq-normal, on the *augmented* matrix (the column of ones carries
+the bias):
+
+
+
+Two lines, and we recover the truth up to the noise floor. Remember what this cost us:
+$O(d^3)$, and the special grace of a linear model. Now the method that scales.
+
+### Take 2: gradient descent, from scratch
+
+We write the model as a small class: a forward pass, manually derived gradients
+(@eq-gd-grad), and an update step. No autograd yet; we want to feel the mechanics once
+with our own hands.
+
+
+
+
+
+### Take 3: the framework way
+
+Finally, the idiom you will use for every model from here on: `nn.Linear` holds the
+knobs, autograd feels the slope for us, and the optimizer takes the step.
+
+::: {.callout-note}
+## A deliberate framework preview
+
+This cell shows the complete PyTorch training loop so you can recognize its shape. We
+use the three framework calls as black boxes here: @sec-03-nonlinearity-mlp introduces
+modules, @sec-04-training-loss-sgd opens the optimizer, and
+@sec-05-backpropagation explains what `backward()` computes. Until then, the manual
+implementation above is the chapter's working toolbox.
+:::
+
+
+
+Three implementations, one answer:
+
+
+
+## Why squared error? The maximum-likelihood view
+
+The MSE is not an arbitrary choice. Assume the data really is generated by a linear
+process plus Gaussian noise:
+
+$$
+y = \vect{w}^\top\vect{x} + b + \epsilon, \qquad \epsilon \sim \mathcal{N}(0, \sigma^2).
+$$
+
+Then the probability of seeing output $y$ given input $\vect{x}$ is a Gaussian centered
+on the model's prediction. **Maximum likelihood estimation** asks: which parameters make
+the observed data most likely? Take the log of the likelihood over all $n$ samples and
+the Gaussian's exponent comes down:
+
+$$
+\log \mathcal{L}(\vect{w}, b)
+= C - \frac{1}{2\sigma^2}\sum_{i=1}^{n}\bigl(y_i - (\vect{w}^\top\vect{x}_i + b)\bigr)^2 .
+$$
+
+Maximizing the log-likelihood is *exactly* minimizing the sum of squared errors. The
+loss encodes an assumption about the noise. This is a pattern to remember: when we meet
+cross-entropy in @sec-02-logistic-softmax, it will be the same story with a different
+distribution.
+
+## A first look at bias and variance
+
+Our learned predictor $\hat f_{\mathcal D}$ depends on the random training set
+$\mathcal D$. Collect a fresh dataset and you get a different prediction at the same
+input $\vect{x}$. Let $f^*(\vect{x}) = \E[Y\mid X=\vect{x}]$ be the noise-free
+regression function. Then the expected squared error on a fresh outcome at this fixed
+input decomposes into three parts:
+
+$$
+\E_{\mathcal D,Y}\!\left[(\hat f_{\mathcal D}(\vect{x})-Y)^2
+\mid X=\vect{x}\right]
+= \underbrace{\left(\E_{\mathcal D}[\hat f_{\mathcal D}(\vect{x})]
+-f^*(\vect{x})\right)^2}_{\text{Bias}^2}
++ \underbrace{\E_{\mathcal D}\!\left[
+(\hat f_{\mathcal D}(\vect{x})-\E_{\mathcal D}[\hat f_{\mathcal D}(\vect{x})])^2
+\right]}_{\text{Variance}}
++ \underbrace{\operatorname{Var}(Y\mid X=\vect{x})}_{\text{Irreducible noise}} .
+$$ {#eq-bias-variance}
+
+**Bias** measures how far the *average* prediction is from the truth, because of
+limiting assumptions like linearity: a simple model on complex data is systematically
+wrong (underfitting). **Variance** measures how much the prediction would change if we
+collected a fresh training set (the model's sensitivity to sampling noise); a complex
+model can fit the noise itself (overfitting). The **irreducible noise** is inherent to
+the data-generating process and cannot be learned away.
+
+![The classical picture: as model complexity grows, bias falls while variance rises; total error is U-shaped, with sweet spots between under- and overfitting.](../../figures/generated/1_1_lin_Recap-fig07.svg){#fig-bias-variance width=70%}
+
+This is why we split data into training, validation, and test: the model sees the
+training set, the validation set referees the bias–variance trade-off, and the test set
+stays untouched until the end.
+
+::: {.callout-warning}
+## The U-shaped curve is a cartoon, not a law of nature
+
+The textbook picture, validation error falling then rising as complexity grows, is a
+helpful first mental model, and you should have it. But bias and variance are not a
+mechanical see-saw. In classical fixed-dimensional, well-specified settings, variance
+often falls roughly like $1/n$ as data grows; that rate is not a universal law for
+modern models. Regularization and inductive biases matched to the task can buy capacity
+without exploding variance. Modern over-parameterized networks live in regimes where
+this cartoon bends in surprising ways; we will look at those pictures properly in
+@sec-06-generalization-inductive-bias.
+:::
+
+### Regularization, briefly
+
+One lever we can pull right now: penalize complexity in the loss itself. **Ridge
+regression** adds an $L_2$ penalty,
+
+$$
+\loss_\lambda(\vect{w}) = \frac{1}{n}\norm{\vect{y} - \matr{X}\vect{w}}_2^2
++ \lambda \norm{\vect{w}}_2^2,
+\qquad
+\hat{\vect{w}}_{\text{ridge}} = (\matr{X}^\top\matr{X} + n\lambda I)^{-1}
+\matr{X}^\top\vect{y},
+$$
+
+nudging the model toward smaller, more stable weights: a little more bias for a lot
+less variance. The factor $n$ is there because our data-fit term is a *mean*. This
+displayed solution applies when there is no intercept or when features and targets have
+been centered so the intercept is recovered separately. We normally do not penalize
+that intercept. In augmented-matrix notation, replace $I$ by
+$\operatorname{diag}(1,\ldots,1,0)$ so the final bias coordinate remains free.
+
+Let us see that, not just assert it. We build a problem designed to punish an
+unregularized model: 20 features of which only 5 matter, noisy targets, and (the cruel
+part) barely more samples than parameters. This is exactly the regime where variance
+explodes and regularization shines:
+
+
+
+OLS, with all its freedom and almost no data to discipline it, assigns large, confident,
+*wrong* weights to the 15 noise features — pure variance. Ridge shrinks everything and
+cuts the damage several-fold: a little bias, traded for a lot of variance. (Rerun this
+cell with `n = 100` and watch OLS become more stable, as classical fixed-dimensional
+theory predicts.) Ridge's $L_1$ cousin, **lasso**, can go further and zero out the
+irrelevant features entirely; we leave it to the exercises, because on the road ahead
+it is weight decay, the $L_2$ idea, that you will meet again and again.
+
+![Why the penalties behave differently: minimizing the loss subject to a weight budget. The spherical $L_2$ budget shrinks the solution toward the origin; the diamond-shaped $L_1$ budget has corners on the axes, so the solution tends to land where some coordinates are exactly zero (Exercise 5).](../../figures/generated/1_1_lin_Recap-fig09.svg){#fig-regularization width=55%}
+
+## Okay, so — what did we just build?
+
+We taught a computer a function from examples, completely:
+
+1. **A model family** — hyperplanes, parameterized by knobs $\vect{w}, b$ (with the
+   augmentation trick to fold $b$ into $\vect{w}$).
+2. **A loss** — MSE, which is maximum likelihood under Gaussian noise; the loss is how
+   we tell the model how bad it is.
+3. **An optimizer** — the exact projection when linearity permits, and gradient descent
+   (feel the slope, step downhill) when it does not, which is always from here on.
+4. **The generalization lens** — bias vs. variance, the data splits that referee them,
+   and regularization as a first counter-measure to overfitting.
+
+And one reframing that will carry the whole book: linear regression is a single neuron
+with the identity activation,
+
+$$
+\underbrace{y = \vect{w}^\top\vect{x} + b}_{\text{this chapter}}
+\quad \xrightarrow{\ \text{add a nonlinearity}\ } \quad
+\underbrace{y = \sigma(\vect{w}^\top\vect{x} + b)}_{\text{a neuron}} .
+$$
+
+First, in @sec-02-logistic-softmax, that squashing function turns our regressor into a
+classifier. Then, in @sec-03-nonlinearity-mlp, we stack neurons — and discover why the
+nonlinearity is not optional.
+
+## Sources and further reading {.unnumbered}
+
+- [Hoerl and Kennard, “Ridge Regression: Biased Estimation for Nonorthogonal
+  Problems” (1970)](https://doi.org/10.1080/00401706.1970.10488634) introduces the
+  biased estimator behind this chapter's stability trade-off and regularization
+  geometry.
+- [Belkin et al., “Reconciling Modern Machine-Learning Practice and the Classical
+  Bias–Variance Trade-Off” (2019)](https://doi.org/10.1073/pnas.1903070116) is the
+  promised next picture: why the classical U-curve can become double descent in
+  interpolating models.
+
+## Exercises {.unnumbered}
+
+1. **(Pencil.)** Derive the normal equations @eq-normal by expanding
+   $\norm{\vect{y}-\matr{X}\vect{w}}_2^2$, taking the gradient with respect to
+   $\vect{w}$, and setting it to zero. Where exactly does the assumption that
+   $\matr{X}^\top\matr{X}$ is invertible enter?
+2. **(Pencil.)** Repeat the derivation with the ridge penalty
+   $\lambda\norm{\vect{w}}_2^2$ and show the solution becomes
+   $(\matr{X}^\top\matr{X} + n\lambda I)^{-1}\matr{X}^\top\vect{y}$ when the data-fit
+   term is the MSE. Why does the $n\lambda I$ term guarantee invertibility for any
+   $\lambda > 0$? If you augment $\matr{X}$ with a bias column, which diagonal entry
+   should be zero so the intercept is not penalized?
+3. **(Code.)** In `make_synthetic_data`, raise `noise` to 1.0 and rerun all three
+   implementations 10 times with different seeds. How much do the learned weights vary
+   across runs? Which term of @eq-bias-variance are you watching?
+4. **(Code.)** Set the learning rate in `LinearRegressionScratch` to 1.0 and rerun.
+   Describe what the loss curve does, and explain it using the blindfolded-descent
+   picture.
+5. **(Code.)** In the ridge experiment, sweep $\lambda \in \{0.01, 0.1, 1, 10, 100\}$
+   and plot weight MSE against $\lambda$. Where is the sweet spot, and what happens at
+   the extremes? Connect your answer to bias and variance. Then replace ridge with
+   `sklearn.linear_model.Lasso` at the best scale you found and count how many weights
+   land exactly at zero. Why can an $L_1$ diamond zero coordinates when an $L_2$
+   sphere usually only shrinks them?
+# Linear Models that Classify: Logistic and Softmax {#sec-02-logistic-softmax}
+
+
+
+Regression predicts numbers; most of what the world wants predicted is *categories* —
+cat or dog, spam or not, which of ten digits. This chapter converts the linear
+machinery of @sec-01-linear-regression into a classifier without discarding a single
+idea: the same weighted sums, the same maximum-likelihood recipe for the loss, the same
+gradient descent. What changes is one squashing function at the output, and it changes
+less than you might think.
+
+## What actually changes
+
+In regression, $y \in \R$ and the Gaussian noise model handed us the MSE
+(@sec-01-linear-regression). In classification, $y$ is a label from
+$\{0, \dots, K-1\}$. Could we just regress onto the labels with MSE anyway? We could,
+and it fails for a principled reason: **the loss is a noise model, and Gaussian is the
+wrong model for a coin flip.** A binary outcome deviates from its probability like a
+Bernoulli variable, not like additive Gaussian noise $\rightarrow$ maximum likelihood
+demands a different loss. Everything in this chapter falls out of taking that seriously.
+
+What we need is two things:
+
+1. a way to turn the model's raw score (its **logit**, $o \in \R$) into a probability,
+2. a loss that measures how wrong a *probability* is.
+
+## Binary classification
+
+### From score to probability: the sigmoid
+
+Our linear model produces $o = \vect{w}^\top\vect{x} + b$, an unbounded score. The
+**sigmoid** squashes it into a probability:
+
+$$
+\sigma(o) = \frac{1}{1 + e^{-o}} .
+$$ {#eq-sigmoid}
+
+
+
+Notice what did *not* change: the decision boundary $\hat{p} = \tfrac{1}{2}$ is exactly
+$o = 0$, i.e. $\vect{w}^\top\vect{x} + b = 0$ — the same hyperplane geometry from
+@sec-01-linear-regression, with $\vect{w}$ still the template the input is scored
+against. The sigmoid does not bend the boundary; it grades our confidence on either
+side of it.
+
+### The loss: cross-entropy from maximum likelihood
+
+Run the maximum-likelihood recipe with the correct noise model. If the label is a coin
+flip with $P(y{=}1 \mid \vect{x}) = \hat{p}$, the likelihood of the dataset is
+$\prod_i \hat{p}_i^{\,y_i}(1-\hat{p}_i)^{1-y_i}$; taking the negative log gives the
+**binary cross-entropy**:
+
+$$
+\loss_{\text{BCE}} = -\bigl[\, y \log \hat{p} + (1 - y)\log(1 - \hat{p}) \,\bigr].
+$$ {#eq-bce}
+
+Read it as *surprise*: if the true label is 1, the loss is $-\log \hat{p}$ — small when
+the model believed in the outcome, exploding as the model's belief goes to zero. A
+confident wrong answer is punished without mercy, which is exactly the pressure a
+probability deserves.
+
+### The beautiful gradient
+
+Chain the sigmoid into the cross-entropy and differentiate with respect to the logit,
+and something remarkable drops out (Exercise 1 walks you through it):
+
+$$
+\frac{\partial \loss}{\partial o} = \hat{p} - y .
+$$ {#eq-bce-grad}
+
+The gradient is *literally the prediction error*, the same form MSE gave us for
+regression. All the logs and exponentials annihilate each other. This is not luck, and
+it is not the last time you will see it.
+
+## Multiclass classification: softmax
+
+With $K$ classes, run $K$ templates at once: $\matr{W} \in \R^{K \times d}$ produces a
+score vector $\vect{o} = \matr{W}\vect{x} + \vect{b}$, one logit per class. To turn $K$
+scores into a probability distribution, exponentiate (making everything positive) and
+normalize:
+
+$$
+\hat{y}_j = \mathrm{softmax}(\vect{o})_j = \frac{e^{o_j}}{\sum_{k=1}^{K} e^{o_k}} .
+$$ {#eq-softmax}
+
+Softmax has three properties worth committing to memory: every output is positive, the
+outputs sum to one, and — less obviously — it is **invariant to constant shifts**:
+adding the same $c$ to every logit changes nothing, because $e^{o_j + c} = e^c e^{o_j}$
+and the $e^c$ cancels top and bottom. Only the *differences* between scores matter.
+
+
+
+::: {.callout-tip}
+## Remember this machine: scores $\rightarrow$ weights
+
+Step back from classification for a moment. What softmax really is: a differentiable
+device that takes any list of scores and returns **positive weights that sum to one**,
+favoring the large scores without silencing the small ones. Today the scores are class
+logits. In Part IV, the scores will be *similarities between a query and a set of
+keys*, and this exact same machine will turn them into **attention weights**
+(@sec-13-attention). One normalizer, the whole book long.
+:::
+
+::: {.callout-note}
+## What "differentiable" buys us — softening the hard
+
+That word *differentiable* deserves a moment in the light, because it names one of the
+great design patterns of this field.
+
+Consider the obvious way to pick a class: take the **argmax**, then output a one-hot
+vector with 1 at the winning index and 0 elsewhere. (The scalar `max` operation is
+different and does have a gradient through its winning input.) Argmax-plus-one-hot is
+*hard*: nudge a losing logit slightly and the output does not move at all; nudge it
+past the winner and the output jumps all at once. Its derivative is zero almost
+everywhere $\rightarrow$ gradient descent receives no useful signal. In the language
+we will formalize in @sec-05-backpropagation, the hard selection is a wall that blame
+cannot flow through.
+
+Softmax is a smooth relaxation of that one-hot selection; the name is literal: a
+**soft max**. Instead of crowning one winner, it distributes belief according to the
+scores, and now every logit can affect the loss. We gave up a little decisiveness and
+bought trainability.
+
+Watch for this move; it is everywhere once you see it. Whenever a useful operation is
+hard — a lookup, a yes/no choice, even *sorting a list* (yes, researchers have built
+differentiable sorting!) — the play is the same: replace it with a smooth version that
+gradients can flow through, train, and sharpen later if needed. The one to remember for
+this book: fetching a value from memory is a hard lookup, and in Part IV we will soften
+it. A *differentiable lookup*, it turns out, is precisely attention.
+:::
+
+### Cross-entropy, multiclass edition
+
+With one-hot labels $\vect{y}$ (all zeros except a 1 at the true class), the
+cross-entropy is
+
+$$
+\loss_{\text{CE}} = -\sum_{j=1}^{K} y_j \log \hat{y}_j = -\log \hat{y}_{\text{true class}},
+$$ {#eq-ce}
+
+the surprise at the true class, again. And the gradient repeats its trick:
+
+$$
+\frac{\partial \loss}{\partial o_j} = \hat{y}_j - y_j ,
+$$ {#eq-ce-grad}
+
+prediction minus target, one more time. This recurrence is no coincidence — sigmoid/BCE
+and softmax/CE are both members of the exponential family paired with their natural
+losses, and that pairing always collapses the gradient to the error.
+
+::: {.callout-note}
+## The information-theory reading
+
+Entropy $H[P] = -\sum_j p_j \log p_j$ measures the uncertainty in a distribution;
+cross-entropy $H(P, Q) = -\sum_j p_j \log q_j$ is the cost of encoding outcomes from
+$P$ using codes built for $Q$. Minimizing our loss is minimizing that encoding cost —
+equivalently, maximizing likelihood, equivalently driving the KL divergence from truth
+to prediction toward zero. Three vocabularies, one objective.
+:::
+
+### One numerical landmine
+
+Computing $e^{o_j}$ overflows for logits as small as a few hundred. The fix exploits
+shift invariance: subtract the max logit before exponentiating (the *log-sum-exp
+trick*), which changes nothing mathematically and everything numerically. We will use
+it in the code below; the deeper story of floating-point limits lives in
+@sec-a4-floating-point.
+
+## Build it: three classes, from scratch
+
+Now we assemble the full classifier on three Gaussian blobs. It has four pieces, all
+of which you have already met: three templates (one per class), the stable softmax, the
+cross-entropy loss, and the gradient. And since @eq-ce-grad reduced that gradient to
+$\hat{y} - y$, we can implement it by hand $\rightarrow$ no autograd needed:
+
+
+
+
+
+The framework version is two lines, with one trap worth a warning. This loss object is
+the only new framework tool introduced here: it evaluates logits and labels, while the
+manual loop above still supplies the gradient. Optimizers and automatic backpropagation
+remain the previews marked in @sec-01-linear-regression until Chapters 4 and 5.
+
+
+
+::: {.callout-warning}
+## Let PyTorch do the logits-to-probabilities conversion
+
+`nn.CrossEntropyLoss` expects **raw logits**, and that is a feature, not a quirk: it
+fuses the softmax and the logarithm internally using the log-sum-exp trick, which is
+more numerically stable than any softmax-then-log you would write yourself. So the
+advice is: have your model output logits, hand them straight to the loss, and only
+apply softmax when you actually need probabilities to report. (The same goes for
+binary problems: prefer `binary_cross_entropy_with_logits` over sigmoid-then-BCE.)
+The classic bug is feeding softmax outputs into `CrossEntropyLoss` — the model still
+trains, just badly and silently. If a classifier is mysteriously mediocre, check this
+first.
+:::
+
+## Okay, so — classification is regression plus a normalizer
+
+1. **The geometry survived**: logits are still template similarities
+   $\vect{w}^\top\vect{x} + b$, boundaries are still hyperplanes. Sigmoid and softmax
+   grade confidence; they do not bend anything.
+2. **The loss came from the noise model**, exactly as in @sec-01-linear-regression:
+   Bernoulli $\rightarrow$ BCE, categorical $\rightarrow$ cross-entropy, both read as
+   *surprise at the truth*.
+3. **The gradient is the error**, $\hat{y} - y$, both times — the exponential-family
+   pairing at work.
+4. **Softmax is a scores-to-weights machine**, shift-invariant, numerically tamed by
+   log-sum-exp — and it will return, unchanged, as the normalizer of attention.
+
+Next, we let the templates themselves be built out of other templates:
+@sec-03-nonlinearity-mlp stacks these linear units — and discovers why a bend between
+them is not optional.
+
+## Sources and further reading {.unnumbered}
+
+- [Cox, “The Regression Analysis of Binary Sequences”
+  (1958)](https://doi.org/10.1111/j.2517-6161.1958.tb00292.x) develops the logistic
+  model as a principled tool for binary outcomes.
+- [Bridle, “Probabilistic Interpretation of Feedforward Classification Network
+  Outputs” (1990)](https://doi.org/10.1007/978-3-642-76153-9_28) connects normalized
+  exponential outputs to probabilistic multiclass classification.
+- [Shannon, “A Mathematical Theory of Communication”
+  (1948)](https://doi.org/10.1002/j.1538-7305.1948.tb01338.x) is the original source
+  behind the entropy and information vocabulary used to read cross-entropy.
+
+## Exercises {.unnumbered}
+
+1. **(Pencil.)** Derive @eq-bce-grad: write $\loss_{\text{BCE}}$ as a function of $o$
+   through $\hat{p} = \sigma(o)$, use $\sigma'(o) = \sigma(o)(1 - \sigma(o))$, and
+   simplify. Which factors cancel, and why is the result independent of the sigmoid's
+   saturation?
+2. **(Pencil.)** Prove softmax's shift invariance from @eq-softmax, then explain why
+   subtracting the max logit makes the computation overflow-proof: what is the largest
+   value ever exponentiated?
+3. **(Code.)** Temperature: replace `logits` with `logits / T` in the softmax figure
+   for $T \in \{0.5, 1, 2, 10\}$. Describe what happens to the distribution at both
+   extremes. (Keep this dial in mind — it returns when we scale attention scores in
+   Part IV.)
+4. **(Code.)** Train the blobs classifier with MSE on one-hot targets instead of
+   cross-entropy (same manual loop; the gradient changes). Compare accuracy and the
+   confidence shading near boundaries. What does the wrong noise model cost?
+5. **(Code.)** Move the three blob centers closer together (`0.7 → 1.2` noise, or
+   centers at distance 1) and retrain. Where does the confidence shading collapse, and
+   what does the cross-entropy value tell you compared to the accuracy?
+# Nonlinearity and the MLP {#sec-03-nonlinearity-mlp}
+
+
+
+Our linear models can regress (@sec-01-linear-regression) and classify
+(@sec-02-logistic-softmax), and it is tempting to think we could get more power by
+simply stacking them: feed the output of one linear layer into another. Watch what
+happens:
+
+$$
+\matr{W}_2\bigl(\matr{W}_1\vect{x} + \vect{b}_1\bigr) + \vect{b}_2
+= (\matr{W}_2\matr{W}_1)\,\vect{x} + (\matr{W}_2\vect{b}_1 + \vect{b}_2)
+= \matr{W}_{\text{new}}\,\vect{x} + \vect{b}_{\text{new}} .
+$$ {#eq-collapse}
+
+The stack *collapses*. Two linear layers, or twenty, are exactly one linear layer with
+different knobs $\rightarrow$ no amount of stacking buys any new expressive power. To
+learn the patterns of the real world we need a magic ingredient: **nonlinearity**. This
+chapter is about what one small bend does to everything.
+
+## The tiny dataset that embarrassed a field
+
+You do not need real-world data to expose the linear ceiling. Four points suffice. The
+XOR function outputs 1 exactly when its two binary inputs *differ*:
+
+| $x_1$ | $x_2$ | XOR |
+|:-:|:-:|:-:|
+| 0 | 0 | 0 |
+| 0 | 1 | 1 |
+| 1 | 0 | 1 |
+| 1 | 1 | 0 |
+
+Plot the four points and try to separate the 1s from the 0s with a single line. The
+positive examples sit on one diagonal, the negatives on the other; any line you draw
+puts at least one point on the wrong side. A linear classifier cannot represent this
+function, no matter how it is trained.
+
+::: {.callout-note}
+## A historical scar
+
+This is not a toy observation. The limitations of single-layer perceptrons, including
+XOR, were publicized in 1969 and became emblematic of the case against that research
+program. They contributed to reduced enthusiasm and funding, but they were not a
+single-cause explanation for the first "AI winter"; limited compute, data, and unmet
+promises mattered too. Multi-layer networks and practical backpropagation
+(@sec-05-backpropagation) later removed the representational obstacle exposed here.
+:::
+
+Let us confirm the ceiling empirically. We reuse the framework loop previewed in
+@sec-01-linear-regression as a measuring instrument; @sec-04-training-loss-sgd and
+@sec-05-backpropagation will explain the optimizer and `backward()` rather than asking
+you to treat them as magic.
+
+
+
+The cross-entropy optimum for this symmetric XOR dataset assigns probability $0.5$ to
+all four points, with loss $\log 2 \approx 0.693$. Turning those exact ties into hard
+labels with a floating-point threshold can report 25%, 50%, or 75% because of tiny
+rounding differences; that number is not evidence about the classifier. The honest
+geometric statement is that a hard linear boundary can classify at most three of the
+four points (75%), while the little network with a bend is perfect.
+
+
+
+## The neuron: a threshold with a bend
+
+The artificial neuron takes its inspiration from biology: a neuron receives signals,
+and it *fires* only when the accumulated stimulus crosses a threshold. The modern,
+computationally friendly version of that thresholding is the **rectified linear unit**:
+
+$$
+\mathrm{ReLU}(z) = \max(0, z), \qquad
+f(\vect{x}) = \mathrm{ReLU}(\vect{w}^\top\vect{x} + b).
+$$ {#eq-neuron}
+
+The weighted input $\vect{w}^\top\vect{x} + b$ is the stimulus — and recall from
+@sec-01-linear-regression that it is a *similarity score* against the template
+$\vect{w}$. Below threshold, the neuron is silent (output 0); above it, the neuron
+fires with intensity proportional to the stimulus.
+
+In one dimension a single neuron turns a line into a **hinge**, and in two dimensions
+it draws a line through the plane: an OFF region and an ON region, with $\vect{w}$
+perpendicular to the boundary. That boundary is the fundamental unit of computation in
+everything that follows.
+
+(What about the sharp corner at $z=0$, where the derivative is undefined? Libraries
+choose a subgradient convention, commonly 0. Exact zeros can occur systematically with
+zero biases, sparse activations, or symmetric inputs, so the convention is not merely
+academic. The gradient story of this open-or-shut gate — including when it helps and
+when a unit goes dead — is told in
+@sec-05-backpropagation.)
+
+## Layers of hinges: bumps and polytopes
+
+One neuron makes one boundary. A layer of $k$ neurons makes $k$ boundaries, and their
+intersections partition the input space into convex **polyhedral regions** (bounded
+ones are polytopes), and within each cell the layer computes a plain linear function. For fixed input
+dimension $d$, the maximum region count of one generic hyperplane arrangement grows on
+the order of $k^d$.
+
+The simplest compact constructive example lives in 1D. Combine three hinges so the
+slopes cancel again after the third breakpoint:
+
+
+
+Follow the pieces: before the first hinge, all units are silent and the output is zero.
+After the first breakpoint, $h_1$ starts the climb. The coefficient $-2$ on $h_2$
+reverses the slope at the peak, and $h_3$ cancels that downward slope at the final
+breakpoint. Four linear pieces $\rightarrow$ one compact bump.
+
+## The universal approximation theorem
+
+Bumps are the whole secret. If you can make one bump, you can make many, at any
+position and height $\rightarrow$ with enough hidden units you can *tile* any
+continuous function, the way an artist paints a shape with brush strokes. That is the
+intuition behind the **universal approximation theorem**: a network with a single
+hidden layer can, in principle, approximate any continuous function on a bounded region
+to any desired accuracy.
+
+Watch the theorem materialize as width grows:
+
+
+
+Now read the theorem's fine print, because it is where beginners over-promise:
+
+::: {.callout-warning}
+## What the theorem does *not* say
+
+1. It does not tell you **how to find the weights** — existence of a good network is
+   not a training algorithm. Finding the weights is the job of the loss and the
+   optimizer, and nothing guarantees gradient descent lands on the theorem's solution.
+2. It does not say the network is **small**. Tiling a complicated function with
+   one-layer bumps can require astronomically many units.
+3. In its usual uniform-approximation form, it speaks of **continuous functions on
+   bounded regions** and says nothing about how the fit behaves *between* or *beyond*
+   your samples. A continuous ReLU network cannot uniformly approximate a jump to
+   arbitrary accuracy: near the jump its worst-case error stays at least half the jump
+   size. Under a mean-square ($L_2$) criterion, however, it can squeeze the transition
+   into a narrow interval and make the *average* error arbitrarily small. The norm and
+   the target class matter. Approximation is still not generalization; that distinction
+   gets its own chapter (@sec-06-generalization-inductive-bias).
+:::
+
+## Why depth: boundaries that bend
+
+If one hidden layer suffices in principle, why is the field called *deep* learning?
+Efficiency, and geometry. A second hidden layer receives, as its inputs, the
+piecewise-linear outputs of the first $\rightarrow$ its boundaries are no longer
+straight lines. They *bend* wherever the first layer's boundaries cut the space.
+Boundaries composed of boundaries: each layer folds the space the previous layer drew.
+
+
+
+This bending can compound dramatically. For suitable ReLU constructions at fixed input
+dimension, achievable region counts grow exponentially with depth, while a single
+hidden layer's count grows polynomially with width. This is an existence and
+architecture-dependent comparison, not a promise that every trained deep network
+realizes all those regions. It gives the economic argument for depth: some partitions
+represented by a deep, narrow network require far more units in a shallow one.
+
+## Your first real MLP
+
+Time to build the thing properly, the way the live session does: as a class.
+
+::: {.callout-tip}
+## Coding hygiene: the house and its foundation
+
+Every model you write from now on subclasses `nn.Module`, and the first line of your
+`__init__` is always `super().__init__()`. Think of it as pouring the foundation
+before building the house: it is what wires up parameter tracking, `.parameters()`,
+and everything the optimizer and autograd need. Forget it and PyTorch fails loudly —
+the one favor a framework can do you.
+:::
+
+
+
+And a problem worthy of it: two interleaved moons, the classic shape no line can
+separate well. Same training loop as always — the model is the only thing that changed:
+
+
+
+One honest footnote on the XOR network: in principle *two* hidden units suffice, but
+such minimal networks are temperamental; across random seeds they frequently get stuck
+at 50% accuracy with silent units (you will verify this in Exercise 3). A few spare
+units cost little and improve reliability. @sec-04-training-loss-sgd will examine when
+optimization noise helps exploration, without treating it as a guaranteed escape.
+
+## A cautionary tale, and a look ahead
+
+There is a seductive story about what the layers of an MLP learn: the first layer
+detects edges, the next combines them into shapes, the next into objects — a tidy
+hierarchy of increasingly abstract features. It is the *idealized* story, and for
+fully-connected networks on raw images it is mostly **not what happens**. A
+fully-connected layer sees its input as one long, structureless vector; it has no
+notion that pixel potentially relates to its neighbor. Nothing in the architecture
+encourages the tidy hierarchy, and with every pixel connected to every unit, the
+parameter count explodes long before the hierarchy emerges.
+
+We now hold real expressive power — networks that can, in principle, represent almost
+anything. @sec-04-training-loss-sgd trains them at scale and
+@sec-05-backpropagation supplies their gradients. And then
+@sec-06-generalization-inductive-bias asks this chapter's uncomfortable question:
+what happens when all that flexibility meets data it does not understand the
+*structure* of? The answer — watch an MLP fail, in pictures, then fix it by building
+knowledge into the architecture — is the turn the whole book pivots on.
+
+## Okay, so — one bend changed everything
+
+1. **Linear stacks collapse** (@eq-collapse); XOR proves four points can defeat any
+   line.
+2. **A neuron is a thresholded similarity score**: below the boundary silent, above it
+   proportional. One neuron $\rightarrow$ one boundary; a layer $\rightarrow$ a
+   polyhedral partition; three hinges $\rightarrow$ a compact bump.
+3. **Bumps tile functions** (universal approximation) — but the theorem promises
+   existence, not learnability, economy, or generalization.
+4. **Depth bends boundaries**: suitable deep constructions can create region counts
+   that grow exponentially with depth, yielding large efficiency gaps relative to
+   comparable shallow constructions.
+5. **The MLP is a class now** (`nn.Module`, foundation first), and it separates what
+   no line can.
+
+## Sources and further reading {.unnumbered}
+
+- [Cybenko, “Approximation by Superpositions of a Sigmoidal Function”
+  (1989)](https://doi.org/10.1007/BF02551274) gives a foundational uniform universal-
+  approximation result on compact domains.
+- [Hornik, “Approximation Capabilities of Multilayer Feedforward Networks”
+  (1991)](https://doi.org/10.1016/0893-6080(91)90009-T) makes the distinction between
+  uniform and $L_p$ approximation explicit, which is exactly the jump-function nuance
+  in this chapter.
+- [Nair and Hinton, “Rectified Linear Units Improve Restricted Boltzmann Machines”
+  (2010)](https://www.cs.toronto.edu/~hinton/absps/reluICML.pdf) is an early empirical
+  account of rectifiers preserving useful signal through multiple layers.
+- [Montúfar et al., “On the Number of Linear Regions of Deep Neural Networks”
+  (2014)](https://papers.nips.cc/paper_files/paper/2014/hash/fa6f2a469cc4d61a92d96e74617c3d2a-Abstract.html)
+  develops the architecture-dependent region-count argument behind the chapter's case
+  for depth.
+
+## Exercises {.unnumbered}
+
+1. **(Pencil.)** Generalize @eq-collapse: show by induction that any stack of $L$
+   linear layers equals a single linear layer. Where exactly does inserting
+   $\mathrm{ReLU}$ between layers break your proof?
+2. **(Pencil.)** Using the bump construction, give explicit weights for a
+   one-hidden-layer network that outputs approximately 1 on $[0,1]$ and 0 outside
+   $[-0.2, 1.2]$. How many hidden units did you need?
+3. **(Code.)** Retrain the XOR network with `hidden_dim = 2` across ten different
+   seeds. How often does it reach 100%? Inspect a failed run: what happened to its
+   hidden units? (Hint: check how many are permanently silent.)
+4. **(Code.)** In the polytope figure, count distinct activation patterns as you vary
+   width at depth 1 versus depth at width 4 (keep total units comparable). Which grows
+   the region count faster?
+5. **(Code.)** Replace the moons MLP's ReLU with `nn.Identity()` and retrain. Explain
+   the resulting boundary in one sentence using @eq-collapse.
+# Training: Loss and Stochastic Gradient Descent {#sec-04-training-loss-sgd}
+
+
+
+We now have models worth training: linear regressors (@sec-01-linear-regression),
+classifiers (@sec-02-logistic-softmax), and multilayer perceptrons
+(@sec-03-nonlinearity-mlp). We have losses that tell each of them how bad they are, and
+we know the direction of improvement is the negative gradient. What remains is the
+question every practitioner faces daily: *how, exactly, do you run the descent* when the
+dataset has a million examples, the model has millions of knobs, and the loss landscape
+is no longer a friendly bowl?
+
+This chapter is about the workhorse answer, stochastic gradient descent, and the small
+set of refinements (learning rates, batch sizes, momentum, Adam) that turn it from a
+theoretical idea into the algorithm that trains essentially everything in this book.
+
+## Where losses come from, one more time
+
+Before optimizing a loss, remember why it is *that* loss. In
+@sec-01-linear-regression we saw that assuming Gaussian noise on a linear process makes
+maximum likelihood collapse into least squares; in @sec-02-logistic-softmax the same
+argument with a categorical distribution produced cross-entropy. This is the general
+pattern: **a loss function is a noise model in disguise.** Choose how you believe the
+data deviates from your model, and maximum likelihood hands you the loss. The loss is
+how we tell the model it is doing badly $\rightarrow$ choosing it well is not a detail,
+it is the supervision itself.
+
+With the loss fixed, training is one line:
+
+$$
+\hat{\vect{w}} = \argmin_{\vect{w}} \; \loss(\vect{w})
+= \argmin_{\vect{w}} \; \frac{1}{n}\sum_{i=1}^{n} \ell_i(\vect{w}),
+$$ {#eq-train-objective}
+
+where $\ell_i$ is the loss on example $i$. Everything that follows is about minimizing
+this average when $n$ is enormous.
+
+## The computational bottleneck
+
+Gradient descent, as we left it in @sec-01-linear-regression, updates with the *full*
+gradient:
+
+$$
+\vect{w}^{(t+1)} = \vect{w}^{(t)} - \alpha \, \frac{1}{n}\sum_{i=1}^{n} \nabla \ell_i(\vect{w}^{(t)}).
+$$ {#eq-full-gd}
+
+Look at the cost. One step touches every example; modern datasets have millions to
+billions of them, modern models have millions to billions of parameters, and training
+needs thousands of steps. One exact gradient per step is a luxury we cannot afford
+$\rightarrow$ we need to change strategy to scale up.
+
+## Stochastic gradient descent
+
+The idea is almost cheeky: we do not need the exact gradient. A good approximation is
+enough. Instead of the expensive sum over all $n$ examples, average over a small random
+**mini-batch** $\mathcal{B}$ — think 32 examples against a million:
+
+$$
+\vect{w}^{(t+1)} = \vect{w}^{(t)} - \alpha \, \frac{1}{|\mathcal{B}|}\sum_{i \in \mathcal{B}} \nabla \ell_i(\vect{w}^{(t)}).
+$$ {#eq-sgd}
+
+Why does this work? At a *fixed* parameter vector, a uniformly sampled mini-batch
+gradient is **unbiased**: the expected contribution of example $i$ to a batch equals
+its contribution to the full average, so
+
+$$
+\E\bigl[\nabla \loss_{\mathcal{B}}(\vect{w})\bigr] = \nabla \loss(\vect{w}).
+$$ {#eq-unbiased}
+
+This statement holds for independent draws with replacement and also for one uniformly
+chosen subset without replacement. In expectation, that cheap gradient points where
+the expensive gradient points. Each estimate is noisy; its average direction is right.
+
+In practice the algorithm is:
+
+1. Shuffle the training data.
+2. Split it into mini-batches of size $B$.
+3. For each batch: compute the average gradient, update the parameters.
+4. One pass through all batches is an **epoch**; repeat for multiple epochs.
+
+::: {.callout-note}
+## Honest fine print
+
+There are two different facts hiding under the word "without replacement." A single
+uniform subset, evaluated at a fixed $\vect{w}$, is still unbiased and has *less*
+variance than with-replacement sampling. Its variance includes the finite-population
+correction $(n-B)/(n-1)$, which reaches zero at $B=n$.
+
+Random reshuffling is subtler. After the first batch changes $\vect{w}$, the next batch
+comes from the remaining examples and is statistically tied to the earlier path. It is
+not an independent unbiased draw of the full gradient at this *new* iterate. Dedicated
+random-reshuffling theory handles that dependence; the one-line proof in
+@eq-unbiased does not. Keep the caveat in mind; keep using the shuffle.
+:::
+
+## The two zones of SGD
+
+The noise gives SGD a characteristic two-phase behavior, and it is worth seeing rather
+than just hearing about. Far from the optimum, almost any batch tells you roughly the
+same thing $\rightarrow$ rapid, consistent progress. Close to the optimum, different
+batches start to disagree ("go left" — "no, go right"), and the iterate bounces around
+in what we will call the **region of confusion**:
+
+
+
+Here is the surprise: the bouncing is not merely tolerable; in some regimes it is a
+**feature**. A noisy step may perturb the iterate away from a saddle, a narrow basin, or
+a shallow trap that exact descent would follow more predictably. Mini-batch noise can
+also bias training toward different solutions, and smaller batches sometimes improve
+generalization. None of these outcomes is guaranteed: the effect depends on the model,
+data, learning rate, and batch size. We will give that evidence its proper treatment in
+@sec-06-generalization-inductive-bias. For now, treat noise as part of the algorithm,
+not automatically as a defect or a cure.
+
+## The learning rate
+
+One knob dominates all others. The learning rate $\alpha$ scales every step, and its
+failure modes are asymmetric: too small wastes your compute budget crawling; too large
+overshoots the valley and diverges.
+
+
+
+::: {.callout-tip}
+## Rule of thumb from the lectures
+
+For the normalized toy problems in these lectures, plain SGD often starts around
+$\alpha = 0.1$. That is a scale-calibrated starting point, not a universal constant;
+Adam, unnormalized features, and very deep models can require very different values.
+Read the training curves: crawling $\rightarrow$ consider raising it; oscillating or
+exploding $\rightarrow$ lower it. Later in training it often pays to *decay* the
+learning rate so the fine-tuning steps get smaller; that is a **learning-rate
+schedule**. One exotic-sounding relative, *warmup* (starting tiny and ramping up), will
+matter enormously when we train Transformers in @sec-14-self-attention-transformer.
+:::
+
+## The batch size
+
+The batch size $B$ sets where you live on the noise–efficiency trade-off:
+
+| Batch size | Character | Trade-off |
+|---|---|---|
+| Small (1–32) | Noisy, exploratory | Sometimes a generalization benefit; slow and less hardware-efficient |
+| Medium (32–256) | Balanced | The usual default; hardware-efficient |
+| Large (256+) | Smooth, high throughput | Less gradient noise; often needs learning-rate and schedule retuning |
+
+With independent sampling, gradient standard deviation scales like $1/\sqrt{B}$:
+quadrupling the batch roughly halves the jitter. For a uniform subset without
+replacement, multiply by
+$\sqrt{(n-B)/(n-1)}$; when $B=n$, the noise is exactly zero. For $B \ll n$ the
+correction is near one, which is why the simpler rule is useful. There is no universal
+best setting here, only a dial linking statistics and hardware.
+
+## Momentum: give the ball some mass
+
+Vanilla SGD has exactly one control, $\alpha$, and in narrow, curved valleys that is
+not enough: the iterate zigzags across the steep direction while inching along the
+shallow one. The fix is to give the update a memory. Keep a running **velocity** that
+accumulates gradients, and move along the velocity instead of the raw gradient:
+
+$$
+\vect{v}^{(t)} = \beta\,\vect{v}^{(t-1)} + \nabla \loss(\vect{w}^{(t)}), \qquad
+\vect{w}^{(t+1)} = \vect{w}^{(t)} - \alpha\,\vect{v}^{(t)},
+$$ {#eq-momentum}
+
+with $\beta \in [0.9, 0.99]$. This is the ball rolling downhill: in directions where
+gradients keep agreeing, speed builds; in directions where they flip sign every step,
+they cancel. The zigzag damps itself, and small bumps in the landscape get rolled
+through rather than obeyed.
+
+## Adam: adaptive steps per knob
+
+Momentum treats every parameter alike, but some knobs sit on steep cliffs while others
+sit on plains. **Adam** (adaptive moment estimation) combines three ideas from the
+lecture: momentum (accumulate past gradients), per-parameter adaptive learning rates
+(scale each knob's step by its own gradient history), and bias correction (account for
+both accumulators starting at zero). Formally, with elementwise operations:
+
+$$
+\vect{m}^{(t)} = \beta_1 \vect{m}^{(t-1)} + (1-\beta_1)\,\vect{g}^{(t)}, \quad
+\vect{s}^{(t)} = \beta_2 \vect{s}^{(t-1)} + (1-\beta_2)\,\vect{g}^{(t)\,2}, \quad
+\vect{w}^{(t+1)} = \vect{w}^{(t)} - \alpha\,\frac{\hat{\vect{m}}^{(t)}}{\sqrt{\hat{\vect{s}}^{(t)}} + \epsilon},
+$$ {#eq-adam}
+
+where $\hat{\vect{m}}, \hat{\vect{s}}$ are the bias-corrected accumulators. When to use
+what, per the lecture: **SGD with momentum** is simple, reliable, and strong for large
+models; **Adam** is the good default that works out of the box.
+
+## The race, on a problem where we know the truth
+
+Claims about optimizers deserve a test you can rerun. We build a least-squares problem
+with a deliberately *ill-conditioned* landscape; the second feature is ten times the
+scale of the first, so the loss surface is a long narrow valley. We give all three
+optimizers the same 120-step, 16-example-batch budget, while using learning rates chosen
+for this toy: $0.003$ for SGD and momentum, $0.1$ for Adam. This is a mechanism
+comparison, not a controlled claim that one optimizer wins at a shared learning rate.
+
+The cell also uses `backward()` as the framework instrument previewed in Chapter 1. It
+supplies gradients for the race; @sec-05-backpropagation opens that box next.
+
+
+
+Read the result honestly. This is one problem, chosen to expose conditioning; it is not
+proof that Adam always wins (it does not — plain SGD with momentum, well tuned, still
+trains many of the best vision models). What the race does show is *mechanism*: when
+different directions of the landscape have wildly different steepness, per-direction
+memory (momentum) and per-parameter scaling (Adam) buy you orders of magnitude. It also
+whispers a practical lesson from the live session: much of this valley's narrowness came
+from unscaled features $\rightarrow$ *normalize your inputs* and you fight the optimizer
+less (Exercise 5).
+
+## Two regularizers that live inside training
+
+Two ideas from @sec-01-linear-regression reappear here as training-loop citizens rather
+than loss-function algebra.
+
+**Weight decay.** Under plain SGD, adding an $L_2$ penalty is equivalent (up to whether
+the coefficient is written as $\lambda$ or $\lambda/2$) to one extra shrinkage term:
+$\vect{w} \leftarrow (1 - \alpha\lambda)\vect{w} - \alpha\nabla\loss$. This is the
+ridge connection from @sec-01-linear-regression. Many PyTorch optimizers expose a
+`weight_decay` argument, but the equivalence needs a boundary: coupled $L_2$ inside an
+adaptive optimizer such as Adam is rescaled by that optimizer and is not the same
+trajectory as multiplicative shrinkage. **AdamW** decouples the decay step explicitly.
+Also, training recipes often exempt bias and normalization parameters rather than
+shrinking every parameter indiscriminately.
+
+**Early stopping.** Track the validation loss during training and stop when it turns
+upward, even though the training loss is still falling:
+
+![Training error keeps falling; validation error turns. Stopping at the turn is regularization by clock — no penalty term required.](../../figures/generated/1_1_lin_Recap-fig08.svg){#fig-early-stop width=70%}
+
+Both are cheap, both are everywhere, and both are previews: the full story of *why*
+constraining training improves generalization is the business of
+@sec-06-generalization-inductive-bias.
+
+## Okay, so — the training loop
+
+Assemble the chapter into the loop you will run, in some form, for the rest of the book:
+
+1. Start from (well-initialized) random parameters.
+2. For each epoch: shuffle, split into mini-batches of size $B$.
+3. For each batch: forward pass $\rightarrow$ loss (your noise model in disguise)
+   $\rightarrow$ backward pass for the gradients $\rightarrow$ optimizer step
+   ($\alpha$, momentum or Adam, weight decay).
+4. Watch the validation curve; schedule the learning rate; stop early when it turns.
+
+One box in that loop is still magic: "backward pass for the gradients." Computing
+millions of partial derivatives at the cost of roughly one extra forward pass is the
+subject of @sec-05-backpropagation.
+
+## Sources and further reading {.unnumbered}
+
+- [Robbins and Monro, “A Stochastic Approximation Method”
+  (1951)](https://doi.org/10.1214/aoms/1177729586) is the classical starting point for
+  replacing exact quantities with noisy observations in an iterative procedure.
+- [Sutskever et al., “On the Importance of Initialization and Momentum in Deep
+  Learning” (2013)](https://proceedings.mlr.press/v28/sutskever13.html) shows how
+  initialization and momentum interact with curvature in deep-network training.
+- [Kingma and Ba, “Adam: A Method for Stochastic Optimization”
+  (2015)](https://arxiv.org/abs/1412.6980) gives the algorithm, bias corrections, and
+  motivation for adaptive moment estimates.
+- [Loshchilov and Hutter, “Decoupled Weight Decay Regularization”
+  (2019)](https://openreview.net/forum?id=Bkg6RiCqY7) explains precisely why coupled
+  $L_2$ regularization and weight decay separate under adaptive optimizers.
+
+## Exercises {.unnumbered}
+
+1. **(Pencil.)** Prove @eq-unbiased for sampling with replacement: if $i$ is drawn
+   uniformly from $\{1,\dots,n\}$, show
+   $\E[\nabla \ell_i(\vect{w})] = \frac{1}{n}\sum_j \nabla \ell_j(\vect{w})$. Where
+   exactly does the argument use uniformity?
+2. **(Code.)** In the two-zones figure, sweep $B \in \{1, 4, 16, 80\}$ and plot the
+   final 30 steps of each path. How does the radius of the region of confusion scale
+   with $B$? Compare against $1/\sqrt{B}$ first, then include the finite-population
+   correction. Why must the noise vanish at $B=80$?
+3. **(Code.)** Add a learning-rate schedule to the race: halve $\alpha$ every 30 steps
+   for plain SGD. How much of the gap to momentum does scheduling close? What does that
+   tell you about what momentum is *really* fixing here?
+4. **(Code.)** Sweep momentum's $\beta \in \{0, 0.5, 0.9, 0.99\}$ in the race. Explain
+   the failure mode at the top end using the ball analogy.
+5. **(Code.)** Standardize the race's features (divide each column of `Xr` by its
+   standard deviation) and rerun all three optimizers. How much of Adam's advantage
+   evaporates? State the practical moral in one sentence.
+# Backpropagation {#sec-05-backpropagation}
+
+
+
+Recall the update rule that ended @sec-01-linear-regression: new parameters come from
+old parameters by stepping against the gradient,
+$\vect{w}^{(t+1)} = \vect{w}^{(t)} - \eta\,\nabla_{\vect{w}}\loss$. For linear
+regression we could write that gradient down by hand. But a modern network has millions,
+sometimes billions, of knobs, tangled through layer after layer of composed functions
+$\rightarrow$ computing each partial derivative naively, one at a time, is hopeless.
+
+Backpropagation is the algorithm that computes *all* of them, exactly, in one backward
+sweep whose cost is a small constant multiple of the graph's elementary operations.
+It is not a new kind of calculus. It is the chain rule, *organized*. By the end of this
+chapter you will have derived it, implemented it by hand, rebuilt it as a tiny scalar
+autograd engine, and then checked that `torch.autograd` agrees with you to machine
+precision.
+
+## One neuron, one chain
+
+Start with the smallest possible case: one neuron on one training example. The
+previous activation $a^{(l-1)}$ is multiplied by a weight $w$, giving the
+pre-activation $z = w\,a^{(l-1)} + b$; the activation function produces
+$a = \sigma(z)$; and $a$ feeds a loss $L$.
+
+Now turn the knob $w$ a little. How much does $L$ change? Follow the chain: turning
+$w$ changes $z$; the change in $z$ changes $a$; the change in $a$ changes $L$. The
+chain rule multiplies these local sensitivities:
+
+$$
+\frac{\partial L}{\partial w}
+= \frac{\partial L}{\partial a}\cdot
+  \frac{\partial a}{\partial z}\cdot
+  \frac{\partial z}{\partial w} .
+$$ {#eq-chain}
+
+
+
+Two things about this picture generalize to any network, however deep:
+
+1. **The forward pass caches.** Computing $L$ produces the intermediate values
+   ($z$, $a$) along the way; we keep them, because the backward pass will need them.
+2. **The backward pass reuses.** Each edge contributes one *local* derivative, and the
+   derivative of $L$ with respect to anything is the product of local derivatives along
+   the path back to it. Nothing is recomputed $\rightarrow$ the whole sweep costs about
+   as much as one forward pass.
+
+## The game of blame
+
+For a full layer of neurons the bookkeeping threatens to become a tangled mess of sums.
+The cure is to pick the right intermediate quantity and track only that. At the output
+of the network the error is obvious: it is just the gap to the target. What is *not*
+obvious is how much of that error is the fault of a weight buried ten layers deep.
+Backpropagation sends this blame backward, from where it is obvious to where it is not.
+
+::: {.callout-note}
+## The blame signal
+
+Define, for each layer $l$, the **blame signal**
+
+$$
+\delta^{(l)} \;:=\; \frac{\partial L}{\partial \vect{z}^{(l)}} ,
+$$
+
+the sensitivity of the loss to that layer's *pre-activations*. It answers: how much did
+each neuron's $z$ contribute to the final loss?
+:::
+
+Everything now unfolds in four short equations. With $\odot$ denoting elementwise
+(Hadamard) product:
+
+**1. Start where blame is obvious (output layer $L$):**
+
+$$
+\delta^{(L)} = \frac{\partial L}{\partial \vect{a}^{(L)}} \odot \sigma'(\vect{z}^{(L)}) .
+$$ {#eq-bp1}
+
+For the half-squared-error convention
+$L=\tfrac12\|\vect{a}^{(L)}-\vect{y}\|^2$,
+$\partial L / \partial \vect{a}^{(L)}$ is exactly the prediction error
+$\vect{a}^{(L)} - \vect{y}$. Other conventions contribute a known scale: mean squared
+error, for example, contributes $2/n$ for $n$ scalar outputs. In every case the output
+error is then gated by how sensitive the activation was to its input.
+
+**2. Propagate blame one layer back:**
+
+$$
+\delta^{(l)} = \Bigl( (\matr{W}^{(l+1)})^\top \delta^{(l+1)} \Bigr) \odot \sigma'(\vect{z}^{(l)}) .
+$$ {#eq-bp2}
+
+Blame flows backward through the same weights the signal flowed forward through, hence
+the transpose; then the local gate $\sigma'(\vect{z}^{(l)})$ scales it. This recursion
+runs from the last layer to the first.
+
+
+
+**3. Convert blame into weight gradients:**
+
+$$
+\frac{\partial L}{\partial \matr{W}^{(l)}} = \delta^{(l)} \, (\vect{a}^{(l-1)})^\top .
+$$ {#eq-bp3}
+
+**4. And into bias gradients:**
+
+$$
+\frac{\partial L}{\partial \vect{b}^{(l)}} = \delta^{(l)} .
+$$ {#eq-bp4}
+
+@eq-bp3 deserves a pause, because its shapes tell the story. With $m$ neurons
+in layer $l$ and $n$ in layer $l-1$: $\delta^{(l)}$ is $(m \times 1)$, and
+$(\vect{a}^{(l-1)})^\top$ is $(1 \times n)$. Their **outer product** is an $m \times n$
+matrix, exactly the shape of $\matr{W}^{(l)}$, and entry $(i,j)$ is the blame of neuron
+$i$ times the activation of neuron $j$ that fed it. The update for a weight is
+*blame out times signal in*:
+
+
+
+No messy summations: the matrix form performs them all at once, and it maps directly
+onto the parallel matrix multiplies GPUs are built for. The same four equations govern
+a toy network and a billion-parameter model; only the matrix sizes change.
+
+## Build it, then check it against autograd
+
+Let us implement the four equations on a two-layer network, with no autograd anywhere,
+and then ask `torch.autograd` to differentiate the same network. If our blame algebra is
+right, the two answers must agree to machine precision.
+
+
+
+
+
+The largest discrepancy is $3.73\times10^{-9}$, consistent with float32 rounding. The
+blame equations *are* what autograd computes; the framework simply builds the
+computation graph for us as we go and then walks it backward, caching and reusing
+exactly as we did.
+
+## A tiny scalar autograd engine
+
+To remove the last trace of magic, let us build the graph ourselves. Each `Value` node
+remembers how it was made (its parents and the local derivative rule); calling
+`backward()` walks the graph in reverse topological order, accumulating blame into every
+node's `grad`.
+
+This teaching implementation is adapted from Andrej Karpathy's
+[micrograd](https://github.com/karpathy/micrograd), released under the MIT License. We
+use only the scalar reverse-mode pattern needed for this derivation; the upstream
+copyright and license notice are preserved in the repository's
+[third-party notices](https://github.com/Shakeri-Lab/dl-book/blob/main/THIRD_PARTY_NOTICES.md).
+
+
+
+
+
+In a few dozen lines, it is the real thing: PyTorch's autograd is this idea with tensors
+instead of scalars, a compiled graph walker, and thousands of derivative rules.
+
+## `torch.autograd` in practice: five rules
+
+Autograd is doing exactly what we just built by hand, and knowing that mechanics tells
+you why each of its rules exists. These five cover nearly every autograd bug you will
+meet; the live-session notebook walks through each in more depth.
+
+**Rule 1 — by default, only leaf tensors retain gradients.** A *leaf* is a tensor you
+created directly (your parameters); a *non-leaf* is the result of an operation
+(activations, losses). After `backward()`, leaves have `.grad` populated while
+intermediate blame is used and released. Call `.retain_grad()` on a non-leaf before
+`backward()` only when you explicitly need its gradient for inspection.
+
+**Rule 2 — gradients accumulate.** `backward()` *adds* into `.grad`. Zero them before
+each step (`optimizer.zero_grad()`), or every update uses the sum of all past
+gradients.
+
+
+
+**Rule 3 — parameter updates happen outside the graph.** For a raw leaf tensor, the
+update `w = w - lr * w.grad` inside autograd's view records the update and rebinds `w`
+to a non-leaf, so its `.grad` will not be retained by default on the next pass.
+Assigning a plain tensor over a registered `nn.Parameter` may instead fail loudly. The
+safe idiom from the live session covers both cases:
+
+```python
+with torch.no_grad():                # temporarily stop recording
+    w -= lr * w.grad                 # update in place; w stays a leaf
+```
+
+**Rule 4 — in-place operations can corrupt the tape.** Methods ending in `_`
+(`add_`, `relu_`) overwrite values that the backward pass may still need from the
+forward cache. Inside `no_grad()` parameter updates they are safe; anywhere else,
+prefer creating a new tensor.
+
+**Rule 5 — the graph lives until you let it go.** Every forward pass builds a fresh
+graph, freed after `backward()`. But any tensor you keep (say, appending `loss` to a
+list for plotting) keeps its whole graph alive with it. Store `loss.item()` (a plain
+float) or `loss.detach()` instead: `detach()` returns the same value with the history
+cut.
+
+::: {.callout-warning}
+## Keep updates outside the graph
+
+Rules 1 and 3 combine into a classic raw-tensor bug: rebinding
+`w = w - lr * w.grad` creates a **new non-leaf**. Its `.grad` then comes back `None` by
+default on the next pass. A registered `nn.Parameter` assignment can raise an error
+instead. In either case, update the existing parameter under `torch.no_grad()`.
+:::
+
+## The gate, and the problem with deep chains
+
+Look again at @eq-bp2. Every backward step multiplies by $\sigma'(\vect{z}^{(l)})$. That
+derivative acts as a **gate** on the blame: wide open, and the signal passes; nearly
+closed, and it dies.
+
+Now examine the sigmoid's gate. From $\sigma'(z) = \sigma(z)(1-\sigma(z))$, its maximum
+value, at $z = 0$, is exactly $0.25$; away from zero the neuron *saturates* and the gate
+approaches $0$. The sigmoid gate is at best a quarter open, and often nearly closed.
+
+
+
+Here is the consequence, and it is one of deep learning's most important failure modes.
+The chain rule *multiplies* local Jacobians across layers. The activation-derivative
+part of a sigmoid path contributes at most $0.25$ per layer, so that part is bounded by
+$0.25^k$ after $k$ gates. Ten gates in, its ceiling is below one in a million. The
+weight matrices and branching paths also scale the full network Jacobian, so
+$0.25^k$ is not a bound on the complete gradient. It isolates why repeated sigmoid
+gates strongly favor vanishing signals.
+
+The fix is almost embarrassingly simple. $\mathrm{ReLU}(z) = \max(0, z)$ has derivative
+$1$ for $z > 0$ and $0$ for $z < 0$. At the kink $z=0$, PyTorch uses derivative $0$;
+exact zeros can occur with zero biases or sparse activations. The gate is either fully
+open or fully closed. For every neuron that was active
+in the forward pass, the activation derivative contributes a factor of exactly one.
+The surrounding weight matrices can still scale the full signal, but the active ReLU
+does not shrink it: a **gradient superhighway** through the network. This, more than
+anything, is why ReLU and its variants are the default in deep networks.
+
+Do not take the argument on faith; measure it. We build the same 30-layer network twice
+(sigmoid versus ReLU), give both copies the same He-scaled weights and input batch, and
+record how much gradient reaches each layer. We compute the diagnostic in float64 so
+the norm itself does not underflow; then we ask the practical float32 question: would a
+learning-rate-$0.1$ update actually change the first layer's stored weights?
+
+
+
+Read the slopes, then read the update audit. The sigmoid first-layer entries are not
+mathematically or representationally zero: all 4,096 survive the float32 cast. They are
+so small, however, that subtracting $0.1g$ changes none of the stored float32 weights.
+The ReLU copy changes all 4,096. That distinction matters: a displayed float32 norm can
+underflow while individual entries remain nonzero, and nonzero gradients can still be
+too small to move a parameter at its current magnitude. ReLU is not magic, but its open
+gates make the signal usable in this matched experiment.
+
+## Initialization: setting the signal's energy
+
+One more lever lives in this chapter, because it falls out of the same variance
+bookkeeping. Think of the network as a pipeline and the variance of the signal as its
+*energy*. If each layer multiplies the variance by more than one, activations explode
+after enough layers; by less than one, they vanish, and by @eq-bp2 the gradients follow.
+A good initialization keeps the energy roughly constant in both directions.
+
+The analysis is one line. For $z = \sum_{i=1}^{n_{\text{in}}} w_i x_i$ with independent,
+zero-mean inputs and weights, $\var(z) = n_{\text{in}} \var(w) \var(x)$. Keeping
+$\var(z) = \var(x)$ demands
+
+$$
+\var(w) = \frac{1}{n_{\text{in}}} \quad \text{(forward)}, \qquad
+\var(w) = \frac{1}{n_{\text{out}}} \quad \text{(backward)}.
+$$
+
+**Xavier initialization** splits the difference for symmetric activations like tanh and
+sigmoid, $\var(w) = 2/(n_{\text{in}} + n_{\text{out}})$. **He initialization** accounts
+for ReLU discarding half its input distribution by doubling the forward recipe,
+$\var(w) = 2/n_{\text{in}}$. PyTorch applies sensible defaults for you; the difference
+between a good and a careless choice is smooth training versus a dead or exploding
+network:
+
+
+
+Initialization gives a stable *start*. Keeping the signal stable *during* training, as
+the weights move, is the job of normalization layers; and for very deep networks even
+that is not enough, and gradients get an architectural bypass: skip connections that add
+a block's input straight to its output. Both belong to later chapters
+(normalization and the residual idea in @sec-09-modern-cnns-transfer, and
+layer normalization where it becomes essential, inside the Transformer of
+@sec-14-self-attention-transformer). What you should carry from here is the invariant
+they all serve: *keep the signal, forward and backward, at constant energy*.
+
+## Okay, so — the chain rule, organized
+
+1. **The graph.** Any network is a computation graph; the forward pass computes and
+   caches, the backward pass multiplies local derivatives in reverse.
+2. **The blame signal.** $\delta^{(l)} = \partial L / \partial \vect{z}^{(l)}$ turns
+   the tangle into four equations: start at the output (@eq-bp1), propagate through
+   $\matr{W}^\top$ and the gate (@eq-bp2), then read off weight and bias gradients
+   (@eq-bp3, @eq-bp4). The backward sweep costs a small constant multiple of the
+   forward graph's operations, for *every* gradient at once.
+3. **We verified it**: our hand-built equations match `torch.autograd` to
+   $10^{-8}$, and a tiny scalar `Value` class reproduces the machinery end to end.
+4. **The gate rules the depth.** The sigmoid-derivative product along a path is bounded
+   above by $0.25^k$ after $k$ gates;
+   ReLU's open gate is a gradient superhighway. Initialization sets the signal's
+   energy so neither direction explodes or dies at the start.
+
+Backpropagation is the engine under every remaining chapter. The next time a deep model
+fails to learn, your first questions now have names: *is the gradient reaching the early
+layers? what is gating it? what is its energy?*
+
+## Sources and further reading {.unnumbered}
+
+- Rumelhart, Hinton, and Williams,
+  ["Learning representations by back-propagating errors"](https://doi.org/10.1038/323533a0)
+  (1986): the landmark short account of learning internal representations by reverse
+  error propagation.
+- Baydin et al.,
+  ["Automatic Differentiation in Machine Learning: a Survey"](https://jmlr.org/papers/v18/17-468.html)
+  (2018): separates reverse-mode automatic differentiation from symbolic and numerical
+  differentiation.
+- Glorot and Bengio,
+  ["Understanding the difficulty of training deep feedforward neural networks"](https://proceedings.mlr.press/v9/glorot10a.html)
+  (2010): the variance argument behind Xavier initialization.
+- He et al.,
+  ["Delving Deep into Rectifiers"](https://openaccess.thecvf.com/content_iccv_2015/html/He_Delving_Deep_into_ICCV_2015_paper.html)
+  (2015): derives the rectifier-aware initialization used in the matched depth
+  experiment.
+
+## Exercises {.unnumbered}
+
+1. **(Pencil.)** Derive the four blame equations for a network whose output layer uses
+   the identity activation and squared-error loss (the network of our verification
+   cell). Confirm that your $\delta^{(2)}$ matches the `delta2` line in the code.
+2. **(Pencil.)** In @eq-bp2, why does the blame flow through $(\matr{W}^{(l+1)})^\top$
+   rather than $\matr{W}^{(l+1)}$? Argue from shapes: what are the dimensions of
+   $\delta^{(l)}$, $\delta^{(l+1)}$, and $\matr{W}^{(l+1)}$?
+3. **(Code.)** Extend the `Value` class with `tanh` and use it to train the one-neuron
+   model from the check cell for 50 steps (write the update loop yourself). Verify the
+   loss decreases.
+4. **(Code.)** In the depth experiment, give the sigmoid network Xavier initialization
+   (`nn.init.xavier_normal_` on each linear layer). How much of the vanishing does good
+   initialization recover at depth 30? What does that tell you about why both fixes,
+   initialization *and* ReLU, became standard?
+5. **(Code.)** Comment out `optimizer.zero_grad()` in any training loop from
+   @sec-01-linear-regression and describe what happens to the loss curve. Explain it
+   with one sentence about `.grad` accumulation.
+# When It Fails: Generalization in Pictures, and Inductive Bias {#sec-06-generalization-inductive-bias}
+
+
+
+Part I has given us everything a course could promise: models with universal expressive
+power (@sec-03-nonlinearity-mlp), losses grounded in maximum likelihood
+(@sec-02-logistic-softmax), an optimizer that scales (@sec-04-training-loss-sgd), and
+gradients for anything (@sec-05-backpropagation). This chapter takes all of it, aims it
+at real images, and succeeds completely.
+
+Then we will look a little closer, and the wheels will come off. Watching *how* they
+come off — in pictures rather than theorems — is the most important lesson of Part I,
+because the cure is the idea the entire rest of this book is built on.
+
+## Victory
+
+The data is a subset of Fashion-MNIST, the classic benchmark from our live sessions:
+28×28 grayscale images of clothing in ten classes. The model and training loop hold no
+surprises: an MLP from @sec-03-nonlinearity-mlp, trained exactly as in
+@sec-04-training-loss-sgd:
+
+
+
+Seventy-six percent on held-out validation images, from one thousand fitting examples
+and a few seconds of CPU. The split was fixed before any experiment, and the separate
+test set remains sealed until the end of the chapter. By every metric we have learned
+to compute, we might be done.
+
+The rest of this chapter is about why we are not.
+
+## Two experiments that should worry you
+
+### Experiment 1: move everything two pixels
+
+Take the validation images and shift each one two pixels to the right. Nothing about any
+garment changes: a coat is a coat, wherever it hangs in the frame. Any human would
+call the original and shifted batches equivalent for classification.
+
+
+
+Two pixels, and the accuracy is nearly cut in half. Push further and the collapse
+completes:
+
+
+
+### Experiment 2: destroy the images entirely
+
+Now the stranger experiment, from the lecture's "fatal flaw" argument. Choose one fixed
+random permutation of the 784 pixel positions and apply it to *every* image, fit and
+validation alike. The displayed arrays are not recognizable pictures anymore — the
+ordinary grid adjacency has been destroyed. Retrain the same MLP on this scrambled world:
+
+
+
+The two validation accuracies are close in this one deterministic run. That is not an
+uncertainty estimate, but it is enough for the structural point: after retraining, an
+invertible relabeling of pixel coordinates costs this MLP no visible accuracy.
+
+Hold the two results side by side and the diagnosis writes itself:
+
+> The MLP hypothesis class and training procedure show no preference for the structure
+> that matters, including pixel adjacency and image geometry, yet the fitted model is
+> **hypersensitive** to a nuisance that should not matter: where the garment happens to
+> sit. It learned the dataset without needing an image-aware representation.
+
+## The autopsy, in pictures
+
+Why exactly does shifting hurt a model that shuffling cannot? Look at what the model
+actually learned. Each row of the first layer's weight matrix is a 784-vector — which
+means we can reshape it into a 28×28 image and look at it. And we know from
+@sec-01-linear-regression what such a row *is*: a **template**, scored against the
+input by dot product.
+
+
+
+There is the whole story in one figure. Every template is **global** — a pattern
+stretched across the entire frame, tuned to where garments sat in the training images.
+Shift the input two pixels and every pixel of every template now scores against the
+wrong part of the garment; hundreds of learned template scores change at once.
+Conversely, the fixed permutation is merely an invertible relabeling of coordinates.
+Retraining can permute the first-layer weights in the opposite direction, so the same
+functions remain available even though adjacency has been destroyed. A model trained
+on ordinary images is not itself invariant to arbitrary pixel permutations.
+
+Capacity was never the issue. By @sec-03-nonlinearity-mlp's universal approximation
+theorem, this network *can represent* a perfectly shift-tolerant classifier. It has no
+reason to find one: nothing in its architecture, loss, or data ever told it that
+position is a nuisance and adjacency is meaningful.
+
+## Naming the disease
+
+With the failure in hand, the classical concepts of Part I snap into focus.
+
+### Hunting the U-curve
+
+The textbook story (@sec-01-linear-regression's cartoon) predicts that as capacity
+grows, validation error should fall and then *rise* as the model overfits. We now have
+everything needed to test the cartoon on real data: a width sweep at two dataset
+sizes:
+
+
+
+Read it honestly. The left side of the cartoon is emphatically real: too little
+capacity underfits badly. But the dreaded right side barely materializes, with a
+whisper of an upturn at the small dataset and nothing at the larger one. This is exactly
+the caveat planted in @sec-01-linear-regression: the U is a helpful cartoon, not a law
+of nature. The optimizer, sample size, and data structure can all shape the curve. This
+one seeded Adam sweep does not identify their separate effects, and it does not
+establish a $1/n$ variance law.
+
+Which sharpens our problem instead of solving it: **our model does not fail for having
+too much capacity. It fails for having no knowledge.** No point on either curve
+survives a two-pixel shift.
+
+### The curse of dimensionality
+
+Could we fix everything with data alone, just by showing the model garments at every
+position? Count what that costs. Our images live in 784 dimensions; a small color image
+(32×32×3) needs 3,072 numbers, a one-megapixel photo three million, an ImageNet input
+150,528. And covering a $d$-dimensional space densely requires exponentially many
+examples: if 9 points cover a 1-D interval at some resolution, matching that density
+takes $9^2$ points in 2-D and $9^d$ in $d$ dimensions. For $d = 784$, there are not
+enough atoms in the universe, at any exchange rate.
+
+High dimensionality also breaks the very idea of "similar examples":
+
+
+
+In the uniform cube, brute-force interpolation loses genuinely near neighbors as the
+ambient dimension grows. Natural images are highly structured and may concentrate near
+a much lower-dimensional set, so this experiment is not their empirical distance
+distribution. It shows the price of trying to cover an *unconstrained* 784-dimensional
+space and why useful structure must enter through data, representation, or architecture.
+
+## The cure has a name
+
+Return to the word planted on the very first pages of this book
+(@sec-01-linear-regression): **inductive bias** — the nudge that steers a learner
+toward the functions we want, among the infinitely many that fit. Our MLP's failure is
+not a capacity problem or (fixably) a data problem. It is a *knowledge* problem: we
+knew things about images that we never told the model.
+
+Say them out loud — the two principles from the lecture:
+
+1. **Locality.** Nearby pixels are related; a pixel and its neighbor jointly form
+   edges, textures, parts. Distant pixels, far less so. (The shuffle experiment proved
+   our MLP holds no such belief.)
+2. **Translation structure.** A local detector's response should move with the feature
+   (**equivariance**), while a classifier's final verdict should tolerate or ignore
+   small changes in position (**invariance**). The shift experiment showed that our
+   fitted MLP did neither reliably.
+
+Here is the move that powers the rest of this book: **build these beliefs into the
+architecture itself** — as constraints. Constrain each template to look at a small
+local patch instead of the whole frame. Then *share* that template across every
+position, so the detection rule itself does not depend on where. Two constraints, and
+both pathologies are attacked at their root. The parameter count falls too: our MLP has
+203,530 parameters, while the LeNet model in @sec-08-cnn will have 61,706, less than a
+third as many. Sharing is a massive economy.
+
+::: {.callout-tip}
+## Constraints are knowledge
+
+A constraint looks like a *reduction* in power: the constrained model is a strict
+subset of the MLP. That is exactly the point. By @sec-01-linear-regression's
+bias–variance lens, we are spending bias — assumptions we are confident of — to
+collapse the search space onto functions that respect the structure of images,
+slashing variance and sample complexity. Inductive bias is not a limitation of a
+model; done right, it is everything you know about the world, cast in architecture.
+And it is a dial, not a dogma: give a weakly-biased model enough data and it can win
+again — a trade we will meet at the frontier in @sec-16-vit-scaling.
+:::
+
+## The pivot
+
+Look once more at the templates figure. The fix is almost visible in it: the templates
+should not span the frame. They should be **small and local** — and they should
+**slide**, scoring every neighborhood of the image with the same little pattern,
+so that a sleeve found anywhere is the same sleeve.
+
+A local template, slid across the image, scoring each position by dot product. That
+machine has a name, it predates deep learning by decades, and Part II opens by building
+it with our bare hands — then asking this book's favorite question about it:
+
+*What if the template were learnable?*
+
+## One sealed test check
+
+The architecture, optimizer, shift size, and reported metrics are now fixed. Only now
+do we fit the same MLP on all 1,200 development examples and open the 600-example test
+set once:
+
+
+
+The sealed check confirms the diagnostic rather than creating it: 80.8% on clean test
+images becomes 42.0% after the predeclared two-pixel shift.
+
+## Okay, so — the lesson of Part I
+
+1. **Every metric can say yes while the model has learned the wrong thing.** Our MLP
+   scored well on clean held-out data while its hypothesis class showed no adjacency
+   preference (fixed shuffle) and its fitted predictions were hypersensitive to a
+   nuisance shift.
+2. **The autopsy is visual**: global templates, tuned to position, blind to adjacency.
+3. **Capacity is not the culprit in this experiment.** The U-curve barely appears in
+   one seeded sweep, while the uniform-cube example shows why unconstrained ambient
+   coverage becomes expensive.
+4. **The cure is inductive bias**: locality and translation structure, built in as
+   constraints. Knowledge, cast in architecture.
+
+## Deeper dive {.unnumbered}
+
+::: {.callout-note collapse="true"}
+## For the curious: how deep this rabbit hole goes
+
+**Networks can memorize random labels.** Zhang et al. reported 100% training accuracy
+on randomly labeled CIFAR-10 and 95.20% on randomly labeled ImageNet under their finite
+training budget, not 100% on ImageNet. Capacity is abundant enough that fitting noise
+is easy (Exercise 4 reproduces the phenomenon on our subset). Capacity alone therefore
+does not explain generalization; the data, optimizer, and architecture must enter the
+account.
+
+**The bias–variance picture, updated.** Our flattened U-curve is a mild case of a
+broader phenomenon: with modern training, test error can even *descend again* beyond
+the interpolation point — "double descent." The cartoon survives as intuition for the
+underfit regime; the overparameterized regime plays by subtler rules.
+
+**Further reading**
+
+- Zhang, Bengio, Hardt, Recht, Vinyals,
+  ["Understanding deep learning requires rethinking generalization"](https://openreview.net/pdf?id=Sy8gdB9xx)
+  (ICLR 2017), the primary source for the random-label experiment.
+- Neal,
+  ["On the Bias-Variance Tradeoff: Textbooks Need an Update"](https://arxiv.org/abs/1912.08286)
+  (2020), the source of this book's "cartoon, not a law" stance.
+- Belkin et al.,
+  ["Reconciling modern machine-learning practice and the classical bias–variance trade-off"](https://doi.org/10.1073/pnas.1903070116)
+  (PNAS 2019), a primary account of double descent.
+- 3Blue1Brown,
+  [*Gradient descent, how neural networks learn*](https://www.youtube.com/watch?v=IHZwWFHWa-w),
+  the visual companion to this chapter's pacing, including the demonstration that a
+  trained MLP can classify pure noise confidently.
+:::
+
+## Exercises {.unnumbered}
+
+1. **(Pencil.)** Explain algebraically why the pixel shuffle costs the MLP nothing:
+   if $\matr{P}$ is a permutation matrix and we train on $\matr{P}\vect{x}$ instead of
+   $\vect{x}$, exhibit the weight matrix that makes the two networks identical. Why
+   does no analogous argument work for the shift?
+2. **(Code.)** Augment the training set with random shifts of ±3 pixels and retrain.
+   Re-plot the cliff. How much robustness did augmentation buy, what did it cost in
+   clean accuracy and compute, and — the real question — what *knowledge* did
+   augmentation encode, compared to building invariance into the architecture?
+3. **(Code.)** The U-curve hunt used widths up to 256. Push to 1024 and 4096 at
+   $n = 300$, repeating each width across several seeds. Then compare Adam with
+   minibatch SGD from @sec-04-training-loss-sgd. Which patterns are stable enough to
+   interpret?
+4. **(Code.)** Randomly permute the training *labels* and train a wide MLP for long
+   enough. Report train and test accuracy, and state in one sentence what this proves
+   about capacity as an explanation of generalization.
+5. **(Pencil.)** Estimate the first-layer parameter count of an MLP with 1,000 hidden
+   units on an ImageNet-scale input (224×224×3). At one float32 per parameter, how
+   much memory is that — and how does the number change if each unit instead sees only
+   a 7×7×3 patch?
+# Filters and Convolution (Fixed Kernels) {#sec-07-filters-convolution}
+
+
+
+Part I ended with a diagnosis and a prescription. The diagnosis: our MLP's templates
+span the whole frame, so they are blind to adjacency and brittle to position
+(@sec-06-generalization-inductive-bias). The prescription, in one sentence: *make the
+template local, and slide it.*
+
+This chapter builds that machine with our bare hands — no learning anywhere. It is a
+piece of classical engineering, decades older than deep learning, and computer-vision
+experts spent careers designing its templates manually. Understanding the machine in
+its fixed, hand-crafted form is the whole point of the chapter, because Part II's
+revolution (@sec-08-cnn) will consist of exactly one change to it.
+
+Recall the primitive from @sec-01-linear-regression: a dot product scores an input
+against a template. When their norms are controlled, its angle component measures
+similarity. Everything below is that one primitive, applied locally, everywhere.
+
+## Two principles, one strategy
+
+The failures of Chapter 6 tell us what knowledge to build in, the two principles from
+the lecture:
+
+1. **Spatial locality.** Nearby pixels are more related than distant ones. Edges,
+   textures, and patterns emerge from *local neighborhoods*, not global pixel
+   arrangements.
+2. **Translation equivariance.** The same feature detector should work regardless of
+   position — a cat's ear is a cat's ear whether it appears top-left or bottom-right.
+
+The strategy they suggest: instead of one massive network staring at the entire image,
+use a *small* detector that analyzes one patch at a time, and **slide it across the
+image** to look for its feature everywhere. To understand what such detectors do, we
+first look at how vision experts used to design them by hand.
+
+## Start in 1D: the moving average
+
+The core operation appears in its friendliest form when smoothing a noisy signal. A
+moving average replaces each point by the mean of its neighborhood: locality, with
+*uniform* weights:
+
+
+
+## To 2D: the recipe
+
+The image version is the same idea with a small 2-D window, and it is worth stating as
+the five-step recipe from the lecture:
+
+1. Define a small window of weights, the **kernel** (for a blur: all positive, summing
+   to 1).
+2. Place the kernel over a patch of the image.
+3. Multiply elementwise: kernel weights against the pixels underneath.
+4. Sum the products into a single output pixel. *(Steps 3–4 are one dot product: the
+   patch, scored against a small template.)*
+5. **Slide the window** to the next location and repeat, producing a new image.
+
+Let us expose every sliding patch at once, multiply each by the kernel, and sum. Then we
+check the result against the framework's version, following the build-then-verify habit
+of this book:
+
+
+
+Also worth noticing before we move on: the output is smaller than the input. A $k
+\times k$ kernel on an $n \times n$ image produces $(n - k + 1) \times (n - k + 1)$
+outputs, because the window must stay inside the frame. What to do about that (and
+about sliding in bigger steps) is @sec-08-cnn's business.
+
+## The filter zoo
+
+Here is the remarkable part: the recipe never changes — *only the numbers in the
+kernel do*. Different numbers produce completely different specialists. Three
+classics, applied to a synthetic test scene and to a boot from our Fashion-MNIST
+subset:
+
+- **Blur**: uniform positive weights summing to 1, the 2-D moving average.
+- **Sharpen**: amplify each pixel's difference from its neighbors.
+- **Edge detection** (Sobel): positive and negative weights summing to *zero* — over
+  any flat region the products cancel and the output is silent; over an edge, a sharp
+  change in values, the sum swings large. A detector that answers one question:
+  *does intensity change here, in my direction?*
+
+
+
+Study the two Sobel columns for a moment. The vertical-edge detector lights up on the
+rectangle's sides and stays silent on its top and bottom; the horizontal detector does
+the reverse; the diagonal stripes excite both. Nine numbers, and we have built a
+primitive *feature detector* — precisely the "small network analyzing one patch"
+of our strategy, except nobody has learned anything yet.
+
+## Naming the operation
+
+This sliding sum-of-products has a proper name: **cross-correlation**. With kernel $V$
+of half-width $\Delta$ and image $X$:
+
+$$
+[H]_{i,j} \;=\; \sum_{a=-\Delta}^{\Delta}\;\sum_{b=-\Delta}^{\Delta} [V]_{a,b}\,[X]_{i+a,\,j+b} .
+$$ {#eq-crosscorr}
+
+::: {.callout-note}
+## "Convolution", with a small asterisk
+
+The deep learning community universally calls this operation a **convolution**, and so
+will we. A mathematician's convolution flips the kernel before sliding; since our
+kernels will soon be *learned* parameters, a flipped kernel is just another kernel, and
+the distinction is inconsequential in practice (Exercise 4 makes you confirm this).
+:::
+
+## The property we paid for: equivariance
+
+Now collect the reward that Chapter 6's MLP could never have. Away from boundaries,
+slide-and-score treats every position identically $\rightarrow$ if the input shifts,
+the output shifts *with it*, unchanged in content. That is **translation equivariance**,
+and it need not be taken on faith:
+
+
+
+Exactly zero on the compared interior. The detector's report moves with the garment.
+Contrast Chapter 6: the MLP's global templates degraded under a 2-pixel shift because
+position was baked into every weight. Here, position cannot matter to *what* is detected
+on the interior, only to *where* the detection lands. At the frame boundary, cropping,
+padding, or fill rules can break exact equality; that is why the code excludes the
+blank-border region.
+
+One precision worth keeping sharp, because the two words will both matter:
+**equivariant** means the output moves along with the input (what convolution gives
+us); **invariant** means the output does not change at all (what a classifier
+ultimately wants — "boot", regardless of position). Equivariance is the raw material;
+in @sec-08-cnn, pooling will spend some position information to buy local shift
+tolerance. Exact invariance is a stronger property and must be tested, not presumed.
+
+## The matrix view: a structured, weight-shared linear map
+
+One more pair of glasses, from the lecture's preview box. Every output pixel is a dot
+product $\rightarrow$ the whole operation is *linear* $\rightarrow$ cross-correlation
+could be written as one enormous matrix multiplying the flattened image. But it is a
+matrix with a rigid structure: almost everywhere zero (locality: each row touches only
+one patch), and the same nine numbers repeating along its diagonals (sharing: every
+row is the same template, relocated).
+
+That view makes the economics explicit. A dense layer from our 28×28 images to an
+equal-sized output would own $784 \times 784 \approx 615{,}000$ weights. The Sobel
+detector owns **nine** — reused at every position. This is Chapter 6's
+constraints-are-knowledge callout made concrete: locality zeroes out most of the
+matrix, equivariance ties the survivors together, and what remains is a linear map
+with almost nothing left to specify.
+
+
+
+## The bottleneck: someone has to design the kernel
+
+So why did this classical machinery not solve vision decades ago? Because the kernels
+are only as good as their designers, and hand-crafted kernels have three limitations
+the lecture names:
+
+1. **Limited expressiveness.** They detect simple, predefined patterns — gradients,
+   blobs, corners. Nobody can write down nine numbers for "cat ear" or "car wheel."
+2. **Manual feature engineering.** Choosing which kernels to use, and how to combine
+   them, takes deep domain expertise and endless experimentation — for every new task.
+3. **No adaptation.** A fixed kernel cannot adjust to a dataset. What works for one
+   task fails for another.
+
+An entire era of computer vision lived inside these constraints, stacking hand-designed
+detectors into elaborate pipelines. The machine was right; the templates were the
+bottleneck.
+
+You can hear the question coming. We have a device that is local, weight-shared, and
+equivariant by construction — with a handful of numbers sitting inside it, currently
+chosen by hand. Nine numbers. We have spent four chapters building tools that tune
+numbers against a loss.
+
+*What if the template were learnable?* That question is @sec-08-cnn, and its answer
+has a name you already know.
+
+## Okay, so — the machine before the learning
+
+1. **One operation, many specialists**: slide a small template, take a dot product at
+   every position (@eq-crosscorr). Blur, sharpen, and edge detection differ only in
+   the kernel's numbers.
+2. **Locality and sharing are built in**: as a matrix, convolution is almost-all-zero
+   with nine numbers repeating — 615,000 weights collapsed to 9.
+3. **Equivariance is exact on the interior**, not approximate: filter-then-shift equals
+   shift-then-filter wherever both operations see the same pixels. Boundary handling
+   must be specified separately. The next chapter asks how much local shift tolerance
+   pooling can purchase from that equivariance.
+4. **Hand-crafting is the bottleneck** — expressiveness, engineering cost, no
+   adaptation — and it is exactly the kind of bottleneck this book knows how to break.
+
+## Sources and further reading {.unnumbered}
+
+- Fukushima,
+  ["Neocognitron: A Self-organizing Neural Network Model"](https://doi.org/10.1007/BF00344251)
+  (1980): an early hierarchy of local, shift-tolerant feature detectors.
+- LeCun et al.,
+  ["Gradient-Based Learning Applied to Document Recognition"](http://yann.lecun.com/exdb/publis/pdf/lecun-98.pdf)
+  (1998): connects shared local kernels to the trainable CNN built next.
+- Dumoulin and Visin,
+  ["A Guide to Convolution Arithmetic for Deep Learning"](https://arxiv.org/abs/1603.07285)
+  (2016): a visual reference for padding, stride, and output-shape arithmetic.
+
+## Exercises {.unnumbered}
+
+1. **(Pencil.)** Compute by hand the full output of cross-correlating this $4\times4$
+   image with the vertical Sobel kernel:
+   rows $(0,0,1,1)$, $(0,0,1,1)$, $(0,0,1,1)$, $(0,0,1,1)$. Before computing: where
+   should the detector fire?
+2. **(Pencil + code.)** Design a $3\times3$ kernel that detects *diagonal* edges
+   (bottom-left to top-right). State your design rule (what must the weights sum to,
+   and why?), then run it on `make_shapes()` and check it fires on the stripes.
+3. **(Pencil.)** Prove translation equivariance from @eq-crosscorr: substitute the
+   shifted image $X'_{i,j} = X_{i-s,j}$ and show $H'_{i,j} = H_{i-s,j}$. Why does the
+   same argument fail for the MLP of Chapter 6? State where the proof applies at a
+   finite image boundary.
+4. **(Code.)** True convolution flips the kernel: run `conv2d` with `k` and with
+   `k.flip(0, 1)` for the blur and for Sobel. Which outputs differ, which do not,
+   and what property of the kernel decides it?
+5. **(Code.)** The box blur is *separable*: show that convolving with the $3\times3$
+   uniform kernel equals convolving with a $3\times1$ column of $\tfrac13$s and then a
+   $1\times3$ row of $\tfrac13$s. Count multiplications per output pixel for each
+   route — this trick mattered enormously in the hand-crafted era.
+# CNNs: Making the Filters Learnable {#sec-08-cnn}
+
+
+
+Chapter 7 closed on a question it had spent a whole chapter earning: we built a machine
+that is local, weight-shared, and translation-equivariant away from boundaries, with
+nine hand-picked numbers
+sitting inside it. Nine numbers $\rightarrow$ nine knobs $\rightarrow$ we have spent
+half a book tuning knobs against a loss.
+
+So: declare the kernel a **parameter**. That single change is this chapter, and it is
+the whole revolution. Everything else here — channels, padding, stride, pooling — is
+the supporting cast that turns one learnable filter into a working network. By the end
+we will have assembled LeNet, the first great convolutional architecture, trained it
+on our garments, and re-run the cruelest experiment of
+@sec-06-generalization-inductive-bias to see what the inductive bias actually bought.
+
+
+
+Note the shapes. In Part I we flattened every image into a 784-vector before the model
+ever saw it. That stops now: the images stay rectangular, and they pick up a *channel*
+dimension, for reasons that will occupy us shortly.
+
+::: {.callout-warning}
+## The book's batch convention: NCHW
+
+Throughout this book, every image **batch** uses PyTorch's **NCHW** order: (batch,
+channels, height, width). A single grayscale batch is therefore shaped `(1, 1, 28,
+28)`. `Conv2d` can also accept an unbatched `(C, H, W)` input, but keeping the batch
+dimension explicit makes downstream shapes predictable. The kernels of a conv layer
+live in a 4-D tensor too: (out-channels,
+in-channels, height, width). This bookkeeping is the single most common source of
+errors in convolutional code: when a shape error greets you, count dimensions before
+touching anything else. Chapter 7's `conv2d` helper hid this with `x[None, None]`;
+from here on we handle it in the open.
+:::
+
+## Nine numbers, learned
+
+Here is a game. I have a feature detector — one of Chapter 7's zoo, but I won't tell
+you which. I will only show you what it does: you hand it images, it hands back
+feature maps. Your job is to build a detector that matches it.
+
+With the tools of Part I, this is not even hard. A kernel applied by @eq-crosscorr is
+just nine numbers entering a dot product $\rightarrow$ the output is differentiable
+with respect to those numbers $\rightarrow$ gradient descent applies. Start from a
+random kernel and run the loop we have run since Chapter 1: predict $\rightarrow$
+measure $\rightarrow$ step.
+
+
+
+The loss falls more than five orders of magnitude, and the learned kernel is the vertical Sobel
+detector to within 0.02 in every entry. Gradient descent, given nothing but
+input–output pairs, has *reinvented* a filter that took computer-vision researchers
+years of squinting at image gradients to design.
+
+
+
+::: {.callout-tip}
+## The pivot of Part II
+
+Read that cell again, because the entire deep-learning revolution in vision is that
+cell writ large. Chapter 7 ended with the bottleneck: hand-crafted kernels are limited
+to patterns a human can articulate in nine numbers — nobody can write down "cat ear."
+The fix is not better articulation. It is to stop articulating: put the numbers on the
+gradient tape and let the task pull the detector it needs out of the data. *What if
+the template were learnable?* It is, and the machinery has been in our hands since
+Chapter 4.
+:::
+
+Two honest disclaimers about the game, both of which make the real thing *more*
+remarkable, not less. First, the game was rigged: the target came from a known kernel,
+so a perfect answer existed and the loss surface was a clean convex bowl (the output
+is linear in $V$, and squared error in a linear map is Chapter 1's setting all over
+again). Second, and more important: **in a real CNN, nobody supplies the target
+feature maps.** The only supervision is the classification loss at the far end of the
+network. Blame flows backward through every layer — exactly the mechanics of
+@sec-05-backpropagation — and the kernels that emerge are whatever detectors the task
+itself demands. We chose Sobel here; a trained network might discover it needs
+something no one has named.
+
+One backpropagation detail deserves a sentence, because it is the same fan-out rule we
+met in @sec-05-backpropagation. The *same* nine numbers are used at every position of
+the slide $\rightarrow$ every position contributes blame to the shared kernel. Those
+contributions accumulate, then the loss reduction supplies its scale; `F.mse_loss`
+with the default `reduction="mean"` averages over batch, channel, and spatial elements.
+Weight sharing is not just a parameter economy. At training time every patch of every
+image teaches the one shared template.
+
+## From one detector to a layer of detectives
+
+One learnable kernel gives one feature map: one specialist, sweeping the image with
+one magnifying glass. But Chapter 7's zoo already told us one specialist is not
+enough — vertical edges, horizontal edges, blobs, textures all carry information. So
+we hire a *team*. The lecture's image is worth keeping: employ six detectives, each
+with a different expertise, each producing their own annotated map of the crime scene.
+
+That is all the **channel** machinery is:
+
+- **Out-channels: more detectives.** A conv layer with 6 output channels owns 6
+  independent kernels and produces a stack of 6 feature maps.
+- **In-channels: detectives read the whole stack.** The *next* layer's input is that
+  6-deep stack, so each of its kernels grows a third dimension: a $6 \times 5 \times
+  5$ volume that looks at all six incoming maps *simultaneously* and sums the
+  evidence into one output map, one bias per output channel at the end.
+
+For an input stack $X$ with $C_{\text{in}}$ channels, output map $o$ is
+
+$$
+[H_o]_{i,j} \;=\; b_o \;+\; \sum_{c=1}^{C_{\text{in}}}\;
+\sum_{a=-\Delta}^{\Delta}\;\sum_{b=-\Delta}^{\Delta}
+[V_{o,c}]_{a,b}\,[X_c]_{i+a,\,j+b},
+$$ {#eq-conv-layer}
+
+which is @eq-crosscorr run once per input channel and summed — followed, as always
+since @sec-03-nonlinearity-mlp, by a nonlinearity. A convolutional layer is Chapter
+3's recipe with a structured linear map: dot products $\rightarrow$ add bias
+$\rightarrow$ ReLU. Nothing in the recipe changed; only the wiring of the linear part
+did.
+
+
+
+Look at `conv2.weight`: sixteen kernels, each $6 \times 5 \times 5$. This is where
+features start *composing*. Suppose detective 3 in the first layer is a vertical-edge
+expert and detective 5 hunts horizontal edges. A second-layer kernel that weights both
+maps positively in the same neighborhood fires precisely when both experts agree
+$\rightarrow$ a **corner detector**, built from evidence no single first-layer kernel
+could see. The cross-talk between channels is how edges become corners, corners become
+textures, and textures become parts. We promised this compositional ladder in Chapter
+3; here is the hardware it runs on.
+
+Chapter 7's zoo can stage the story before any learning enters. Give the first layer
+two hand-crafted experts — vertical and horizontal edge energy — then hand-build one
+second-layer kernel that reads both reports at once:
+
+
+
+The four brightest cells of the right panel are exactly the square's four corners: a
+corner detector, assembled from experts that individually know nothing about corners.
+In a trained CNN, gradient descent builds combinations like this — and far stranger
+ones — on its own.
+
+::: {.callout-tip}
+## `nn` versus `F`, appliances versus recipes
+
+The lecture's analogy: `nn` modules are *appliances* — they have knobs and memory, and
+PyTorch carries their state around for you (`nn.Conv2d` owns its kernels and biases as
+`nn.Parameter`s, registered for autograd and visible to the optimizer). `F` functions
+are *recipes* — stateless, everything passed in by hand. In Chapter 7 the kernel was
+ours, so `F.conv2d` was the honest choice; now the kernel is the layer's business, so
+`nn.Conv2d` is. Use appliances for anything with parameters, recipes for everything
+else (`F.relu`, `F.max_pool2d`).
+:::
+
+## Padding and stride: the bookkeeping with a payoff
+
+Chapter 7 left an administrative debt: a $k \times k$ kernel on an $n \times n$ image
+yields only $(n-k+1) \times (n-k+1)$ outputs, because the window must stay inside the
+frame. For one layer, a nuisance. For a *deep* stack, fatal: $28 \rightarrow 24
+\rightarrow 20 \rightarrow \cdots$ and the feature map shrinks toward nothing, with
+edge pixels contributing to ever fewer windows along the way.
+
+The fix is blunt: **padding**. Add a border of zeros around the input so the window
+can center itself on every real pixel. For a $5 \times 5$ kernel, a 2-pixel border
+returns exactly the input size $\rightarrow$ that is why `conv1` above says
+`padding=2`. Padding
+decouples "how deep can the network be" from "how fast do the maps shrink," and that
+decoupling is what makes deep stacks possible at all.
+
+Sometimes, though, we *want* to shrink — coarser maps mean less computation and a
+wider view per pixel. Then we shrink on purpose with **stride**: slide the window $s$
+pixels at a time instead of one. Both knobs live in one formula, worth memorizing
+because you will run it in your head for every architecture you ever read:
+
+$$
+n_{\text{out}} \;=\; \left\lfloor \frac{n + 2p - k}{s} \right\rfloor + 1 .
+$$ {#eq-outsize}
+
+The numerator is the padded length minus the window, i.e. how far the window can
+travel; dividing by the step and flooring counts the stops; $+1$ counts the starting
+position. The lecture's three worked cases, verified:
+
+
+
+## Pooling: trading exact location for local tolerance
+
+Now for the deepest design decision in the network, and it starts from the asset
+Chapter 7 banked. Under matched boundary rules, convolution is equivariant on the
+interior: shift the garment, and every feature map shifts in lockstep. The detective's
+map of clues faithfully tracks the scene. But the network's final job is not mapping
+clues; it is a verdict. *Is this a
+trouser?* The answer must not depend on where the trouser stands. The feature-finding
+stage wants **equivariance** (where things are matters); the decision stage wants
+**invariance** (only what was found matters). Equivariance is what we have; invariance
+is what the classifier head needs $\rightarrow$ something must reduce sensitivity to
+location.
+
+That converter is **pooling**. Slide a window over each feature map (no parameters
+this time) and summarize each neighborhood by one number:
+
+- **Max pooling** asks: *what is the strongest clue here?* Keep the loudest
+  activation, discard the rest.
+- **Average pooling** asks: *what is the general vibe of this neighborhood?* Smoother,
+  but a single sharp clue gets diluted by quiet neighbors.
+
+
+
+The common configuration is the one above: $2 \times 2$ windows with stride 2,
+non-overlapping, halving each spatial dimension. Max is the default choice in
+practice, precisely because feature detection is about the strongest evidence, not the
+committee average.
+
+How can this buy local tolerance? Start with a deliberately clean construction in
+which a shift becomes invisible:
+
+
+
+Both clues moved, yet these particular pooled maps are *identical*: each isolated
+maximum stayed inside its $2 \times 2$ window. That equality belongs to this
+construction, not to max pooling in general. A shift can change which values share a
+window, which maximum wins, or what crosses the boundary. Pooling can therefore buy
+local tolerance to jitter, but the amount depends on the activations and alignment;
+the end of this chapter measures it rather than assuming it.
+
+::: {.callout-warning}
+## Tolerance has a price tag
+
+Pooling can buy tolerance by *throwing away position*. After two rounds, the network
+knows a strong vertical edge exists in a region; it no longer knows exactly where.
+For classification this is the right trade — but it is a trade, and it will come due
+twice in this book. Deeper in Part II, tasks that need precise locations will have to
+be more careful with resolution. And in Part IV the tables turn completely:
+self-attention (@sec-14-self-attention-transformer) is so thoroughly
+position-agnostic that we will have to *pay to put position back in*. Remember, when
+we get there, that position was something we once discarded on purpose.
+:::
+
+## How far a deep neuron sees
+
+There is one more consequence of stacking, and it quietly resolves the tension Chapter
+6 left us with. Every kernel here is tiny — $5 \times 5$, resolutely local. Yet
+recognizing a garment is a *global* judgment. Where does globality come from?
+
+From depth. A neuron in the first feature map sees a $5 \times 5$ patch of the image:
+its **receptive field**. A neuron one layer up sees a $5 \times 5$ patch *of feature
+maps*, each pixel of which already summarizes a patch below $\rightarrow$ its
+receptive field on the original image is wider. Pooling accelerates this: after a
+$2\times2$/stride-2 pool, neighboring pixels in the pooled map stand two original
+pixels apart, so every later window covers twice the ground. For our upcoming network
+the ledger reads: conv1 sees $5 \times 5$ $\rightarrow$ pooling nudges it to $6 \times
+6$ $\rightarrow$ conv2's $5\times5$ window, at stride-2 spacing, expands it to $14
+\times 14$ $\rightarrow$ the final pool reaches $16 \times 16$ — over half the frame
+in every direction, from nothing but $5 \times 5$ looks.
+
+
+
+This is the compositional hierarchy of @sec-03-nonlinearity-mlp given a strong
+architectural invitation. The MLP *could* represent features-of-features but nothing
+encouraged it to; locality and growing receptive fields encourage later layers to
+compose earlier responses. Learned channels often progress from edge-like patterns to
+textures and parts, but the architecture does not force those human labels. The CNN
+buys global sight gradually, paying for it with depth; hold that thought until Part IV,
+where attention will buy global sight in a single step and pay for it differently
+(@sec-13-attention).
+
+## LeNet: the whole machine
+
+Time to assemble. The canonical blueprint is **LeNet**, Yann LeCun's digit-reading
+network, and its rhythm is the CNN design pattern to this day: *convolve, shrink,
+deepen; repeat; then decide.* Spatial size falls (28 $\rightarrow$ 14 $\rightarrow$ 5)
+while feature depth grows (1 $\rightarrow$ 6 $\rightarrow$ 16): the network trades
+"where" for "what" stage by stage, until a small dense head reads the final $16 \times
+5 \times 5$ summary and votes.
+
+
+
+Every line is a tool we already own: @eq-conv-layer twice, @eq-outsize silently fixing
+`padding=2`, pooling twice, then Chapter 3's MLP as the decision head — and, per
+Chapter 2's advice, the model returns raw logits and lets `F.cross_entropy` handle the
+probabilities.
+
+::: {.callout-note}
+## LeNet, then and now
+
+The LeNet family (LeCun and colleagues, 1989–1998) began by reading handwritten ZIP
+codes for the US Postal Service, and its mature form, LeNet-5, went on to read a
+substantial share of America's bank checks — convolutional networks were literally
+cashing checks decades before they were fashionable. Our variant keeps the classic
+skeleton but upgrades the internals with
+Part I's verdicts: ReLU where the original used sigmoid-family activations
+(@sec-03-nonlinearity-mlp, @sec-05-backpropagation), max pooling where it used
+average-flavored subsampling, Adam as the optimizer. The lecture's live session adds
+one more modern stabilizer, batch normalization, which we meet properly in
+@sec-09-modern-cnns-transfer.
+:::
+
+Before training, the parameter audit — because parameter *economy* was half of Chapter
+7's sales pitch, and Chapter 6's MLP is the yardstick:
+
+
+
+Two readings of this table. Against the MLP: LeNet carries 61,706 parameters to the
+MLP's 203,530 (less than a third) while performing far richer spatial computation.
+Weight sharing is doing exactly what Chapter 7's matrix view promised. Within LeNet:
+look where the parameters live. The two conv layers, the part that actually *sees*,
+own 2,572 parameters (about 4%) while the dense head hoards the rest. That imbalance
+is a design smell we will fix in @sec-09-modern-cnns-transfer, where modern
+architectures go deeper in convolution and lighter in the head.
+
+Now train both models under one shared optimization recipe: same fitting split,
+optimizer, minibatch size, number of epochs, and therefore number of parameter updates.
+The comparison does **not** match parameter count or floating-point work; a convolution
+and a dense layer spend different computation per update. Architecture is the intended
+difference, compute is not controlled:
+
+
+
+Read the clean-validation column honestly: the MLP scores 75.5% and LeNet 74.5% in this
+single seeded run. A one-point difference is descriptive, not an uncertainty estimate,
+so it does not establish which architecture has higher expected clean accuracy. Chapter
+6 already told us why a landslide is unlikely here: centered garments do not expose the
+MLP's main weakness. Both models nearly interpolate the fitting split. Our small-data
+regime makes a narrower point: LeNet reaches comparable clean accuracy with less than a
+third of the parameters. The shift experiment now asks whether it learned a different
+kind of representation.
+
+## The rematch
+
+Chapter 6 convicted our MLP with one experiment: shift every validation garment two pixels
+right, and accuracy fell off a cliff — the full-frame templates kept scoring sleeves
+against background. We then promised that an architecture built on locality and weight
+sharing would face the same trial. The rematch:
+
+
+
+There is the payoff, and it is worth stating precisely. At two pixels the MLP falls
+from 75.5% to 42.0%, while LeNet falls from 74.5% to 57.5%. That is one deterministic
+validation split, not a sampling distribution, but the within-run contrast is large.
+The mechanism is everything this chapter built: the kernels travel with the garment
+(equivariance), so the *features are still found*; pooling forgives some sub-window
+jitter (local insensitivity); only the coarse layout entering the head changes at all.
+
+And yet the navy curve falls too. Also worth stating precisely, because it teaches the
+architecture's fine print. Two rounds of 2× pooling buy tolerance measured in a few
+pixels, not unlimited; and after `flatten(1)`, the dense head reads the final $5
+\times 5$ grid *positionally* — a four-pixel input shift moves features roughly one
+full cell in that grid, and the head is as brittle to cell-level shifts as Chapter 6's
+MLP was to pixel-level ones. The inductive bias did not abolish the cliff; it moved it
+outward and flattened it into a slope. Reducing the remaining sensitivity is the next
+chapter's business, where we revisit depth and the position-sensitive head.
+
+One last look inside, because Chapter 6 also showed us what the MLP's first layer
+*looked like* — global, smeared, garment-shaped templates
+(@sec-06-generalization-inductive-bias) — and promised that structure would change:
+
+
+
+Six small, local kernels produce distinct response maps on the same garment. Some show
+directional structure; others remain noisy enough that naming a detector would tell
+more story than this one run supports. Nobody designed them. The classification loss,
+pulling blame backward through @eq-conv-layer for roughly 1,200 optimizer steps, chose
+these local measurements.
+
+## One sealed test check
+
+We have now fixed both architectures, the optimizer schedule, the shift size, and the
+two reported metrics. We refit each model on all 1,200 development images, then open the
+600-image test set once:
+
+
+
+The sealed check confirms the validation diagnosis. Clean accuracy is 82.2% for the
+MLP and 82.5% for LeNet, a descriptive 0.3-point gap from one seed. Under the
+predeclared two-pixel shift, the gap becomes 41.8% versus 62.3%.
+
+## Okay, so —
+
+1. **One change made the revolution**: the kernel's numbers became parameters.
+   Gradient descent can recover a hand-crafted detector from data (our rigged game)
+   and, more importantly, discover detectors nobody designed, supervised only by the
+   task loss at the far end.
+2. **Channels turn one detector into a team**: out-channels stack specialists'
+   feature maps; in-channels let the next layer read all maps at once
+   (@eq-conv-layer), which is how edges compose into corners and parts.
+3. **Padding and stride are the shape budget**: $n_{\text{out}} = \lfloor (n + 2p -
+   k)/s \rfloor + 1$ (@eq-outsize). Padding lets networks go deep without shrinking to
+   nothing; stride shrinks on purpose.
+4. **Pooling can turn equivariance into local shift tolerance** — the strongest clue
+   per window, some position discarded. It is a purchase, and position is the currency.
+5. **Receptive fields grow with depth**: $5 \rightarrow 6 \rightarrow 14 \rightarrow
+   16$ in our LeNet. Local wiring earns global sight gradually; the hierarchy Chapter
+   3 could only hope for is now encouraged by architecture.
+6. **The verdict**: on the sealed test set, one seed puts clean accuracy at 82.2% for
+   the MLP and 82.5% for LeNet; this does not establish an expected clean-accuracy
+   difference. Under the predeclared two-pixel shift, the same models score 41.8% and
+   62.3%. The bias did not add capacity; it added the *right constraints*, exactly
+   Chapter 6's prescription.
+
+## Sources and further reading {.unnumbered}
+
+- LeCun et al.,
+  ["Gradient-Based Learning Applied to Document Recognition"](http://yann.lecun.com/exdb/publis/pdf/lecun-98.pdf)
+  (1998): the primary LeNet account, including the architecture's document-recognition
+  setting.
+- Fukushima,
+  ["Neocognitron: A Self-organizing Neural Network Model"](https://doi.org/10.1007/BF00344251)
+  (1980): historical context for alternating feature extraction and spatial tolerance.
+- Zeiler and Fergus,
+  ["Visualizing and Understanding Convolutional Networks"](https://arxiv.org/abs/1311.2901)
+  (2014): methods and evidence for inspecting learned convolutional features without
+  over-reading a single filter image.
+- Dumoulin and Visin,
+  ["A Guide to Convolution Arithmetic for Deep Learning"](https://arxiv.org/abs/1603.07285)
+  (2016): a compact companion for checking convolution, pooling, and receptive-field
+  shapes.
+
+## Exercises {.unnumbered}
+
+1. **(Pencil.)** Run @eq-outsize through LeNet layer by layer, starting from $28
+   \times 28$: verify every shape comment in the `LeNet` class, then verify the
+   parameter counts of `conv1` and `conv2` from the table (weights *and* biases).
+2. **(Pencil.)** Verify the receptive-field ledger $5 \rightarrow 6 \rightarrow 14
+   \rightarrow 16$. (Track two numbers per stage: the field size, and the *jump* — the
+   spacing in input pixels between neighboring units — which each stride-2 pool
+   doubles.) Then show that no convolutional or pooling unit in LeNet ever sees the
+   full $28 \times 28$ frame. Where does globality finally enter the network?
+3. **(Code.)** Play the mystery-detector game with the $3 \times 3$ blur kernel as
+   the target. Does gradient descent recover it as cleanly as Sobel? Now rerun with
+   only 8 training images instead of 256. What happens to the recovered kernel, and
+   what does that say about data volume versus parameter identifiability?
+4. **(Code.)** Swap LeNet's max pooling for average pooling and retrain. Compare
+   clean accuracy and the shift curve. Which changes more, and does the result match
+   the "strongest clue vs. general vibe" story?
+5. **(Pencil.)** The final dense head receives 25 spatial positions per feature map.
+   Explain why this can reintroduce shift sensitivity after equivariant convolutions.
+   Describe what information a position-insensitive head would keep and discard; we
+   will build one in @sec-09-modern-cnns-transfer.
+# Modern CNNs and Transfer Learning {#sec-09-modern-cnns-transfer}
+
+
+
+Chapter 8 ended with a working machine and a report card. LeNet reads garments at
+82.5% with 61,706 parameters; graceful under shift where the MLP cliff-dived. But the
+card has two demerits we wrote down explicitly: 96% of those parameters sit in the
+dense head rather than in the convolutions that do the seeing, and the shift cliff was
+softened, not abolished. And one IOU: the live session's batch normalization, promised
+for this chapter.
+
+What happened after LeNet is a decade of architecture research, and it can drown you
+in named networks. The lecture compresses it into **four design questions**, and we
+will let them drive:
+
+1. **Why $5 \times 5$?** Could smaller filters do the same job with fewer parameters?
+2. **How do we go deeper** without gradients dying on the way down?
+3. **Where do the parameters actually live**, and how do we evict them?
+4. **Can we design reusable blocks**: optimized layer-combinations we stack, keeping
+   a bird's-eye view instead of re-designing what already works?
+
+Each question has a famous answer (VGG, ResNet, NiN's $1\times1$ + global pooling,
+and the block habit itself), and each answer is a constraint-shaped idea we can test
+on our own data. At the end, the practical superpower the lecture builds to,
+reusing a pretrained backbone, gets the most honest experiment in this book.
+
+
+
+One evaluation label needs an honesty note. Chapter 8 already opened the 600-image
+holdout, and this chapter queries it repeatedly while comparing architectures. We
+keep the familiar `X_te` name, but treat it as the book's fixed **benchmark**. These
+comparisons are descriptive, not an unbiased estimate after model selection; a final
+claim would require a fresh, untouched test set.
+
+Two small novelties in the recipe, both because this chapter's networks contain batch
+normalization: `model.train()` before each step and `model.eval()` before each
+evaluation. Why that matters is the subject of the second section.
+
+## Question 1: why $5 \times 5$? Stack small kernels instead
+
+VGG's answer (Simonyan & Zisserman, 2014) is the cleanest idea in this chapter. Recall
+the receptive-field ledger of @sec-08-cnn: stacking grows the field. Two stacked
+$3 \times 3$ convolutions let the second layer see $5 \times 5$ of the input, the
+*same* receptive field as one $5 \times 5$ kernel. But compare the bills, for a layer
+with $C$ channels in and $C$ out:
+
+$$
+\underbrace{25\,C^2}_{\text{one } 5\times5}
+\qquad\text{versus}\qquad
+\underbrace{2 \times 9\,C^2 = 18\,C^2}_{\text{two } 3\times3\text{s}},
+$$
+
+a 28% saving. The stacked pair also fires a ReLU *twice* where the big kernel fires
+once. Same sight, fewer parameters, more nonlinearity. Three $3\times3$s reach a
+$7\times7$ field for $27C^2$ against $49C^2$: the deeper you take the idea, the
+better the deal gets.
+
+
+
+One honest caveat before you re-derive the field equations of vision from this: the
+$18C^2 < 25C^2$ arithmetic assumes the channel width stays $C$ through the stack.
+When a layer *grows* channels (as LeNet's $6 \rightarrow 16$ did), splitting it into
+two growing $3\times3$s can cost more, not less. VGG's design sidesteps this by
+keeping width constant inside each block and changing it only between blocks, which
+is exactly the shape our code will take. (Exercise 1 makes you find the break-even
+point.)
+
+## The stabilizer we owe you: batch normalization
+
+Before we stack deeper than ever, we need the tool Chapter 8's live session used and
+we deferred. Here is the problem it solves. Watch what happens to the *scale* of
+activations as a signal crosses twelve freshly initialized $3\times3$ conv layers:
+
+
+
+Without normalization the signal's spread collapses by an order of magnitude within a
+few layers and keeps sagging. Forward activation scales and backward gradients are not
+the same quantity, but both are shaped by the stack's weights and nonlinearities;
+poorly scaled activations are therefore a warning to inspect gradient flow directly,
+as we do below.
+
+**Batch normalization** (Ioffe & Szegedy, 2015) re-standardizes at every layer. For
+each channel of an NCHW tensor, `BatchNorm2d` computes the mean and variance across
+the current minibatch **and both spatial axes** ($N$, $H$, and $W$), normalizes the
+activations, then lets the layer undo that transformation through two learnable knobs:
+
+$$
+\hat{x} = \frac{x - \mu_{\text{batch}}}{\sqrt{\sigma^2_{\text{batch}} + \epsilon}},
+\qquad
+y = \gamma\,\hat{x} + \beta .
+$$ {#eq-batchnorm}
+
+The $\gamma, \beta$ pair matters: normalization is a *reset to a healthy scale*, not a
+straitjacket. The network can learn to restore any mean and spread that helps, but
+it starts every layer from sane numbers. In the printout above, the BN column holds
+near a constant spread through all twelve layers: every layer trains from day one.
+The standard placement, which the live session uses and we adopt, is
+conv $\rightarrow$ BN $\rightarrow$ ReLU, with `bias=False` on the convolution, since
+$\beta$ already provides the shift.
+
+::: {.callout-warning}
+## BN is two different machines: tell PyTorch which one you're running
+
+At training time BN normalizes by the *current batch's* statistics. At evaluation
+time there may be no batch (one image!), so it uses running averages collected during
+training. `model.train()` and `model.eval()` switch between the two. Forgetting the
+switch is the classic BN bug: evaluate in train mode and your predictions depend on
+whatever else happens to be in the batch; train in eval mode and BN never learns its
+statistics. Our `train_model` recipe flips the switch in both directions; look for
+it. Corollary: BN needs real batches to estimate statistics, so it gets unreliable at
+tiny batch sizes.
+:::
+
+::: {.callout-note}
+## Normalize across *what*? A seed for Part IV
+
+Batch statistics are one choice among several. When we build transformers
+(@sec-14-self-attention-transformer), batches of variable-length sequences will make
+per-batch statistics awkward, and the same standardize-then-rescale idea will reappear
+computed per *token* instead: **layer normalization**. Same equation, different
+axis. Remember @eq-batchnorm when you meet it.
+:::
+
+## Building with blocks: a small VGG
+
+Now assemble Question 1's answer with Question 4's habit. Define the *atom* — conv,
+BN, ReLU — once; a block stacks atoms and pools; a network stacks blocks. This is the
+lecture's point about VGG versus its hand-tuned predecessors: you stop re-designing
+and start repeating.
+
+
+
+Two readings again. The good: this VGG-style recipe reaches 86.7%, four points above
+LeNet in this run. Because depth, width, normalization, kernel sizes, parameter count,
+and training duration all changed together, this comparison does not isolate which
+ingredient earned the gain. The bad: 218,586 parameters, *triple* LeNet's total, and
+the head's share got worse —
+92% of the network is a dense layer reading a flattened grid. The convolutional
+diet succeeded and the total got fatter anyway. Which forces the lecture's third
+question: where do the parameters live, and — his phrasing — where can we do the
+most damage to the count?
+
+## Question 3: $1 \times 1$ convolutions, and firing the flatten head
+
+The bloat has one address: `nn.Linear(1568, 128)`. To evict it we need one more tool,
+odd-looking at first sight: a convolution whose kernel is $1 \times 1$.
+
+A $1 \times 1$ kernel does no spatial mixing at all — it looks at a single pixel. But
+across *channels* it does exactly what @eq-conv-layer says: at each position, take
+the $C_{\text{in}}$ channel values and form $C_{\text{out}}$ weighted combinations
+plus bias. Pause on what that is: a **linear model across the channels, run
+separately at every pixel** — Chapter 1's machine, miniaturized and stamped across
+the image. Add a ReLU and each pixel is running a tiny MLP over its own feature
+vector. The lecture's summary: we *summarize* channels, we don't discard them —
+compressing 64 feature maps into 32 loses far less than pooling them away, and each
+compression injects another nonlinearity almost for free.
+
+That tool enables the **Network-in-Network** design (Lin et al., 2013), and with it
+the clean head. A NiN block is one $3\times3$ (some spatial mixing) followed by two
+$1\times1$s (per-pixel channel mixing). And the classifier becomes:
+
+1. Let the last block produce a stack of feature maps.
+2. **Global average pooling (GAP)**: average each map over all positions — 64 maps
+   in, 64 numbers out. No parameters at all.
+3. One small linear layer to the logits.
+
+
+
+
+
+The parameter story is a rout: 35,034 total, a 650-parameter head, six times smaller
+than VGGSmall. The accuracy is 76.2%, and that dip is worth more attention than the
+win, so let us not rush past it. First, though, collect the promised payoff. Chapter
+8 said the remaining shift-cliff was the flatten head's fault: it reads the final
+grid *positionally*. GAP averages over positions, so the head no longer assigns a
+different weight to every location. The rematch of the rematch:
+
+
+
+The curve that fell from 82% to 27% across this book's Part II is now a gentle slope
+from 76% to 67%. Position-specific weights are gone from NINSmall's head, and the
+result is consistent with the promised robustness benefit. It is not a matched-head
+ablation: the trunks and training recipes differ too. The complete CNN is only
+approximately shift-tolerant; boundaries, strides, and pooling can still change its
+features.
+
+Now the dip. On clean, centered test garments NINSmall trails LeNet by six points.
+That result is *consistent with* Chapter 8's warning: on centered data, position can
+carry information, and a GAP head cannot assign separate weights to separate
+locations. But GAP is not the only changed ingredient, so this run does not prove it
+caused the gap. With the full 60,000-image dataset the lecture's NiN reaches about 90%,
+near its LeNet. At our scale the comparison exposes a hypothesis worth testing with a
+matched-head ablation: shift tolerance may be bought with positional information.
+
+::: {.callout-note}
+## Question 4's other famous block: Inception, in one breath
+
+GoogLeNet's Inception block (2014) answers "which kernel size?" with "all of them":
+parallel $1\times1$, $3\times3$, $5\times5$, and pooling branches, concatenated. Its
+enabling trick is the $1\times1$ *bottleneck*: compress channels before the expensive
+spatial kernels. The seed's arithmetic for one $5\times5$ branch at 256 channels:
+direct, $5^2 \times 256 \times 128 \approx 819$k parameters; with a $1\times1$
+squeeze to 32 first, $256 \times 32 + 5^2 \times 32 \times 128 \approx 111$k — an
+86% cut for the same nominal operation. We won't build Inception here (the principle,
+channel compression before spatial expense, is the transferable part), but Exercise 2
+walks the arithmetic and the course assignment has you build the block itself.
+:::
+
+## Question 2: going deeper, and the wall you hit
+
+VGG says depth is the direction. So push it: stack twenty of our two-conv blocks
+(with BN, per the recipe, on a $14\times14$ grid so the experiment fits a laptop) and
+compare against the *identical* stack with one change we'll reveal after the numbers.
+
+
+
+
+
+Look at the *training* column first, because it carries the whole lesson. The plain
+40-conv-layer network cannot even fit the 1,200 images it sees every epoch: 61% train
+accuracy, while its residual twin memorizes them and generalizes twenty-seven points
+better. This is an **optimization failure** in the same family as the degradation
+problem He et al. reported in 2015, where their 56-layer plain net trained worse than
+their 20-layer one. Our experiment isolates the residual rescue at one depth; a strict
+demonstration that adding depth degrades a plain network would also require a shallower
+plain control.
+
+The one change: each block computes $F(x)$ and outputs $F(x) + x$. A **residual
+connection** lets the input skip over the block and adds it back.
+
+$$
+H(x) = F(x) + x
+\qquad\Longrightarrow\qquad
+\frac{\partial L}{\partial x}
+= \frac{\partial L}{\partial H}\left(\frac{\partial F}{\partial x} + I\right).
+$$ {#eq-residual}
+
+
+
+Read the right-hand side with Chapter 5 eyes. Blame arriving at a block's output
+reaches its input through two additive terms: the learned branch $\partial F /\partial
+x$ and the identity $I$. The identity contribution gives gradient flow a direct route
+that does not itself multiply by the learned weights. It is powerful, not magical:
+the learned Jacobian can still reinforce, distort, or even partly cancel that term.
+Chapter 5 called ReLU's open gate a *gradient superhighway* through a single unit; a
+skip connection builds a direct lane into every block. The block only needs to learn
+the *residual*, the correction on top of "pass it through," and doing nothing is easy
+to represent: $F = 0$.
+
+Here is the highway visible at initialization, extending Chapter 5's depth experiment
+from dense layers to conv stacks:
+
+
+
+::: {.callout-tip}
+## The most important seed this chapter plants
+
+Residual connections are not only a CNN trick. They became a central design device in
+many deep architectures; when we assemble a transformer in
+@sec-14-self-attention-transformer, every attention layer and every feed-forward
+layer will be wrapped as $x + F(x)$, and the freshly-met layer normalization will sit
+beside each skip. The picture to carry forward: a *residual stream* with direct
+additive routes through the network, each block reading from it and writing a
+correction back. Those routes improve conditioning without making the stream immune
+to learned-branch interactions. Attention will be one kind of correction. You now own
+both parts of that skeleton.
+:::
+
+## The scorecard: what a decade of design bought
+
+The lecture closes its architecture tour with a scatter worth reproducing: every
+model of Part II on one canvas, accuracy against parameters, each trained to
+convergence under our shared recipe:
+
+
+
+## Transfer learning: the mechanics, and an honest experiment
+
+Everything so far trains from scratch. The lecture's final move is the one that
+defines practice today: most image features are *shared* — edges, textures, parts
+transfer across tasks — so train one strong backbone once, on enormous data, and
+reuse it everywhere. The mechanics come in two strengths:
+
+- **Linear probe**: freeze the pretrained trunk entirely (`requires_grad = False`),
+  extract its features, train only a new linear head on your labels.
+- **Fine-tuning**: additionally unfreeze the last block or two, training them at a
+  *much* smaller learning rate than the fresh head, so the pretrained features adapt
+  gently instead of being trampled.
+
+We will test the idea properly. The task: classify the three shoe classes (sandal,
+sneaker, ankle boot) from **ten labeled examples each**. The 30-image regime is
+exactly where transfer should shine — too few labels to learn features, goes the
+story, so imported features should dominate. Three contenders:
+
+1. **From scratch**: our VGG-style trunk trained on the 30 images alone.
+2. **Our own pretrained trunk**: the same trunk pretrained on the seven *non-shoe*
+   classes (863 images), frozen, linear probe.
+3. **A real pretrained backbone**: SqueezeNet 1.1 trained on ImageNet — 1.2 million
+   photographs, 1,000 classes — loaded from weights committed with this book,
+   frozen, linear probe on its 512-dimensional features. (Fashion images get
+   upsampled to 96×96 and repeated to three channels to fit its expectations. That
+   awkwardness is part of the experiment, and part of the lesson.)
+
+
+
+
+
+Read that table slowly, because it does *not* say what the textbook story predicts,
+and the discrepancy is the best lesson in this chapter. Training from scratch on
+thirty images fights the mighty ImageNet backbone to a dead heat — the means differ
+by less than a point, well inside seed noise. And our own pretrained trunk,
+perfectly competent on its source task per the printout above, transfers *worse
+than nothing*. Three
+reasons, each a general principle:
+
+1. **A trunk can only donate what its data taught it.** Our own trunk saw 863
+   shirts, bags, and trousers. Nothing in that curriculum required foot-shaped
+   detectors, so its 64 features flatten sandals, sneakers, and boots into nearly
+   the same point. Pretraining is not magic; it is *curriculum*.
+2. **Domain and resolution gaps tax the donation.** SqueezeNet's filters expect
+   224-pixel color photographs; we feed it 28-pixel grayscale icons inflated to 96.
+   Its early layers hunt for detail that simply is not there. (The lecture's recipe —
+   resize and normalize *to match the pretraining pipeline* — is doing real work;
+   we complied as far as the data allows.)
+3. **Transfer wins when the target is big relative to your labels — not small.**
+   This is the quiet one. Three shoe silhouettes at $28 \times 28$ is a *small*
+   problem: thirty images genuinely suffice, so the scratch baseline is strong and
+   there is little room for imported knowledge to pay rent. The lecture's numbers
+   show the other regime: linear-probing an ImageNet ResNet-18 on the *full*
+   FashionMNIST task reaches about 93%, and fine-tuning about 94% — at 224 pixels,
+   with a task rich enough that features matter more than labels.
+
+::: {.callout-tip}
+## When to reach for a pretrained backbone
+
+The honest decision rule our experiment and the lecture's jointly support: transfer
+pays when (your labels are scarce) *and* (the target task is feature-hungry) *and*
+(the pretraining data plausibly covers the target's features at a matched scale). At
+224 pixels and 18 landmark classes — the course assignment — all three hold, and
+transfer is the winning move by a wide margin. At 28 pixels and 3 silhouettes, the
+conditions fail and scratch fights the superpower to a draw. Knowing *which regime you are in*
+is the skill; the mechanics (`requires_grad`, learning-rate splits) are the easy
+part.
+:::
+
+The mechanics, for completeness, since you will use them constantly from Part V
+onward — fine-tuning SqueezeNet's last block with the lecture's two-learning-rate
+recipe (fresh head fast, pretrained layers slow):
+
+
+
+Fine-tuning edges the frozen probe on this seed and lands in the same tie with
+scratch. This is consistent with the regime analysis above: adaptation helps at the margin,
+but no amount of it makes a small target task need imported features.
+
+Keep the pattern, though: *this* loop, scaled to real backbones and feature-hungry
+tasks, is how most
+of applied deep learning ships today. It is also this book's destination: Part V is
+what happened when the field noticed that "pretrain big, adapt cheaply" was not a
+vision trick but *the* recipe for language too. The BERT moment
+(@sec-15-bert-pretraining) is this section's idea, taken seriously at scale.
+
+## Okay, so —
+
+1. **Small kernels, stacked**: two $3\times3$s see what a $5\times5$ sees, for
+   $18C^2$ against $25C^2$, with twice the nonlinearity — provided width holds
+   constant through the stack. Design in blocks, repeat the block.
+2. **BatchNorm** re-standardizes every channel over the batch and spatial axes, then hands back two
+   knobs ($\gamma, \beta$); conv→BN→ReLU with `bias=False`; *train and eval are
+   different machines*, so flip the switch. Its per-token cousin, LayerNorm,
+   awaits in @sec-14-self-attention-transformer.
+3. **$1\times1$ convolutions** run Chapter 1's linear model across channels at every
+   pixel: summarize channels, don't discard them. With **global average pooling**
+   they fire the flatten head: parameters collapse (218k $\rightarrow$ 35k) and
+   position-specific weights leave the head, at a clean-accuracy price our small
+   dataset makes visible. Boundaries and downsampling still prevent exact invariance.
+4. **Depth can hit an optimization wall**: our plain 40-layer net
+   couldn't fit its own training set. The residual connection $H(x) = F(x) + x$ adds
+   an identity lane to the Jacobian, Chapter 5's gradient superhighway as
+   infrastructure, and the same-depth twin trains to 100%. Transformer stacks will
+   reuse this residual pattern around each attention and feed-forward sublayer.
+5. **Transfer learning** = freeze + probe, or gently fine-tune. Our honest experiment
+   found scratch and the ImageNet probe in a near tie across three seeds at 28-pixel
+   scale. Pretraining is curriculum, gaps are taxed, and small targets may leave
+   little room for imports. The lecture's full-scale runs
+   (93–94% via ImageNet ResNet-18) illustrate a richer regime where transfer pays. Diagnosing
+   the regime is the skill.
+
+## Sources and further reading {.unnumbered}
+
+- [Simonyan & Zisserman, *Very Deep Convolutional Networks for Large-Scale Image Recognition*](https://arxiv.org/abs/1409.1556): the small-kernel, repeated-block argument behind VGG.
+- [Lin, Chen, & Yan, *Network In Network*](https://arxiv.org/abs/1312.4400): introduces the $1\times1$ channel mixer and global-average-pooling classifier.
+- [Ioffe & Szegedy, *Batch Normalization*](https://proceedings.mlr.press/v37/ioffe15.html): the original normalization method and its train/evaluation distinction.
+- [He et al., *Deep Residual Learning for Image Recognition*](https://openaccess.thecvf.com/content_cvpr_2016/html/He_Deep_Residual_Learning_CVPR_2016_paper.html): the degradation experiment and residual-block solution.
+- [Yosinski et al., *How Transferable Are Features in Deep Neural Networks?*](https://proceedings.neurips.cc/paper/2014/hash/375c71349b295fbe2dcdca9206f20a06-Abstract.html): a careful empirical account of when transferred features remain useful.
+
+## Exercises {.unnumbered}
+
+1. **(Pencil.)** Generalize the kernel-stacking arithmetic: $n$ stacked $3\times3$
+   layers versus one $(2n{+}1)\times(2n{+}1)$ kernel, at constant width $C$. Then
+   redo it for a layer that grows channels $C \rightarrow 2C$: split into two
+   $3\times3$s ($C \rightarrow C \rightarrow 2C$ and $C \rightarrow 2C \rightarrow
+   2C$) and find when the split stops saving parameters.
+2. **(Pencil.)** Verify the Inception bottleneck arithmetic from the callout
+   ($819{,}200$ versus $110{,}592$), then design the cheapest $1\times1$-plus-
+   $5\times5$ pipeline from 128 channels to 64 output channels that keeps the squeeze
+   width at least a quarter of the input width.
+3. **(Code.)** Make VGGSmall's blocks *depthwise separable*: replace each $3\times3$
+   conv with a per-channel $3\times3$ (`groups=c_in`) followed by a $1\times1$ mixer.
+   Count parameters, retrain, and report the accuracy-per-parameter ratio against
+   the original. (This is MobileNet's trick for phones, the lecture's fifth
+   principle.)
+4. **(Code.)** Ablate BatchNorm: retrain VGGSmall with the BN layers removed, same
+   budget. Compare final accuracy *and* the first ten epochs' training accuracy.
+   Then repeat the `bn-drift` cell's measurement on both trained networks. Does
+   training itself fix the activation scales?
+5. **(Code.)** Data augmentation as a third road: on the 30-image shoe task, train
+   from scratch with random horizontal flips and ±3-pixel shifts (Chapter 6's
+   exercise, now as a tool). Does augmentation close the gap to the lecture's
+   full-data numbers further than transfer did? Why might augmentation and transfer
+   help in *different* regimes?

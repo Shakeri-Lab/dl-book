@@ -55,6 +55,19 @@ chapter stub's draft-sources; revisit during the planned outline session with th
 - Modules 8/9 research-lens readings and the Module 10 test-time regression/control
   outline, discussion prompt, and five explained self-checks were completed in the
   July 15 memory/control pass. Their prose remains in the general author edit gate.
+- **PDF index:** technically supported by the current TinyTeX toolchain, but deferred
+  to a dedicated editorial pass. Select useful terms, subentries, ranges, and
+  `see`/`see also` relationships across the full manuscript before enabling it; HTML
+  search remains the current navigation fallback.
+- Package the controlled transfer (§15.6), ICL ceiling (§17.1.1), and memory-capacity
+  (§14.8.6) mechanism tests as graded artifacts only after the author approves a shared
+  autograder and submission contract.
+- Consider a one-page protocol card after the experimentation interlude: claim type,
+  predeclared contract, seed panel, endpoint rule, and ledger fields. Link it from later
+  designed studies if adopted.
+- Consider reusing the epilogue's five closing questions as the final project or exam
+  report frame, and add a short public revision-notes page before the next semester if
+  returning students need a page-reference migration guide.
 
 ## 5. GPU experiment queue (backlog-only; revised after the memory/control pass, July 15, 2026)
 

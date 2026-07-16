@@ -1,7 +1,7 @@
 # Continuing the Book — Handoff & Roadmap
 
 *Written 2026-07-09 after Chapter 11 shipped; updated 2026-07-15 for the structural,
-course-alignment, and test-time memory/control passes. This is the master handoff document:
+course-alignment, test-time memory/control, and release-polish passes. This is the master handoff document:
 everything a fresh collaborator (human or Claude session, on any account) needs to
 continue the project without the original conversation history. Read `CLAUDE.md`
 (repo root) first for environment setup; read this second; read
@@ -101,7 +101,7 @@ language-model, runtime, or architecture-ranking claim.
 These are top-1 identification rates, not exact value interpolation: softmax's mean
 value MSE is `5.43e-06`, and its maximum trial MSE is `4.55e-04`.
 
-The complete frozen render is now 516 pages. Chapter 12's two-box addendum fits one
+The complete frozen render is now 512 pages. Chapter 12's two-box addendum fits one
 page, §14.8 fits nine pages, and the epilogue frontier fits two. Every affected unit was
 executed in HTML and TeX; printed outputs match, the complete book renders, the affected
 PDF ranges passed visual QA, and local browser checks confirm anchors, equations,
@@ -109,6 +109,22 @@ figures, alt text, and course-site interaction. The companion site adds the two 
 lens readings to Modules 8/9, a timed 20-minute Module 10 outline and discussion prompt,
 and five explained self-check questions. Its study guide, type check, 24-page production
 export, styled browser layout, links, and answer reveal all pass.
+
+The final July 15 release-polish pass removes four pure-schematic code listings while
+preserving their source, adds format-aware counter notes to both interludes and the
+epilogue, makes the preface's optional **Check yourself** scope accurate, and restores
+Sources-before-Exercises order in Chapter 20 and Appendix B. Chapter 8 and Chapter 13
+now distinguish a chapter-local or decision-inert endpoint from a globally untouched
+test set. The memory-spectrum price list is numbered as Table 14.1. An audit of all 100
+rendered HTML figure images found and closed five static-image alt-text gaps. Both
+formats were regenerated, the four-page reduction was visually checked across every
+affected range, and a PCA schematic overlap found during that check was repaired. The
+same rerender exposed a latent reproducibility bug: Chapters 10 and 14 had read live
+prose, so copyedits could move the corpus only when a freeze refreshed. Both now read an
+immutable 148,594-character snapshot and assert its SHA-256, restoring the exact declared
+benchmark outputs. A PDF index remains a separate editorial project because useful index
+terms, subentries, and cross-references require a book-wide authoring pass rather than an
+automatic build flag.
 
 The companion site continues to use a plural `bookChapters` field because modules and
 chapters do not map one-to-one. The earlier July 15 alignment added the HPO and
@@ -375,6 +391,12 @@ These are precedents; when a new experiment misbehaves, check here first.
   reason. Two whole task designs were nearly abandoned before this diagnosis.
 - **Freeze staleness (ch. 8):** `--to html` single-file renders leave `tex.json`
   stale → book PDF ships old content. Render single files with no `--to` flag.
+- **A benchmark cannot depend on live prose (chs. 10/14):** both character-LM cells
+  once globbed the current Chapter 1–9 sources. Copyedits then changed the corpus only
+  when those chapters happened to re-execute, leaving frozen output and pinned prose
+  on different datasets. Both now read the committed 148,594-character
+  `data/book-corpus-ch1-9.txt` snapshot and assert its SHA-256. Rebuild that file only
+  as a declared benchmark revision, then rerun and rewrite both chapters together.
 - **A kernel does not supply its own average (ch. 12/14):** an unrestricted
   $M$ with $w=1$ and $R=0$ can interpolate observed pairs; it does not imply the
   Nadaraya–Watson/softmax result at a query. The kernel supplies weights and the
@@ -446,7 +468,7 @@ These are precedents; when a new experiment misbehaves, check here first.
 | `data/fashion-train.pt` | 1,200 Fashion-MNIST train images + labels + class names | 28×28 uint8; provenance, license, and checksum in `data/README.md` |
 | `data/fashion-test.pt` | 600 Fashion-MNIST benchmark images | initially held out, then opened for final checks in chs. 6/8 and reused descriptively from ch. 9 onward; not an unbiased post-selection test for later architecture claims |
 | `data/squeezenet1_1-imagenet.pt` | torchvision SqueezeNet 1.1 ImageNet weights | upstream enum, URL, license note, and checksum in `data/README.md` |
-| (ch. 10 corpus) | the book's own chapters 1–9 | not a file — `glob("../part*/0*.qmd")` at render, code cells stripped |
+| `data/book-corpus-ch1-9.txt` | the book's own Chapters 1–9, with executable Python cells and HTML comments removed | immutable 148,594-character snapshot from commit `24ae3a6321ad901497776180b8e107490750adc9`; generator and checksum in `scripts/build_book_corpus_snapshot.py` and `data/README.md` |
 
 ## 7. Roadmap: completed manuscript units
 

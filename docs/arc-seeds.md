@@ -99,9 +99,10 @@ memory/control passes.*
    Transformer reaches train/held-out 1.1132/1.9190; the no-position ablation reaches
    1.8672/2.3405. Position improves 0.4214 (18.0%) in the matched seed; the LSTM
    narrowly remains ahead by 0.0309 (1.64%). The positional repeat is tensor- and
-   metric-exact. Closed. NOTE: the corpus is `glob("../part*/0*.qmd")` — Chapters
-   1–9 only, code cells stripped; editing those chapters changes the corpus only
-   when ch. 10/14 re-render (freeze).
+   metric-exact. Closed. The shared corpus is the committed 148,594-character
+   `data/book-corpus-ch1-9.txt` snapshot from commit `24ae3a6321ad901497776180b8e107490750adc9`, not a glob of live
+   prose. Both chapters assert its SHA-256, so copyedits cannot silently move the
+   benchmark.
 
 ## 3. Reader's toolbox — what is introduced where (reading-order rule)
 

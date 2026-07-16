@@ -744,10 +744,12 @@ later, inside sampling—not between the output layer and the loss.
 ## The book reads itself, again
 
 A fair rematch begins by preserving what can be preserved. Chapter 10 trained on
-the code-stripped text of Chapters 1–9: 148,594 characters, vocabulary 104, a
-contiguous 90/10 split, 100-character windows, batch size 64, and 2,501 updates
-with Adam at learning rate 0.002 and gradient clipping at norm 1. The held-out
-metric resets state at each fixed window.
+a committed snapshot of Chapters 1–9 with executable code cells and HTML comments
+removed: 148,594 characters,
+vocabulary 104, a contiguous 90/10 split, 100-character windows, batch size 64, and
+2,501 updates with Adam at learning rate 0.002 and gradient clipping at norm 1. The
+snapshot keeps later copyedits from moving the benchmark. The held-out metric resets
+state at each fixed window.
 
 The two architectures cannot be made identical—one has recurrent gates and the
 other has attention blocks—but their opportunity to see training targets can be.
@@ -761,9 +763,8 @@ test set.
 #| label: transformer-data-model
 #| code-summary: "Code: exact Chapter 10 corpus and schedule, plus a custom tiny Transformer"
 
-import glob
 import hashlib
-import re
+from pathlib import Path
 import torch.nn.functional as F
 
 torch.set_num_threads(4)
@@ -778,17 +779,12 @@ HEADS = 4
 FF_WIDTH = 168
 BLOCKS = 2
 
-fence = chr(96) * 3
-files = sorted(glob.glob("../part*/0*.qmd"))
-text = ""
-for filename in files:
-    raw = open(filename).read()
-    code_pattern = (
-        re.escape(fence) + r"\{python\}.*?" + re.escape(fence)
-    )
-    raw = re.sub(code_pattern, "", raw, flags=re.S)
-    raw = re.sub(r"<!--.*?-->", "", raw, flags=re.S)
-    text += raw
+corpus_path = Path("../../data/book-corpus-ch1-9.txt")
+text = corpus_path.read_text(encoding="utf-8")
+assert len(text) == 148_594
+assert hashlib.sha256(text.encode("utf-8")).hexdigest() == (
+    "b0fc23a513e37e7bcd78da04a03877345f6ebc850b91dbae260656d9924fb299"
+)
 
 chars = sorted(set(text))
 stoi = {char: index for index, char in enumerate(chars)}
@@ -899,10 +895,7 @@ initial_state = {
 initial_hash = state_digest(initial_state)
 schedule_hash = hashlib.sha256(starts.numpy().tobytes()).hexdigest()
 
-print(
-    f"corpus: {len(files)} chapters, {len(text):,} characters, "
-    f"vocab {len(chars)}"
-)
+print(f"corpus: 9 chapters, {len(text):,} characters, vocab {len(chars)}")
 print(
     f"deterministic split: {len(train_data):,} train / "
     f"{len(valid_data):,} held out"
@@ -1512,7 +1505,10 @@ and can have costs below the dense outer-product ledger here.
 | Factorized kernel | $(S_t,z_t)$ with $S_t\in\mathbb{R}^{r\times d_v}$ | $O(rd_v)$ plus feature-map cost | Exact for the chosen finite factorization; lossy relative to retaining arbitrary raw rows |
 | One newest-pair SGD step (Delta rule and gated variants) | $H_t\in\mathbb{R}^{d_v\times d_k}$ plus any gate state | $O(d_kd_v)$ for a dense update/read | Approximate online fit; fixed capacity whose writes can be steered |
 
-The asymptotic labels name this dense educational setup, not every implementation.
+: Solver choices expose the memory spectrum of the shared regression problem. {#tbl-memory-spectrum}
+
+The asymptotic labels in @tbl-memory-spectrum name this dense educational setup, not
+every implementation.
 Feature width $r$, head dimensions, low-rank structure, convolutions, and hardware
 schedules change constants and sometimes orders. Most importantly, “retains every
 row” does not mean “recalls every association exactly.” Softmax still returns a convex
@@ -1531,8 +1527,8 @@ does not turn it into the compressed contract in the second or third row.
 
 ### Mechanism test: recall under a fixed capacity
 
-The table makes a prediction we can test without pretending to train a language
-model. Store $N$ random unit key--value pairs, then query every stored key. Decode a
+@tbl-memory-spectrum makes a prediction we can test without pretending to train a
+language model. Store $N$ random unit key--value pairs, then query every stored key. Decode a
 read by the nearest stored value. Exact softmax attention keeps all pairs. A dense
 delta state has $d^2$ numbers regardless of $N$. A selective delta arm receives one
 extra priority bit and writes ordinary pairs at only one tenth strength, so it can

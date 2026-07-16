@@ -129,6 +129,7 @@ Available: `\vect{}`, `\matr{}`, `\E`, `\Ex`, `\var`, `\cov`, `\norm{}`, `\argma
 | Render hangs or times out | you're probably in Box; work in `~/dl-book` |
 | Subagents unavailable (spend limit) | draft inline: read seed + transcripts fully first, then write; audit-by-construction and verify code by executing |
 | Book PDF missing latest chapter edits | stale `tex.json` from an `--to html` render — re-render the chapter with no `--to` flag, then full render |
+| Book-corpus LM numbers move after a copyedit | the training cell read live chapter sources — Chapters 10 and 14 must read `data/book-corpus-ch1-9.txt`, whose length and SHA-256 are asserted; rebuild it only as an explicit benchmark revision |
 | PDF chapter links all print as “Chapter 1” | chapter-level `sec-*` references were resolved in a chapter-local PDF pass — keep `filters/pdf-chapter-xrefs.lua` enabled and never begin an indented continuation line with `@sec-*` (Pandoc reads it as an example-list marker) |
 | seq2seq/RNN mysteriously stuck at 40–60% | padding poisoning — `pack_padded_sequence` the encoder, `ignore_index=PAD` the loss (ch. 11 runs this as an experiment) |
 | RNN/seq2seq training crawls | `clip_grad_norm_` threshold too tight (1.0 throttled ch. 11's task; 5.0 fine) |
