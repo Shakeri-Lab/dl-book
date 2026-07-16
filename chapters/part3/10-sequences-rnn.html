@@ -871,25 +871,25 @@ Figure&nbsp;10.3: The gradient-vs-lag experiment, rerun with an LSTM whose effec
 </section>
 <section id="the-book-reads-itself" class="level2" data-number="10.6">
 <h2 data-number="10.6" class="anchored" data-anchor-id="the-book-reads-itself"><span class="header-section-number">10.6</span> The book reads itself</h2>
-<p>Time to put fixed windows, clipping, gates, and Chapter 2’s softmax over a vocabulary to work on real text. In keeping with a book whose every experiment runs on its own pages, the training corpus is <em>the nine chapters you have already read</em>: their prose, stripped of code cells, more than 130,000 characters. The task is the oldest one in language modeling: read a character, predict the next.</p>
+<p>Time to put fixed windows, clipping, gates, and Chapter 2’s softmax over a vocabulary to work on real text. In keeping with a book whose every experiment runs on its own pages, the training corpus is <em>the nine chapters you have already read</em>: their prose, stripped of code cells, more than 130,000 characters. We commit that code-stripped text as a benchmark snapshot; later copyedits must not silently change the task. The task is the oldest one in language modeling: read a character, predict the next.</p>
 <div id="char-lm-train" class="cell" data-execution_count="6">
 <details class="code-fold">
 <summary>Code: a character-level LSTM trained on Chapters 1–9</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> glob, re</span>
-<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>files <span class="op">=</span> <span class="bu">sorted</span>(glob.glob(<span class="st">"../part*/0*.qmd"</span>))          <span class="co"># chapters 1-9, not this one</span></span>
-<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>text <span class="op">=</span> <span class="st">""</span></span>
-<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> f <span class="kw">in</span> files:</span>
-<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>    raw <span class="op">=</span> <span class="bu">open</span>(f).read()</span>
-<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>    raw <span class="op">=</span> re.sub(<span class="vs">r"```</span><span class="ch">\{</span><span class="vs">python</span><span class="ch">\}</span><span class="dv">.</span><span class="op">*?</span><span class="vs">```"</span>, <span class="st">""</span>, raw, flags<span class="op">=</span>re.S)   <span class="co"># drop code cells</span></span>
-<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>    raw <span class="op">=</span> re.sub(<span class="vs">r"&lt;!--</span><span class="dv">.</span><span class="op">*?</span><span class="vs">--&gt;"</span>, <span class="st">""</span>, raw, flags<span class="op">=</span>re.S)            <span class="co"># drop comments</span></span>
-<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a>    text <span class="op">+=</span> raw</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> hashlib</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> pathlib <span class="im">import</span> Path</span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>corpus_path <span class="op">=</span> Path(<span class="st">"../../data/book-corpus-ch1-9.txt"</span>)</span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>text <span class="op">=</span> corpus_path.read_text(encoding<span class="op">=</span><span class="st">"utf-8"</span>)</span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> <span class="bu">len</span>(text) <span class="op">==</span> <span class="dv">148_594</span></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> hashlib.sha256(text.encode(<span class="st">"utf-8"</span>)).hexdigest() <span class="op">==</span> (</span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>    <span class="st">"b0fc23a513e37e7bcd78da04a03877345f6ebc850b91dbae260656d9924fb299"</span></span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a>)</span>
 <span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a>chars <span class="op">=</span> <span class="bu">sorted</span>(<span class="bu">set</span>(text))</span>
 <span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a>stoi <span class="op">=</span> {c: i <span class="cf">for</span> i, c <span class="kw">in</span> <span class="bu">enumerate</span>(chars)}</span>
 <span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a>data <span class="op">=</span> torch.tensor([stoi[c] <span class="cf">for</span> c <span class="kw">in</span> text])</span>
 <span id="cb9-13"><a href="#cb9-13" aria-hidden="true" tabindex="-1"></a>split <span class="op">=</span> <span class="bu">int</span>(<span class="fl">0.9</span> <span class="op">*</span> <span class="bu">len</span>(data))</span>
 <span id="cb9-14"><a href="#cb9-14" aria-hidden="true" tabindex="-1"></a>train_data, valid_data <span class="op">=</span> data[:split], data[split:]</span>
-<span id="cb9-15"><a href="#cb9-15" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"corpus: </span><span class="sc">{</span><span class="bu">len</span>(files)<span class="sc">}</span><span class="ss"> chapters, </span><span class="sc">{</span><span class="bu">len</span>(text)<span class="sc">:,}</span><span class="ss"> characters, vocab </span><span class="sc">{</span><span class="bu">len</span>(chars)<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb9-15"><a href="#cb9-15" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"corpus: 9 chapters, </span><span class="sc">{</span><span class="bu">len</span>(text)<span class="sc">:,}</span><span class="ss"> characters, vocab </span><span class="sc">{</span><span class="bu">len</span>(chars)<span class="sc">}</span><span class="ss">"</span>)</span>
 <span id="cb9-16"><a href="#cb9-16" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"deterministic split: </span><span class="sc">{</span><span class="bu">len</span>(train_data)<span class="sc">:,}</span><span class="ss"> train / </span><span class="sc">{</span><span class="bu">len</span>(valid_data)<span class="sc">:,}</span><span class="ss"> held out"</span>)</span>
 <span id="cb9-17"><a href="#cb9-17" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb9-18"><a href="#cb9-18" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> CharLSTM(nn.Module):</span>
@@ -939,14 +939,14 @@ Figure&nbsp;10.3: The gradient-vs-lag experiment, rerun with an LSTM whose effec
 <span id="cb9-62"><a href="#cb9-62" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"held-out fixed-window loss </span><span class="sc">{</span>fixed_window_loss(model, valid_data)<span class="sc">:.2f}</span><span class="ss">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>corpus: 9 chapters, 155,733 characters, vocab 104
-deterministic split: 140,159 train / 15,574 held out
+<pre><code>corpus: 9 chapters, 148,594 characters, vocab 104
+deterministic split: 133,734 train / 14,860 held out
 step    0   loss 4.62
-step  500   loss 2.29
-step 1000   loss 2.01
-step 1500   loss 1.76
+step  500   loss 2.28
+step 1000   loss 1.93
+step 1500   loss 1.75
 step 2000   loss 1.57
-step 2500   loss 1.53
+step 2500   loss 1.42
 held-out fixed-window loss 1.89</code></pre>
 </div>
 </div>
@@ -970,9 +970,16 @@ held-out fixed-window loss 1.89</code></pre>
 <span id="cb11-14"><a href="#cb11-14" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sample(<span class="st">"The gradient "</span>, n<span class="op">=</span><span class="dv">300</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>The gradient supermentawe entwork** $(\matr{W}^{(l+1})$. For ento a moes from the buefing $\vect{w} \in \vect{x}$. dece explocks
-on the glow but a siggorments *worn: the start fulling it, the loss append
-the ore nime net rester herd — the strainct produce. To winkop the *deap's fatward matiands the canserd fiest</code></pre>
+<pre><code>The gradient mupolition both
+lates
+chood each the burk's map into a mack from the bupfured way
+   intene agmenten. Pyout nothing buith and why the dirge melies to exactly. What algien is
+
+$$
+\logit_i).
+   ixsections.
+
+## Exercise reseds the barkwarper from to twe optimized $\rightarrow$ and classitivations, in t</code></pre>
 </div>
 </div>
 <p>Read the output honestly, because both halves of the verdict teach. What it <em>got</em>: words, spacing, sentence rhythm, markdown furniture (asterisks, pipes, colons), and the book’s working vocabulary (training, batch, layer, convolution in various misspellings), all learned from raw characters by a one-layer recurrence reading 100-character chunks. What it <em>lacks</em>: meaning. Clauses trail off; equations open and never close; the prose has the book’s accent with none of its intent. Some of that is scale (a 130k-character corpus and 128 hidden units is a <em>tiny</em> language model), and some of it is the finite state. By the end of a sentence, the beginning has been squeezed through the LSTM’s two 128-dimensional states, <span class="math inline">\((\vect{h}, \vect{c})\)</span>: 256 scalars in all. Both diagnoses point down the road this part of the book is traveling.</p>
