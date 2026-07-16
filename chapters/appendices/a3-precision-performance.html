@@ -79,7 +79,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../../site_libs/quarto-html/quarto-syntax-highlighting-15634bcf2e68342d4ad2dfa704d543f6.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../../site_libs/bootstrap/bootstrap-c90f29e1247290e1dfbeb1da338aa877.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../../site_libs/bootstrap/bootstrap-2c6940bf2fa6cf01ae6e8f10fcb58cc9.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -986,16 +986,14 @@ I_{\mathrm{GEMM,ideal}}
 </div>
 </div>
 <div class="callout-body-container callout-body">
-<p>Chapter 14’s sampler confesses that it recomputes the whole visible prefix for every new character (<a href="../part4/14-self-attention-transformer.html" class="quarto-xref"><span>Chapter 14</span></a>). For an evaluation-mode causal Transformer decoding a growing prefix with stable position indices and no eviction, appending a token cannot change earlier positions: their masks forbid the suffix, and their keys and values are therefore reusable. A <strong>key/value (KV) cache</strong> stores those projected rows at every layer. At the next step, the layer computes the new token’s query, key, and value, appends the new key and value, and forms only the new query’s attention row against the stored prefix.</p>
+<p>For a causal Transformer with stable positions and no eviction, a new token cannot change earlier representations. A <strong>key/value (KV) cache</strong> therefore retains each layer’s earlier projected rows and appends one new pair. In Chapter 14’s regression language, this is not a separate mysterious memory: <strong>the KV cache is the nonparametric estimator’s dataset</strong>. The new query traverses those rows, while the old rows do not have to be projected again.</p>
 <p>Let <span class="math inline">\(L\)</span> be the layer count, <span class="math inline">\(B\)</span> the batch size, <span class="math inline">\(h_{KV}\)</span> the number of key/value heads, <span class="math inline">\(t\)</span> the cached length, <span class="math inline">\(d_h\)</span> the head width, and <span class="math inline">\(s\)</span> the bytes per stored element. The cache ledger is</p>
 <p><span class="math display">\[
 N_{KV}=2LBh_{KV}td_h\quad\text{elements},
 \qquad
 M_{KV}=2sLBh_{KV}td_h\quad\text{bytes}.
 \]</span></p>
-<p>Thus caching spends storage that grows linearly with context length. For one new token, dense attention reads a growing <span class="math inline">\(1\times t\)</span> score row at each head; summed over generation, attention arithmetic is still quadratic in the final length. What the cache avoids is re-projecting old states and rebuilding their old-to-old score grids. That is an arithmetic-and-storage statement, not a latency measurement.</p>
-<p>That reuse rule does not apply unchanged to Chapter 14’s exact toy loop. The loop evicts old characters from a sliding window and reindexes the retained positions, so the retained states no longer have the same past or positional inputs. A cached version needs a cache-compatible eviction and position policy; otherwise it must recompute the window.</p>
-<p>This is a different bargain from FlashAttention below. KV caching <strong>keeps</strong> linear-size past state to reuse it during autoregressive inference. FlashAttention avoids writing full quadratic score and probability grids, and may recompute blocks during training’s backward pass. Put both in the I/O ledger before timing either one; Chapter 17 adds the cache to the total-memory bill (<a href="../part5/17-peft-quantization.html" class="quarto-xref"><span>Chapter 17</span></a>).</p>
+<p>Thus caching spends storage that grows linearly with context length. For one new token, dense attention still reads a score row whose length grows with <span class="math inline">\(t\)</span>; across a generation, that work is quadratic in final length. Caching avoids re-projecting and re-attending old queries. That is why Chapter 14’s naive sampler, which rebuilds its current context on every step, is wasteful. Sliding-window eviction and position reindexing need an explicit cache policy, so that toy loop cannot simply reuse rows unchanged. Chapter 17 adds this linear-size cache to the total-memory ledger (<a href="../part5/17-peft-quantization.html" class="quarto-xref"><span>Chapter 17</span></a>).</p>
 </div>
 </div>
 <!-- /NOVEL -->
@@ -1127,6 +1125,7 @@ Figure&nbsp;C.2: Materialized attention and tiled online attention evaluate the 
 </div>
 <div class="callout-body-container callout-body">
 <p>The attention rule, causal or padding mask semantics, and dense quadratic arithmetic remain. “Exact” means no modeling approximation; floating-point order still changes. Longer context is not free, and an implementation that is faster for one shape or device may not be faster for another.</p>
+<p>In <a href="../part4/14-self-attention-transformer.html#sec-14-memory-spectrum" class="quarto-xref"><span>Section 14.8</span></a>’s terms, FlashAttention reorganizes the <strong>same nonparametric solve</strong> to reduce traffic: it changes the schedule, not the statistics, and the KV dataset still grows. Linear-attention and delta-style solvers make a different bargain. They change the statistical contract by compressing history into a fixed-size state, accepting loss or restriction for constant storage in the prefix length.</p>
 </div>
 </div>
 </section>
