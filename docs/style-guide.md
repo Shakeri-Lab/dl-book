@@ -202,11 +202,14 @@ retrieve from memory: title the mistaken inference, then state the repair.
    idea, and echo that composition (see `docs/dl-course-code.md`). Verify TikZ
    conversions *visually* before embedding — captions must match content.
 3. **Code: lean, typed, educational.** Keep type hints and shape comments (his hygiene),
-   cut every comment that merely restates the line. One idea per cell. Conceptual
-   figures may be self-contained folded cells placed right where the concept lives.
-4. **Code folded by default** (`code-fold: true` project-wide): outputs and plots are
-   the primary content; code is one click away. Give conceptual-figure cells a
-   descriptive `#| code-summary`.
+   cut every comment that merely restates the line. One idea per cell. Experiments,
+   derivations, assertions, and numerical audits show their code. Pure concept diagrams
+   keep executable drawing source in the repository but set `#| echo: false`; split a
+   mixed cell before hiding it so no implementation or evidence disappears with the
+   coordinates.
+4. **Code folded by default** (`code-fold: true` project-wide): visible code is one
+   click away in HTML and prints in the PDF. Give visible figure cells a descriptive
+   `#| code-summary`; use `echo: false` only for pure concept-diagram drawing cells.
 
 ## Closing Notes
 

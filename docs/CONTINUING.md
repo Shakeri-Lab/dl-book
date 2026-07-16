@@ -1,7 +1,8 @@
 # Continuing the Book — Handoff & Roadmap
 
-*Written 2026-07-09 after Chapter 11 shipped; updated 2026-07-15 for the structural,
-course-alignment, test-time memory/control, and release-polish passes. This is the master handoff document:
+*Written 2026-07-09 after Chapter 11 shipped; updated 2026-07-16 for the structural,
+course-alignment, test-time memory/control, release-polish, and v1.0 stewardship
+passes. This is the master handoff document:
 everything a fresh collaborator (human or Claude session, on any account) needs to
 continue the project without the original conversation history. Read `CLAUDE.md`
 (repo root) first for environment setup; read this second; read
@@ -101,7 +102,7 @@ language-model, runtime, or architecture-ranking claim.
 These are top-1 identification rates, not exact value interpolation: softmax's mean
 value MSE is `5.43e-06`, and its maximum trial MSE is `4.55e-04`.
 
-The complete frozen render is now 512 pages. Chapter 12's two-box addendum fits one
+The complete frozen render is now 498 pages. Chapter 12's two-box addendum fits one
 page, §14.8 fits nine pages, and the epilogue frontier fits two. Every affected unit was
 executed in HTML and TeX; printed outputs match, the complete book renders, the affected
 PDF ranges passed visual QA, and local browser checks confirm anchors, equations,
@@ -125,6 +126,25 @@ immutable 148,594-character snapshot and assert its SHA-256, restoring the exact
 benchmark outputs. A PDF index remains a separate editorial project because useful index
 terms, subentries, and cross-references require a book-wide authoring pass rather than an
 automatic build flag.
+
+The July 16 **v1.0 stewardship pass** finishes that consistency sweep and establishes a
+stable citation boundary. Fifteen additional concept schematics named in the review,
+plus the same-class BERT adaptation schematic found by the audit, now fold their drawing
+code while experiments, derivations, assertions, printed audits, and implementation
+lessons remain visible. Six mixed cells were split before folding so that no evidence
+was hidden. The preface now states the executable-source covenant precisely, names v1.0
+and its archived PDF, and gives the suggested citation. `CITATION.cff` validates against
+CFF 1.2.0; the book date is fixed at July 16, 2026; and HTML-only revision notes explain
+the page-reference migration without adding a PDF chapter.
+
+Four high-value tables are now numbered and cited: the experiment claim types, the
+paired BatchNorm study contract, the alignment route choice, and the book's tensor-shape
+dictionary. Existing format-aware notes remain the cheaper and accurate resolution for
+the trainer interlude, PCA interlude, and epilogue counter inheritance. The final
+498-page PDF was built from both execution formats, its metadata and key text were
+checked, and every newly folded schematic plus the new tables and preface callout passed
+page-level raster QA. This stewardship pass adds no chapter, experiment, or arc seed;
+the seed ledger and GPU queue therefore retain their July 15 scientific contents.
 
 The companion site continues to use a plural `bookChapters` field because modules and
 chapters do not map one-to-one. The earlier July 15 alignment added the HPO and

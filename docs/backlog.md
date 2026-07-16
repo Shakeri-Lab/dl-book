@@ -3,6 +3,16 @@
 Planned items from the author's chapter reviews. Pick these up only when he green-lights
 them or a chapter naturally touches them.
 
+## Release stewardship — COMPLETED 2026-07-16
+
+The stable v1.0 edition is fixed at July 16, 2026. The repository now carries validated
+`CITATION.cff` metadata, an exact suggested citation, an HTML-only revision-notes
+section, and a 498-page release PDF. The remaining pure concept schematics were folded
+without hiding experiments or numerical audits; four protocol/reference tables gained
+earned numbers. The `v1.0` tag and GitHub release are the stable archive for this
+edition. Future changes belong to a later version rather than silently replacing that
+asset.
+
 ## 1. Appendix C: numerical precision and hardware efficiency — COMPLETED 2026-07-15
 
 Shipped as `chapters/appendices/a3-precision-performance.qmd`. It harvests Chapter 5's
@@ -66,8 +76,8 @@ chapter stub's draft-sources; revisit during the planned outline session with th
   predeclared contract, seed panel, endpoint rule, and ledger fields. Link it from later
   designed studies if adopted.
 - Consider reusing the epilogue's five closing questions as the final project or exam
-  report frame, and add a short public revision-notes page before the next semester if
-  returning students need a page-reference migration guide.
+  report frame. The v1.0 HTML revision notes now provide the page-reference migration
+  guide for returning students.
 
 ## 5. GPU experiment queue (backlog-only; revised after the memory/control pass, July 15, 2026)
 

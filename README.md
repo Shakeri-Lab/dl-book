@@ -2,10 +2,13 @@
 
 The course-companion textbook for [DS 6050 Deep Learning](https://shakeri-lab.github.io/dl-course-site/)
 (School of Data Science, University of Virginia), by [Heman Shakeri](https://shakeri-lab.github.io/).
-Written in the open; every figure and result is produced by the code on the page —
-native Python and PyTorch, CPU-friendly.
+Written in the open; every figure and result is produced by code in the source.
+Experiments show their code, while concept diagrams keep their drawing source in the
+repository. The examples use native Python and PyTorch and are CPU-friendly.
 
-**Read it:** <https://shakeri-lab.github.io/dl-book/> (HTML) · PDF built from the same sources.
+**Read it:** <https://shakeri-lab.github.io/dl-book/> (HTML) · PDF built from the same sources
+
+**Stable release:** [v1.0 (July 2026)](https://github.com/Shakeri-Lab/dl-book/releases/tag/v1.0)
 
 ## The idea
 
@@ -52,6 +55,12 @@ Code sessions working in this repo.
 [docs/arc-seeds.md](docs/arc-seeds.md) (the cross-chapter seed/harvest
 ledger every new chapter must respect). These documents are the project's persistent
 memory and are updated after every shipped chapter.
+
+## Citation
+
+Suggested citation: Shakeri, Heman. 2026. *Deep Learning: Making It Learnable*.
+Version 1.0. <https://shakeri-lab.github.io/dl-book/>. The repository also provides
+machine-readable metadata in [CITATION.cff](CITATION.cff).
 
 ## License
 

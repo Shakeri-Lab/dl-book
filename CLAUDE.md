@@ -89,7 +89,10 @@ compositions for figures. Full guide: `docs/dl-course-code.md`.
    transcript; math re-derived; NOVEL items flagged.
 6. **Figures.** Data-driven → matplotlib cells (preferred). Architecture diagrams →
    `./scripts/build_tikz.sh <name-filter>` → reference `figures/generated/<name>.svg`.
-   Reusable course SVGs are in `figures/static/`.
+   Reusable course SVGs are in `figures/static/`. Experiments, derivations, assertions,
+   and numerical audits keep visible code. Pure concept-diagram drawing cells use
+   `#| echo: false`; split mixed cells first so hiding coordinates never hides an
+   implementation or evidence.
 7. **Execute + render** (this refreshes the committed freeze cache — CI never executes):
    ```bash
    QUARTO_PYTHON=.venv/bin/python quarto render chapters/partN/XX-*.qmd  # NO --to flag!
