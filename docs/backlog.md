@@ -52,8 +52,11 @@ chapter stub's draft-sources; revisit during the planned outline session with th
   2026-07-07; others pending) — provenance for later chapters' code.
 - Course-site `bookChapters` mappings through Chapter 20 were completed in the July 15
   course-alignment pass, alongside the syllabus's native-PyTorch wording repair.
+- Modules 8/9 research-lens readings and the Module 10 test-time regression/control
+  outline, discussion prompt, and five explained self-checks were completed in the
+  July 15 memory/control pass. Their prose remains in the general author edit gate.
 
-## 5. GPU experiment queue (backlog-only; revised after Chapter 20, July 15, 2026)
+## 5. GPU experiment queue (backlog-only; revised after the memory/control pass, July 15, 2026)
 
 Do not place project-management placeholders in the published chapters. Keep these
 experiments here until GPU access is available; then run them on Rivanna/Colab, pin the
@@ -70,7 +73,14 @@ proxy-coverage audits; and Chapter 19's Gaussian-ELBO, finite-GAN,
 schedule-coefficient, and five-seed scalar-diffusion studies. They require no GPU
 dependency or project-management placeholder in the published chapters. Chapter 20's
 five-seed paired-versus-deranged cross-modal retrieval study is likewise CPU-complete.
-The queue below remains the private reminder for later access. Appendix A's linear-algebra demonstrations and
+Chapter 14's seed-6050 recall-under-capacity study is CPU-complete: its factorized
+kernel traversal, delta recurrence, and selective-write trade are mechanism checks,
+not long-context language-model or accelerator claims. At $N/d=8$, plain/gated
+overall recall is 0.134/0.138; the gate changes priority/ordinary recall by
++0.387/-0.124, and softmax has 0/26,040 top-1 failures while retaining nonzero value
+MSE. `docs/CONTINUING.md` preserves the full endpoint table.
+The queue below remains the private reminder for later access. Appendix A's
+linear-algebra demonstrations and
 Appendix B's tensor-contract demonstrations are also CPU-complete; neither publishes a
 GPU placeholder or infers hardware behavior. Appendix C's dtype probes, synthetic
 Roofline, attention tensor ledger, and online-softmax parity check are complete as CPU
@@ -103,6 +113,21 @@ here.
 - **Ch. 11 translation, full scale**: English→French with an independently written,
   packed encoder–decoder pipeline, bucketing, BLEU, and greedy-versus-beam decoding.
   Do not use the course's D2L-derived `rnn_data_prep.py`.
+- **Ch. 14 long-context memory spectrum, full scale**: compare exact softmax with a
+  KV cache, a factorized/linear-attention model, a delta or gated-delta model, and a
+  selective SSM on one licensed language corpus. Predeclare quality and context-length
+  ladders; match tokenizer, data, parameter scale, training tokens, optimizer effort,
+  and output protocol where defensible. Report state and cache bytes, prefill and decode
+  arithmetic, synchronized latency/throughput, realized kernel/backend, and
+  quality-versus-context with multiple end-to-end seeds. Do not turn the CPU key--value
+  mechanism test into a claim about Mamba, DeltaNet, or language modeling.
+- **Epilogue test-time-control rematch, when a reproducible implementation and GPU
+  access exist**: hold backbone, training data, prompts, sampling, hardware, and output
+  caps fixed; meter the planner's internal horizon work as well as generated tokens.
+  Allocate the same measured FLOPs or wall time to memory-only, longer-sampling, and
+  self-consistency baselines; report quality versus total inference compute with
+  uncertainty. Treat the paper's Table 2 as evidence to rematch, not a family-level
+  verdict, and publish no TTC placeholder before that study is complete.
 - **Ch. 15 masked-LM transfer, full scale**: use a licensed pretrained encoder and
   a natural-language target with a predeclared label-scarcity ladder. Compare
   scratch, frozen probe, and full fine-tuning across multiple end-to-end seeds;

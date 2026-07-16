@@ -1238,6 +1238,444 @@ The causal mask is therefore more than an implementation detail. It says which
 information a representation is allowed to use. “Visibility is a modeling
 decision” is the seed this chapter hands forward.
 
+During autoregressive generation, exact softmax attention also makes the past a
+systems object. A **key/value (KV) cache** retains each layer's earlier key and value
+rows so a new query can reuse them instead of recomputing the whole prefix. In the
+regression language of Chapter 12, the KV cache is the nonparametric estimator's
+dataset: one new query still reads a table that grows with $t$, but the earlier rows
+do not have to be rebuilt. The toy sampler in @sec-14-self-attention-transformer is
+wasteful precisely because it rebuilds that dataset at every step; Appendix C
+separates caching from FlashAttention's I/O schedule.
+
+<!-- NOVEL: needs sign-off - test-time regression and memory-spectrum extension. -->
+## The memory spectrum: one regression, three solvers {#sec-14-memory-spectrum}
+
+The Transformer resolved Chapter 10's bottleneck by keeping the visible evidence
+available. Its quadratic routing bill was the price. There is another resolution:
+keep the *problem* Chapter 12 posed, but change how the forward pass solves it.
+
+That move has become a live architecture program under names such as test-time
+regression, fast weights, linear attention, DeltaNet, and state-space sequence models.
+The useful unit is not the model name. It is one objective and the statistical bargain
+made by its solver.
+
+### One objective, four dials
+
+At time $t$, let learned projections turn token representation $\vect{x}_\tau$ into
+two views,
+
+$$
+\vect{k}_\tau=\matr{W}_K\vect{x}_\tau,
+\qquad
+\vect{v}_\tau=\matr{W}_V\vect{x}_\tau.
+$$
+
+A memory layer can be described as building an online predictor
+$M_t:\mathbb{R}^{d_k}\rightarrow\mathbb{R}^{d_v}$:
+
+$$
+M_t
+=\arg\min_{M\in\mathcal{M}}
+\frac{1}{2}\sum_{\tau\le t}w_{t,\tau}
+\norm{M(\vect{k}_\tau)-\vect{v}_\tau}^{2}
++\Omega(M),
+\qquad
+\vect{y}_t=M_t(\vect{q}_t),
+\quad \vect{q}_t=\matr{W}_Q\vect{x}_t.
+$$ {#eq-test-time-regression}
+
+This is Wang, Shi, and Fox's test-time-regression frame, written for vector values.
+It exposes four dials the book already knows.
+
+**The views.** $W_Q,W_K,W_V$ are Chapter 13's learned comparison and payload spaces.
+The token is not assigned one permanent meaning; it learns what to ask, advertise,
+and carry.
+
+**The history weights.** $w_{t,\tau}$ decide how much an older residual matters to
+the fitting problem. Chapter 10's forget gates prepared the idea that retention can
+depend on time and content. A geometric schedule can privilege recent errors; an
+input-dependent schedule can decide that one token deserves a longer trace.
+
+**The model and regularizer.** The class $\mathcal{M}$ decides whether the predictor
+is a local constant, a linear map, or something richer. $\Omega$ brings back ridge
+penalties from Chapter 1 and weight decay from Chapter 4. Regularization controls the
+fitted map; it is not, by itself, the same operation as forgetting old observations.
+
+**The solver.** A closed-form local fit, a running sufficient statistic, and one
+gradient step do different work and preserve different information. This is the new
+rung: *what if the solver itself were a design choice, or even learned?*
+
+@eq-test-time-regression is an umbrella, not an equivalence theorem. Its
+methods can restrict different function classes, use different weights, and stop at
+different approximations. Those differences are the lesson.
+
+### Solver 1: keep the data and fit at the query
+
+Chapter 12 was more precise than saying “attention minimizes
+@eq-test-time-regression.” For a query $\vect{q}$, softmax attention solves the
+local-constant problem
+
+$$
+\vect{c}^{*}(\vect{q})
+=\arg\min_{\vect{c}}
+\frac{1}{2}\sum_{\tau\le t}
+\kappa(\vect{q},\vect{k}_\tau)
+\norm{\vect{c}-\vect{v}_\tau}^{2}.
+$$ {#eq-14-local-constant}
+
+Write $\kappa_\tau=\kappa(\vect{q},\vect{k}_\tau)$. Differentiation gives
+
+$$
+\nabla_{\vect{c}}=
+\sum_{\tau\le t}\kappa_\tau(\vect{c}-\vect{v}_\tau)=\vect{0}
+\quad\Longrightarrow\quad
+\vect{c}^{*}=
+\frac{\sum_\tau\kappa_\tau\vect{v}_\tau}{\sum_\tau\kappa_\tau}.
+$$
+
+Choose
+$\kappa(\vect{q},\vect{k})=\exp(\vect{q}^{\top}\vect{k}/\sqrt{d_k})$ and the
+normalized coefficients are exactly a row of scaled dot-product softmax. The kernel
+supplies the weights; the constant fit supplies the average. An unrestricted $M$ with
+unit observation weights and no regularizer would instead interpolate compatible
+training pairs and be undetermined away from them. We will not smuggle the average
+into a stronger claim.
+
+Here is the numerical stationarity audit. Subtracting the largest score rescales every
+$\kappa_\tau$ by the same positive constant and leaves the minimizer unchanged.
+
+```{python}
+#| label: local-constant-attention-check
+#| code-summary: "Code: verify softmax attention's local-constant optimum"
+ms_rng = np.random.default_rng(6050)
+ms_d, ms_T = 8, 12
+ms_K = ms_rng.standard_normal((ms_T, ms_d))
+ms_V = ms_rng.standard_normal((ms_T, 3))
+ms_q = ms_rng.standard_normal(ms_d)
+ms_scores = ms_K @ ms_q / np.sqrt(ms_d)
+ms_kappa = np.exp(ms_scores - ms_scores.max())
+ms_c = (ms_kappa[:, None] * ms_V).sum(0) / ms_kappa.sum()
+ms_attention = (ms_kappa / ms_kappa.sum()) @ ms_V
+ms_gradient = (ms_kappa[:, None] * (ms_c - ms_V)).sum(0)
+assert np.allclose(ms_c, ms_attention)
+print(f"max |stationarity gradient|: {np.abs(ms_gradient).max():.3e}")
+```
+
+This solver retains the key--value rows because a future query may weight every row
+differently. That is why dense causal attention carries a growing dataset forward.
+
+### Solver 2: collapse a factorized kernel into sufficient state
+
+Suppose the kernel factors through a finite feature map
+$\phi:\mathbb{R}^{d_k}\rightarrow\mathbb{R}^{r}$:
+
+$$
+\kappa(\vect{q},\vect{k})
+=\phi(\vect{q})^{\top}\phi(\vect{k}).
+$$
+
+Substitute that factorization into the weighted average and regroup terms:
+
+$$
+\begin{aligned}
+\vect{y}_t(\vect{q})
+&=\frac{\sum_{\tau\le t}
+\bigl[\phi(\vect{q})^{\top}\phi(\vect{k}_\tau)\bigr]\vect{v}_\tau}
+{\sum_{\tau\le t}\phi(\vect{q})^{\top}\phi(\vect{k}_\tau)} \\
+&=\frac{\phi(\vect{q})^{\top}\matr{S}_t}
+{\phi(\vect{q})^{\top}\vect{z}_t},
+\end{aligned}
+$$ {#eq-linear-attention-state}
+
+where
+
+$$
+\matr{S}_t=\sum_{\tau\le t}\phi(\vect{k}_\tau)\vect{v}_\tau^{\top},
+\qquad
+\vect{z}_t=\sum_{\tau\le t}\phi(\vect{k}_\tau).
+$$
+
+The sufficient state is the pair $(\matr{S}_t,\vect{z}_t)$, not $\matr{S}_t$ alone:
+the numerator needs accumulated value-weighted features and the denominator needs its
+normalizer. Each new pair updates that fixed-size state once. Any later query reads the
+same answer as a full traversal of all pairs, for this factorized kernel.
+
+```{python}
+#| label: linear-attention-sufficient-state-check
+#| code-summary: "Code: compare a factorized-kernel traversal with its running state"
+def ms_phi(x):
+    return np.where(x > 0, x + 1, np.exp(x))
+
+ms_S = np.zeros((ms_d, ms_V.shape[1]))
+ms_z = np.zeros(ms_d)
+for ms_key, ms_value in zip(ms_K, ms_V, strict=True):
+    ms_S += np.outer(ms_phi(ms_key), ms_value)
+    ms_z += ms_phi(ms_key)
+ms_streaming = (ms_S.T @ ms_phi(ms_q)) / (ms_z @ ms_phi(ms_q))
+ms_weights = ms_phi(ms_K) @ ms_phi(ms_q)
+ms_traversal = (ms_weights[:, None] * ms_V).sum(0) / ms_weights.sum()
+assert np.allclose(ms_streaming, ms_traversal)
+print("streaming equals traversal:", np.allclose(ms_streaming, ms_traversal))
+print(f"max |difference|: {np.abs(ms_streaming-ms_traversal).max():.3e}")
+```
+
+The equality is exact up to floating-point order: the full dataset traversal has
+collapsed into two running sums. With $r$ and $d_v$ fixed, storage no longer grows
+with the prefix. This is the honest content behind “Transformers are RNNs” for
+causal **linear** attention: the recurrent state returns, dignified, as a sufficient
+statistic of a regression.
+
+There is a price. Ordinary softmax's exponential dot-product kernel does not have the
+finite exact feature map used above. Changing to a finite factorization changes the
+kernel, or approximates it. Collisions in $(S_t,z_t)$ cannot be undone by revisiting a
+discarded row. The traversal equality is exact for the chosen factorized kernel, not a
+proof that finite-state linear attention reproduces exact softmax for arbitrary
+prefixes.
+
+### Solver 3: take one gradient step and get the delta rule
+
+Now restrict the predictor to a scalar linear map
+$M(\vect{q})=\vect{h}^{\top}\vect{q}$ and let the solver take one SGD step on only
+the newest pair. Its instantaneous loss and gradient are
+
+$$
+\ell_t(\vect{h})
+=\frac{1}{2}(\vect{h}^{\top}\vect{k}_t-v_t)^2,
+\qquad
+\nabla_{\vect{h}}\ell_t
+=\vect{k}_t(\vect{k}_t^{\top}\vect{h}-v_t).
+$$
+
+Substituting the gradient into the update gives the delta recurrence in three lines:
+
+$$
+\begin{aligned}
+\vect{h}_t
+&=\vect{h}_{t-1}-\eta_t\vect{k}_t
+  (\vect{k}_t^{\top}\vect{h}_{t-1}-v_t)\\
+&=(\matr{I}-\eta_t\vect{k}_t\vect{k}_t^{\top})\vect{h}_{t-1}
+  +\eta_t v_t\vect{k}_t.
+\end{aligned}
+$$ {#eq-delta-recurrence}
+
+```{python}
+#| label: delta-sgd-check
+#| code-summary: "Code: verify that one SGD step is the delta recurrence"
+ms_eta = 0.3
+ms_h = ms_rng.standard_normal(ms_d)
+ms_k = ms_rng.standard_normal(ms_d)
+ms_v = ms_rng.standard_normal()
+ms_sgd = ms_h - ms_eta * ms_k * (ms_k @ ms_h - ms_v)
+ms_delta = ((np.eye(ms_d) - ms_eta * np.outer(ms_k, ms_k)) @ ms_h
+            + ms_eta * ms_v * ms_k)
+assert np.allclose(ms_sgd, ms_delta)
+print("SGD equals Delta recurrence:", np.allclose(ms_sgd, ms_delta))
+print(f"max |difference|: {np.abs(ms_sgd-ms_delta).max():.3e}")
+```
+
+For vector values, store
+$\matr{H}_t\in\mathbb{R}^{d_v\times d_k}$ and replace the update by
+
+$$
+\matr{H}_t
+=\matr{H}_{t-1}
++\eta_t(\vect{v}_t-\matr{H}_{t-1}\vect{k}_t)\vect{k}_t^{\top}.
+$$ {#eq-vector-delta-rule}
+
+Each outer product writes the residual left by the current key. DeltaNet turns that
+classical online least-squares step into a sequence layer. The recurrence also exposes
+a state-space form: its transition is
+$\matr{A}_t=\matr{I}-\eta_t\vect{k}_t\vect{k}_t^{\top}$ and its input write is
+$\eta_t v_t\vect{k}_t$. The state transition is therefore determined by the current
+token's learned key.
+
+Forgetting needs one more careful distinction. Exponential history weights
+$w_{t,\tau}=\gamma^{t-\tau}$ define an exponentially weighted least-squares
+*objective*, but its exact minimizer generally requires a recursive least-squares
+covariance state. Writing $\gamma\matr{H}_{t-1}$ into a one-step delta recurrence is
+a fading-memory solver choice, not an algebraic consequence of those weights. Gates
+can make that retention and the step size depend on the current token.
+
+This is the derivation-first connection to the wider SSM family. Mamba makes parts of
+its state transition, input injection, and readout depend on the token; in the present
+language, those mechanisms play roles analogous to a learnable retention-and-write
+schedule. Gated DeltaNet adds learned gating around delta-style updates. That is an
+interpretive bridge, not a claim that Mamba is literally obtained by differentiating
+@eq-test-time-regression. Structured SSMs also use different state parameterizations
+and can have costs below the dense outer-product ledger here.
+
+### The price list
+
+| Solver of the shared problem | State carried forward | Per-token read/write ledger | Statistical contract |
+|---|---|---:|---|
+| Local-constant exponential-kernel fit (softmax attention) | All prior $K,V$ rows: the KV cache | $O(t(d_k+d_v))$ | No state compression; every row remains available, but the read is still a query-dependent weighted average |
+| Factorized kernel | $(S_t,z_t)$ with $S_t\in\mathbb{R}^{r\times d_v}$ | $O(rd_v)$ plus feature-map cost | Exact for the chosen finite factorization; lossy relative to retaining arbitrary raw rows |
+| One newest-pair SGD step (Delta rule and gated variants) | $H_t\in\mathbb{R}^{d_v\times d_k}$ plus any gate state | $O(d_kd_v)$ for a dense update/read | Approximate online fit; fixed capacity whose writes can be steered |
+
+The asymptotic labels name this dense educational setup, not every implementation.
+Feature width $r$, head dimensions, low-rank structure, convolutions, and hardware
+schedules change constants and sometimes orders. Most importantly, “retains every
+row” does not mean “recalls every association exactly.” Softmax still returns a convex
+mixture whose quality depends on keys, temperature, and interference.
+
+::: {.callout-warning}
+## Trap: attention's memory is a dataset, not a hidden box
+
+Attention does not *have* a separate memory in the recurrent sense. The attention
+operation is the estimator; during causal decoding, the KV cache is the observed
+key--value dataset it must retain. A nonparametric query rule keeps growing data so it
+can form a new local fit. A parametric state instead compresses those data into a
+fixed-size object. FlashAttention changes how the uncompressed fit is scheduled; it
+does not turn it into the compressed contract in the second or third row.
+:::
+
+### Mechanism test: recall under a fixed capacity
+
+The table makes a prediction we can test without pretending to train a language
+model. Store $N$ random unit key--value pairs, then query every stored key. Decode a
+read by the nearest stored value. Exact softmax attention keeps all pairs. A dense
+delta state has $d^2$ numbers regardless of $N$. A selective delta arm receives one
+extra priority bit and writes ordinary pairs at only one tenth strength, so it can
+choose what to sacrifice.
+
+The study was designed on seed branches 0 and 1. Those branches fixed
+$\eta=0.20$, the 25% priority rate, the 0.10 ordinary write gate, dimensions
+$(8,16,32)$, and loads $N/d\in(0.5,1,2,4,8)$. Only then was disjoint branch 2 opened
+for 30 endpoint repetitions. All methods in a trial receive the same keys, values,
+order, queries, and decoder. The endpoint code below is the frozen protocol; it runs
+on CPU in under a second on the reference machine.
+
+```{python}
+#| label: memory-capacity-study
+#| code-summary: "Code: run the sealed synthetic recall-under-capacity study"
+MS_SEED, MS_ETA, MS_GATE = 6050, 0.20, 0.10
+MS_DIMS, MS_LOADS, MS_REPEATS = (8, 16, 32), (0.5, 1, 2, 4, 8), 30
+
+def ms_unit(x):
+    return x / np.linalg.norm(x, axis=1, keepdims=True)
+
+def ms_decode(prediction, values):
+    return np.argmax(prediction @ values.T, axis=1)
+
+def ms_trial(rng, repeat, d, load):
+    n = max(4, round(load * d))
+    keys = ms_unit(rng.standard_normal((n, d)))
+    values = ms_unit(rng.standard_normal((n, d)))
+    priority = np.zeros(n, dtype=bool)
+    priority[rng.permutation(n)[:max(1, round(0.25 * n))]] = True
+
+    scores = 32.0 * (keys @ keys.T)
+    scores -= scores.max(axis=1, keepdims=True)
+    weights = np.exp(scores); weights /= weights.sum(axis=1, keepdims=True)
+    attention = weights @ values
+
+    def delta(write_gate):
+        state = np.zeros((d, d))
+        for key, value, gate in zip(keys, values, write_gate, strict=True):
+            state += MS_ETA * gate * np.outer(value - state @ key, key)
+        return keys @ state.T
+
+    plain = delta(np.ones(n))
+    selective = delta(np.where(priority, 1.0, MS_GATE))
+    truth = np.arange(n)
+    correct = lambda pred: ms_decode(pred, values) == truth
+    a_ok, d_ok, s_ok = correct(attention), correct(plain), correct(selective)
+    ordinary = ~priority
+    return [repeat, d, n, load, a_ok.mean(), ((attention-values)**2).mean(),
+            d_ok.mean(), d_ok[priority].mean(), d_ok[ordinary].mean(),
+            s_ok.mean(), s_ok[priority].mean(), s_ok[ordinary].mean()]
+
+def ms_panel(tag, repeats):
+    seeds = np.random.SeedSequence([MS_SEED, tag]).spawn(
+        repeats * len(MS_DIMS) * len(MS_LOADS))
+    rows, index = [], 0
+    for repeat in range(repeats):
+        for d in MS_DIMS:
+            for load in MS_LOADS:
+                rows.append(ms_trial(np.random.default_rng(seeds[index]),
+                                     repeat, d, load))
+                index += 1
+    return np.asarray(rows)
+
+# Tags 0 and 1 were development; tag 2 remained sealed until settings were fixed.
+ms_development = np.vstack([ms_panel(tag, 5) for tag in (0, 1)])
+assert np.all(ms_development[:, 4] == 1.0)
+ms_endpoint = ms_panel(2, MS_REPEATS)
+assert np.all(ms_endpoint[:, 4] == 1.0)
+
+print("study_seed=6050; development_tags=(0, 1); sealed_endpoint_tag=2")
+print("endpoint_trials=30 x 3 dimensions; d=(8, 16, 32); "
+      "N/d=(0.5, 1, 2, 4, 8)")
+print("fixed: eta=0.20; priority_fraction=0.25; ordinary_write_gate=0.10")
+print("load  attention  Delta  gated-all  gated-priority  gated-ordinary")
+for load in MS_LOADS:
+    block = ms_endpoint[ms_endpoint[:, 3] == load]
+    means = block[:, [4, 6, 9, 10, 11]].mean(0)
+    print(f"{load:>4.1f}   " + "  ".join(f"{value:.3f}" for value in means))
+
+hard = ms_endpoint[ms_endpoint[:, 3] == 8]
+priority_gain = hard[:, 10] - hard[:, 7]
+ordinary_gain = hard[:, 11] - hard[:, 8]
+print(f"N/d=8 gated-minus-Delta priority: {priority_gain.mean():+.3f} "
+      f"(SD {priority_gain.std(ddof=1):.3f})")
+print(f"N/d=8 gated-minus-Delta ordinary: {ordinary_gain.mean():+.3f} "
+      f"(SD {ordinary_gain.std(ddof=1):.3f})")
+print(f"attention top-1 failures=0/{int(ms_endpoint[:, 2].sum())}; "
+      f"mean value MSE={ms_endpoint[:, 5].mean():.2e}; "
+      f"max trial MSE={ms_endpoint[:, 5].max():.2e}")
+```
+
+```{python}
+#| label: fig-memory-capacity-spectrum
+#| fig-cap: "A sealed synthetic mechanism test, not a language-model or state-space benchmark. Left: the uncompressed softmax table has perfect top-1 identification in this constructed, sharp-softmax regime, while the fixed delta state loses associations as N/d grows; this is not exact numeric interpolation. Right: the selective arm receives an unmatched priority bit and trades ordinary recall for priority recall. Keys, values, order, queries, decoder, and state width are matched within each trial; inference arithmetic, stored data, and side information are not matched, and no wall-clock claim is made. Left-panel lines average 30 endpoint seeds per dimension; right-panel lines pool the three dimensions, for 90 dimension-by-seed trials per load."
+#| fig-alt: "Two line charts. In the left chart softmax top-1 recall stays at one while Delta recall falls with load for dimensions 8, 16, and 32. In the right chart a gated Delta update preserves priority items better than ordinary items, especially at high load, while the ungated update does not make that trade as strongly."
+#| code-summary: "Figure: compare full-table and fixed-state recall as load grows"
+fig, axes = plt.subplots(1, 2, figsize=(8.4, 3.35), constrained_layout=True)
+colors = {8: "#E57200", 16: "#2E7D32", 32: "#722F37"}
+for d in MS_DIMS:
+    means = [ms_endpoint[(ms_endpoint[:, 1] == d) &
+                         (ms_endpoint[:, 3] == load), 6].mean()
+             for load in MS_LOADS]
+    axes[0].plot(MS_LOADS, means, marker="o", color=colors[d], label=f"Delta, d={d}")
+axes[0].plot(MS_LOADS, np.ones(len(MS_LOADS)), color="#232D4B", lw=2,
+             label="softmax table")
+axes[0].set(xscale="log", xlabel="load N/d", ylabel="top-1 recall",
+            title="Fixed state meets capacity", ylim=(-0.03, 1.05))
+axes[0].set_xticks(MS_LOADS, [str(x) for x in MS_LOADS])
+axes[0].minorticks_off()
+axes[0].legend(fontsize=7.3)
+
+for column, label, style, color in [
+    (7, "Delta: priority", "--", "#B45309"),
+    (8, "Delta: ordinary", "--", "#64748B"),
+    (10, "gated: priority", "-", "#E57200"),
+    (11, "gated: ordinary", "-", "#232D4B"),
+]:
+    means = [ms_endpoint[ms_endpoint[:, 3] == load, column].mean()
+             for load in MS_LOADS]
+    axes[1].plot(MS_LOADS, means, marker="o", ls=style, color=color, label=label)
+axes[1].set(xscale="log", xlabel="load N/d", ylabel="top-1 recall",
+            title="A gate chooses what to forget", ylim=(-0.03, 1.05))
+axes[1].set_xticks(MS_LOADS, [str(x) for x in MS_LOADS])
+axes[1].minorticks_off()
+axes[1].legend(fontsize=7.3)
+plt.show()
+```
+
+At $N/d=8$, the gate raises priority recall over the plain delta state by 0.387 on
+average and lowers ordinary recall by 0.124. That is selective forgetting made
+visible, not a claim that the gated arm is globally better. Overall gated recall is
+0.138 while plain Delta recall is 0.134 at that load. The useful result is the trade:
+given an extra signal, a fixed state can spend capacity differently.
+
+The fixed-size state could not hold everything in @sec-10-sequences-rnn. It still
+cannot. Now we know the price list on which that failure was one entry. Keeping the
+dataset buys uncompressed access at growing cost; sufficient statistics buy an exact
+stream for a restricted kernel; online updates buy a steerable fixed state and accept
+interference. The RNN state has returned as a statistical choice rather than a design
+we were supposed to declare dead.
+<!-- /NOVEL -->
+
 ## Okay, so — the Transformer routes, then computes
 
 1. **Self-attention reuses Chapter 13's operator within one sequence.** $Q$, $K$,
@@ -1264,6 +1702,10 @@ decision” is the seed this chapter hands forward.
    versus 1.9190.
    Architecture changes inductive bias; it does not guarantee victory in every
    data and scale regime.
+7. **One regression question admits several memory contracts.** Exact softmax keeps
+   the key--value table; a factorized kernel carries $(S_t,z_t)$; a delta update
+   carries a fixed matrix and accepts interference. The solver decides what the
+   layer remembers and what it pays.
 
 ## Sources and further reading {.unnumbered}
 
@@ -1273,6 +1715,11 @@ decision” is the seed this chapter hands forward.
 - [Geva et al., *Transformer Feed-Forward Layers Are Key-Value Memories*](https://aclanthology.org/2021.emnlp-main.446/): empirical evidence behind the associative-memory interpretation of FFNs.
 - [Jain and Wallace, *Attention Is Not Explanation*](https://aclanthology.org/N19-1357/): an important limit on reading attention maps as explanations.
 - [Holtzman et al., *The Curious Case of Neural Text Degeneration*](https://arxiv.org/abs/1904.09751): nucleus sampling and the distinction between likely continuations and useful generation behavior.
+- [Katharopoulos et al., *Transformers Are RNNs: Fast Autoregressive Transformers with Linear Attention* (2020)](https://arxiv.org/abs/2006.16236): derives the recurrent sufficient-state form for causal linear attention.
+- [Schlag, Irie, & Schmidhuber, *Linear Transformers Are Secretly Fast Weight Programmers* (2021)](https://proceedings.mlr.press/v139/schlag21a.html): connects linear attention, fast weights, and the delta update.
+- [Gu & Dao, *Mamba: Linear-Time Sequence Modeling with Selective State Spaces* (2023)](https://arxiv.org/abs/2312.00752): makes state-space parameters input dependent; the chapter uses selectivity as a retention-and-write analogy, not an exact regression equivalence.
+- [Yang et al., *Gated Delta Networks: Improving Mamba2 with Delta Rule* (2024)](https://arxiv.org/abs/2412.06464): combines gated linear recurrence with delta-style associative updates.
+- [Wang, Shi, & Fox, *Test-Time Regression: A Unifying Framework for Designing Sequence Models with Associative Memory* (2025)](https://arxiv.org/abs/2501.12352): the shared regression objective and solver-design perspective.
 
 ## Exercises {.unnumbered}
 
@@ -1298,3 +1745,21 @@ decision” is the seed this chapter hands forward.
    distribution for every head and block. Then perturb the highest-weight key's
    value vector and measure the logit change. Explain why routing weight and causal
    influence need not rank tokens identically.
+6. **(Pencil.)** Starting from @eq-14-local-constant, derive the stationarity
+   equation and its normalized solution. Identify exactly where the local-constant
+   restriction enters. Why would an unrestricted function with no regularizer not
+   imply the same average?
+7. **(Code.)** Reproduce @eq-linear-attention-state with a positive feature map of
+   your choice. Assert that full traversal and the running pair $(S_t,z_t)$ agree for
+   every prefix, not only at the final time. Which assertion fails if you omit $z_t$?
+8. **(Pencil.)** Derive @eq-delta-recurrence from one SGD step. Then propose a
+   recurrence with a factor $\gamma$ multiplying the old state. Explain why this is a
+   fading-memory solver choice rather than the exact minimizer of exponentially
+   weighted least squares.
+9. **(Code.)** Sweep the capacity study over at least five state widths $d$. Preserve
+   the sealed-seed protocol, plot recall against both $N$ and $N/d$, and report where
+   the curves align. Do not call top-1 identification exact value recall.
+10. **(Pencil and critique.)** For each row of the price table, write the state size,
+    update cost, query cost, and information that cannot be reconstructed. Which pair
+    is compute-matched? Which is storage-matched? Design one rematch for a claim you
+    would actually be willing to make.

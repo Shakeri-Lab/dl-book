@@ -8,7 +8,8 @@ new rows here. The pedagogical-efficiency rule (drafting-template) depends on
 this file: a concept with no payoff chapter listed here should be an exercise or
 a cut.*
 
-*Updated: 2026-07-15, after the course-alignment and structural-review pass.*
+*Updated: 2026-07-15, after the course-alignment, structural-review, and test-time
+memory/control passes.*
 
 ## 1. Seeds planted and their harvest contracts
 
@@ -35,8 +36,10 @@ a cut.*
 | LayerNorm: "same equation, different axis — remember @eq-batchnorm when you meet it" | ch. 9 | ch. 14 | done |
 | Transfer decision rule (labels scarce ∧ task feature-hungry ∧ coverage at matched scale) | ch. 9 | ch. 15 ✓ (controlled generated-token transfer); ch. 17 ✓ (adaptation changes cost and permitted writes, not source coverage) | done |
 | Third weight sharing (examples → space → time) | ch. 10 | ch. 14 (stationarity retained; one comparison rule shared across ordered pairs) | done |
-| Finite-state bottleneck; "the book ends Part III when we refuse to pay that price" | ch. 10–11 | ch. 12 (retain the memory bank), ch. 13 (learn the access rule) | done |
+| Finite-state bottleneck; "the book ends Part III when we refuse to pay that price" | ch. 10–11 | ch. 12 (retain the memory bank), ch. 13 (learn the access rule), ch. 14.8 (the fixed state returns as a chosen regression tradeoff) | done |
 | Fixed attention matrix; "what if the similarity itself were learnable?" | ch. 12 | ch. 13 (learned compatibility and the date-task rematch) | done |
+| The kernel supplies the weights; the local-constant fit supplies the average | ch. 12 | ch. 14.8 — exact softmax as one solver, then the sufficient-state and delta alternatives | done |
+| Test-time memory fits the past; could a layer evaluate futures before answering? | ch. 14.8 and ch. 18's outside-the-policy judge | epilogue — scalar Riccati planning and the learnable-planner frontier | done |
 | "Hard address, learned content" (embeddings); soften the address too | ch. 11 | ch. 13 — harvest the phrase | done |
 | Masking = "which positions it may not look at"; causal mask preview | ch. 11 | ch. 14 (causal mask turns transformer into LM) | done |
 | Date-normalization benchmark (leak-free packed seq2seq: 53.8% @ epoch 6, 95.0% @ 12 on 400 unambiguous validation sources; 93.1% on the final 437-source unambiguous test; alignment invisible) | ch. 11 | ch. 13 — attention: 93.25% @ 6, 99.75% @ 12, 100.0% final test; validation alignment visible | done |
@@ -45,7 +48,8 @@ a cut.*
 | Book-corpus char-LM (held-out fixed-window loss 1.89; sampled training minibatch 1.42; babble) | ch. 10 | ch. 14 (exact corpus/split/evaluation and historical window schedule; positional transformer 1.9190, no-position 2.3405) | done |
 | Visibility is a modeling decision | ch. 14 | ch. 15 (causal generation versus bidirectional masked-token representation learning) | done |
 | Global routing trades away locality bias | ch. 14 | ch. 16 ✓ (patch-token ViT rematches convolution's built-in geometry in a five-seed scratch regime) | done |
-| Short paths, dense work; global access is not free memory | ch. 14 | Appendix C — the $Bhn^2$ ledger becomes the FlashAttention I/O case study | done |
+| Short paths, dense work; global access is not free memory | ch. 14 | ch. 14.8 — one regression, three memory contracts; Appendix C — the $Bhn^2$ ledger becomes the FlashAttention I/O case study | done |
+| The KV cache is the nonparametric estimator's retained dataset | ch. 14.7–14.8 | Appendix C — FlashAttention changes the I/O schedule of that dataset traversal; fixed-state solvers change the statistical contract | done |
 | A learned summary token can gather a sequence for a downstream head | ch. 15 | ch. 16 ✓ (`[CLS]` becomes a learned meeting place over image patches, not a summary by birth) | done |
 | Pretraining is a regime, not an architecture | ch. 15 | ch. 16 ✓ (the same encoder pattern crosses from text to vision; data scale can reverse the CNN–ViT ranking) | done |
 | Training-optimal is not serving-optimal | ch. 16 | ch. 17 — harvested by name: Chinchilla allocates training compute, not storage, inference, or adaptation cost; the mismatch motivates prompting, PEFT, and quantization | done |
@@ -123,15 +127,16 @@ optimizers or `backward()` before Chapter 5.
 | Autoencoder interlude (after 9) | encoder–code–decoder reconstruction contract; PCA as a tied undercomplete linear autoencoder; projector rather than basis comparison; nonlinear/manifold reconstruction; denoising input–target contracts; convolutional autoencoders; transposed convolution as adjoint, not inverse; fixed-code versus variable-length-process distinction. `torch.linalg.svd` is a labeled Appendix A baseline preview and `nn.Tanh` a labeled ch. 10 activation preview. |
 | 10 | `nn.RNN`/`nn.LSTM` (+GRU eqs), BPTT, truncated chunks, `clip_grad_norm_`, `F.one_hot` (in models), sampling with temperature, `torch.multinomial` |
 | 11 | encoder–decoder, `nn.Embedding`, PAD/BOS/EOS, `pad_sequence`, `pack_padded_sequence`, `ignore_index`, teacher forcing/free-running, exposure bias, scheduled sampling (concept), greedy/beam search, length normalization |
-| 12 | kernels/bandwidth, Nadaraya–Watson, queries/keys/values, row-softmax over log-kernel scores, attention-weight matrices (fixed) |
+| 12 | kernels/bandwidth, Nadaraya–Watson, queries/keys/values, row-softmax over log-kernel scores, attention-weight matrices (fixed), query-local constant-fit characterization of softmax attention, test-time-regression research lens |
 | 13 | learned Q/K/V, additive and scaled dot-product cross-attention, source-padding attention masks, attention-augmented seq2seq, alignment heatmaps; multi-head preview only |
-| 14 | permutation-equivariant self-attention, custom multi-head attention, causal masks, sinusoidal positional encoding, LayerNorm, residual stream, pre-LN transformer blocks, FFN memory lens, exact ablation scheduling |
+| 14 | permutation-equivariant self-attention, custom multi-head attention, causal masks, sinusoidal positional encoding, LayerNorm, residual stream, pre-LN transformer blocks, FFN memory lens, exact ablation scheduling; test-time regression's four dials; KV cache as retained K/V dataset; factorized-kernel sufficient state $(S_t,z_t)$; linear/delta online update; derivation-first Mamba/Gated-Delta selectivity bridge; sealed recall-under-capacity mechanism test |
 | 15 | self-supervision, full nonpadding visibility, MLM selection/corruption and 80/10/10 policy, WordPiece concept, learned token/position/segment embeddings, `[CLS]`/`[SEP]`, GELU, BERT encoder and historical NSP, full fine-tuning versus frozen probes, centered cosine similarity, paired end-to-end transfer controls |
 | 16 | image patch tokens (`F.unfold` and stride-$P$ `nn.Conv2d` equivalence), ViT encoder classifier (learned image positions and `[CLS]`, pre-LN blocks), patch-size/attention-cost arithmetic, paired schedule-hash audits, CNN–ViT inductive-bias regimes; compound depth/width/resolution scaling, empirical power-law scaling, compute-optimal parameter/data allocation, Chinchilla joint loss fit |
 | 17 | hard/few-shot prompting and frozen-weight in-context learning; retrieval as a separate context path; soft prompts, prefix tuning, adapters, and BitFit; LoRA equations, initialization, rank-capacity, merge, and freeze audits; symmetric versus affine quantization, per-tensor versus per-row scales, PTQ/QAT/GPTQ/AWQ concepts; QLoRA, NF4, and double quantization; `nn.TransformerEncoderLayer` convenience wrapper |
 | 18 | response-masked SFT and instruction tuning; preference records and Bradley–Terry reward models; reward-shift and cyclic-consistency audits; reward model versus value function; finite KL-regularized Gibbs policy; PPO old-policy versus fixed-reference anchors; proxy-coverage audit; DPO reference-relative margin and exact finite identity; alignment evaluation contracts and model cards |
 | 19 | Gaussian latent-variable models; ELBO and reparameterization; GAN minimax games and Jensen–Shannon divergence; diffusion schedules, noise prediction, score, and reverse sampling; generative evaluation contracts |
 | 20 | multimodal paired supervision; separate encoders into normalized shared coordinates; cosine score matrices; symmetric batch contrastive/InfoNCE-style loss; cross-modal Recall@$k$; text-prototype zero-shot classification; retrieval-versus-generation and pair/candidate evaluation contracts |
+| Epilogue | fast/transient versus slow/persistent adaptation taxonomy; predictive versus reward/preference/control signals; scalar finite-horizon LQR and Riccati recursion; test-time control as a hedged research frontier |
 | A | matrix maps and affine bias; span, rank, orthogonality, projectors; `torch.linalg.solve`, `lstsq`, conditioning, `eigh`/SVD contracts, low-rank approximation, batched SVD, centered PCA |
 | B | six-part tensor contract; book-wide axis dictionary; `nn.Linear` row batches; broadcasting; `expand`/`repeat`; views, strides, contiguity; batched `@`/`einsum`; indexing, masks, and dtype-aware factories |
 | C | binary floating-point range and resolution; `torch.finfo`/`nextafter`; rounded-away updates, cancellation, stable softmax, and log-domain products; mixed-precision and loss-scaling contracts; operational intensity, Roofline bounds, and ridge points; I/O-aware exact attention and online softmax; performance-measurement contracts |

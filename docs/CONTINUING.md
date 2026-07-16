@@ -1,7 +1,7 @@
 # Continuing the Book — Handoff & Roadmap
 
-*Written 2026-07-09 after Chapter 11 shipped; updated 2026-07-15 for the structural and
-course-alignment pass. This is the master handoff document:
+*Written 2026-07-09 after Chapter 11 shipped; updated 2026-07-15 for the structural,
+course-alignment, and test-time memory/control passes. This is the master handoff document:
 everything a fresh collaborator (human or Claude session, on any account) needs to
 continue the project without the original conversation history. Read `CLAUDE.md`
 (repo root) first for environment setup; read this second; read
@@ -19,11 +19,11 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 | I · From Lines to Networks | 1–6 | **Shipped; repair pass complete and verified** (July 11, 2026) |
 | II · Vision | 7–9 | **Shipped; repair pass complete and verified** (July 11, 2026) |
 | III · Sequences | 10–11 | **Shipped; repair pass complete and verified** (July 11, 2026) |
-| IV · Attention | 12–16 | **Shipped and two-format verified** (July 13, 2026) |
+| IV · Attention | 12–16 | **Shipped; test-time memory spectrum extension verified** (July 15, 2026) |
 | V · Pretrained Era | 17–20 | **Shipped and two-format verified** (July 15, 2026; ch. 19 revised, ch. 20 added) |
 | Unnumbered bridges | Experimentation/HPO after ch. 6; PCA/autoencoders after ch. 9 | **Shipped and two-format verified** (July 15, 2026) |
-| Epilogue | The Question Is Yours | **Shipped and two-format verified** (July 15, 2026) |
-| Appendices | A–D | **Shipped and verified** (Appendix D completed July 15, 2026) |
+| Epilogue | The Question Is Yours | **Shipped; memory-to-planning frontier verified** (July 15, 2026) |
+| Appendices | A–D | **Shipped and verified** (Appendix C KV-cache bridge and Appendix D complete July 15, 2026) |
 
 **Milestone 1** (Part I complete + skeleton) is met. The July 11 quantitative,
 mathematical, licensing, evaluation-hygiene, and two-format repair pass over Chapters
@@ -63,8 +63,59 @@ PDF `\vect`/`\matr` to `\symbf` and HTML MathJax to `\boldsymbol`, removes manua
 numerals, completes all recap titles, and labels Chapter 15's pretraining-family table.
 The July 15 refresh executed all 28 book units in both formats, regenerated 26
 HTML/TeX freeze pairs, and matched all 127 printed-output blocks. A frozen full render,
-the 506-page PDF, and browser asset/alt/layout checks passed; publication remains the
-normal `main` → `gh-pages` operational step.
+the 506-page PDF, and browser asset/alt/layout checks passed; that release followed the
+normal `main` → `gh-pages` path.
+
+The later July 15 **test-time memory/control extension** keeps the Chapter 11 → 12 →
+13 → 14 bottleneck arc intact and turns Chapter 12's regression lens one rung further.
+Chapter 12 now states the exact local-constant problem before using the phrase
+“attention is regression” and identifies the 2024–26 research program. New §14.8
+derives three statistical contracts from one online regression objective: retain the
+key/value dataset, carry the factorized-kernel sufficient pair $(S_t,z_t)$, or update a
+bounded delta-rule state. Chapter 10 supplies the forward promise; §14.7 and Appendix C
+name the KV cache as the nonparametric estimator's dataset and distinguish
+FlashAttention's schedule change from state compression. The epilogue adds a strictly
+frontier-level memory-versus-planning landing and a scalar Riccati box—no differentiable
+LQR implementation or architecture-survey detour.
+
+All added derivations were pinned before prose. The local-constant stationarity
+residual is `3.053e-16`; factorized traversal and running state differ by at most
+`3.469e-17`; the explicit SGD and delta recurrences differ by `4.441e-16`; and the
+scalar first-action gain moves from `-0.8181818` at horizon one to `-0.8233456` at
+horizon ten. The sealed CPU recall study uses seed 6050, development tags 0/1, endpoint
+tag 2, 30 repeats, $d\in\{8,16,32\}$, and $N/d\in\{0.5,1,2,4,8\}$. Softmax has zero
+top-1 failures over 26,040 constructed queries; plain Delta recall falls from 0.988 to
+0.134 across the load sweep. At $N/d=8$, the priority-bit gate changes priority recall
+by `+0.387` (SD `0.156`) and ordinary recall by `-0.124` (SD `0.065`) relative to the
+plain state. The caption discloses the unmatched side information and makes no
+language-model, runtime, or architecture-ranking claim.
+
+| $N/d$ | softmax | Delta | gated overall | gated priority | gated ordinary |
+|---:|---:|---:|---:|---:|---:|
+| 0.5 | 1.000 | 0.988 | 0.471 | 1.000 | 0.294 |
+| 1 | 1.000 | 0.910 | 0.352 | 0.992 | 0.139 |
+| 2 | 1.000 | 0.657 | 0.282 | 0.982 | 0.048 |
+| 4 | 1.000 | 0.338 | 0.228 | 0.848 | 0.022 |
+| 8 | 1.000 | 0.134 | 0.138 | 0.522 | 0.010 |
+
+These are top-1 identification rates, not exact value interpolation: softmax's mean
+value MSE is `5.43e-06`, and its maximum trial MSE is `4.55e-04`.
+
+The complete frozen render is now 516 pages. Chapter 12's two-box addendum fits one
+page, §14.8 fits nine pages, and the epilogue frontier fits two. Every affected unit was
+executed in HTML and TeX; printed outputs match, the complete book renders, the affected
+PDF ranges passed visual QA, and local browser checks confirm anchors, equations,
+figures, alt text, and course-site interaction. The companion site adds the two research
+lens readings to Modules 8/9, a timed 20-minute Module 10 outline and discussion prompt,
+and five explained self-check questions. Its study guide, type check, 24-page production
+export, styled browser layout, links, and answer reveal all pass.
+
+The companion site continues to use a plural `bookChapters` field because modules and
+chapters do not map one-to-one. The earlier July 15 alignment added the HPO and
+autoencoder interludes plus Chapters 12–20 as primary readings, kept D2L as an
+alternative, fixed Module 7's prerequisite, and repaired the syllabus's inaccurate
+NumPy-spine wording. The memory/control material extends that shipped mapping; only its
+prose remains covered by the general author edit gate.
 
 Chapter 13 is also complete: additive and scaled dot-product attention are derived,
 source-padding masking is exercised, and the Chapter 11 date benchmark has a
@@ -73,11 +124,12 @@ implementation was independently derived after D2L-like source-code blocks were
 removed from the public snapshot.
 
 Chapter 14 is complete: self-attention, positional encoding, causal multi-head
-attention, the pre-LayerNorm residual block, and the FFN memory lens are derived
-and exercised. Its exact-schedule book-corpus rematch uses 132,488 parameters. In
-the matched seed, position lowers held-out loss from 2.3405 to 1.9190; the Chapter
-10 LSTM narrowly remains ahead at 1.8881. The comparison is a controlled case
-study, not an across-seed effect estimate.
+attention, the pre-LayerNorm residual block, the FFN memory lens, and the regression
+memory spectrum are derived and exercised. Its exact-schedule book-corpus rematch uses
+132,488 parameters. In the matched seed, position lowers held-out loss from 2.3405 to
+1.9190; the Chapter 10 LSTM narrowly remains ahead at 1.8881. The comparison is a
+controlled case study, not an across-seed effect estimate. The new capacity study is a
+separate synthetic mechanism test with a sealed endpoint, not a language-model rematch.
 
 Chapter 15 is complete: causal visibility, full nonpadding visibility, MLM target
 selection, and padding protection are separated explicitly; original BERT's
@@ -185,19 +237,22 @@ recap derives online softmax, matches materialized attention to
 `4.441e-16` in FP64, and distinguishes reduced I/O and working storage from unchanged
 dense quadratic arithmetic. Both freezes and all printed outputs match; the complete
 Appendix C PDF range, both original figures, and browser layout passed QA. It contains
-no GPU placeholder or unmeasured speedup.
+no GPU placeholder or unmeasured speedup. Its KV-cache bridge now says explicitly that
+FlashAttention changes the I/O schedule of the same nonparametric solve; the fixed-state
+solvers in §14.8 change the statistical contract instead.
 
 **Decisions still gated on the author:**
-- The author's final prose/sign-off pass, including every `NOVEL` marker, remains a
-  separate gate even after this assessment-driven structural revision.
-- Course-site integration uses a plural `bookChapters` field because modules and
-  chapters do not map one-to-one. The July 15 pass adds the HPO and autoencoder
-  interludes plus Chapters 12–20 as primary module readings, keeps D2L alternatives,
-  fixes Module 7's prerequisite, and replaces the inaccurate NumPy-spine syllabus
-  language. A clean temporary install passes the production build; commit, deploy, and
-  live-link checks remain.
+- The author's final prose/sign-off pass remains a separate gate after the technical
+  release. For this extension it covers Chapter 10's two-sentence forward pointer;
+  Chapter 12's precision/research boxes; §14.8 and its added exercises; Appendix C's
+  KV-cache/schedule bridge; the epilogue taxonomy and Riccati frontier; the entire
+  maintainer exercise bank; and the Modules 8–10 readings, outline, prompt, and five
+  self-checks. The manuscript blocks and exercise bank retain their `NOVEL` markers;
+  the pointer, part of Appendix C, and course-site data have no separate marker.
 - "Deeper dive" collapsed sections: piloted in ch. 6; his verdict pending ("let us
-  get back to deeper dive later"). Do not retrofit chs. 1/5.
+  get back to deeper dive later"). The explicitly requested epilogue Riccati box is a
+  one-off frontier treatment; it does not settle that global verdict or authorize
+  retrofits in chs. 1/5.
 - GPU experiments remain backlog-only until access is available. Do not publish
   placeholder callouts in chapters; run the queued experiments on Rivanna/Colab and
   fold real results back into the relevant chapters later.
@@ -290,7 +345,7 @@ F. **Honesty gate**: printed numbers must support the prose exactly; overclaims
    get toned down, not numbers massaged. When an experiment refuses to show the
    textbook result honestly, the null result with a diagnosis is usually the
    better chapter (precedents in §5).
-G. **GPU queue** (revised July 11): experiments needing full-dataset/GPU scale get an
+G. **GPU queue** (revised July 15): experiments needing full-dataset/GPU scale get an
    entry in `docs/backlog.md` §5, not an in-chapter placeholder. Never fake a
    scaled-down win; publish the honest CPU result and add the scaled result only after
    it has actually run.
@@ -300,8 +355,11 @@ H. **Licensing**: no d2l.ai text/code ever (his `rnn_data_prep.py` is D2L-derive
    No render-time downloads, ever.
 I. **Reading order**: chapter N's code uses only tools introduced in chapters
    ≤ N. The introduced-tools ledger lives in `docs/arc-seeds.md` §3.
-J. **Exercises**: 4–5, tagged **(Pencil.)** / **(Code.)** / mixed, each
-   reinforcing an arc point; open-ended phrasing for untested outcomes.
+J. **Exercises**: normally 4–5 core items, tagged **(Pencil.)** / **(Code.)** /
+   mixed, each reinforcing an arc point; open-ended phrasing for untested outcomes.
+   A specifically requested addendum may expand the chapter list or use a separately
+   scoped maintainer bank, as §14.8 and
+   `docs/test-time-memory-control-exercise-bank.md` do.
 K. **Provenance**: every chapter opens with the
    `<!-- lecture-source: … seeds: … -->` comment; deviations from the lecture's
    framing are noted there (see ch. 10/11 for the pattern).
@@ -317,6 +375,16 @@ These are precedents; when a new experiment misbehaves, check here first.
   reason. Two whole task designs were nearly abandoned before this diagnosis.
 - **Freeze staleness (ch. 8):** `--to html` single-file renders leave `tex.json`
   stale → book PDF ships old content. Render single files with no `--to` flag.
+- **A kernel does not supply its own average (ch. 12/14):** an unrestricted
+  $M$ with $w=1$ and $R=0$ can interpolate observed pairs; it does not imply the
+  Nadaraya–Watson/softmax result at a query. The kernel supplies weights and the
+  local-constant restriction supplies the weighted average. State that precision
+  before using “attention is regression.”
+- **A sufficient state changes the contract (ch. 14):** $(S_t,z_t)$ exactly matches
+  traversal for its chosen factorized kernel, not arbitrary softmax. Perfect top-1
+  identification is not exact value recall, and a Mamba-style retention/write mapping
+  is interpretive rather than an algebraic equivalence. Keep all three distinctions in
+  captions, tables, and recap claims.
 - **Regimes that only appear at the right scale:** ResNet degradation needs real
   depth (plain-20 at 14×14 shows it; plain-10 does not — ch. 9). The vanilla-RNN
   recall failure at lag 80 is a *lottery* across seeds, not a wall (ch. 10) —
@@ -428,6 +496,14 @@ experiment, and verification contract:
   average. For the Gaussian score $-\|q-k\|^2/(2h^2)$, bandwidth maps to temperature
   through $2h^2$. A dot product is pure angular similarity only when norms are
   controlled.
+- **Research-lens precision upgrade**: before any regression slogan, the chapter now
+  states softmax attention as the exact local-constant fit
+  $\arg\min_c\sum_\tau\kappa(q,k_\tau)\|c-v_\tau\|^2$. The kernel supplies the
+  weights; restricting the fit to one constant supplies the average. An unrestricted
+  zero-regularization function could interpolate observed pairs and does not imply the
+  same query-local average. A Warning carries the trap, an INFO/Note box connects the
+  lens to TTT, DeltaNet, Titans, MesaNet, and test-time regression/control, and the
+  stationarity proof is an explicit Pencil exercise.
 - **Harvests completed**: ch. 1's "weighted combination of targets" and
   "dot product as similarity" seeds; ch. 2's "scores → weights" softmax framing;
   the finite-state bottleneck is partially relieved by retaining a memory bank.
@@ -485,6 +561,21 @@ experiment, and verification contract:
   1.1132/1.9190; no position yields 1.8672/2.3405. Position improves held-out loss
   by 0.4214 (18.0%), but the 1.8881 LSTM baseline narrowly wins by 0.0309 (1.64%).
   The positional run repeated exactly; the one-seed gap is not an average effect.
+- **Memory spectrum shipped**: new §14.8 writes one online regression objective and
+  audits four dials—views, history weights, regularization, and solver. It re-derives
+  the local-constant attention solution, collapses a factorized kernel into the exact
+  running pair $(S_t,z_t)$, and derives the delta recurrence from one newest-pair SGD
+  step. It explicitly rejects three tempting overclaims: $(S_t,z_t)$ is exact only for
+  the chosen factorization, exponential objective weights do not automatically yield
+  a $\gamma H_{t-1}$ update, and Mamba-style selectivity is an interpretive
+  retention/write analogy rather than a derivation or genealogy.
+- **Pinned capacity mechanism test**: the sealed seed/load ledger and exact endpoint
+  values are recorded in §1. The uncompressed softmax table, plain delta state, and
+  priority-gated delta state share keys, values, order, queries, decoder, and width;
+  stored data, arithmetic, and the gate's priority bit are deliberately unmatched and
+  confessed in the caption. Chapter 14 now has ten exercises; the external exercise bank is
+  `docs/test-time-memory-control-exercise-bank.md` (nine prompts with solution
+  sketches, including the Table 2/§E.2 compute-matched critique).
 - **Forward seeds planted**: “visibility is a modeling decision” into ch. 15 and
   “global routing trades away locality bias” into ch. 16.
 
@@ -694,9 +785,20 @@ experiment, and verification contract:
 - Replays the five-rung learnability ladder in one original figure, names objective,
   data, and evaluation as choices no architecture makes for us, gathers the
   experimentation discipline, marks roads outside scope, and hands the core question
-  back to the reader. It is unnumbered and carries no new examinable mechanism.
-- Both execution freezes, the figure, browser layout, and the complete PDF range passed
-  QA in the integrated July 15 build.
+  back to the reader.
+- The frontier landing distinguishes backward-looking fitting from forward-looking
+  evaluation, adds an adapted/extended fast-versus-slow × predictive-versus-control
+  taxonomy, and treats the source paper's System 1/System 2 language only as a
+  metaphor—a cartoon, not a law or demonstrated model partition. Prompting/ICL, LoRA,
+  and DPO carry explicit taxonomy caveats.
+- A Deeper-dive box derives only the scalar Riccati recursion and shows that the first
+  action changes with horizon. It connects Chapter 18's external learned judge to a
+  tractable cost planned against inside a layer, then closes on “what if the planner
+  were learnable?” as an architectural bet, not settled science. Differentiable LQR,
+  CUDA co-design, benchmark generalization, and the contested RL ceiling claim remain
+  out of scope.
+- Both execution freezes, both figures, browser layout, and the complete PDF range
+  passed QA in the integrated July 15 build.
 
 ### Appendices
 - **Appendix A — Linear Algebra and the SVD (SHIPPED):** sanitized
@@ -715,7 +817,10 @@ experiment, and verification contract:
   cancellation, stable softmax, mixed precision and loss scaling; synthetic Roofline
   analysis; exact tiled online attention and a FlashAttention recap; seven cells, two
   original figures, two exact freezes, and full PDF/browser QA passed. Roofline values
-  are explicitly synthetic and no hardware-runtime claim is made.
+  are explicitly synthetic and no hardware-runtime claim is made. The recap now names
+  the KV cache as the nonparametric estimator's retained dataset, explains why the
+  naïve §14.6.2 sampler wasted projection work, and separates FlashAttention's
+  I/O-efficient schedule from §14.8's lossy fixed-state statistical contracts.
 - **Appendix D — Notation (SHIPPED):** derived directly from
   `tex/macros.tex`, `mathjax-config.html`, and actual manuscript usage. It records
   typography, decorations, index/dimension roles, recurring dense/image/sequence/
@@ -733,6 +838,7 @@ experiment, and verification contract:
 | `docs/style-guide.md` | voice guide + Book-Specific Writing Rules |
 | `docs/drafting-template.md` | per-chapter drafting prompt/checklist |
 | `docs/backlog.md` | author-requested future work + GPU experiment queue |
+| `docs/test-time-memory-control-exercise-bank.md` | D7 maintainer/course bank + concise solution sketches; intentionally outside book navigation |
 | `docs/dl-course-code.md` | how to use his Manim repo (module spines, scenes) |
 | `docs/enhancement-proposal.md` (in dl-course-site repo) | course-site history |
 

@@ -524,14 +524,12 @@ where to investigate next.
 ::: {.callout-note}
 ## Systems bridge (non-examinable): cache the past at generation time
 
-Chapter 14's sampler confesses that it recomputes the whole visible prefix for every
-new character (@sec-14-self-attention-transformer). For an evaluation-mode causal
-Transformer decoding a growing prefix with stable position indices and no eviction,
-appending a token cannot change earlier positions: their masks forbid the suffix, and
-their keys and values are therefore reusable. A **key/value (KV) cache** stores those
-projected rows at every layer. At the next step, the layer computes the new token's
-query, key, and value, appends the new key and value, and forms only the new query's
-attention row against the stored prefix.
+For a causal Transformer with stable positions and no eviction, a new token cannot
+change earlier representations. A **key/value (KV) cache** therefore retains each
+layer's earlier projected rows and appends one new pair. In Chapter 14's regression
+language, this is not a separate mysterious memory: **the KV cache is the
+nonparametric estimator's dataset**. The new query traverses those rows, while the old
+rows do not have to be projected again.
 
 Let $L$ be the layer count, $B$ the batch size, $h_{KV}$ the number of key/value
 heads, $t$ the cached length, $d_h$ the head width, and $s$ the bytes per stored
@@ -544,22 +542,13 @@ M_{KV}=2sLBh_{KV}td_h\quad\text{bytes}.
 $$
 
 Thus caching spends storage that grows linearly with context length. For one new
-token, dense attention reads a growing $1\times t$ score row at each head; summed over
-generation, attention arithmetic is still quadratic in the final length. What the
-cache avoids is re-projecting old states and rebuilding their old-to-old score grids.
-That is an arithmetic-and-storage statement, not a latency measurement.
-
-That reuse rule does not apply unchanged to Chapter 14's exact toy loop. The loop
-evicts old characters from a sliding window and reindexes the retained positions, so
-the retained states no longer have the same past or positional inputs. A cached version
-needs a cache-compatible eviction and position policy; otherwise it must recompute the
-window.
-
-This is a different bargain from FlashAttention below. KV caching **keeps** linear-size
-past state to reuse it during autoregressive inference. FlashAttention avoids writing
-full quadratic score and probability grids, and may recompute blocks during training's
-backward pass. Put both in the I/O ledger before timing either one; Chapter 17 adds the
-cache to the total-memory bill (@sec-17-peft-quantization).
+token, dense attention still reads a score row whose length grows with $t$; across a
+generation, that work is quadratic in final length. Caching avoids re-projecting and
+re-attending old queries. That is why Chapter 14's naive sampler, which rebuilds its
+current context on every step, is wasteful. Sliding-window eviction and position
+reindexing need an explicit cache policy, so that toy loop cannot simply reuse rows
+unchanged. Chapter 17 adds this linear-size cache to the total-memory ledger
+(@sec-17-peft-quantization).
 :::
 <!-- /NOVEL -->
 
@@ -769,6 +758,13 @@ The attention rule, causal or padding mask semantics, and dense quadratic arithm
 remain. “Exact” means no modeling approximation; floating-point order still changes.
 Longer context is not free, and an implementation that is faster for one shape or
 device may not be faster for another.
+
+In @sec-14-memory-spectrum's terms, FlashAttention reorganizes the **same
+nonparametric solve** to reduce traffic: it changes the schedule, not the statistics,
+and the KV dataset still grows. Linear-attention and delta-style solvers make a
+different bargain. They change the statistical contract by compressing history into
+a fixed-size state, accepting loss or restriction for constant storage in the prefix
+length.
 :::
 
 ## A measurement contract
