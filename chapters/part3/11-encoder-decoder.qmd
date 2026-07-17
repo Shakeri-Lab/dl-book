@@ -330,6 +330,40 @@ the two runs are identical except for bookkeeping, and the bookkeeping was worth
 than every design decision in Part III so far. The sealed test set remains untouched
 until both training-mode designs below are fixed.
 
+The mechanism is worth *seeing* once. Take the naive model and one short validation
+source, and watch its encoder state as the input runs past the last real character
+into the padding:
+
+```{python}
+#| label: fig-padding-drift
+#| fig-cap: "Why naive right-padding hurts: the encoder state does not stop when the sentence does. One short validation source is encoded by the naive model; at its last real character (green) the state is exactly what the decoder should receive. A *single* <pad> step already throws the state most of the way to its final drift, and each further step compounds it (navy) — the decoder is handed the endpoint of the shaded excursion, a state the unpadded inference-time encoder never produces. Packing simply stops the clock at the green dot."
+#| code-summary: "Code: encoder-state drift through the padding tail"
+short_src = min((s for s, _ in valid_pairs), key=len)
+ids = torch.tensor([src_stoi[c] for c in short_src])
+n_pads = 8
+padded_ids = torch.cat([ids, torch.zeros(n_pads, dtype=torch.long)])
+with torch.no_grad():
+    states, _ = naive.encoder(naive.src_emb(padded_ids[None]))
+states = states.squeeze(0)                        # (len + n_pads, hidden)
+T = len(ids)
+drift = (states[T - 1:] - states[T - 1]).norm(dim=1)
+
+plt.figure(figsize=(6.4, 2.9))
+steps = range(T, T + n_pads + 1)
+plt.plot(steps, drift, "o-", color="#232D4B", lw=2, ms=4)
+plt.axvspan(T + 0.5, T + n_pads + 0.4, color="#E57200", alpha=0.12)
+plt.plot([T], [0.0], "o", color="#2E7D32", ms=8)
+plt.text(T + 0.25, float(drift.max()) * 0.06,
+         "last real character:\nthe state the decoder should get",
+         fontsize=8.5, color="#2E7D32", va="bottom")
+plt.text(T + n_pads / 2 + 1.2, float(drift.max()) * 0.55,
+         "<pad> steps keep\nmoving the state", color="#722F37", fontsize=9,
+         ha="center")
+plt.xlabel(f"encoder timestep (source {short_src!r}, length {T})")
+plt.ylabel(r"$\|\mathbf{h}_t - \mathbf{h}_T\|$")
+plt.tight_layout(); plt.show()
+```
+
 ::: {.callout-warning}
 ## Trap: the model will happily read your padding
 
