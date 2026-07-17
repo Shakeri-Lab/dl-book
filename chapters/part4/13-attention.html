@@ -508,6 +508,20 @@ window.Quarto = {
      for Chapter 14. -->
 <p>Chapter 12 built the whole attention operator except for one piece. It had a query, a bank of keys and values, a score for every query–key pair, softmax weights, and a weighted read. But Euclidean distance decided what counted as similar. The task could tune the bandwidth; it could not invent a better notion of relevance.</p>
 <p>Chapter 11 left us a more pointed promise: <strong>hard address, learned content</strong>. An embedding can learn what lives at row 17, but fetching row 17 is still a rigid indexing operation. Chapter 2 told us how to soften that hard choice. Replace the single address with a differentiable distribution over addresses, let the loss send blame through every score, and learn which memory locations deserve weight. A differentiable lookup, Chapter 2 promised, is precisely attention. The promise comes due here.</p>
+<div id="cell-fig-attention-lookup" class="cell" data-execution_count="1">
+<div class="cell-output cell-output-display">
+<div id="fig-attention-lookup" class="quarto-float quarto-figure quarto-figure-center anchored" alt="A query box on the left sends arrows of different thickness to four key rows; each key row pairs with a value row whose shading matches the arrow weight; all values merge into a single output box labeled weighted blend of all rows.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-attention-lookup-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="13-attention_files/figure-html/fig-attention-lookup-output-1.png" alt="A query box on the left sends arrows of different thickness to four key rows; each key row pairs with a value row whose shading matches the arrow weight; all values merge into a single output box labeled weighted blend of all rows." width="720" height="317" class="figure-img">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-attention-lookup-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;13.1: The lookup table, softened. A hard lookup would follow exactly one arrow to one row. Attention scores the query against every key, softmax turns the scores into row weights (arrow thickness; the numbers here are illustrative), and the output is the weighted blend of all values. Every arrow is differentiable, so the loss can teach the scoring itself — this diagram is the entire chapter.
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
 <!-- NOVEL: needs sign-off - opening preview of the seeded date-rematch results. -->
 <p>The result is visible in the date task before we name all its parts. For the fixed validation source</p>
 <pre class="text"><code>may 17, 1971  -&gt;  1971-05-17</code></pre>
@@ -563,7 +577,7 @@ e_{t,i}
 \]</span></p>
 <p>Their sum produces <span class="math inline">\((B,n,d_a)\)</span> match features. Reduction by <span class="math inline">\(\vect{v}_a\)</span> produces <span class="math inline">\((B,n)\)</span> scores, softmax runs over the <span class="math inline">\(n\)</span> source positions, and the weighted read returns a <span class="math inline">\((B,d_e)\)</span> context. That last axis choice is not bookkeeping: softmax over the wrong dimension answers the wrong question.</p>
 <p>The lecture’s scene freezes one simple parameter snapshot so we can watch the arithmetic. With identity projections and an all-ones selector, three source states receive scores <span class="math inline">\((1.015,1.562,1.124)\)</span> and therefore weights <span class="math inline">\((0.260,0.450,0.290)\)</span>:</p>
-<div id="additive-scorer-snapshot" class="cell" data-execution_count="1">
+<div id="additive-scorer-snapshot" class="cell" data-execution_count="2">
 <details class="code-fold">
 <summary>Code: compute the three-key additive scores and softmax weights</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> __future__ <span class="im">import</span> annotations</span>
@@ -591,7 +605,7 @@ e_{t,i}
 <span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a>snapshot_weights <span class="op">/=</span> snapshot_weights.<span class="bu">sum</span>()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 </div>
-<div id="cell-fig-additive-scorer" class="cell" data-execution_count="2">
+<div id="cell-fig-additive-scorer" class="cell" data-execution_count="3">
 <div class="cell-output cell-output-display">
 <div id="fig-additive-scorer" class="quarto-float quarto-figure quarto-figure-center anchored" alt="A query branch and key branch pass through separate projections, merge, then pass through tanh and a learned selector to produce one score. The adjacent three-bar chart gives the middle key the largest softmax weight.">
 <figure class="quarto-float quarto-float-fig figure">
@@ -599,7 +613,7 @@ e_{t,i}
 <img src="13-attention_files/figure-html/fig-additive-scorer-output-1.png" alt="A query branch and key branch pass through separate projections, merge, then pass through tanh and a learned selector to produce one score. The adjacent three-bar chart gives the middle key the largest softmax weight." width="710" height="278" class="figure-img">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-additive-scorer-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;13.1: Additive attention learns a compatibility function. Query and key enter separate projections, their alignment features interact through tanh, and a learned selector reduces those features to one score. The right panel freezes one parameter setting to show the resulting scores-to-weights calculation; it is arithmetic, not a trained result.
+Figure&nbsp;13.2: Additive attention learns a compatibility function. Query and key enter separate projections, their alignment features interact through tanh, and a learned selector reduces those features to one score. The right panel freezes one parameter setting to show the resulting scores-to-weights calculation; it is arithmetic, not a trained result.
 </figcaption>
 </figure>
 </div>
@@ -623,7 +637,7 @@ Figure&nbsp;13.1: Additive attention learns a compatibility function. Query and 
 <h2 data-number="13.3" class="anchored" data-anchor-id="scaled-dot-product-learn-the-spaces-simplify-the-score"><span class="header-section-number">13.3</span> Scaled dot product: learn the spaces, simplify the score</h2>
 <p>For <span class="math inline">\(m\)</span> decoder queries, additive attention is vectorized, but it forms a <span class="math inline">\((B,m,n,d_a)\)</span> intermediate, applies an elementwise tanh, and reduces it. Dense matrix multiplication has a simpler computational path. Chapter 1 introduced the dot product as a similarity score against a template. Here the key is the template, and training learns the space in which that comparison is useful.</p>
 <p>The lecture first walks one four-dimensional query past three keys. Its raw dot products are <span class="math inline">\((1.10,-0.60,0.15)\)</span>. Since <span class="math inline">\(\sqrt{4}=2\)</span>, scaling gives <span class="math inline">\((0.55,-0.30,0.075)\)</span>, and softmax gives <span class="math inline">\((0.488,0.209,0.303)\)</span>:</p>
-<div id="scaled-dot-snapshot" class="cell" data-execution_count="3">
+<div id="scaled-dot-snapshot" class="cell" data-execution_count="4">
 <details class="code-fold">
 <summary>Code: one query through dot product, scaling, and softmax</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>query_walk <span class="op">=</span> torch.tensor([<span class="fl">0.9</span>, <span class="op">-</span><span class="fl">0.3</span>, <span class="fl">0.2</span>, <span class="fl">0.6</span>])</span>
@@ -684,7 +698,7 @@ weights: [0.4879715  0.20856632 0.3034622 ] sum: 1.0</code></pre>
 <p>The score’s standard deviation grows as <span class="math inline">\(\sqrt{d_k}\)</span>. Dividing by that quantity returns the idealized variance to one. This is a variance-control rationale, not a promise that trained projections remain independent or unit variance.</p>
 <!-- NOVEL: needs sign-off - seeded sqrt(d_k) variance/softmax audit and results. -->
 <p>Let us test both the variance and what softmax sees. For each width, draw 20,000 queries and 16 independent keys per query:</p>
-<div id="cell-fig-sqrt-d-audit" class="cell" data-execution_count="4">
+<div id="cell-fig-sqrt-d-audit" class="cell" data-execution_count="5">
 <details class="code-fold">
 <summary>Code: audit score variance and softmax concentration versus width</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>scaling_gen <span class="op">=</span> torch.Generator().manual_seed(<span class="dv">6050132</span>)</span>
@@ -746,7 +760,7 @@ weights: [0.4879715  0.20856632 0.3034622 ] sum: 1.0</code></pre>
 <img src="13-attention_files/figure-html/fig-sqrt-d-audit-output-2.png" alt="As projected width grows, raw score variance and the largest softmax weight both rise sharply. Their scaled counterparts remain nearly horizontal, around variance one and largest weight one quarter." width="712" height="299" class="figure-img">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-sqrt-d-audit-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;13.2: The scaling argument under its stated random-feature assumptions. Left: raw dot-product variance grows with width, while division by the square root of the width keeps it near one. Right: without scaling, a 16-key softmax becomes nearly one-hot as width grows; scaling keeps its mean largest weight near one quarter (0.24 in this draw). These are seeded synthetic draws about concentration, not a claim about every trained layer’s gradients.
+Figure&nbsp;13.3: The scaling argument under its stated random-feature assumptions. Left: raw dot-product variance grows with width, while division by the square root of the width keeps it near one. Right: without scaling, a 16-key softmax becomes nearly one-hot as width grows; scaling keeps its mean largest weight near one quarter (0.24 in this draw). These are seeded synthetic draws about concentration, not a claim about every trained layer’s gradients.
 </figcaption>
 </figure>
 </div>
@@ -761,7 +775,7 @@ Figure&nbsp;13.2: The scaling argument under its stated random-feature assumptio
 <p>Chapter 11 showed that padding can poison an encoder’s final state. Attention creates a third place to enforce sequence lengths: the score matrix. A padded key must not receive a merely mediocre score. It must be excluded before normalization. Setting its score to zero is wrong because <span class="math inline">\(\exp(0)=1\)</span> still earns weight.</p>
 <!-- NOVEL: needs sign-off - independent mask implementation and all-masked guard. -->
 <p>Here is an independently written scaled-dot operator. It accepts already projected queries, keys, and values, then audits a batch whose second example has two padded keys:</p>
-<div id="cell-fig-padding-mask" class="cell" data-execution_count="5">
+<div id="cell-fig-padding-mask" class="cell" data-execution_count="6">
 <details class="code-fold">
 <summary>Code: scaled dot-product attention with a source-padding mask</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> scaled_dot_attention(</span>
@@ -832,7 +846,7 @@ maximum padded weight: 0.0</code></pre>
 <img src="13-attention_files/figure-html/fig-padding-mask-output-2.png" alt="A two-row by four-column attention heatmap contains numeric weights in the first two key columns. The final two columns are labeled PAD in both rows and have zero weight." width="567" height="251" class="figure-img">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-padding-mask-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;13.3: A source-padding mask acts before softmax. The second example has only two real keys; its last two score cells are excluded and receive exactly zero weight. Cross-attention may read every real source position, so no causal triangle belongs here.
+Figure&nbsp;13.4: A source-padding mask acts before softmax. The second example has only two real keys; its last two score cells are excluded and receive exactly zero weight. Cross-attention may read every real source position, so no causal triangle belongs here.
 </figcaption>
 </figure>
 </div>
@@ -866,7 +880,7 @@ Figure&nbsp;13.3: A source-padding mask acts before softmax. The second example 
 <li>one final scalar audit on the same 437 unambiguous test sources.</li>
 </ul>
 <p>The generator and split below are deliberately byte-for-byte copies of Chapter 11. Changing them would end the running benchmark:</p>
-<div id="date-data-rematch" class="cell" data-execution_count="6">
+<div id="date-data-rematch" class="cell" data-execution_count="7">
 <details class="code-fold">
 <summary>Code: reconstruct Chapter 11’s sealed date benchmark</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> random, torch</span>
@@ -983,7 +997,7 @@ source vocab 37, target vocab 14</code></pre>
 </tbody>
 </table>
 <!-- NOVEL: needs sign-off - independently written attentive date model and rematch. -->
-<div id="attentive-seq2seq" class="cell" data-execution_count="7">
+<div id="attentive-seq2seq" class="cell" data-execution_count="8">
 <details class="code-fold">
 <summary>Code: a masked additive-attention LSTM decoder</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> batchify(prs: <span class="bu">list</span>[<span class="bu">tuple</span>[<span class="bu">str</span>, <span class="bu">str</span>]], idx: <span class="bu">list</span>[<span class="bu">int</span>]) <span class="op">-&gt;</span> <span class="bu">tuple</span>[</span>
@@ -1132,7 +1146,7 @@ source vocab 37, target vocab 14</code></pre>
 <section id="the-matched-schedule-rematch" class="level3">
 <h3 class="anchored" data-anchor-id="the-matched-schedule-rematch">The matched-schedule rematch</h3>
 <p>The full Chapter 11 validation curve below is frozen from a byte-identical re-execution of that chapter’s published baseline. We do not retrain it here. We train the attentive model once and inspect only validation alignments. Chapter 11’s test endpoint is not globally sealed here because that chapter has already reported it; for this rematch it remains decision-inert, and we request one final scalar only after the attention choices are fixed:</p>
-<div id="attention-date-training" class="cell" data-execution_count="8">
+<div id="attention-date-training" class="cell" data-execution_count="9">
 <details class="code-fold">
 <summary>Code: matched-schedule date rematch and reused-endpoint audit</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>checkpoints <span class="op">=</span> (<span class="dv">2</span>, <span class="dv">4</span>, <span class="dv">6</span>, <span class="dv">8</span>, <span class="dv">12</span>, <span class="dv">16</span>, <span class="dv">20</span>, <span class="dv">25</span>)</span>
@@ -1215,7 +1229,7 @@ maximum validation row-sum error: 2.38e-07
 one final test audit (437 sources): baseline 93.1%; attention 100.0%</code></pre>
 </div>
 </div>
-<div id="cell-fig-attention-rematch" class="cell" data-execution_count="9">
+<div id="cell-fig-attention-rematch" class="cell" data-execution_count="10">
 <details class="code-fold">
 <summary>Figure: convergence rematch and learned date alignment</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> matplotlib.patches <span class="im">import</span> Rectangle</span>
@@ -1268,7 +1282,7 @@ one final test audit (437 sources): baseline 93.1%; attention 100.0%</code></pre
 <img src="13-attention_files/figure-html/fig-attention-rematch-output-1.png" alt="The left learning curves show the attention model reaching high exact-match accuracy much earlier than the fixed-state baseline. The right character-by-character heatmap concentrates the first four output rows inside a box around the source year positions." width="952" height="342" class="figure-img">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-attention-rematch-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;13.4: Left: exact-sequence accuracy on Chapter 11’s fixed 400-source validation subset. Both models use the same data, embedding and recurrent hidden widths, optimizer, top-level seed, and epoch schedule; attention adds parameters and a stepwise decoder, so this is not a parameter- or compute-matched ablation. Right: the predeclared first validation example. Rows are emitted ISO characters, columns are contextual encoder states indexed by source character, and the orange box marks the source year. The first four rows concentrate there.
+Figure&nbsp;13.5: Left: exact-sequence accuracy on Chapter 11’s fixed 400-source validation subset. Both models use the same data, embedding and recurrent hidden widths, optimizer, top-level seed, and epoch schedule; attention adds parameters and a stepwise decoder, so this is not a parameter- or compute-matched ablation. Right: the predeclared first validation example. Rows are emitted ISO characters, columns are contextual encoder states indexed by source character, and the orange box marks the source year. The first four rows concentrate there.
 </figcaption>
 </figure>
 </div>
