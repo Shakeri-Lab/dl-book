@@ -886,3 +886,10 @@ experiment, and verification contract:
 
 *After every shipped chapter or appendix, update §1's table, the arc-seeds ledger,
 and the GPU queue. These documents are the project's memory now.*
+
+## Commit authorship (standing rule, July 2026)
+
+Do not add AI attribution anywhere in git history: no `Co-Authored-By: Claude ...`
+trailers, no "Generated with Claude Code" lines, in this or any of the author's
+repositories. The pre-July-17 history was rewritten to strip these; do not
+reintroduce them.

@@ -156,3 +156,11 @@ primary readings via a `bookChapters` array in `lib/module-extras.ts`; one cours
 module can map to several book chapters. D2L remains an alternative reading. Keep the
 author's edit gate distinct from the technical review/render gate, and verify the site
 build after changing any mapping.
+
+## Commit authorship (standing rule)
+
+Never add AI attribution to commits in this repository: no `Co-Authored-By:
+Claude ...` trailers and no "Generated with Claude Code" lines — in commit
+messages, PR bodies, or release notes. Commits are authored solely under the
+author's git identity. (Author instruction, July 2026; the pre-existing history
+was rewritten to remove such trailers.)

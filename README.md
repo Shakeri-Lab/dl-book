@@ -1,10 +1,12 @@
 # Deep Learning: Making It Learnable
 
-The course-companion textbook for [DS 6050 Deep Learning](https://shakeri-lab.github.io/dl-course-site/)
+**What to learn, what to build in, and what to reuse** — a first-principles course in
+Python and PyTorch, and the textbook for
+[DS 6050 Deep Learning](https://shakeri-lab.github.io/dl-course-site/)
 (School of Data Science, University of Virginia), by [Heman Shakeri](https://shakeri-lab.github.io/).
 Written in the open; every figure and result is produced by code in the source.
 Experiments show their code, while concept diagrams keep their drawing source in the
-repository. The examples use native Python and PyTorch and are CPU-friendly.
+repository. The examples are written directly in Python and PyTorch and are CPU-friendly.
 
 **Read it:** <https://shakeri-lab.github.io/dl-book/> (HTML) · PDF built from the same sources
 
