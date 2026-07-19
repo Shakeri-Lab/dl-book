@@ -1018,153 +1018,115 @@ x&amp;\leftarrow x+\operatorname{FFN}(\operatorname{LN}(x)).
 <h2 data-number="14.6" class="anchored" data-anchor-id="the-book-reads-itself-again"><span class="header-section-number">14.6</span> The book reads itself, again</h2>
 <p>A fair rematch begins by preserving what can be preserved. Chapter 10 trained on a committed snapshot of Chapters 1–9 with executable code cells and HTML comments removed: 148,594 characters, vocabulary 104, a contiguous 90/10 split, 100-character windows, batch size 64, and 2,501 updates with Adam at learning rate 0.002 and gradient clipping at norm 1. The snapshot keeps later copyedits from moving the benchmark. The held-out metric resets state at each fixed window.</p>
 <p>The two architectures cannot be made identical—one has recurrent gates and the other has attention blocks—but their opportunity to see training targets can be. The code below reconstructs Chapter 10’s exact random-window schedule, then gives both Transformer variants the same initial weights and all 16,006,400 target characters in the same order. The held-out tail has been inspected repeatedly across chapters, so treat it as a stable validation benchmark—not a newly sealed test set.</p>
-<div id="transformer-data-model" class="cell" data-execution_count="9">
+<div id="transformer-kernel" class="cell" data-execution_count="10">
 <details class="code-fold">
-<summary>Code: exact Chapter 10 corpus and schedule, plus a custom tiny Transformer</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> hashlib</span>
-<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> pathlib <span class="im">import</span> Path</span>
-<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch.nn.functional <span class="im">as</span> F</span>
-<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>torch.set_num_threads(<span class="dv">4</span>)</span>
-<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>torch.use_deterministic_algorithms(<span class="va">True</span>)</span>
-<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>SEED <span class="op">=</span> <span class="dv">6050</span></span>
-<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a>CONTEXT <span class="op">=</span> <span class="dv">100</span></span>
-<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a>BATCH <span class="op">=</span> <span class="dv">64</span></span>
-<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a>UPDATES <span class="op">=</span> <span class="dv">2501</span></span>
-<span id="cb11-12"><a href="#cb11-12" aria-hidden="true" tabindex="-1"></a>WIDTH <span class="op">=</span> <span class="dv">84</span></span>
-<span id="cb11-13"><a href="#cb11-13" aria-hidden="true" tabindex="-1"></a>HEADS <span class="op">=</span> <span class="dv">4</span></span>
-<span id="cb11-14"><a href="#cb11-14" aria-hidden="true" tabindex="-1"></a>FF_WIDTH <span class="op">=</span> <span class="dv">168</span></span>
-<span id="cb11-15"><a href="#cb11-15" aria-hidden="true" tabindex="-1"></a>BLOCKS <span class="op">=</span> <span class="dv">2</span></span>
-<span id="cb11-16"><a href="#cb11-16" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-17"><a href="#cb11-17" aria-hidden="true" tabindex="-1"></a>corpus_path <span class="op">=</span> Path(<span class="st">"../../data/book-corpus-ch1-9.txt"</span>)</span>
-<span id="cb11-18"><a href="#cb11-18" aria-hidden="true" tabindex="-1"></a>text <span class="op">=</span> corpus_path.read_text(encoding<span class="op">=</span><span class="st">"utf-8"</span>)</span>
-<span id="cb11-19"><a href="#cb11-19" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> <span class="bu">len</span>(text) <span class="op">==</span> <span class="dv">148_594</span></span>
-<span id="cb11-20"><a href="#cb11-20" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> hashlib.sha256(text.encode(<span class="st">"utf-8"</span>)).hexdigest() <span class="op">==</span> (</span>
-<span id="cb11-21"><a href="#cb11-21" aria-hidden="true" tabindex="-1"></a>    <span class="st">"b0fc23a513e37e7bcd78da04a03877345f6ebc850b91dbae260656d9924fb299"</span></span>
-<span id="cb11-22"><a href="#cb11-22" aria-hidden="true" tabindex="-1"></a>)</span>
+<summary>Code: the tiny Transformer — positions, block, model</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> sinusoidal_positions(length: <span class="bu">int</span>, width: <span class="bu">int</span>) <span class="op">-&gt;</span> torch.Tensor:</span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>    position <span class="op">=</span> torch.arange(length, dtype<span class="op">=</span>torch.float32).unsqueeze(<span class="dv">1</span>)</span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>    frequency <span class="op">=</span> torch.exp(</span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>        torch.arange(<span class="dv">0</span>, width, <span class="dv">2</span>, dtype<span class="op">=</span>torch.float32)</span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>        <span class="op">*</span> (<span class="op">-</span>math.log(<span class="fl">10_000.0</span>) <span class="op">/</span> width)</span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>    table <span class="op">=</span> torch.zeros(length, width)</span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>    table[:, <span class="dv">0</span>::<span class="dv">2</span>] <span class="op">=</span> torch.sin(position <span class="op">*</span> frequency)</span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a>    table[:, <span class="dv">1</span>::<span class="dv">2</span>] <span class="op">=</span> torch.cos(position <span class="op">*</span> frequency)</span>
+<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> table</span>
+<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-12"><a href="#cb11-12" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> TransformerBlock(nn.Module):</span>
+<span id="cb11-13"><a href="#cb11-13" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>) <span class="op">-&gt;</span> <span class="va">None</span>:</span>
+<span id="cb11-14"><a href="#cb11-14" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().<span class="fu">__init__</span>()</span>
+<span id="cb11-15"><a href="#cb11-15" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.norm1 <span class="op">=</span> nn.LayerNorm(WIDTH)</span>
+<span id="cb11-16"><a href="#cb11-16" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.attention <span class="op">=</span> CausalMultiHeadAttention(WIDTH, HEADS)</span>
+<span id="cb11-17"><a href="#cb11-17" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.norm2 <span class="op">=</span> nn.LayerNorm(WIDTH)</span>
+<span id="cb11-18"><a href="#cb11-18" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.ff <span class="op">=</span> nn.Sequential(</span>
+<span id="cb11-19"><a href="#cb11-19" aria-hidden="true" tabindex="-1"></a>            nn.Linear(WIDTH, FF_WIDTH),</span>
+<span id="cb11-20"><a href="#cb11-20" aria-hidden="true" tabindex="-1"></a>            nn.ReLU(),</span>
+<span id="cb11-21"><a href="#cb11-21" aria-hidden="true" tabindex="-1"></a>            nn.Linear(FF_WIDTH, WIDTH),</span>
+<span id="cb11-22"><a href="#cb11-22" aria-hidden="true" tabindex="-1"></a>        )</span>
 <span id="cb11-23"><a href="#cb11-23" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-24"><a href="#cb11-24" aria-hidden="true" tabindex="-1"></a>chars <span class="op">=</span> <span class="bu">sorted</span>(<span class="bu">set</span>(text))</span>
-<span id="cb11-25"><a href="#cb11-25" aria-hidden="true" tabindex="-1"></a>stoi <span class="op">=</span> {char: index <span class="cf">for</span> index, char <span class="kw">in</span> <span class="bu">enumerate</span>(chars)}</span>
-<span id="cb11-26"><a href="#cb11-26" aria-hidden="true" tabindex="-1"></a>data <span class="op">=</span> torch.tensor([stoi[char] <span class="cf">for</span> char <span class="kw">in</span> text])</span>
-<span id="cb11-27"><a href="#cb11-27" aria-hidden="true" tabindex="-1"></a>split <span class="op">=</span> <span class="bu">int</span>(<span class="fl">0.9</span> <span class="op">*</span> <span class="bu">len</span>(data))</span>
-<span id="cb11-28"><a href="#cb11-28" aria-hidden="true" tabindex="-1"></a>train_data, valid_data <span class="op">=</span> data[:split], data[split:]</span>
-<span id="cb11-29"><a href="#cb11-29" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-30"><a href="#cb11-30" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> sinusoidal_positions(length: <span class="bu">int</span>, width: <span class="bu">int</span>) <span class="op">-&gt;</span> torch.Tensor:</span>
-<span id="cb11-31"><a href="#cb11-31" aria-hidden="true" tabindex="-1"></a>    position <span class="op">=</span> torch.arange(length, dtype<span class="op">=</span>torch.float32).unsqueeze(<span class="dv">1</span>)</span>
-<span id="cb11-32"><a href="#cb11-32" aria-hidden="true" tabindex="-1"></a>    frequency <span class="op">=</span> torch.exp(</span>
-<span id="cb11-33"><a href="#cb11-33" aria-hidden="true" tabindex="-1"></a>        torch.arange(<span class="dv">0</span>, width, <span class="dv">2</span>, dtype<span class="op">=</span>torch.float32)</span>
-<span id="cb11-34"><a href="#cb11-34" aria-hidden="true" tabindex="-1"></a>        <span class="op">*</span> (<span class="op">-</span>math.log(<span class="fl">10_000.0</span>) <span class="op">/</span> width)</span>
-<span id="cb11-35"><a href="#cb11-35" aria-hidden="true" tabindex="-1"></a>    )</span>
-<span id="cb11-36"><a href="#cb11-36" aria-hidden="true" tabindex="-1"></a>    table <span class="op">=</span> torch.zeros(length, width)</span>
-<span id="cb11-37"><a href="#cb11-37" aria-hidden="true" tabindex="-1"></a>    table[:, <span class="dv">0</span>::<span class="dv">2</span>] <span class="op">=</span> torch.sin(position <span class="op">*</span> frequency)</span>
-<span id="cb11-38"><a href="#cb11-38" aria-hidden="true" tabindex="-1"></a>    table[:, <span class="dv">1</span>::<span class="dv">2</span>] <span class="op">=</span> torch.cos(position <span class="op">*</span> frequency)</span>
-<span id="cb11-39"><a href="#cb11-39" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> table</span>
-<span id="cb11-40"><a href="#cb11-40" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-41"><a href="#cb11-41" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> TransformerBlock(nn.Module):</span>
-<span id="cb11-42"><a href="#cb11-42" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>) <span class="op">-&gt;</span> <span class="va">None</span>:</span>
-<span id="cb11-43"><a href="#cb11-43" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().<span class="fu">__init__</span>()</span>
-<span id="cb11-44"><a href="#cb11-44" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.norm1 <span class="op">=</span> nn.LayerNorm(WIDTH)</span>
-<span id="cb11-45"><a href="#cb11-45" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.attention <span class="op">=</span> CausalMultiHeadAttention(WIDTH, HEADS)</span>
-<span id="cb11-46"><a href="#cb11-46" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.norm2 <span class="op">=</span> nn.LayerNorm(WIDTH)</span>
-<span id="cb11-47"><a href="#cb11-47" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.ff <span class="op">=</span> nn.Sequential(</span>
-<span id="cb11-48"><a href="#cb11-48" aria-hidden="true" tabindex="-1"></a>            nn.Linear(WIDTH, FF_WIDTH),</span>
-<span id="cb11-49"><a href="#cb11-49" aria-hidden="true" tabindex="-1"></a>            nn.ReLU(),</span>
-<span id="cb11-50"><a href="#cb11-50" aria-hidden="true" tabindex="-1"></a>            nn.Linear(FF_WIDTH, WIDTH),</span>
+<span id="cb11-24"><a href="#cb11-24" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> forward(<span class="va">self</span>, x: torch.Tensor, return_weights: <span class="bu">bool</span> <span class="op">=</span> <span class="va">False</span>):</span>
+<span id="cb11-25"><a href="#cb11-25" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> return_weights:</span>
+<span id="cb11-26"><a href="#cb11-26" aria-hidden="true" tabindex="-1"></a>            attended, weights <span class="op">=</span> <span class="va">self</span>.attention(<span class="va">self</span>.norm1(x), <span class="va">True</span>)</span>
+<span id="cb11-27"><a href="#cb11-27" aria-hidden="true" tabindex="-1"></a>            x <span class="op">=</span> x <span class="op">+</span> attended</span>
+<span id="cb11-28"><a href="#cb11-28" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> x <span class="op">+</span> <span class="va">self</span>.ff(<span class="va">self</span>.norm2(x)), weights</span>
+<span id="cb11-29"><a href="#cb11-29" aria-hidden="true" tabindex="-1"></a>        x <span class="op">=</span> x <span class="op">+</span> <span class="va">self</span>.attention(<span class="va">self</span>.norm1(x))</span>
+<span id="cb11-30"><a href="#cb11-30" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> x <span class="op">+</span> <span class="va">self</span>.ff(<span class="va">self</span>.norm2(x))</span>
+<span id="cb11-31"><a href="#cb11-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-32"><a href="#cb11-32" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> TinyTransformerLM(nn.Module):</span>
+<span id="cb11-33"><a href="#cb11-33" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, vocab: <span class="bu">int</span>, positions: <span class="bu">bool</span>) <span class="op">-&gt;</span> <span class="va">None</span>:</span>
+<span id="cb11-34"><a href="#cb11-34" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().<span class="fu">__init__</span>()</span>
+<span id="cb11-35"><a href="#cb11-35" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.positions <span class="op">=</span> positions</span>
+<span id="cb11-36"><a href="#cb11-36" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.token_embedding <span class="op">=</span> nn.Embedding(vocab, WIDTH)</span>
+<span id="cb11-37"><a href="#cb11-37" aria-hidden="true" tabindex="-1"></a>        nn.init.normal_(</span>
+<span id="cb11-38"><a href="#cb11-38" aria-hidden="true" tabindex="-1"></a>            <span class="va">self</span>.token_embedding.weight,</span>
+<span id="cb11-39"><a href="#cb11-39" aria-hidden="true" tabindex="-1"></a>            mean<span class="op">=</span><span class="fl">0.0</span>,</span>
+<span id="cb11-40"><a href="#cb11-40" aria-hidden="true" tabindex="-1"></a>            std<span class="op">=</span><span class="dv">1</span> <span class="op">/</span> math.sqrt(WIDTH),</span>
+<span id="cb11-41"><a href="#cb11-41" aria-hidden="true" tabindex="-1"></a>        )</span>
+<span id="cb11-42"><a href="#cb11-42" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.blocks <span class="op">=</span> nn.ModuleList(</span>
+<span id="cb11-43"><a href="#cb11-43" aria-hidden="true" tabindex="-1"></a>            [TransformerBlock() <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(BLOCKS)]</span>
+<span id="cb11-44"><a href="#cb11-44" aria-hidden="true" tabindex="-1"></a>        )</span>
+<span id="cb11-45"><a href="#cb11-45" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.final_norm <span class="op">=</span> nn.LayerNorm(WIDTH)</span>
+<span id="cb11-46"><a href="#cb11-46" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.output <span class="op">=</span> nn.Linear(WIDTH, vocab)</span>
+<span id="cb11-47"><a href="#cb11-47" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.register_buffer(</span>
+<span id="cb11-48"><a href="#cb11-48" aria-hidden="true" tabindex="-1"></a>            <span class="st">"position_table"</span>,</span>
+<span id="cb11-49"><a href="#cb11-49" aria-hidden="true" tabindex="-1"></a>            sinusoidal_positions(CONTEXT, WIDTH),</span>
+<span id="cb11-50"><a href="#cb11-50" aria-hidden="true" tabindex="-1"></a>            persistent<span class="op">=</span><span class="va">False</span>,</span>
 <span id="cb11-51"><a href="#cb11-51" aria-hidden="true" tabindex="-1"></a>        )</span>
 <span id="cb11-52"><a href="#cb11-52" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-53"><a href="#cb11-53" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> forward(<span class="va">self</span>, x: torch.Tensor, return_weights: <span class="bu">bool</span> <span class="op">=</span> <span class="va">False</span>):</span>
-<span id="cb11-54"><a href="#cb11-54" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> return_weights:</span>
-<span id="cb11-55"><a href="#cb11-55" aria-hidden="true" tabindex="-1"></a>            attended, weights <span class="op">=</span> <span class="va">self</span>.attention(<span class="va">self</span>.norm1(x), <span class="va">True</span>)</span>
-<span id="cb11-56"><a href="#cb11-56" aria-hidden="true" tabindex="-1"></a>            x <span class="op">=</span> x <span class="op">+</span> attended</span>
-<span id="cb11-57"><a href="#cb11-57" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> x <span class="op">+</span> <span class="va">self</span>.ff(<span class="va">self</span>.norm2(x)), weights</span>
-<span id="cb11-58"><a href="#cb11-58" aria-hidden="true" tabindex="-1"></a>        x <span class="op">=</span> x <span class="op">+</span> <span class="va">self</span>.attention(<span class="va">self</span>.norm1(x))</span>
-<span id="cb11-59"><a href="#cb11-59" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> x <span class="op">+</span> <span class="va">self</span>.ff(<span class="va">self</span>.norm2(x))</span>
-<span id="cb11-60"><a href="#cb11-60" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-61"><a href="#cb11-61" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> TinyTransformerLM(nn.Module):</span>
-<span id="cb11-62"><a href="#cb11-62" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, vocab: <span class="bu">int</span>, positions: <span class="bu">bool</span>) <span class="op">-&gt;</span> <span class="va">None</span>:</span>
-<span id="cb11-63"><a href="#cb11-63" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().<span class="fu">__init__</span>()</span>
-<span id="cb11-64"><a href="#cb11-64" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.positions <span class="op">=</span> positions</span>
-<span id="cb11-65"><a href="#cb11-65" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.token_embedding <span class="op">=</span> nn.Embedding(vocab, WIDTH)</span>
-<span id="cb11-66"><a href="#cb11-66" aria-hidden="true" tabindex="-1"></a>        nn.init.normal_(</span>
-<span id="cb11-67"><a href="#cb11-67" aria-hidden="true" tabindex="-1"></a>            <span class="va">self</span>.token_embedding.weight,</span>
-<span id="cb11-68"><a href="#cb11-68" aria-hidden="true" tabindex="-1"></a>            mean<span class="op">=</span><span class="fl">0.0</span>,</span>
-<span id="cb11-69"><a href="#cb11-69" aria-hidden="true" tabindex="-1"></a>            std<span class="op">=</span><span class="dv">1</span> <span class="op">/</span> math.sqrt(WIDTH),</span>
-<span id="cb11-70"><a href="#cb11-70" aria-hidden="true" tabindex="-1"></a>        )</span>
-<span id="cb11-71"><a href="#cb11-71" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.blocks <span class="op">=</span> nn.ModuleList(</span>
-<span id="cb11-72"><a href="#cb11-72" aria-hidden="true" tabindex="-1"></a>            [TransformerBlock() <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(BLOCKS)]</span>
-<span id="cb11-73"><a href="#cb11-73" aria-hidden="true" tabindex="-1"></a>        )</span>
-<span id="cb11-74"><a href="#cb11-74" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.final_norm <span class="op">=</span> nn.LayerNorm(WIDTH)</span>
-<span id="cb11-75"><a href="#cb11-75" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.output <span class="op">=</span> nn.Linear(WIDTH, vocab)</span>
-<span id="cb11-76"><a href="#cb11-76" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.register_buffer(</span>
-<span id="cb11-77"><a href="#cb11-77" aria-hidden="true" tabindex="-1"></a>            <span class="st">"position_table"</span>,</span>
-<span id="cb11-78"><a href="#cb11-78" aria-hidden="true" tabindex="-1"></a>            sinusoidal_positions(CONTEXT, WIDTH),</span>
-<span id="cb11-79"><a href="#cb11-79" aria-hidden="true" tabindex="-1"></a>            persistent<span class="op">=</span><span class="va">False</span>,</span>
-<span id="cb11-80"><a href="#cb11-80" aria-hidden="true" tabindex="-1"></a>        )</span>
-<span id="cb11-81"><a href="#cb11-81" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-82"><a href="#cb11-82" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> forward(<span class="va">self</span>, tokens: torch.Tensor, return_weights: <span class="bu">bool</span> <span class="op">=</span> <span class="va">False</span>):</span>
-<span id="cb11-83"><a href="#cb11-83" aria-hidden="true" tabindex="-1"></a>        length <span class="op">=</span> tokens.shape[<span class="dv">1</span>]</span>
-<span id="cb11-84"><a href="#cb11-84" aria-hidden="true" tabindex="-1"></a>        x <span class="op">=</span> <span class="va">self</span>.token_embedding(tokens) <span class="op">*</span> math.sqrt(WIDTH)</span>
-<span id="cb11-85"><a href="#cb11-85" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="va">self</span>.positions:</span>
-<span id="cb11-86"><a href="#cb11-86" aria-hidden="true" tabindex="-1"></a>            x <span class="op">=</span> x <span class="op">+</span> <span class="va">self</span>.position_table[:length]</span>
-<span id="cb11-87"><a href="#cb11-87" aria-hidden="true" tabindex="-1"></a>        maps <span class="op">=</span> []</span>
-<span id="cb11-88"><a href="#cb11-88" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> block <span class="kw">in</span> <span class="va">self</span>.blocks:</span>
-<span id="cb11-89"><a href="#cb11-89" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> return_weights:</span>
-<span id="cb11-90"><a href="#cb11-90" aria-hidden="true" tabindex="-1"></a>                x, weights <span class="op">=</span> block(x, <span class="va">True</span>)</span>
-<span id="cb11-91"><a href="#cb11-91" aria-hidden="true" tabindex="-1"></a>                maps.append(weights)</span>
-<span id="cb11-92"><a href="#cb11-92" aria-hidden="true" tabindex="-1"></a>            <span class="cf">else</span>:</span>
-<span id="cb11-93"><a href="#cb11-93" aria-hidden="true" tabindex="-1"></a>                x <span class="op">=</span> block(x)</span>
-<span id="cb11-94"><a href="#cb11-94" aria-hidden="true" tabindex="-1"></a>        logits <span class="op">=</span> <span class="va">self</span>.output(<span class="va">self</span>.final_norm(x))</span>
-<span id="cb11-95"><a href="#cb11-95" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> (logits, maps) <span class="cf">if</span> return_weights <span class="cf">else</span> logits</span>
-<span id="cb11-96"><a href="#cb11-96" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-97"><a href="#cb11-97" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> HistoricalCharLSTM(nn.Module):</span>
-<span id="cb11-98"><a href="#cb11-98" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, vocab: <span class="bu">int</span>, hidden: <span class="bu">int</span> <span class="op">=</span> <span class="dv">128</span>) <span class="op">-&gt;</span> <span class="va">None</span>:</span>
-<span id="cb11-99"><a href="#cb11-99" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().<span class="fu">__init__</span>()</span>
-<span id="cb11-100"><a href="#cb11-100" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.vocab <span class="op">=</span> vocab</span>
-<span id="cb11-101"><a href="#cb11-101" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.lstm <span class="op">=</span> nn.LSTM(vocab, hidden, batch_first<span class="op">=</span><span class="va">True</span>)</span>
-<span id="cb11-102"><a href="#cb11-102" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.out <span class="op">=</span> nn.Linear(hidden, vocab)</span>
-<span id="cb11-103"><a href="#cb11-103" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-104"><a href="#cb11-104" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> state_digest(state: <span class="bu">dict</span>[<span class="bu">str</span>, torch.Tensor]) <span class="op">-&gt;</span> <span class="bu">str</span>:</span>
-<span id="cb11-105"><a href="#cb11-105" aria-hidden="true" tabindex="-1"></a>    digest <span class="op">=</span> hashlib.sha256()</span>
-<span id="cb11-106"><a href="#cb11-106" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> name, value <span class="kw">in</span> state.items():</span>
-<span id="cb11-107"><a href="#cb11-107" aria-hidden="true" tabindex="-1"></a>        digest.update(name.encode())</span>
-<span id="cb11-108"><a href="#cb11-108" aria-hidden="true" tabindex="-1"></a>        digest.update(value.detach().cpu().numpy().tobytes())</span>
-<span id="cb11-109"><a href="#cb11-109" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> digest.hexdigest()</span>
-<span id="cb11-110"><a href="#cb11-110" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-111"><a href="#cb11-111" aria-hidden="true" tabindex="-1"></a><span class="co"># Reconstruct the random-number state immediately after Chapter 10 created</span></span>
-<span id="cb11-112"><a href="#cb11-112" aria-hidden="true" tabindex="-1"></a><span class="co"># its LSTM, then draw that chapter's complete minibatch-start schedule.</span></span>
-<span id="cb11-113"><a href="#cb11-113" aria-hidden="true" tabindex="-1"></a>torch.manual_seed(SEED)</span>
-<span id="cb11-114"><a href="#cb11-114" aria-hidden="true" tabindex="-1"></a>_ <span class="op">=</span> HistoricalCharLSTM(<span class="bu">len</span>(chars))</span>
-<span id="cb11-115"><a href="#cb11-115" aria-hidden="true" tabindex="-1"></a>schedule_generator <span class="op">=</span> torch.Generator()</span>
-<span id="cb11-116"><a href="#cb11-116" aria-hidden="true" tabindex="-1"></a>schedule_generator.set_state(torch.random.get_rng_state())</span>
-<span id="cb11-117"><a href="#cb11-117" aria-hidden="true" tabindex="-1"></a>starts <span class="op">=</span> torch.randint(</span>
-<span id="cb11-118"><a href="#cb11-118" aria-hidden="true" tabindex="-1"></a>    <span class="dv">0</span>,</span>
-<span id="cb11-119"><a href="#cb11-119" aria-hidden="true" tabindex="-1"></a>    <span class="bu">len</span>(train_data) <span class="op">-</span> CONTEXT <span class="op">-</span> <span class="dv">1</span>,</span>
-<span id="cb11-120"><a href="#cb11-120" aria-hidden="true" tabindex="-1"></a>    (UPDATES, BATCH),</span>
-<span id="cb11-121"><a href="#cb11-121" aria-hidden="true" tabindex="-1"></a>    generator<span class="op">=</span>schedule_generator,</span>
-<span id="cb11-122"><a href="#cb11-122" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb11-123"><a href="#cb11-123" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-124"><a href="#cb11-124" aria-hidden="true" tabindex="-1"></a><span class="co"># The two Transformer variants begin with exactly the same tensors.</span></span>
-<span id="cb11-125"><a href="#cb11-125" aria-hidden="true" tabindex="-1"></a>torch.manual_seed(SEED)</span>
-<span id="cb11-126"><a href="#cb11-126" aria-hidden="true" tabindex="-1"></a>base_model <span class="op">=</span> TinyTransformerLM(<span class="bu">len</span>(chars), positions<span class="op">=</span><span class="va">True</span>)</span>
-<span id="cb11-127"><a href="#cb11-127" aria-hidden="true" tabindex="-1"></a>initial_state <span class="op">=</span> {</span>
-<span id="cb11-128"><a href="#cb11-128" aria-hidden="true" tabindex="-1"></a>    name: value.clone() <span class="cf">for</span> name, value <span class="kw">in</span> base_model.state_dict().items()</span>
-<span id="cb11-129"><a href="#cb11-129" aria-hidden="true" tabindex="-1"></a>}</span>
-<span id="cb11-130"><a href="#cb11-130" aria-hidden="true" tabindex="-1"></a>initial_hash <span class="op">=</span> state_digest(initial_state)</span>
-<span id="cb11-131"><a href="#cb11-131" aria-hidden="true" tabindex="-1"></a>schedule_hash <span class="op">=</span> hashlib.sha256(starts.numpy().tobytes()).hexdigest()</span>
-<span id="cb11-132"><a href="#cb11-132" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-133"><a href="#cb11-133" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"corpus: 9 chapters, </span><span class="sc">{</span><span class="bu">len</span>(text)<span class="sc">:,}</span><span class="ss"> characters, vocab </span><span class="sc">{</span><span class="bu">len</span>(chars)<span class="sc">}</span><span class="ss">"</span>)</span>
-<span id="cb11-134"><a href="#cb11-134" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(</span>
-<span id="cb11-135"><a href="#cb11-135" aria-hidden="true" tabindex="-1"></a>    <span class="ss">f"deterministic split: </span><span class="sc">{</span><span class="bu">len</span>(train_data)<span class="sc">:,}</span><span class="ss"> train / "</span></span>
-<span id="cb11-136"><a href="#cb11-136" aria-hidden="true" tabindex="-1"></a>    <span class="ss">f"</span><span class="sc">{</span><span class="bu">len</span>(valid_data)<span class="sc">:,}</span><span class="ss"> held out"</span></span>
-<span id="cb11-137"><a href="#cb11-137" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb11-138"><a href="#cb11-138" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(</span>
-<span id="cb11-139"><a href="#cb11-139" aria-hidden="true" tabindex="-1"></a>    <span class="ss">f"Transformer parameters: "</span></span>
-<span id="cb11-140"><a href="#cb11-140" aria-hidden="true" tabindex="-1"></a>    <span class="ss">f"</span><span class="sc">{</span><span class="bu">sum</span>(parameter.numel() <span class="cf">for</span> parameter <span class="kw">in</span> base_model.parameters())<span class="sc">:,}</span><span class="ss">"</span></span>
-<span id="cb11-141"><a href="#cb11-141" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb11-142"><a href="#cb11-142" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"first eight window starts: </span><span class="sc">{</span>starts[<span class="dv">0</span>, :<span class="dv">8</span>]<span class="sc">.</span>tolist()<span class="sc">}</span><span class="ss">"</span>)</span>
-<span id="cb11-143"><a href="#cb11-143" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"initial tensors: </span><span class="sc">{</span>initial_hash[:<span class="dv">12</span>]<span class="sc">}</span><span class="ss">…"</span>)</span>
-<span id="cb11-144"><a href="#cb11-144" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"window schedule: </span><span class="sc">{</span>schedule_hash[:<span class="dv">12</span>]<span class="sc">}</span><span class="ss">…"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb11-53"><a href="#cb11-53" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> forward(<span class="va">self</span>, tokens: torch.Tensor, return_weights: <span class="bu">bool</span> <span class="op">=</span> <span class="va">False</span>):</span>
+<span id="cb11-54"><a href="#cb11-54" aria-hidden="true" tabindex="-1"></a>        length <span class="op">=</span> tokens.shape[<span class="dv">1</span>]</span>
+<span id="cb11-55"><a href="#cb11-55" aria-hidden="true" tabindex="-1"></a>        x <span class="op">=</span> <span class="va">self</span>.token_embedding(tokens) <span class="op">*</span> math.sqrt(WIDTH)</span>
+<span id="cb11-56"><a href="#cb11-56" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="va">self</span>.positions:</span>
+<span id="cb11-57"><a href="#cb11-57" aria-hidden="true" tabindex="-1"></a>            x <span class="op">=</span> x <span class="op">+</span> <span class="va">self</span>.position_table[:length]</span>
+<span id="cb11-58"><a href="#cb11-58" aria-hidden="true" tabindex="-1"></a>        maps <span class="op">=</span> []</span>
+<span id="cb11-59"><a href="#cb11-59" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> block <span class="kw">in</span> <span class="va">self</span>.blocks:</span>
+<span id="cb11-60"><a href="#cb11-60" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> return_weights:</span>
+<span id="cb11-61"><a href="#cb11-61" aria-hidden="true" tabindex="-1"></a>                x, weights <span class="op">=</span> block(x, <span class="va">True</span>)</span>
+<span id="cb11-62"><a href="#cb11-62" aria-hidden="true" tabindex="-1"></a>                maps.append(weights)</span>
+<span id="cb11-63"><a href="#cb11-63" aria-hidden="true" tabindex="-1"></a>            <span class="cf">else</span>:</span>
+<span id="cb11-64"><a href="#cb11-64" aria-hidden="true" tabindex="-1"></a>                x <span class="op">=</span> block(x)</span>
+<span id="cb11-65"><a href="#cb11-65" aria-hidden="true" tabindex="-1"></a>        logits <span class="op">=</span> <span class="va">self</span>.output(<span class="va">self</span>.final_norm(x))</span>
+<span id="cb11-66"><a href="#cb11-66" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> (logits, maps) <span class="cf">if</span> return_weights <span class="cf">else</span> logits</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+<p>The paired protocol is worth printing in full — it <em>is</em> the experimental design:</p>
+<div id="transformer-protocol" class="cell" data-execution_count="11">
+<details class="code-fold">
+<summary>Code: the paired protocol — shared schedule, identical initial tensors</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Reconstruct the random-number state immediately after Chapter 10 created</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="co"># its LSTM, then draw that chapter's complete minibatch-start schedule.</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>torch.manual_seed(SEED)</span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>_ <span class="op">=</span> HistoricalCharLSTM(<span class="bu">len</span>(chars))</span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>schedule_generator <span class="op">=</span> torch.Generator()</span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>schedule_generator.set_state(torch.random.get_rng_state())</span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>starts <span class="op">=</span> torch.randint(</span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>    <span class="dv">0</span>,</span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>    <span class="bu">len</span>(train_data) <span class="op">-</span> CONTEXT <span class="op">-</span> <span class="dv">1</span>,</span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>    (UPDATES, BATCH),</span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a>    generator<span class="op">=</span>schedule_generator,</span>
+<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a><span class="co"># The two Transformer variants begin with exactly the same tensors.</span></span>
+<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a>torch.manual_seed(SEED)</span>
+<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a>base_model <span class="op">=</span> TinyTransformerLM(<span class="bu">len</span>(chars), positions<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb12-17"><a href="#cb12-17" aria-hidden="true" tabindex="-1"></a>initial_state <span class="op">=</span> {</span>
+<span id="cb12-18"><a href="#cb12-18" aria-hidden="true" tabindex="-1"></a>    name: value.clone() <span class="cf">for</span> name, value <span class="kw">in</span> base_model.state_dict().items()</span>
+<span id="cb12-19"><a href="#cb12-19" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb12-20"><a href="#cb12-20" aria-hidden="true" tabindex="-1"></a>initial_hash <span class="op">=</span> state_digest(initial_state)</span>
+<span id="cb12-21"><a href="#cb12-21" aria-hidden="true" tabindex="-1"></a>schedule_hash <span class="op">=</span> hashlib.sha256(starts.numpy().tobytes()).hexdigest()</span>
+<span id="cb12-22"><a href="#cb12-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-23"><a href="#cb12-23" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"corpus: 9 chapters, </span><span class="sc">{</span><span class="bu">len</span>(text)<span class="sc">:,}</span><span class="ss"> characters, vocab </span><span class="sc">{</span><span class="bu">len</span>(chars)<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb12-24"><a href="#cb12-24" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(</span>
+<span id="cb12-25"><a href="#cb12-25" aria-hidden="true" tabindex="-1"></a>    <span class="ss">f"deterministic split: </span><span class="sc">{</span><span class="bu">len</span>(train_data)<span class="sc">:,}</span><span class="ss"> train / "</span></span>
+<span id="cb12-26"><a href="#cb12-26" aria-hidden="true" tabindex="-1"></a>    <span class="ss">f"</span><span class="sc">{</span><span class="bu">len</span>(valid_data)<span class="sc">:,}</span><span class="ss"> held out"</span></span>
+<span id="cb12-27"><a href="#cb12-27" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb12-28"><a href="#cb12-28" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(</span>
+<span id="cb12-29"><a href="#cb12-29" aria-hidden="true" tabindex="-1"></a>    <span class="ss">f"Transformer parameters: "</span></span>
+<span id="cb12-30"><a href="#cb12-30" aria-hidden="true" tabindex="-1"></a>    <span class="ss">f"</span><span class="sc">{</span><span class="bu">sum</span>(parameter.numel() <span class="cf">for</span> parameter <span class="kw">in</span> base_model.parameters())<span class="sc">:,}</span><span class="ss">"</span></span>
+<span id="cb12-31"><a href="#cb12-31" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb12-32"><a href="#cb12-32" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"first eight window starts: </span><span class="sc">{</span>starts[<span class="dv">0</span>, :<span class="dv">8</span>]<span class="sc">.</span>tolist()<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb12-33"><a href="#cb12-33" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"initial tensors: </span><span class="sc">{</span>initial_hash[:<span class="dv">12</span>]<span class="sc">}</span><span class="ss">…"</span>)</span>
+<span id="cb12-34"><a href="#cb12-34" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"window schedule: </span><span class="sc">{</span>schedule_hash[:<span class="dv">12</span>]<span class="sc">}</span><span class="ss">…"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
 <pre><code>corpus: 9 chapters, 148,594 characters, vocab 104
@@ -1189,89 +1151,71 @@ window schedule: e470a091bd50…</code></pre>
 <p>Calling the same random seed before both training runs would not, by itself, prove that they saw the same windows. Model construction consumes random numbers, and different construction paths can silently shift every later draw. The experiment precomputes the full start-index tensor with an explicit generator and copies one saved initialization into both models. It also prints fingerprints for both artifacts.</p>
 </div>
 </div>
-<div id="transformer-training-function" class="cell" data-execution_count="10">
+<p>Training and evaluation are Chapter 10’s canonical listings, imported. The signature of the imported trainer, for reference:</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb14" data-startfrom="11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python" style="counter-reset: source-line 10;"><span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> fit_next_token(</span>
+<span id="cb14-12"><a href="#cb14-12" aria-hidden="true" tabindex="-1"></a>    model: nn.Module,</span>
+<span id="cb14-13"><a href="#cb14-13" aria-hidden="true" tabindex="-1"></a>    data: torch.Tensor,</span>
+<span id="cb14-14"><a href="#cb14-14" aria-hidden="true" tabindex="-1"></a>    <span class="op">*</span>,</span>
+<span id="cb14-15"><a href="#cb14-15" aria-hidden="true" tabindex="-1"></a>    vocab: <span class="bu">int</span>,</span>
+<span id="cb14-16"><a href="#cb14-16" aria-hidden="true" tabindex="-1"></a>    context: <span class="bu">int</span> <span class="op">=</span> <span class="dv">100</span>,</span>
+<span id="cb14-17"><a href="#cb14-17" aria-hidden="true" tabindex="-1"></a>    batch: <span class="bu">int</span> <span class="op">=</span> <span class="dv">64</span>,</span>
+<span id="cb14-18"><a href="#cb14-18" aria-hidden="true" tabindex="-1"></a>    steps: <span class="bu">int</span> <span class="op">=</span> <span class="dv">2501</span>,</span>
+<span id="cb14-19"><a href="#cb14-19" aria-hidden="true" tabindex="-1"></a>    lr: <span class="bu">float</span> <span class="op">=</span> <span class="fl">2e-3</span>,</span>
+<span id="cb14-20"><a href="#cb14-20" aria-hidden="true" tabindex="-1"></a>    clip: <span class="bu">float</span> <span class="op">=</span> <span class="fl">1.0</span>,</span>
+<span id="cb14-21"><a href="#cb14-21" aria-hidden="true" tabindex="-1"></a>    schedule: <span class="bu">list</span>[torch.Tensor] <span class="op">|</span> <span class="va">None</span> <span class="op">=</span> <span class="va">None</span>,</span>
+<span id="cb14-22"><a href="#cb14-22" aria-hidden="true" tabindex="-1"></a>    log_every: <span class="bu">int</span> <span class="op">=</span> <span class="dv">500</span>,</span>
+<span id="cb14-23"><a href="#cb14-23" aria-hidden="true" tabindex="-1"></a>    log_decimals: <span class="bu">int</span> <span class="op">=</span> <span class="dv">2</span>,</span>
+<span id="cb14-24"><a href="#cb14-24" aria-hidden="true" tabindex="-1"></a>) <span class="op">-&gt;</span> <span class="bu">tuple</span>[nn.Module, <span class="bu">list</span>[<span class="bu">tuple</span>[<span class="bu">int</span>, <span class="bu">float</span>]]]:</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p><em>… body exactly as Listing 10.1 — this chapter prints only what it changes.</em></p>
+<div id="transformer-training-function" class="cell" data-execution_count="12">
 <details class="code-fold">
-<summary>Code: one matched training and evaluation protocol</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> train_transformer(</span>
-<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>    positions: <span class="bu">bool</span>,</span>
-<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>) <span class="op">-&gt;</span> <span class="bu">tuple</span>[nn.Module, <span class="bu">list</span>[<span class="bu">tuple</span>[<span class="bu">int</span>, <span class="bu">float</span>]]]:</span>
-<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>    net <span class="op">=</span> TinyTransformerLM(<span class="bu">len</span>(chars), positions<span class="op">=</span>positions)</span>
-<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>    net.load_state_dict(initial_state, strict<span class="op">=</span><span class="va">True</span>)</span>
-<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">assert</span> state_digest(net.state_dict()) <span class="op">==</span> initial_hash</span>
-<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>    optimizer <span class="op">=</span> torch.optim.Adam(net.parameters(), lr<span class="op">=</span><span class="fl">2e-3</span>)</span>
-<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a>    curve <span class="op">=</span> []</span>
-<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> step, batch_starts <span class="kw">in</span> <span class="bu">enumerate</span>(starts):</span>
-<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a>        xb <span class="op">=</span> torch.stack([</span>
-<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a>            train_data[j : j <span class="op">+</span> CONTEXT] <span class="cf">for</span> j <span class="kw">in</span> batch_starts</span>
-<span id="cb13-12"><a href="#cb13-12" aria-hidden="true" tabindex="-1"></a>        ])</span>
-<span id="cb13-13"><a href="#cb13-13" aria-hidden="true" tabindex="-1"></a>        yb <span class="op">=</span> torch.stack([</span>
-<span id="cb13-14"><a href="#cb13-14" aria-hidden="true" tabindex="-1"></a>            train_data[j <span class="op">+</span> <span class="dv">1</span> : j <span class="op">+</span> CONTEXT <span class="op">+</span> <span class="dv">1</span>] <span class="cf">for</span> j <span class="kw">in</span> batch_starts</span>
-<span id="cb13-15"><a href="#cb13-15" aria-hidden="true" tabindex="-1"></a>        ])</span>
-<span id="cb13-16"><a href="#cb13-16" aria-hidden="true" tabindex="-1"></a>        logits <span class="op">=</span> net(xb)</span>
-<span id="cb13-17"><a href="#cb13-17" aria-hidden="true" tabindex="-1"></a>        loss <span class="op">=</span> F.cross_entropy(</span>
-<span id="cb13-18"><a href="#cb13-18" aria-hidden="true" tabindex="-1"></a>            logits.reshape(<span class="op">-</span><span class="dv">1</span>, <span class="bu">len</span>(chars)), yb.reshape(<span class="op">-</span><span class="dv">1</span>)</span>
-<span id="cb13-19"><a href="#cb13-19" aria-hidden="true" tabindex="-1"></a>        )</span>
-<span id="cb13-20"><a href="#cb13-20" aria-hidden="true" tabindex="-1"></a>        optimizer.zero_grad()</span>
-<span id="cb13-21"><a href="#cb13-21" aria-hidden="true" tabindex="-1"></a>        loss.backward()</span>
-<span id="cb13-22"><a href="#cb13-22" aria-hidden="true" tabindex="-1"></a>        nn.utils.clip_grad_norm_(net.parameters(), <span class="fl">1.0</span>)</span>
-<span id="cb13-23"><a href="#cb13-23" aria-hidden="true" tabindex="-1"></a>        optimizer.step()</span>
-<span id="cb13-24"><a href="#cb13-24" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> step <span class="op">%</span> <span class="dv">250</span> <span class="op">==</span> <span class="dv">0</span>:</span>
-<span id="cb13-25"><a href="#cb13-25" aria-hidden="true" tabindex="-1"></a>            curve.append((step, loss.item()))</span>
-<span id="cb13-26"><a href="#cb13-26" aria-hidden="true" tabindex="-1"></a>            <span class="bu">print</span>(<span class="ss">f"step </span><span class="sc">{</span>step<span class="sc">:4d}</span><span class="ss">   loss </span><span class="sc">{</span>loss<span class="sc">.</span>item()<span class="sc">:.4f}</span><span class="ss">"</span>)</span>
-<span id="cb13-27"><a href="#cb13-27" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> net, curve</span>
-<span id="cb13-28"><a href="#cb13-28" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-29"><a href="#cb13-29" aria-hidden="true" tabindex="-1"></a><span class="at">@torch.no_grad</span>()</span>
-<span id="cb13-30"><a href="#cb13-30" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> fixed_window_loss(</span>
-<span id="cb13-31"><a href="#cb13-31" aria-hidden="true" tabindex="-1"></a>    net: nn.Module,</span>
-<span id="cb13-32"><a href="#cb13-32" aria-hidden="true" tabindex="-1"></a>    sequence: torch.Tensor,</span>
-<span id="cb13-33"><a href="#cb13-33" aria-hidden="true" tabindex="-1"></a>    window: <span class="bu">int</span> <span class="op">=</span> CONTEXT,</span>
-<span id="cb13-34"><a href="#cb13-34" aria-hidden="true" tabindex="-1"></a>) <span class="op">-&gt;</span> <span class="bu">float</span>:</span>
-<span id="cb13-35"><a href="#cb13-35" aria-hidden="true" tabindex="-1"></a>    net.<span class="bu">eval</span>()</span>
-<span id="cb13-36"><a href="#cb13-36" aria-hidden="true" tabindex="-1"></a>    total_loss, n_tokens <span class="op">=</span> <span class="fl">0.0</span>, <span class="dv">0</span></span>
-<span id="cb13-37"><a href="#cb13-37" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> start <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">0</span>, <span class="bu">len</span>(sequence) <span class="op">-</span> <span class="dv">1</span>, window):</span>
-<span id="cb13-38"><a href="#cb13-38" aria-hidden="true" tabindex="-1"></a>        stop <span class="op">=</span> <span class="bu">min</span>(start <span class="op">+</span> window, <span class="bu">len</span>(sequence) <span class="op">-</span> <span class="dv">1</span>)</span>
-<span id="cb13-39"><a href="#cb13-39" aria-hidden="true" tabindex="-1"></a>        xb <span class="op">=</span> sequence[start:stop].unsqueeze(<span class="dv">0</span>)</span>
-<span id="cb13-40"><a href="#cb13-40" aria-hidden="true" tabindex="-1"></a>        yb <span class="op">=</span> sequence[start <span class="op">+</span> <span class="dv">1</span> : stop <span class="op">+</span> <span class="dv">1</span>]</span>
-<span id="cb13-41"><a href="#cb13-41" aria-hidden="true" tabindex="-1"></a>        logits <span class="op">=</span> net(xb)</span>
-<span id="cb13-42"><a href="#cb13-42" aria-hidden="true" tabindex="-1"></a>        total_loss <span class="op">+=</span> F.cross_entropy(</span>
-<span id="cb13-43"><a href="#cb13-43" aria-hidden="true" tabindex="-1"></a>            logits.reshape(<span class="op">-</span><span class="dv">1</span>, <span class="bu">len</span>(chars)),</span>
-<span id="cb13-44"><a href="#cb13-44" aria-hidden="true" tabindex="-1"></a>            yb,</span>
-<span id="cb13-45"><a href="#cb13-45" aria-hidden="true" tabindex="-1"></a>            reduction<span class="op">=</span><span class="st">"sum"</span>,</span>
-<span id="cb13-46"><a href="#cb13-46" aria-hidden="true" tabindex="-1"></a>        ).item()</span>
-<span id="cb13-47"><a href="#cb13-47" aria-hidden="true" tabindex="-1"></a>        n_tokens <span class="op">+=</span> yb.numel()</span>
-<span id="cb13-48"><a href="#cb13-48" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> total_loss <span class="op">/</span> n_tokens</span>
-<span id="cb13-49"><a href="#cb13-49" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-50"><a href="#cb13-50" aria-hidden="true" tabindex="-1"></a><span class="at">@torch.no_grad</span>()</span>
-<span id="cb13-51"><a href="#cb13-51" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> transformer_sample(</span>
-<span id="cb13-52"><a href="#cb13-52" aria-hidden="true" tabindex="-1"></a>    net: nn.Module,</span>
-<span id="cb13-53"><a href="#cb13-53" aria-hidden="true" tabindex="-1"></a>    prompt: <span class="bu">str</span>,</span>
-<span id="cb13-54"><a href="#cb13-54" aria-hidden="true" tabindex="-1"></a>    n: <span class="bu">int</span> <span class="op">=</span> <span class="dv">300</span>,</span>
-<span id="cb13-55"><a href="#cb13-55" aria-hidden="true" tabindex="-1"></a>    temperature: <span class="bu">float</span> <span class="op">=</span> <span class="fl">0.8</span>,</span>
-<span id="cb13-56"><a href="#cb13-56" aria-hidden="true" tabindex="-1"></a>) <span class="op">-&gt;</span> <span class="bu">str</span>:</span>
-<span id="cb13-57"><a href="#cb13-57" aria-hidden="true" tabindex="-1"></a>    net.<span class="bu">eval</span>()</span>
-<span id="cb13-58"><a href="#cb13-58" aria-hidden="true" tabindex="-1"></a>    generator <span class="op">=</span> torch.Generator().manual_seed(<span class="dv">1_406_050</span>)</span>
-<span id="cb13-59"><a href="#cb13-59" aria-hidden="true" tabindex="-1"></a>    tokens <span class="op">=</span> [stoi.get(char, <span class="dv">0</span>) <span class="cf">for</span> char <span class="kw">in</span> prompt]</span>
-<span id="cb13-60"><a href="#cb13-60" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(n):</span>
-<span id="cb13-61"><a href="#cb13-61" aria-hidden="true" tabindex="-1"></a>        context <span class="op">=</span> torch.tensor(tokens[<span class="op">-</span>CONTEXT:]).unsqueeze(<span class="dv">0</span>)</span>
-<span id="cb13-62"><a href="#cb13-62" aria-hidden="true" tabindex="-1"></a>        probabilities <span class="op">=</span> F.softmax(</span>
-<span id="cb13-63"><a href="#cb13-63" aria-hidden="true" tabindex="-1"></a>            net(context)[<span class="dv">0</span>, <span class="op">-</span><span class="dv">1</span>] <span class="op">/</span> temperature, dim<span class="op">=-</span><span class="dv">1</span></span>
-<span id="cb13-64"><a href="#cb13-64" aria-hidden="true" tabindex="-1"></a>        )</span>
-<span id="cb13-65"><a href="#cb13-65" aria-hidden="true" tabindex="-1"></a>        next_token <span class="op">=</span> torch.multinomial(</span>
-<span id="cb13-66"><a href="#cb13-66" aria-hidden="true" tabindex="-1"></a>            probabilities, <span class="dv">1</span>, generator<span class="op">=</span>generator</span>
-<span id="cb13-67"><a href="#cb13-67" aria-hidden="true" tabindex="-1"></a>        ).item()</span>
-<span id="cb13-68"><a href="#cb13-68" aria-hidden="true" tabindex="-1"></a>        tokens.append(next_token)</span>
-<span id="cb13-69"><a href="#cb13-69" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="st">""</span>.join(chars[index] <span class="cf">for</span> index <span class="kw">in</span> tokens)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<summary>Code: Chapter 10’s trainer, imported — only the deltas printed</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> dlbook.training <span class="im">import</span> fit_next_token      <span class="co"># Listing 10.1, Ch. 10</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> dlbook.evaluation <span class="im">import</span> fixed_window_loss  <span class="co"># Listing 10.2, Ch. 10</span></span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> train_transformer(</span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>    positions: <span class="bu">bool</span>,</span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a>) <span class="op">-&gt;</span> <span class="bu">tuple</span>[nn.Module, <span class="bu">list</span>[<span class="bu">tuple</span>[<span class="bu">int</span>, <span class="bu">float</span>]]]:</span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a>    net <span class="op">=</span> TinyTransformerLM(<span class="bu">len</span>(chars), positions<span class="op">=</span>positions)</span>
+<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a>    net.load_state_dict(initial_state, strict<span class="op">=</span><span class="va">True</span>)  <span class="co"># paired start: same tensors</span></span>
+<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a>    <span class="cf">assert</span> state_digest(net.state_dict()) <span class="op">==</span> initial_hash</span>
+<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> fit_next_token(</span>
+<span id="cb15-11"><a href="#cb15-11" aria-hidden="true" tabindex="-1"></a>        net, train_data, vocab<span class="op">=</span><span class="bu">len</span>(chars),</span>
+<span id="cb15-12"><a href="#cb15-12" aria-hidden="true" tabindex="-1"></a>        schedule<span class="op">=</span>starts,                 <span class="co"># minibatch order is protocol, not chance</span></span>
+<span id="cb15-13"><a href="#cb15-13" aria-hidden="true" tabindex="-1"></a>        log_every<span class="op">=</span><span class="dv">250</span>, log_decimals<span class="op">=</span><span class="dv">4</span>,</span>
+<span id="cb15-14"><a href="#cb15-14" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb15-15"><a href="#cb15-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-16"><a href="#cb15-16" aria-hidden="true" tabindex="-1"></a><span class="at">@torch.no_grad</span>()</span>
+<span id="cb15-17"><a href="#cb15-17" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> transformer_sample(</span>
+<span id="cb15-18"><a href="#cb15-18" aria-hidden="true" tabindex="-1"></a>    net: nn.Module,</span>
+<span id="cb15-19"><a href="#cb15-19" aria-hidden="true" tabindex="-1"></a>    prompt: <span class="bu">str</span>,</span>
+<span id="cb15-20"><a href="#cb15-20" aria-hidden="true" tabindex="-1"></a>    n: <span class="bu">int</span> <span class="op">=</span> <span class="dv">300</span>,</span>
+<span id="cb15-21"><a href="#cb15-21" aria-hidden="true" tabindex="-1"></a>    temperature: <span class="bu">float</span> <span class="op">=</span> <span class="fl">0.8</span>,</span>
+<span id="cb15-22"><a href="#cb15-22" aria-hidden="true" tabindex="-1"></a>) <span class="op">-&gt;</span> <span class="bu">str</span>:</span>
+<span id="cb15-23"><a href="#cb15-23" aria-hidden="true" tabindex="-1"></a>    net.<span class="bu">eval</span>()</span>
+<span id="cb15-24"><a href="#cb15-24" aria-hidden="true" tabindex="-1"></a>    generator <span class="op">=</span> torch.Generator().manual_seed(<span class="dv">1_406_050</span>)</span>
+<span id="cb15-25"><a href="#cb15-25" aria-hidden="true" tabindex="-1"></a>    tokens <span class="op">=</span> [stoi.get(char, <span class="dv">0</span>) <span class="cf">for</span> char <span class="kw">in</span> prompt]</span>
+<span id="cb15-26"><a href="#cb15-26" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(n):</span>
+<span id="cb15-27"><a href="#cb15-27" aria-hidden="true" tabindex="-1"></a>        context <span class="op">=</span> torch.tensor(tokens[<span class="op">-</span>CONTEXT:]).unsqueeze(<span class="dv">0</span>)</span>
+<span id="cb15-28"><a href="#cb15-28" aria-hidden="true" tabindex="-1"></a>        probabilities <span class="op">=</span> F.softmax(</span>
+<span id="cb15-29"><a href="#cb15-29" aria-hidden="true" tabindex="-1"></a>            net(context)[<span class="dv">0</span>, <span class="op">-</span><span class="dv">1</span>] <span class="op">/</span> temperature, dim<span class="op">=-</span><span class="dv">1</span></span>
+<span id="cb15-30"><a href="#cb15-30" aria-hidden="true" tabindex="-1"></a>        )</span>
+<span id="cb15-31"><a href="#cb15-31" aria-hidden="true" tabindex="-1"></a>        next_token <span class="op">=</span> torch.multinomial(</span>
+<span id="cb15-32"><a href="#cb15-32" aria-hidden="true" tabindex="-1"></a>            probabilities, <span class="dv">1</span>, generator<span class="op">=</span>generator</span>
+<span id="cb15-33"><a href="#cb15-33" aria-hidden="true" tabindex="-1"></a>        ).item()</span>
+<span id="cb15-34"><a href="#cb15-34" aria-hidden="true" tabindex="-1"></a>        tokens.append(next_token)</span>
+<span id="cb15-35"><a href="#cb15-35" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="st">""</span>.join(chars[index] <span class="cf">for</span> index <span class="kw">in</span> tokens)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 </div>
 <p>The training function is defined once, then called in separate cells so each substantial run stays within the chapter’s execution budget.</p>
-<div id="train-transformer-positions" class="cell" data-execution_count="11">
+<div id="train-transformer-positions" class="cell" data-execution_count="13">
 <details class="code-fold">
 <summary>Code: train the positional Transformer</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>position_model, position_curve <span class="op">=</span> train_transformer(positions<span class="op">=</span><span class="va">True</span>)</span>
-<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>position_train_loss <span class="op">=</span> fixed_window_loss(position_model, train_data)</span>
-<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>position_valid_loss <span class="op">=</span> fixed_window_loss(position_model, valid_data)</span>
-<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"fixed-window train loss: </span><span class="sc">{</span>position_train_loss<span class="sc">:.4f}</span><span class="ss">"</span>)</span>
-<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"fixed-window held-out loss: </span><span class="sc">{</span>position_valid_loss<span class="sc">:.4f}</span><span class="ss">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>position_model, position_curve <span class="op">=</span> train_transformer(positions<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>position_train_loss <span class="op">=</span> fixed_window_loss(position_model, train_data, vocab<span class="op">=</span><span class="bu">len</span>(chars))</span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>position_valid_loss <span class="op">=</span> fixed_window_loss(position_model, valid_data, vocab<span class="op">=</span><span class="bu">len</span>(chars))</span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"fixed-window train loss: </span><span class="sc">{</span>position_train_loss<span class="sc">:.4f}</span><span class="ss">"</span>)</span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"fixed-window held-out loss: </span><span class="sc">{</span>position_valid_loss<span class="sc">:.4f}</span><span class="ss">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
 <pre><code>step    0   loss 4.7550
@@ -1289,14 +1233,14 @@ fixed-window train loss: 1.1132
 fixed-window held-out loss: 1.9190</code></pre>
 </div>
 </div>
-<div id="train-transformer-no-positions" class="cell" data-execution_count="12">
+<div id="train-transformer-no-positions" class="cell" data-execution_count="14">
 <details class="code-fold">
 <summary>Code: repeat with position removed and everything else fixed</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>no_position_model, no_position_curve <span class="op">=</span> train_transformer(positions<span class="op">=</span><span class="va">False</span>)</span>
-<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>no_position_train_loss <span class="op">=</span> fixed_window_loss(no_position_model, train_data)</span>
-<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>no_position_valid_loss <span class="op">=</span> fixed_window_loss(no_position_model, valid_data)</span>
-<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"fixed-window train loss: </span><span class="sc">{</span>no_position_train_loss<span class="sc">:.4f}</span><span class="ss">"</span>)</span>
-<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"fixed-window held-out loss: </span><span class="sc">{</span>no_position_valid_loss<span class="sc">:.4f}</span><span class="ss">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>no_position_model, no_position_curve <span class="op">=</span> train_transformer(positions<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>no_position_train_loss <span class="op">=</span> fixed_window_loss(no_position_model, train_data, vocab<span class="op">=</span><span class="bu">len</span>(chars))</span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>no_position_valid_loss <span class="op">=</span> fixed_window_loss(no_position_model, valid_data, vocab<span class="op">=</span><span class="bu">len</span>(chars))</span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"fixed-window train loss: </span><span class="sc">{</span>no_position_train_loss<span class="sc">:.4f}</span><span class="ss">"</span>)</span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"fixed-window held-out loss: </span><span class="sc">{</span>no_position_valid_loss<span class="sc">:.4f}</span><span class="ss">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
 <pre><code>step    0   loss 4.7289
@@ -1314,41 +1258,41 @@ fixed-window train loss: 1.8672
 fixed-window held-out loss: 2.3405</code></pre>
 </div>
 </div>
-<div id="cell-fig-book-corpus-rematch" class="cell" data-fig-height="4" data-fig-width="10" data-execution_count="13">
+<div id="cell-fig-book-corpus-rematch" class="cell" data-fig-height="4" data-fig-width="10" data-execution_count="15">
 <details class="code-fold">
 <summary>Code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>lstm_valid_loss <span class="op">=</span> <span class="fl">1.888110429</span></span>
-<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>fig, axes <span class="op">=</span> plt.subplots(<span class="dv">1</span>, <span class="dv">2</span>, figsize<span class="op">=</span>(<span class="dv">10</span>, <span class="dv">4</span>))</span>
-<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> curve, label, color <span class="kw">in</span> [</span>
-<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>    (position_curve, <span class="st">"Transformer + position"</span>, <span class="st">"#3566a8"</span>),</span>
-<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a>    (no_position_curve, <span class="st">"Transformer, no position"</span>, <span class="st">"#d37b29"</span>),</span>
-<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a>]:</span>
-<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a>    steps, losses <span class="op">=</span> <span class="bu">zip</span>(<span class="op">*</span>curve)</span>
-<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a>    axes[<span class="dv">0</span>].plot(steps, losses, marker<span class="op">=</span><span class="st">"o"</span>, ms<span class="op">=</span><span class="dv">3</span>, label<span class="op">=</span>label, color<span class="op">=</span>color)</span>
-<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].set_xlabel(<span class="st">"update"</span>)</span>
-<span id="cb18-11"><a href="#cb18-11" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].set_ylabel(<span class="st">"sampled training-minibatch loss"</span>)</span>
-<span id="cb18-12"><a href="#cb18-12" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].set_title(<span class="st">"same windows, same initialization"</span>)</span>
-<span id="cb18-13"><a href="#cb18-13" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].legend(frameon<span class="op">=</span><span class="va">False</span>)</span>
-<span id="cb18-14"><a href="#cb18-14" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-15"><a href="#cb18-15" aria-hidden="true" tabindex="-1"></a>labels <span class="op">=</span> [<span class="st">"Ch. 10</span><span class="ch">\n</span><span class="st">LSTM"</span>, <span class="st">"Transformer</span><span class="ch">\n</span><span class="st">+ position"</span>, <span class="st">"Transformer</span><span class="ch">\n</span><span class="st">no position"</span>]</span>
-<span id="cb18-16"><a href="#cb18-16" aria-hidden="true" tabindex="-1"></a>values <span class="op">=</span> [lstm_valid_loss, position_valid_loss, no_position_valid_loss]</span>
-<span id="cb18-17"><a href="#cb18-17" aria-hidden="true" tabindex="-1"></a>bars <span class="op">=</span> axes[<span class="dv">1</span>].bar(labels, values, color<span class="op">=</span>[<span class="st">"#6b7280"</span>, <span class="st">"#3566a8"</span>, <span class="st">"#d37b29"</span>])</span>
-<span id="cb18-18"><a href="#cb18-18" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].set_ylim(<span class="fl">1.5</span>, <span class="fl">2.7</span>)</span>
-<span id="cb18-19"><a href="#cb18-19" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].set_ylabel(<span class="st">"held-out loss ↓"</span>)</span>
-<span id="cb18-20"><a href="#cb18-20" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].set_title(<span class="st">"fixed-window rematch"</span>)</span>
-<span id="cb18-21"><a href="#cb18-21" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].bar_label(bars, fmt<span class="op">=</span><span class="st">"</span><span class="sc">%.4f</span><span class="st">"</span>, padding<span class="op">=</span><span class="dv">3</span>)</span>
-<span id="cb18-22"><a href="#cb18-22" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
-<span id="cb18-23"><a href="#cb18-23" aria-hidden="true" tabindex="-1"></a>plt.show()</span>
-<span id="cb18-24"><a href="#cb18-24" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-25"><a href="#cb18-25" aria-hidden="true" tabindex="-1"></a>improvement <span class="op">=</span> no_position_valid_loss <span class="op">-</span> position_valid_loss</span>
-<span id="cb18-26"><a href="#cb18-26" aria-hidden="true" tabindex="-1"></a>relative <span class="op">=</span> improvement <span class="op">/</span> no_position_valid_loss</span>
-<span id="cb18-27"><a href="#cb18-27" aria-hidden="true" tabindex="-1"></a>lstm_gap <span class="op">=</span> position_valid_loss <span class="op">-</span> lstm_valid_loss</span>
-<span id="cb18-28"><a href="#cb18-28" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(</span>
-<span id="cb18-29"><a href="#cb18-29" aria-hidden="true" tabindex="-1"></a>    <span class="ss">f"position improvement: </span><span class="sc">{</span>improvement<span class="sc">:.4f}</span><span class="ss"> loss "</span></span>
-<span id="cb18-30"><a href="#cb18-30" aria-hidden="true" tabindex="-1"></a>    <span class="ss">f"(</span><span class="sc">{</span>relative<span class="sc">:.1%}</span><span class="ss"> relative)"</span></span>
-<span id="cb18-31"><a href="#cb18-31" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb18-32"><a href="#cb18-32" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"positional Transformer minus LSTM: </span><span class="sc">{</span>lstm_gap<span class="sc">:.4f}</span><span class="ss"> loss"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb20"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>lstm_valid_loss <span class="op">=</span> <span class="fl">1.888110429</span></span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a>fig, axes <span class="op">=</span> plt.subplots(<span class="dv">1</span>, <span class="dv">2</span>, figsize<span class="op">=</span>(<span class="dv">10</span>, <span class="dv">4</span>))</span>
+<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> curve, label, color <span class="kw">in</span> [</span>
+<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a>    (position_curve, <span class="st">"Transformer + position"</span>, <span class="st">"#3566a8"</span>),</span>
+<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a>    (no_position_curve, <span class="st">"Transformer, no position"</span>, <span class="st">"#d37b29"</span>),</span>
+<span id="cb20-7"><a href="#cb20-7" aria-hidden="true" tabindex="-1"></a>]:</span>
+<span id="cb20-8"><a href="#cb20-8" aria-hidden="true" tabindex="-1"></a>    steps, losses <span class="op">=</span> <span class="bu">zip</span>(<span class="op">*</span>curve)</span>
+<span id="cb20-9"><a href="#cb20-9" aria-hidden="true" tabindex="-1"></a>    axes[<span class="dv">0</span>].plot(steps, losses, marker<span class="op">=</span><span class="st">"o"</span>, ms<span class="op">=</span><span class="dv">3</span>, label<span class="op">=</span>label, color<span class="op">=</span>color)</span>
+<span id="cb20-10"><a href="#cb20-10" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].set_xlabel(<span class="st">"update"</span>)</span>
+<span id="cb20-11"><a href="#cb20-11" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].set_ylabel(<span class="st">"sampled training-minibatch loss"</span>)</span>
+<span id="cb20-12"><a href="#cb20-12" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].set_title(<span class="st">"same windows, same initialization"</span>)</span>
+<span id="cb20-13"><a href="#cb20-13" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].legend(frameon<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb20-14"><a href="#cb20-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-15"><a href="#cb20-15" aria-hidden="true" tabindex="-1"></a>labels <span class="op">=</span> [<span class="st">"Ch. 10</span><span class="ch">\n</span><span class="st">LSTM"</span>, <span class="st">"Transformer</span><span class="ch">\n</span><span class="st">+ position"</span>, <span class="st">"Transformer</span><span class="ch">\n</span><span class="st">no position"</span>]</span>
+<span id="cb20-16"><a href="#cb20-16" aria-hidden="true" tabindex="-1"></a>values <span class="op">=</span> [lstm_valid_loss, position_valid_loss, no_position_valid_loss]</span>
+<span id="cb20-17"><a href="#cb20-17" aria-hidden="true" tabindex="-1"></a>bars <span class="op">=</span> axes[<span class="dv">1</span>].bar(labels, values, color<span class="op">=</span>[<span class="st">"#6b7280"</span>, <span class="st">"#3566a8"</span>, <span class="st">"#d37b29"</span>])</span>
+<span id="cb20-18"><a href="#cb20-18" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].set_ylim(<span class="fl">1.5</span>, <span class="fl">2.7</span>)</span>
+<span id="cb20-19"><a href="#cb20-19" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].set_ylabel(<span class="st">"held-out loss ↓"</span>)</span>
+<span id="cb20-20"><a href="#cb20-20" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].set_title(<span class="st">"fixed-window rematch"</span>)</span>
+<span id="cb20-21"><a href="#cb20-21" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].bar_label(bars, fmt<span class="op">=</span><span class="st">"</span><span class="sc">%.4f</span><span class="st">"</span>, padding<span class="op">=</span><span class="dv">3</span>)</span>
+<span id="cb20-22"><a href="#cb20-22" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
+<span id="cb20-23"><a href="#cb20-23" aria-hidden="true" tabindex="-1"></a>plt.show()</span>
+<span id="cb20-24"><a href="#cb20-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-25"><a href="#cb20-25" aria-hidden="true" tabindex="-1"></a>improvement <span class="op">=</span> no_position_valid_loss <span class="op">-</span> position_valid_loss</span>
+<span id="cb20-26"><a href="#cb20-26" aria-hidden="true" tabindex="-1"></a>relative <span class="op">=</span> improvement <span class="op">/</span> no_position_valid_loss</span>
+<span id="cb20-27"><a href="#cb20-27" aria-hidden="true" tabindex="-1"></a>lstm_gap <span class="op">=</span> position_valid_loss <span class="op">-</span> lstm_valid_loss</span>
+<span id="cb20-28"><a href="#cb20-28" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(</span>
+<span id="cb20-29"><a href="#cb20-29" aria-hidden="true" tabindex="-1"></a>    <span class="ss">f"position improvement: </span><span class="sc">{</span>improvement<span class="sc">:.4f}</span><span class="ss"> loss "</span></span>
+<span id="cb20-30"><a href="#cb20-30" aria-hidden="true" tabindex="-1"></a>    <span class="ss">f"(</span><span class="sc">{</span>relative<span class="sc">:.1%}</span><span class="ss"> relative)"</span></span>
+<span id="cb20-31"><a href="#cb20-31" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb20-32"><a href="#cb20-32" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"positional Transformer minus LSTM: </span><span class="sc">{</span>lstm_gap<span class="sc">:.4f}</span><span class="ss"> loss"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-display">
 <div id="fig-book-corpus-rematch" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Two-panel matched comparison. Training losses start together near 4.7, then the positional Transformer falls steadily to about 1.1 while the no-position model ends near 1.85. Held-out bars rank the Chapter 10 LSTM lowest at 1.8881, the positional Transformer at 1.9190, and the no-position Transformer highest at 2.3405.">
@@ -1385,45 +1329,45 @@ positional Transformer minus LSTM: 0.0309 loss</code></pre>
 <section id="what-did-the-heads-route" class="level3">
 <h3 class="anchored" data-anchor-id="what-did-the-heads-route">What did the heads route?</h3>
 <p>An attention map records routing weights, not reasons, confidence, or a guaranteed explanation of a prediction. Still, inspecting real learned maps can verify the mask and reveal the kinds of patterns a trained model happened to use. The next cell sends the prompt <em>The gradient</em> through the positional model and plots the second block’s four heads.</p>
-<div id="cell-fig-learned-attention" class="cell" data-fig-height="6" data-fig-width="10" data-execution_count="14">
+<div id="cell-fig-learned-attention" class="cell" data-fig-height="6" data-fig-width="10" data-execution_count="16">
 <details class="code-fold">
 <summary>Code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb20"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>prompt <span class="op">=</span> <span class="st">"The gradient "</span></span>
-<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>prompt_tokens <span class="op">=</span> torch.tensor([[stoi[char] <span class="cf">for</span> char <span class="kw">in</span> prompt]])</span>
-<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a>position_model.<span class="bu">eval</span>()</span>
-<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> torch.no_grad():</span>
-<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a>    _, learned_maps <span class="op">=</span> position_model(prompt_tokens, return_weights<span class="op">=</span><span class="va">True</span>)</span>
-<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a>learned <span class="op">=</span> learned_maps[<span class="op">-</span><span class="dv">1</span>][<span class="dv">0</span>]</span>
-<span id="cb20-7"><a href="#cb20-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb20-8"><a href="#cb20-8" aria-hidden="true" tabindex="-1"></a>future <span class="op">=</span> torch.triu(</span>
-<span id="cb20-9"><a href="#cb20-9" aria-hidden="true" tabindex="-1"></a>    torch.ones(<span class="bu">len</span>(prompt), <span class="bu">len</span>(prompt), dtype<span class="op">=</span>torch.<span class="bu">bool</span>), diagonal<span class="op">=</span><span class="dv">1</span></span>
-<span id="cb20-10"><a href="#cb20-10" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb20-11"><a href="#cb20-11" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> learned[:, future].<span class="bu">max</span>().item() <span class="op">==</span> <span class="fl">0.0</span></span>
-<span id="cb20-12"><a href="#cb20-12" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> torch.allclose(</span>
-<span id="cb20-13"><a href="#cb20-13" aria-hidden="true" tabindex="-1"></a>    learned.<span class="bu">sum</span>(dim<span class="op">=-</span><span class="dv">1</span>),</span>
-<span id="cb20-14"><a href="#cb20-14" aria-hidden="true" tabindex="-1"></a>    torch.ones_like(learned.<span class="bu">sum</span>(dim<span class="op">=-</span><span class="dv">1</span>)),</span>
-<span id="cb20-15"><a href="#cb20-15" aria-hidden="true" tabindex="-1"></a>    atol<span class="op">=</span><span class="fl">1e-6</span>,</span>
-<span id="cb20-16"><a href="#cb20-16" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb20-17"><a href="#cb20-17" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb20-18"><a href="#cb20-18" aria-hidden="true" tabindex="-1"></a>display_tokens <span class="op">=</span> [<span class="st">"·"</span> <span class="cf">if</span> char <span class="op">==</span> <span class="st">" "</span> <span class="cf">else</span> char <span class="cf">for</span> char <span class="kw">in</span> prompt]</span>
-<span id="cb20-19"><a href="#cb20-19" aria-hidden="true" tabindex="-1"></a>fig, axes <span class="op">=</span> plt.subplots(<span class="dv">2</span>, <span class="dv">2</span>, figsize<span class="op">=</span>(<span class="dv">10</span>, <span class="dv">6</span>), layout<span class="op">=</span><span class="st">"constrained"</span>)</span>
-<span id="cb20-20"><a href="#cb20-20" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> head, axis <span class="kw">in</span> <span class="bu">enumerate</span>(axes.flat):</span>
-<span id="cb20-21"><a href="#cb20-21" aria-hidden="true" tabindex="-1"></a>    image <span class="op">=</span> axis.imshow(</span>
-<span id="cb20-22"><a href="#cb20-22" aria-hidden="true" tabindex="-1"></a>        learned[head].numpy(), cmap<span class="op">=</span><span class="st">"viridis"</span>, vmin<span class="op">=</span><span class="dv">0</span>, vmax<span class="op">=</span><span class="dv">1</span></span>
-<span id="cb20-23"><a href="#cb20-23" aria-hidden="true" tabindex="-1"></a>    )</span>
-<span id="cb20-24"><a href="#cb20-24" aria-hidden="true" tabindex="-1"></a>    axis.set_title(<span class="ss">f"block 2, head </span><span class="sc">{</span>head <span class="op">+</span> <span class="dv">1</span><span class="sc">}</span><span class="ss">"</span>)</span>
-<span id="cb20-25"><a href="#cb20-25" aria-hidden="true" tabindex="-1"></a>    axis.set_xticks(<span class="bu">range</span>(<span class="bu">len</span>(prompt)), display_tokens)</span>
-<span id="cb20-26"><a href="#cb20-26" aria-hidden="true" tabindex="-1"></a>    axis.set_yticks(<span class="bu">range</span>(<span class="bu">len</span>(prompt)), display_tokens)</span>
-<span id="cb20-27"><a href="#cb20-27" aria-hidden="true" tabindex="-1"></a>    axis.set_xlabel(<span class="st">"key"</span>)</span>
-<span id="cb20-28"><a href="#cb20-28" aria-hidden="true" tabindex="-1"></a>    axis.set_ylabel(<span class="st">"query"</span>)</span>
-<span id="cb20-29"><a href="#cb20-29" aria-hidden="true" tabindex="-1"></a>fig.colorbar(image, ax<span class="op">=</span>axes, fraction<span class="op">=</span><span class="fl">0.025</span>, shrink<span class="op">=</span><span class="fl">0.8</span>, pad<span class="op">=</span><span class="fl">0.02</span>)</span>
-<span id="cb20-30"><a href="#cb20-30" aria-hidden="true" tabindex="-1"></a>plt.show()</span>
-<span id="cb20-31"><a href="#cb20-31" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb20-32"><a href="#cb20-32" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"maximum future attention:"</span>, learned[:, future].<span class="bu">max</span>().item())</span>
-<span id="cb20-33"><a href="#cb20-33" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(</span>
-<span id="cb20-34"><a href="#cb20-34" aria-hidden="true" tabindex="-1"></a>    <span class="st">"maximum row-sum error:"</span>,</span>
-<span id="cb20-35"><a href="#cb20-35" aria-hidden="true" tabindex="-1"></a>    (learned.<span class="bu">sum</span>(dim<span class="op">=-</span><span class="dv">1</span>) <span class="op">-</span> <span class="dv">1</span>).<span class="bu">abs</span>().<span class="bu">max</span>().item(),</span>
-<span id="cb20-36"><a href="#cb20-36" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb22"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a>prompt <span class="op">=</span> <span class="st">"The gradient "</span></span>
+<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a>prompt_tokens <span class="op">=</span> torch.tensor([[stoi[char] <span class="cf">for</span> char <span class="kw">in</span> prompt]])</span>
+<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a>position_model.<span class="bu">eval</span>()</span>
+<span id="cb22-4"><a href="#cb22-4" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> torch.no_grad():</span>
+<span id="cb22-5"><a href="#cb22-5" aria-hidden="true" tabindex="-1"></a>    _, learned_maps <span class="op">=</span> position_model(prompt_tokens, return_weights<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb22-6"><a href="#cb22-6" aria-hidden="true" tabindex="-1"></a>learned <span class="op">=</span> learned_maps[<span class="op">-</span><span class="dv">1</span>][<span class="dv">0</span>]</span>
+<span id="cb22-7"><a href="#cb22-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-8"><a href="#cb22-8" aria-hidden="true" tabindex="-1"></a>future <span class="op">=</span> torch.triu(</span>
+<span id="cb22-9"><a href="#cb22-9" aria-hidden="true" tabindex="-1"></a>    torch.ones(<span class="bu">len</span>(prompt), <span class="bu">len</span>(prompt), dtype<span class="op">=</span>torch.<span class="bu">bool</span>), diagonal<span class="op">=</span><span class="dv">1</span></span>
+<span id="cb22-10"><a href="#cb22-10" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb22-11"><a href="#cb22-11" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> learned[:, future].<span class="bu">max</span>().item() <span class="op">==</span> <span class="fl">0.0</span></span>
+<span id="cb22-12"><a href="#cb22-12" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> torch.allclose(</span>
+<span id="cb22-13"><a href="#cb22-13" aria-hidden="true" tabindex="-1"></a>    learned.<span class="bu">sum</span>(dim<span class="op">=-</span><span class="dv">1</span>),</span>
+<span id="cb22-14"><a href="#cb22-14" aria-hidden="true" tabindex="-1"></a>    torch.ones_like(learned.<span class="bu">sum</span>(dim<span class="op">=-</span><span class="dv">1</span>)),</span>
+<span id="cb22-15"><a href="#cb22-15" aria-hidden="true" tabindex="-1"></a>    atol<span class="op">=</span><span class="fl">1e-6</span>,</span>
+<span id="cb22-16"><a href="#cb22-16" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb22-17"><a href="#cb22-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-18"><a href="#cb22-18" aria-hidden="true" tabindex="-1"></a>display_tokens <span class="op">=</span> [<span class="st">"·"</span> <span class="cf">if</span> char <span class="op">==</span> <span class="st">" "</span> <span class="cf">else</span> char <span class="cf">for</span> char <span class="kw">in</span> prompt]</span>
+<span id="cb22-19"><a href="#cb22-19" aria-hidden="true" tabindex="-1"></a>fig, axes <span class="op">=</span> plt.subplots(<span class="dv">2</span>, <span class="dv">2</span>, figsize<span class="op">=</span>(<span class="dv">10</span>, <span class="dv">6</span>), layout<span class="op">=</span><span class="st">"constrained"</span>)</span>
+<span id="cb22-20"><a href="#cb22-20" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> head, axis <span class="kw">in</span> <span class="bu">enumerate</span>(axes.flat):</span>
+<span id="cb22-21"><a href="#cb22-21" aria-hidden="true" tabindex="-1"></a>    image <span class="op">=</span> axis.imshow(</span>
+<span id="cb22-22"><a href="#cb22-22" aria-hidden="true" tabindex="-1"></a>        learned[head].numpy(), cmap<span class="op">=</span><span class="st">"viridis"</span>, vmin<span class="op">=</span><span class="dv">0</span>, vmax<span class="op">=</span><span class="dv">1</span></span>
+<span id="cb22-23"><a href="#cb22-23" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb22-24"><a href="#cb22-24" aria-hidden="true" tabindex="-1"></a>    axis.set_title(<span class="ss">f"block 2, head </span><span class="sc">{</span>head <span class="op">+</span> <span class="dv">1</span><span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb22-25"><a href="#cb22-25" aria-hidden="true" tabindex="-1"></a>    axis.set_xticks(<span class="bu">range</span>(<span class="bu">len</span>(prompt)), display_tokens)</span>
+<span id="cb22-26"><a href="#cb22-26" aria-hidden="true" tabindex="-1"></a>    axis.set_yticks(<span class="bu">range</span>(<span class="bu">len</span>(prompt)), display_tokens)</span>
+<span id="cb22-27"><a href="#cb22-27" aria-hidden="true" tabindex="-1"></a>    axis.set_xlabel(<span class="st">"key"</span>)</span>
+<span id="cb22-28"><a href="#cb22-28" aria-hidden="true" tabindex="-1"></a>    axis.set_ylabel(<span class="st">"query"</span>)</span>
+<span id="cb22-29"><a href="#cb22-29" aria-hidden="true" tabindex="-1"></a>fig.colorbar(image, ax<span class="op">=</span>axes, fraction<span class="op">=</span><span class="fl">0.025</span>, shrink<span class="op">=</span><span class="fl">0.8</span>, pad<span class="op">=</span><span class="fl">0.02</span>)</span>
+<span id="cb22-30"><a href="#cb22-30" aria-hidden="true" tabindex="-1"></a>plt.show()</span>
+<span id="cb22-31"><a href="#cb22-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-32"><a href="#cb22-32" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"maximum future attention:"</span>, learned[:, future].<span class="bu">max</span>().item())</span>
+<span id="cb22-33"><a href="#cb22-33" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(</span>
+<span id="cb22-34"><a href="#cb22-34" aria-hidden="true" tabindex="-1"></a>    <span class="st">"maximum row-sum error:"</span>,</span>
+<span id="cb22-35"><a href="#cb22-35" aria-hidden="true" tabindex="-1"></a>    (learned.<span class="bu">sum</span>(dim<span class="op">=-</span><span class="dv">1</span>) <span class="op">-</span> <span class="dv">1</span>).<span class="bu">abs</span>().<span class="bu">max</span>().item(),</span>
+<span id="cb22-36"><a href="#cb22-36" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-display">
 <div id="fig-learned-attention" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Four lower-triangular heatmaps for the second block's four heads on the character prompt 'The gradient' with spaces shown as dots. Each query row attends only to itself and earlier characters, but the heads distribute their bright high-weight cells differently: some follow local diagonals while others concentrate on a few earlier columns.">
@@ -1467,13 +1411,13 @@ p_i(T)=\frac{\exp(z_i/T)}{\sum_j\exp(z_j/T)},\qquad T&gt;0.
 </div>
 </div>
 <!-- /NOVEL -->
-<div id="transformer-samples" class="cell" data-execution_count="15">
+<div id="transformer-samples" class="cell" data-execution_count="17">
 <details class="code-fold">
 <summary>Code: deterministic samples from both Transformer variants</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb22"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"WITH POSITION</span><span class="ch">\n</span><span class="st">"</span>)</span>
-<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(transformer_sample(position_model, <span class="st">"The gradient "</span>))</span>
-<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"</span><span class="ch">\n\n</span><span class="st">WITHOUT POSITION</span><span class="ch">\n</span><span class="st">"</span>)</span>
-<span id="cb22-4"><a href="#cb22-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(transformer_sample(no_position_model, <span class="st">"The gradient "</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb24"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"WITH POSITION</span><span class="ch">\n</span><span class="st">"</span>)</span>
+<span id="cb24-2"><a href="#cb24-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(transformer_sample(position_model, <span class="st">"The gradient "</span>))</span>
+<span id="cb24-3"><a href="#cb24-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"</span><span class="ch">\n\n</span><span class="st">WITHOUT POSITION</span><span class="ch">\n</span><span class="st">"</span>)</span>
+<span id="cb24-4"><a href="#cb24-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(transformer_sample(no_position_model, <span class="st">"The gradient "</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
 <pre><code>WITH POSITION
@@ -1555,21 +1499,21 @@ M_t
 \]</span></p>
 <p>Choose <span class="math inline">\(\kappa(\vect{q},\vect{k})=\exp(\vect{q}^{\top}\vect{k}/\sqrt{d_k})\)</span> and the normalized coefficients are exactly a row of scaled dot-product softmax. The kernel supplies the weights; the constant fit supplies the average. An unrestricted <span class="math inline">\(M\)</span> with unit observation weights and no regularizer would instead interpolate compatible training pairs and be undetermined away from them. We will not smuggle the average into a stronger claim.</p>
 <p>Here is the numerical stationarity audit. Subtracting the largest score rescales every <span class="math inline">\(\kappa_\tau\)</span> by the same positive constant and leaves the minimizer unchanged.</p>
-<div id="local-constant-attention-check" class="cell" data-execution_count="16">
+<div id="local-constant-attention-check" class="cell" data-execution_count="18">
 <details class="code-fold">
 <summary>Code: verify softmax attention’s local-constant optimum</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb24"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a>ms_rng <span class="op">=</span> np.random.default_rng(<span class="dv">6050</span>)</span>
-<span id="cb24-2"><a href="#cb24-2" aria-hidden="true" tabindex="-1"></a>ms_d, ms_T <span class="op">=</span> <span class="dv">8</span>, <span class="dv">12</span></span>
-<span id="cb24-3"><a href="#cb24-3" aria-hidden="true" tabindex="-1"></a>ms_K <span class="op">=</span> ms_rng.standard_normal((ms_T, ms_d))</span>
-<span id="cb24-4"><a href="#cb24-4" aria-hidden="true" tabindex="-1"></a>ms_V <span class="op">=</span> ms_rng.standard_normal((ms_T, <span class="dv">3</span>))</span>
-<span id="cb24-5"><a href="#cb24-5" aria-hidden="true" tabindex="-1"></a>ms_q <span class="op">=</span> ms_rng.standard_normal(ms_d)</span>
-<span id="cb24-6"><a href="#cb24-6" aria-hidden="true" tabindex="-1"></a>ms_scores <span class="op">=</span> ms_K <span class="op">@</span> ms_q <span class="op">/</span> np.sqrt(ms_d)</span>
-<span id="cb24-7"><a href="#cb24-7" aria-hidden="true" tabindex="-1"></a>ms_kappa <span class="op">=</span> np.exp(ms_scores <span class="op">-</span> ms_scores.<span class="bu">max</span>())</span>
-<span id="cb24-8"><a href="#cb24-8" aria-hidden="true" tabindex="-1"></a>ms_c <span class="op">=</span> (ms_kappa[:, <span class="va">None</span>] <span class="op">*</span> ms_V).<span class="bu">sum</span>(<span class="dv">0</span>) <span class="op">/</span> ms_kappa.<span class="bu">sum</span>()</span>
-<span id="cb24-9"><a href="#cb24-9" aria-hidden="true" tabindex="-1"></a>ms_attention <span class="op">=</span> (ms_kappa <span class="op">/</span> ms_kappa.<span class="bu">sum</span>()) <span class="op">@</span> ms_V</span>
-<span id="cb24-10"><a href="#cb24-10" aria-hidden="true" tabindex="-1"></a>ms_gradient <span class="op">=</span> (ms_kappa[:, <span class="va">None</span>] <span class="op">*</span> (ms_c <span class="op">-</span> ms_V)).<span class="bu">sum</span>(<span class="dv">0</span>)</span>
-<span id="cb24-11"><a href="#cb24-11" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> np.allclose(ms_c, ms_attention)</span>
-<span id="cb24-12"><a href="#cb24-12" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"max |stationarity gradient|: </span><span class="sc">{</span>np<span class="sc">.</span><span class="bu">abs</span>(ms_gradient)<span class="sc">.</span><span class="bu">max</span>()<span class="sc">:.3e}</span><span class="ss">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb26"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a>ms_rng <span class="op">=</span> np.random.default_rng(<span class="dv">6050</span>)</span>
+<span id="cb26-2"><a href="#cb26-2" aria-hidden="true" tabindex="-1"></a>ms_d, ms_T <span class="op">=</span> <span class="dv">8</span>, <span class="dv">12</span></span>
+<span id="cb26-3"><a href="#cb26-3" aria-hidden="true" tabindex="-1"></a>ms_K <span class="op">=</span> ms_rng.standard_normal((ms_T, ms_d))</span>
+<span id="cb26-4"><a href="#cb26-4" aria-hidden="true" tabindex="-1"></a>ms_V <span class="op">=</span> ms_rng.standard_normal((ms_T, <span class="dv">3</span>))</span>
+<span id="cb26-5"><a href="#cb26-5" aria-hidden="true" tabindex="-1"></a>ms_q <span class="op">=</span> ms_rng.standard_normal(ms_d)</span>
+<span id="cb26-6"><a href="#cb26-6" aria-hidden="true" tabindex="-1"></a>ms_scores <span class="op">=</span> ms_K <span class="op">@</span> ms_q <span class="op">/</span> np.sqrt(ms_d)</span>
+<span id="cb26-7"><a href="#cb26-7" aria-hidden="true" tabindex="-1"></a>ms_kappa <span class="op">=</span> np.exp(ms_scores <span class="op">-</span> ms_scores.<span class="bu">max</span>())</span>
+<span id="cb26-8"><a href="#cb26-8" aria-hidden="true" tabindex="-1"></a>ms_c <span class="op">=</span> (ms_kappa[:, <span class="va">None</span>] <span class="op">*</span> ms_V).<span class="bu">sum</span>(<span class="dv">0</span>) <span class="op">/</span> ms_kappa.<span class="bu">sum</span>()</span>
+<span id="cb26-9"><a href="#cb26-9" aria-hidden="true" tabindex="-1"></a>ms_attention <span class="op">=</span> (ms_kappa <span class="op">/</span> ms_kappa.<span class="bu">sum</span>()) <span class="op">@</span> ms_V</span>
+<span id="cb26-10"><a href="#cb26-10" aria-hidden="true" tabindex="-1"></a>ms_gradient <span class="op">=</span> (ms_kappa[:, <span class="va">None</span>] <span class="op">*</span> (ms_c <span class="op">-</span> ms_V)).<span class="bu">sum</span>(<span class="dv">0</span>)</span>
+<span id="cb26-11"><a href="#cb26-11" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> np.allclose(ms_c, ms_attention)</span>
+<span id="cb26-12"><a href="#cb26-12" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"max |stationarity gradient|: </span><span class="sc">{</span>np<span class="sc">.</span><span class="bu">abs</span>(ms_gradient)<span class="sc">.</span><span class="bu">max</span>()<span class="sc">:.3e}</span><span class="ss">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
 <pre><code>max |stationarity gradient|: 3.053e-16</code></pre>
@@ -1602,23 +1546,23 @@ M_t
 \vect{z}_t=\sum_{\tau\le t}\phi(\vect{k}_\tau).
 \]</span></p>
 <p>The sufficient state is the pair <span class="math inline">\((\matr{S}_t,\vect{z}_t)\)</span>, not <span class="math inline">\(\matr{S}_t\)</span> alone: the numerator needs accumulated value-weighted features and the denominator needs its normalizer. Each new pair updates that fixed-size state once. Any later query reads the same answer as a full traversal of all pairs, for this factorized kernel.</p>
-<div id="linear-attention-sufficient-state-check" class="cell" data-execution_count="17">
+<div id="linear-attention-sufficient-state-check" class="cell" data-execution_count="19">
 <details class="code-fold">
 <summary>Code: compare a factorized-kernel traversal with its running state</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb26"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> ms_phi(x):</span>
-<span id="cb26-2"><a href="#cb26-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> np.where(x <span class="op">&gt;</span> <span class="dv">0</span>, x <span class="op">+</span> <span class="dv">1</span>, np.exp(x))</span>
-<span id="cb26-3"><a href="#cb26-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb26-4"><a href="#cb26-4" aria-hidden="true" tabindex="-1"></a>ms_S <span class="op">=</span> np.zeros((ms_d, ms_V.shape[<span class="dv">1</span>]))</span>
-<span id="cb26-5"><a href="#cb26-5" aria-hidden="true" tabindex="-1"></a>ms_z <span class="op">=</span> np.zeros(ms_d)</span>
-<span id="cb26-6"><a href="#cb26-6" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> ms_key, ms_value <span class="kw">in</span> <span class="bu">zip</span>(ms_K, ms_V, strict<span class="op">=</span><span class="va">True</span>):</span>
-<span id="cb26-7"><a href="#cb26-7" aria-hidden="true" tabindex="-1"></a>    ms_S <span class="op">+=</span> np.outer(ms_phi(ms_key), ms_value)</span>
-<span id="cb26-8"><a href="#cb26-8" aria-hidden="true" tabindex="-1"></a>    ms_z <span class="op">+=</span> ms_phi(ms_key)</span>
-<span id="cb26-9"><a href="#cb26-9" aria-hidden="true" tabindex="-1"></a>ms_streaming <span class="op">=</span> (ms_S.T <span class="op">@</span> ms_phi(ms_q)) <span class="op">/</span> (ms_z <span class="op">@</span> ms_phi(ms_q))</span>
-<span id="cb26-10"><a href="#cb26-10" aria-hidden="true" tabindex="-1"></a>ms_weights <span class="op">=</span> ms_phi(ms_K) <span class="op">@</span> ms_phi(ms_q)</span>
-<span id="cb26-11"><a href="#cb26-11" aria-hidden="true" tabindex="-1"></a>ms_traversal <span class="op">=</span> (ms_weights[:, <span class="va">None</span>] <span class="op">*</span> ms_V).<span class="bu">sum</span>(<span class="dv">0</span>) <span class="op">/</span> ms_weights.<span class="bu">sum</span>()</span>
-<span id="cb26-12"><a href="#cb26-12" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> np.allclose(ms_streaming, ms_traversal)</span>
-<span id="cb26-13"><a href="#cb26-13" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"streaming equals traversal:"</span>, np.allclose(ms_streaming, ms_traversal))</span>
-<span id="cb26-14"><a href="#cb26-14" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"max |difference|: </span><span class="sc">{</span>np<span class="sc">.</span><span class="bu">abs</span>(ms_streaming<span class="op">-</span>ms_traversal)<span class="sc">.</span><span class="bu">max</span>()<span class="sc">:.3e}</span><span class="ss">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb28"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> ms_phi(x):</span>
+<span id="cb28-2"><a href="#cb28-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> np.where(x <span class="op">&gt;</span> <span class="dv">0</span>, x <span class="op">+</span> <span class="dv">1</span>, np.exp(x))</span>
+<span id="cb28-3"><a href="#cb28-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb28-4"><a href="#cb28-4" aria-hidden="true" tabindex="-1"></a>ms_S <span class="op">=</span> np.zeros((ms_d, ms_V.shape[<span class="dv">1</span>]))</span>
+<span id="cb28-5"><a href="#cb28-5" aria-hidden="true" tabindex="-1"></a>ms_z <span class="op">=</span> np.zeros(ms_d)</span>
+<span id="cb28-6"><a href="#cb28-6" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> ms_key, ms_value <span class="kw">in</span> <span class="bu">zip</span>(ms_K, ms_V, strict<span class="op">=</span><span class="va">True</span>):</span>
+<span id="cb28-7"><a href="#cb28-7" aria-hidden="true" tabindex="-1"></a>    ms_S <span class="op">+=</span> np.outer(ms_phi(ms_key), ms_value)</span>
+<span id="cb28-8"><a href="#cb28-8" aria-hidden="true" tabindex="-1"></a>    ms_z <span class="op">+=</span> ms_phi(ms_key)</span>
+<span id="cb28-9"><a href="#cb28-9" aria-hidden="true" tabindex="-1"></a>ms_streaming <span class="op">=</span> (ms_S.T <span class="op">@</span> ms_phi(ms_q)) <span class="op">/</span> (ms_z <span class="op">@</span> ms_phi(ms_q))</span>
+<span id="cb28-10"><a href="#cb28-10" aria-hidden="true" tabindex="-1"></a>ms_weights <span class="op">=</span> ms_phi(ms_K) <span class="op">@</span> ms_phi(ms_q)</span>
+<span id="cb28-11"><a href="#cb28-11" aria-hidden="true" tabindex="-1"></a>ms_traversal <span class="op">=</span> (ms_weights[:, <span class="va">None</span>] <span class="op">*</span> ms_V).<span class="bu">sum</span>(<span class="dv">0</span>) <span class="op">/</span> ms_weights.<span class="bu">sum</span>()</span>
+<span id="cb28-12"><a href="#cb28-12" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> np.allclose(ms_streaming, ms_traversal)</span>
+<span id="cb28-13"><a href="#cb28-13" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"streaming equals traversal:"</span>, np.allclose(ms_streaming, ms_traversal))</span>
+<span id="cb28-14"><a href="#cb28-14" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"max |difference|: </span><span class="sc">{</span>np<span class="sc">.</span><span class="bu">abs</span>(ms_streaming<span class="op">-</span>ms_traversal)<span class="sc">.</span><span class="bu">max</span>()<span class="sc">:.3e}</span><span class="ss">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
 <pre><code>streaming equals traversal: True
@@ -1648,19 +1592,19 @@ max |difference|: 3.469e-17</code></pre>
   +\eta_t v_t\vect{k}_t.
 \end{aligned}
 \tag{14.4}\]</span></span></p>
-<div id="delta-sgd-check" class="cell" data-execution_count="18">
+<div id="delta-sgd-check" class="cell" data-execution_count="20">
 <details class="code-fold">
 <summary>Code: verify that one SGD step is the delta recurrence</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb28"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a>ms_eta <span class="op">=</span> <span class="fl">0.3</span></span>
-<span id="cb28-2"><a href="#cb28-2" aria-hidden="true" tabindex="-1"></a>ms_h <span class="op">=</span> ms_rng.standard_normal(ms_d)</span>
-<span id="cb28-3"><a href="#cb28-3" aria-hidden="true" tabindex="-1"></a>ms_k <span class="op">=</span> ms_rng.standard_normal(ms_d)</span>
-<span id="cb28-4"><a href="#cb28-4" aria-hidden="true" tabindex="-1"></a>ms_v <span class="op">=</span> ms_rng.standard_normal()</span>
-<span id="cb28-5"><a href="#cb28-5" aria-hidden="true" tabindex="-1"></a>ms_sgd <span class="op">=</span> ms_h <span class="op">-</span> ms_eta <span class="op">*</span> ms_k <span class="op">*</span> (ms_k <span class="op">@</span> ms_h <span class="op">-</span> ms_v)</span>
-<span id="cb28-6"><a href="#cb28-6" aria-hidden="true" tabindex="-1"></a>ms_delta <span class="op">=</span> ((np.eye(ms_d) <span class="op">-</span> ms_eta <span class="op">*</span> np.outer(ms_k, ms_k)) <span class="op">@</span> ms_h</span>
-<span id="cb28-7"><a href="#cb28-7" aria-hidden="true" tabindex="-1"></a>            <span class="op">+</span> ms_eta <span class="op">*</span> ms_v <span class="op">*</span> ms_k)</span>
-<span id="cb28-8"><a href="#cb28-8" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> np.allclose(ms_sgd, ms_delta)</span>
-<span id="cb28-9"><a href="#cb28-9" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"SGD equals Delta recurrence:"</span>, np.allclose(ms_sgd, ms_delta))</span>
-<span id="cb28-10"><a href="#cb28-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"max |difference|: </span><span class="sc">{</span>np<span class="sc">.</span><span class="bu">abs</span>(ms_sgd<span class="op">-</span>ms_delta)<span class="sc">.</span><span class="bu">max</span>()<span class="sc">:.3e}</span><span class="ss">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb30"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb30-1"><a href="#cb30-1" aria-hidden="true" tabindex="-1"></a>ms_eta <span class="op">=</span> <span class="fl">0.3</span></span>
+<span id="cb30-2"><a href="#cb30-2" aria-hidden="true" tabindex="-1"></a>ms_h <span class="op">=</span> ms_rng.standard_normal(ms_d)</span>
+<span id="cb30-3"><a href="#cb30-3" aria-hidden="true" tabindex="-1"></a>ms_k <span class="op">=</span> ms_rng.standard_normal(ms_d)</span>
+<span id="cb30-4"><a href="#cb30-4" aria-hidden="true" tabindex="-1"></a>ms_v <span class="op">=</span> ms_rng.standard_normal()</span>
+<span id="cb30-5"><a href="#cb30-5" aria-hidden="true" tabindex="-1"></a>ms_sgd <span class="op">=</span> ms_h <span class="op">-</span> ms_eta <span class="op">*</span> ms_k <span class="op">*</span> (ms_k <span class="op">@</span> ms_h <span class="op">-</span> ms_v)</span>
+<span id="cb30-6"><a href="#cb30-6" aria-hidden="true" tabindex="-1"></a>ms_delta <span class="op">=</span> ((np.eye(ms_d) <span class="op">-</span> ms_eta <span class="op">*</span> np.outer(ms_k, ms_k)) <span class="op">@</span> ms_h</span>
+<span id="cb30-7"><a href="#cb30-7" aria-hidden="true" tabindex="-1"></a>            <span class="op">+</span> ms_eta <span class="op">*</span> ms_v <span class="op">*</span> ms_k)</span>
+<span id="cb30-8"><a href="#cb30-8" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> np.allclose(ms_sgd, ms_delta)</span>
+<span id="cb30-9"><a href="#cb30-9" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"SGD equals Delta recurrence:"</span>, np.allclose(ms_sgd, ms_delta))</span>
+<span id="cb30-10"><a href="#cb30-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"max |difference|: </span><span class="sc">{</span>np<span class="sc">.</span><span class="bu">abs</span>(ms_sgd<span class="op">-</span>ms_delta)<span class="sc">.</span><span class="bu">max</span>()<span class="sc">:.3e}</span><span class="ss">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
 <pre><code>SGD equals Delta recurrence: True
@@ -1743,84 +1687,84 @@ Table&nbsp;14.1: Solver choices expose the memory spectrum of the shared regress
 <h3 class="anchored" data-anchor-id="mechanism-test-recall-under-a-fixed-capacity">Mechanism test: recall under a fixed capacity</h3>
 <p><a href="#tbl-memory-spectrum" class="quarto-xref">Table&nbsp;<span>14.1</span></a> makes a prediction we can test without pretending to train a language model. Store <span class="math inline">\(N\)</span> random unit key–value pairs, then query every stored key. Decode a read by the nearest stored value. Exact softmax attention keeps all pairs. A dense delta state has <span class="math inline">\(d^2\)</span> numbers regardless of <span class="math inline">\(N\)</span>. A selective delta arm receives one extra priority bit and writes ordinary pairs at only one tenth strength, so it can choose what to sacrifice.</p>
 <p>The study was designed on seed branches 0 and 1. Those branches fixed <span class="math inline">\(\eta=0.20\)</span>, the 25% priority rate, the 0.10 ordinary write gate, dimensions <span class="math inline">\((8,16,32)\)</span>, and loads <span class="math inline">\(N/d\in(0.5,1,2,4,8)\)</span>. Only then was disjoint branch 2 opened for 30 endpoint repetitions. All methods in a trial receive the same keys, values, order, queries, and decoder. The endpoint code below is the frozen protocol; it runs on CPU in under a second on the reference machine.</p>
-<div id="memory-capacity-study" class="cell" data-execution_count="19">
+<div id="memory-capacity-study" class="cell" data-execution_count="21">
 <details class="code-fold">
 <summary>Code: run the sealed synthetic recall-under-capacity study</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb30"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb30-1"><a href="#cb30-1" aria-hidden="true" tabindex="-1"></a>MS_SEED, MS_ETA, MS_GATE <span class="op">=</span> <span class="dv">6050</span>, <span class="fl">0.20</span>, <span class="fl">0.10</span></span>
-<span id="cb30-2"><a href="#cb30-2" aria-hidden="true" tabindex="-1"></a>MS_DIMS, MS_LOADS, MS_REPEATS <span class="op">=</span> (<span class="dv">8</span>, <span class="dv">16</span>, <span class="dv">32</span>), (<span class="fl">0.5</span>, <span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">4</span>, <span class="dv">8</span>), <span class="dv">30</span></span>
-<span id="cb30-3"><a href="#cb30-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb30-4"><a href="#cb30-4" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> ms_unit(x):</span>
-<span id="cb30-5"><a href="#cb30-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> x <span class="op">/</span> np.linalg.norm(x, axis<span class="op">=</span><span class="dv">1</span>, keepdims<span class="op">=</span><span class="va">True</span>)</span>
-<span id="cb30-6"><a href="#cb30-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb30-7"><a href="#cb30-7" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> ms_decode(prediction, values):</span>
-<span id="cb30-8"><a href="#cb30-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> np.argmax(prediction <span class="op">@</span> values.T, axis<span class="op">=</span><span class="dv">1</span>)</span>
-<span id="cb30-9"><a href="#cb30-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb30-10"><a href="#cb30-10" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> ms_trial(rng, repeat, d, load):</span>
-<span id="cb30-11"><a href="#cb30-11" aria-hidden="true" tabindex="-1"></a>    n <span class="op">=</span> <span class="bu">max</span>(<span class="dv">4</span>, <span class="bu">round</span>(load <span class="op">*</span> d))</span>
-<span id="cb30-12"><a href="#cb30-12" aria-hidden="true" tabindex="-1"></a>    keys <span class="op">=</span> ms_unit(rng.standard_normal((n, d)))</span>
-<span id="cb30-13"><a href="#cb30-13" aria-hidden="true" tabindex="-1"></a>    values <span class="op">=</span> ms_unit(rng.standard_normal((n, d)))</span>
-<span id="cb30-14"><a href="#cb30-14" aria-hidden="true" tabindex="-1"></a>    priority <span class="op">=</span> np.zeros(n, dtype<span class="op">=</span><span class="bu">bool</span>)</span>
-<span id="cb30-15"><a href="#cb30-15" aria-hidden="true" tabindex="-1"></a>    priority[rng.permutation(n)[:<span class="bu">max</span>(<span class="dv">1</span>, <span class="bu">round</span>(<span class="fl">0.25</span> <span class="op">*</span> n))]] <span class="op">=</span> <span class="va">True</span></span>
-<span id="cb30-16"><a href="#cb30-16" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb30-17"><a href="#cb30-17" aria-hidden="true" tabindex="-1"></a>    scores <span class="op">=</span> <span class="fl">32.0</span> <span class="op">*</span> (keys <span class="op">@</span> keys.T)</span>
-<span id="cb30-18"><a href="#cb30-18" aria-hidden="true" tabindex="-1"></a>    scores <span class="op">-=</span> scores.<span class="bu">max</span>(axis<span class="op">=</span><span class="dv">1</span>, keepdims<span class="op">=</span><span class="va">True</span>)</span>
-<span id="cb30-19"><a href="#cb30-19" aria-hidden="true" tabindex="-1"></a>    weights <span class="op">=</span> np.exp(scores)<span class="op">;</span> weights <span class="op">/=</span> weights.<span class="bu">sum</span>(axis<span class="op">=</span><span class="dv">1</span>, keepdims<span class="op">=</span><span class="va">True</span>)</span>
-<span id="cb30-20"><a href="#cb30-20" aria-hidden="true" tabindex="-1"></a>    attention <span class="op">=</span> weights <span class="op">@</span> values</span>
-<span id="cb30-21"><a href="#cb30-21" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb30-22"><a href="#cb30-22" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> delta(write_gate):</span>
-<span id="cb30-23"><a href="#cb30-23" aria-hidden="true" tabindex="-1"></a>        state <span class="op">=</span> np.zeros((d, d))</span>
-<span id="cb30-24"><a href="#cb30-24" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> key, value, gate <span class="kw">in</span> <span class="bu">zip</span>(keys, values, write_gate, strict<span class="op">=</span><span class="va">True</span>):</span>
-<span id="cb30-25"><a href="#cb30-25" aria-hidden="true" tabindex="-1"></a>            state <span class="op">+=</span> MS_ETA <span class="op">*</span> gate <span class="op">*</span> np.outer(value <span class="op">-</span> state <span class="op">@</span> key, key)</span>
-<span id="cb30-26"><a href="#cb30-26" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> keys <span class="op">@</span> state.T</span>
-<span id="cb30-27"><a href="#cb30-27" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb30-28"><a href="#cb30-28" aria-hidden="true" tabindex="-1"></a>    plain <span class="op">=</span> delta(np.ones(n))</span>
-<span id="cb30-29"><a href="#cb30-29" aria-hidden="true" tabindex="-1"></a>    selective <span class="op">=</span> delta(np.where(priority, <span class="fl">1.0</span>, MS_GATE))</span>
-<span id="cb30-30"><a href="#cb30-30" aria-hidden="true" tabindex="-1"></a>    truth <span class="op">=</span> np.arange(n)</span>
-<span id="cb30-31"><a href="#cb30-31" aria-hidden="true" tabindex="-1"></a>    correct <span class="op">=</span> <span class="kw">lambda</span> pred: ms_decode(pred, values) <span class="op">==</span> truth</span>
-<span id="cb30-32"><a href="#cb30-32" aria-hidden="true" tabindex="-1"></a>    a_ok, d_ok, s_ok <span class="op">=</span> correct(attention), correct(plain), correct(selective)</span>
-<span id="cb30-33"><a href="#cb30-33" aria-hidden="true" tabindex="-1"></a>    ordinary <span class="op">=</span> <span class="op">~</span>priority</span>
-<span id="cb30-34"><a href="#cb30-34" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> [repeat, d, n, load, a_ok.mean(), ((attention<span class="op">-</span>values)<span class="op">**</span><span class="dv">2</span>).mean(),</span>
-<span id="cb30-35"><a href="#cb30-35" aria-hidden="true" tabindex="-1"></a>            d_ok.mean(), d_ok[priority].mean(), d_ok[ordinary].mean(),</span>
-<span id="cb30-36"><a href="#cb30-36" aria-hidden="true" tabindex="-1"></a>            s_ok.mean(), s_ok[priority].mean(), s_ok[ordinary].mean()]</span>
-<span id="cb30-37"><a href="#cb30-37" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb30-38"><a href="#cb30-38" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> ms_panel(tag, repeats):</span>
-<span id="cb30-39"><a href="#cb30-39" aria-hidden="true" tabindex="-1"></a>    seeds <span class="op">=</span> np.random.SeedSequence([MS_SEED, tag]).spawn(</span>
-<span id="cb30-40"><a href="#cb30-40" aria-hidden="true" tabindex="-1"></a>        repeats <span class="op">*</span> <span class="bu">len</span>(MS_DIMS) <span class="op">*</span> <span class="bu">len</span>(MS_LOADS))</span>
-<span id="cb30-41"><a href="#cb30-41" aria-hidden="true" tabindex="-1"></a>    rows, index <span class="op">=</span> [], <span class="dv">0</span></span>
-<span id="cb30-42"><a href="#cb30-42" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> repeat <span class="kw">in</span> <span class="bu">range</span>(repeats):</span>
-<span id="cb30-43"><a href="#cb30-43" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> d <span class="kw">in</span> MS_DIMS:</span>
-<span id="cb30-44"><a href="#cb30-44" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> load <span class="kw">in</span> MS_LOADS:</span>
-<span id="cb30-45"><a href="#cb30-45" aria-hidden="true" tabindex="-1"></a>                rows.append(ms_trial(np.random.default_rng(seeds[index]),</span>
-<span id="cb30-46"><a href="#cb30-46" aria-hidden="true" tabindex="-1"></a>                                     repeat, d, load))</span>
-<span id="cb30-47"><a href="#cb30-47" aria-hidden="true" tabindex="-1"></a>                index <span class="op">+=</span> <span class="dv">1</span></span>
-<span id="cb30-48"><a href="#cb30-48" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> np.asarray(rows)</span>
-<span id="cb30-49"><a href="#cb30-49" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb30-50"><a href="#cb30-50" aria-hidden="true" tabindex="-1"></a><span class="co"># Tags 0 and 1 were development; tag 2 remained sealed until settings were fixed.</span></span>
-<span id="cb30-51"><a href="#cb30-51" aria-hidden="true" tabindex="-1"></a>ms_development <span class="op">=</span> np.vstack([ms_panel(tag, <span class="dv">5</span>) <span class="cf">for</span> tag <span class="kw">in</span> (<span class="dv">0</span>, <span class="dv">1</span>)])</span>
-<span id="cb30-52"><a href="#cb30-52" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> np.<span class="bu">all</span>(ms_development[:, <span class="dv">4</span>] <span class="op">==</span> <span class="fl">1.0</span>)</span>
-<span id="cb30-53"><a href="#cb30-53" aria-hidden="true" tabindex="-1"></a>ms_endpoint <span class="op">=</span> ms_panel(<span class="dv">2</span>, MS_REPEATS)</span>
-<span id="cb30-54"><a href="#cb30-54" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> np.<span class="bu">all</span>(ms_endpoint[:, <span class="dv">4</span>] <span class="op">==</span> <span class="fl">1.0</span>)</span>
-<span id="cb30-55"><a href="#cb30-55" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb30-56"><a href="#cb30-56" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"study_seed=6050; development_tags=(0, 1); sealed_endpoint_tag=2"</span>)</span>
-<span id="cb30-57"><a href="#cb30-57" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"endpoint_trials=30 x 3 dimensions; d=(8, 16, 32); "</span></span>
-<span id="cb30-58"><a href="#cb30-58" aria-hidden="true" tabindex="-1"></a>      <span class="st">"N/d=(0.5, 1, 2, 4, 8)"</span>)</span>
-<span id="cb30-59"><a href="#cb30-59" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"fixed: eta=0.20; priority_fraction=0.25; ordinary_write_gate=0.10"</span>)</span>
-<span id="cb30-60"><a href="#cb30-60" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"load  attention  Delta  gated-all  gated-priority  gated-ordinary"</span>)</span>
-<span id="cb30-61"><a href="#cb30-61" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> load <span class="kw">in</span> MS_LOADS:</span>
-<span id="cb30-62"><a href="#cb30-62" aria-hidden="true" tabindex="-1"></a>    block <span class="op">=</span> ms_endpoint[ms_endpoint[:, <span class="dv">3</span>] <span class="op">==</span> load]</span>
-<span id="cb30-63"><a href="#cb30-63" aria-hidden="true" tabindex="-1"></a>    means <span class="op">=</span> block[:, [<span class="dv">4</span>, <span class="dv">6</span>, <span class="dv">9</span>, <span class="dv">10</span>, <span class="dv">11</span>]].mean(<span class="dv">0</span>)</span>
-<span id="cb30-64"><a href="#cb30-64" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"</span><span class="sc">{</span>load<span class="sc">:&gt;4.1f}</span><span class="ss">   "</span> <span class="op">+</span> <span class="st">"  "</span>.join(<span class="ss">f"</span><span class="sc">{</span>value<span class="sc">:.3f}</span><span class="ss">"</span> <span class="cf">for</span> value <span class="kw">in</span> means))</span>
-<span id="cb30-65"><a href="#cb30-65" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb30-66"><a href="#cb30-66" aria-hidden="true" tabindex="-1"></a>hard <span class="op">=</span> ms_endpoint[ms_endpoint[:, <span class="dv">3</span>] <span class="op">==</span> <span class="dv">8</span>]</span>
-<span id="cb30-67"><a href="#cb30-67" aria-hidden="true" tabindex="-1"></a>priority_gain <span class="op">=</span> hard[:, <span class="dv">10</span>] <span class="op">-</span> hard[:, <span class="dv">7</span>]</span>
-<span id="cb30-68"><a href="#cb30-68" aria-hidden="true" tabindex="-1"></a>ordinary_gain <span class="op">=</span> hard[:, <span class="dv">11</span>] <span class="op">-</span> hard[:, <span class="dv">8</span>]</span>
-<span id="cb30-69"><a href="#cb30-69" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"N/d=8 gated-minus-Delta priority: </span><span class="sc">{</span>priority_gain<span class="sc">.</span>mean()<span class="sc">:+.3f}</span><span class="ss"> "</span></span>
-<span id="cb30-70"><a href="#cb30-70" aria-hidden="true" tabindex="-1"></a>      <span class="ss">f"(SD </span><span class="sc">{</span>priority_gain<span class="sc">.</span>std(ddof<span class="op">=</span><span class="dv">1</span>)<span class="sc">:.3f}</span><span class="ss">)"</span>)</span>
-<span id="cb30-71"><a href="#cb30-71" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"N/d=8 gated-minus-Delta ordinary: </span><span class="sc">{</span>ordinary_gain<span class="sc">.</span>mean()<span class="sc">:+.3f}</span><span class="ss"> "</span></span>
-<span id="cb30-72"><a href="#cb30-72" aria-hidden="true" tabindex="-1"></a>      <span class="ss">f"(SD </span><span class="sc">{</span>ordinary_gain<span class="sc">.</span>std(ddof<span class="op">=</span><span class="dv">1</span>)<span class="sc">:.3f}</span><span class="ss">)"</span>)</span>
-<span id="cb30-73"><a href="#cb30-73" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"attention top-1 failures=0/</span><span class="sc">{</span><span class="bu">int</span>(ms_endpoint[:, <span class="dv">2</span>].<span class="bu">sum</span>())<span class="sc">}</span><span class="ss">"</span>)</span>
-<span id="cb30-74"><a href="#cb30-74" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"mean value MSE=</span><span class="sc">{</span>ms_endpoint[:, <span class="dv">5</span>]<span class="sc">.</span>mean()<span class="sc">:.2e}</span><span class="ss">; "</span></span>
-<span id="cb30-75"><a href="#cb30-75" aria-hidden="true" tabindex="-1"></a>      <span class="ss">f"max trial MSE=</span><span class="sc">{</span>ms_endpoint[:, <span class="dv">5</span>]<span class="sc">.</span><span class="bu">max</span>()<span class="sc">:.2e}</span><span class="ss">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb32"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a>MS_SEED, MS_ETA, MS_GATE <span class="op">=</span> <span class="dv">6050</span>, <span class="fl">0.20</span>, <span class="fl">0.10</span></span>
+<span id="cb32-2"><a href="#cb32-2" aria-hidden="true" tabindex="-1"></a>MS_DIMS, MS_LOADS, MS_REPEATS <span class="op">=</span> (<span class="dv">8</span>, <span class="dv">16</span>, <span class="dv">32</span>), (<span class="fl">0.5</span>, <span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">4</span>, <span class="dv">8</span>), <span class="dv">30</span></span>
+<span id="cb32-3"><a href="#cb32-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-4"><a href="#cb32-4" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> ms_unit(x):</span>
+<span id="cb32-5"><a href="#cb32-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> x <span class="op">/</span> np.linalg.norm(x, axis<span class="op">=</span><span class="dv">1</span>, keepdims<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb32-6"><a href="#cb32-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-7"><a href="#cb32-7" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> ms_decode(prediction, values):</span>
+<span id="cb32-8"><a href="#cb32-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> np.argmax(prediction <span class="op">@</span> values.T, axis<span class="op">=</span><span class="dv">1</span>)</span>
+<span id="cb32-9"><a href="#cb32-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-10"><a href="#cb32-10" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> ms_trial(rng, repeat, d, load):</span>
+<span id="cb32-11"><a href="#cb32-11" aria-hidden="true" tabindex="-1"></a>    n <span class="op">=</span> <span class="bu">max</span>(<span class="dv">4</span>, <span class="bu">round</span>(load <span class="op">*</span> d))</span>
+<span id="cb32-12"><a href="#cb32-12" aria-hidden="true" tabindex="-1"></a>    keys <span class="op">=</span> ms_unit(rng.standard_normal((n, d)))</span>
+<span id="cb32-13"><a href="#cb32-13" aria-hidden="true" tabindex="-1"></a>    values <span class="op">=</span> ms_unit(rng.standard_normal((n, d)))</span>
+<span id="cb32-14"><a href="#cb32-14" aria-hidden="true" tabindex="-1"></a>    priority <span class="op">=</span> np.zeros(n, dtype<span class="op">=</span><span class="bu">bool</span>)</span>
+<span id="cb32-15"><a href="#cb32-15" aria-hidden="true" tabindex="-1"></a>    priority[rng.permutation(n)[:<span class="bu">max</span>(<span class="dv">1</span>, <span class="bu">round</span>(<span class="fl">0.25</span> <span class="op">*</span> n))]] <span class="op">=</span> <span class="va">True</span></span>
+<span id="cb32-16"><a href="#cb32-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-17"><a href="#cb32-17" aria-hidden="true" tabindex="-1"></a>    scores <span class="op">=</span> <span class="fl">32.0</span> <span class="op">*</span> (keys <span class="op">@</span> keys.T)</span>
+<span id="cb32-18"><a href="#cb32-18" aria-hidden="true" tabindex="-1"></a>    scores <span class="op">-=</span> scores.<span class="bu">max</span>(axis<span class="op">=</span><span class="dv">1</span>, keepdims<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb32-19"><a href="#cb32-19" aria-hidden="true" tabindex="-1"></a>    weights <span class="op">=</span> np.exp(scores)<span class="op">;</span> weights <span class="op">/=</span> weights.<span class="bu">sum</span>(axis<span class="op">=</span><span class="dv">1</span>, keepdims<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb32-20"><a href="#cb32-20" aria-hidden="true" tabindex="-1"></a>    attention <span class="op">=</span> weights <span class="op">@</span> values</span>
+<span id="cb32-21"><a href="#cb32-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-22"><a href="#cb32-22" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> delta(write_gate):</span>
+<span id="cb32-23"><a href="#cb32-23" aria-hidden="true" tabindex="-1"></a>        state <span class="op">=</span> np.zeros((d, d))</span>
+<span id="cb32-24"><a href="#cb32-24" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> key, value, gate <span class="kw">in</span> <span class="bu">zip</span>(keys, values, write_gate, strict<span class="op">=</span><span class="va">True</span>):</span>
+<span id="cb32-25"><a href="#cb32-25" aria-hidden="true" tabindex="-1"></a>            state <span class="op">+=</span> MS_ETA <span class="op">*</span> gate <span class="op">*</span> np.outer(value <span class="op">-</span> state <span class="op">@</span> key, key)</span>
+<span id="cb32-26"><a href="#cb32-26" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> keys <span class="op">@</span> state.T</span>
+<span id="cb32-27"><a href="#cb32-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-28"><a href="#cb32-28" aria-hidden="true" tabindex="-1"></a>    plain <span class="op">=</span> delta(np.ones(n))</span>
+<span id="cb32-29"><a href="#cb32-29" aria-hidden="true" tabindex="-1"></a>    selective <span class="op">=</span> delta(np.where(priority, <span class="fl">1.0</span>, MS_GATE))</span>
+<span id="cb32-30"><a href="#cb32-30" aria-hidden="true" tabindex="-1"></a>    truth <span class="op">=</span> np.arange(n)</span>
+<span id="cb32-31"><a href="#cb32-31" aria-hidden="true" tabindex="-1"></a>    correct <span class="op">=</span> <span class="kw">lambda</span> pred: ms_decode(pred, values) <span class="op">==</span> truth</span>
+<span id="cb32-32"><a href="#cb32-32" aria-hidden="true" tabindex="-1"></a>    a_ok, d_ok, s_ok <span class="op">=</span> correct(attention), correct(plain), correct(selective)</span>
+<span id="cb32-33"><a href="#cb32-33" aria-hidden="true" tabindex="-1"></a>    ordinary <span class="op">=</span> <span class="op">~</span>priority</span>
+<span id="cb32-34"><a href="#cb32-34" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> [repeat, d, n, load, a_ok.mean(), ((attention<span class="op">-</span>values)<span class="op">**</span><span class="dv">2</span>).mean(),</span>
+<span id="cb32-35"><a href="#cb32-35" aria-hidden="true" tabindex="-1"></a>            d_ok.mean(), d_ok[priority].mean(), d_ok[ordinary].mean(),</span>
+<span id="cb32-36"><a href="#cb32-36" aria-hidden="true" tabindex="-1"></a>            s_ok.mean(), s_ok[priority].mean(), s_ok[ordinary].mean()]</span>
+<span id="cb32-37"><a href="#cb32-37" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-38"><a href="#cb32-38" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> ms_panel(tag, repeats):</span>
+<span id="cb32-39"><a href="#cb32-39" aria-hidden="true" tabindex="-1"></a>    seeds <span class="op">=</span> np.random.SeedSequence([MS_SEED, tag]).spawn(</span>
+<span id="cb32-40"><a href="#cb32-40" aria-hidden="true" tabindex="-1"></a>        repeats <span class="op">*</span> <span class="bu">len</span>(MS_DIMS) <span class="op">*</span> <span class="bu">len</span>(MS_LOADS))</span>
+<span id="cb32-41"><a href="#cb32-41" aria-hidden="true" tabindex="-1"></a>    rows, index <span class="op">=</span> [], <span class="dv">0</span></span>
+<span id="cb32-42"><a href="#cb32-42" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> repeat <span class="kw">in</span> <span class="bu">range</span>(repeats):</span>
+<span id="cb32-43"><a href="#cb32-43" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> d <span class="kw">in</span> MS_DIMS:</span>
+<span id="cb32-44"><a href="#cb32-44" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> load <span class="kw">in</span> MS_LOADS:</span>
+<span id="cb32-45"><a href="#cb32-45" aria-hidden="true" tabindex="-1"></a>                rows.append(ms_trial(np.random.default_rng(seeds[index]),</span>
+<span id="cb32-46"><a href="#cb32-46" aria-hidden="true" tabindex="-1"></a>                                     repeat, d, load))</span>
+<span id="cb32-47"><a href="#cb32-47" aria-hidden="true" tabindex="-1"></a>                index <span class="op">+=</span> <span class="dv">1</span></span>
+<span id="cb32-48"><a href="#cb32-48" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> np.asarray(rows)</span>
+<span id="cb32-49"><a href="#cb32-49" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-50"><a href="#cb32-50" aria-hidden="true" tabindex="-1"></a><span class="co"># Tags 0 and 1 were development; tag 2 remained sealed until settings were fixed.</span></span>
+<span id="cb32-51"><a href="#cb32-51" aria-hidden="true" tabindex="-1"></a>ms_development <span class="op">=</span> np.vstack([ms_panel(tag, <span class="dv">5</span>) <span class="cf">for</span> tag <span class="kw">in</span> (<span class="dv">0</span>, <span class="dv">1</span>)])</span>
+<span id="cb32-52"><a href="#cb32-52" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> np.<span class="bu">all</span>(ms_development[:, <span class="dv">4</span>] <span class="op">==</span> <span class="fl">1.0</span>)</span>
+<span id="cb32-53"><a href="#cb32-53" aria-hidden="true" tabindex="-1"></a>ms_endpoint <span class="op">=</span> ms_panel(<span class="dv">2</span>, MS_REPEATS)</span>
+<span id="cb32-54"><a href="#cb32-54" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> np.<span class="bu">all</span>(ms_endpoint[:, <span class="dv">4</span>] <span class="op">==</span> <span class="fl">1.0</span>)</span>
+<span id="cb32-55"><a href="#cb32-55" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-56"><a href="#cb32-56" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"study_seed=6050; development_tags=(0, 1); sealed_endpoint_tag=2"</span>)</span>
+<span id="cb32-57"><a href="#cb32-57" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"endpoint_trials=30 x 3 dimensions; d=(8, 16, 32); "</span></span>
+<span id="cb32-58"><a href="#cb32-58" aria-hidden="true" tabindex="-1"></a>      <span class="st">"N/d=(0.5, 1, 2, 4, 8)"</span>)</span>
+<span id="cb32-59"><a href="#cb32-59" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"fixed: eta=0.20; priority_fraction=0.25; ordinary_write_gate=0.10"</span>)</span>
+<span id="cb32-60"><a href="#cb32-60" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"load  attention  Delta  gated-all  gated-priority  gated-ordinary"</span>)</span>
+<span id="cb32-61"><a href="#cb32-61" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> load <span class="kw">in</span> MS_LOADS:</span>
+<span id="cb32-62"><a href="#cb32-62" aria-hidden="true" tabindex="-1"></a>    block <span class="op">=</span> ms_endpoint[ms_endpoint[:, <span class="dv">3</span>] <span class="op">==</span> load]</span>
+<span id="cb32-63"><a href="#cb32-63" aria-hidden="true" tabindex="-1"></a>    means <span class="op">=</span> block[:, [<span class="dv">4</span>, <span class="dv">6</span>, <span class="dv">9</span>, <span class="dv">10</span>, <span class="dv">11</span>]].mean(<span class="dv">0</span>)</span>
+<span id="cb32-64"><a href="#cb32-64" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"</span><span class="sc">{</span>load<span class="sc">:&gt;4.1f}</span><span class="ss">   "</span> <span class="op">+</span> <span class="st">"  "</span>.join(<span class="ss">f"</span><span class="sc">{</span>value<span class="sc">:.3f}</span><span class="ss">"</span> <span class="cf">for</span> value <span class="kw">in</span> means))</span>
+<span id="cb32-65"><a href="#cb32-65" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-66"><a href="#cb32-66" aria-hidden="true" tabindex="-1"></a>hard <span class="op">=</span> ms_endpoint[ms_endpoint[:, <span class="dv">3</span>] <span class="op">==</span> <span class="dv">8</span>]</span>
+<span id="cb32-67"><a href="#cb32-67" aria-hidden="true" tabindex="-1"></a>priority_gain <span class="op">=</span> hard[:, <span class="dv">10</span>] <span class="op">-</span> hard[:, <span class="dv">7</span>]</span>
+<span id="cb32-68"><a href="#cb32-68" aria-hidden="true" tabindex="-1"></a>ordinary_gain <span class="op">=</span> hard[:, <span class="dv">11</span>] <span class="op">-</span> hard[:, <span class="dv">8</span>]</span>
+<span id="cb32-69"><a href="#cb32-69" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"N/d=8 gated-minus-Delta priority: </span><span class="sc">{</span>priority_gain<span class="sc">.</span>mean()<span class="sc">:+.3f}</span><span class="ss"> "</span></span>
+<span id="cb32-70"><a href="#cb32-70" aria-hidden="true" tabindex="-1"></a>      <span class="ss">f"(SD </span><span class="sc">{</span>priority_gain<span class="sc">.</span>std(ddof<span class="op">=</span><span class="dv">1</span>)<span class="sc">:.3f}</span><span class="ss">)"</span>)</span>
+<span id="cb32-71"><a href="#cb32-71" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"N/d=8 gated-minus-Delta ordinary: </span><span class="sc">{</span>ordinary_gain<span class="sc">.</span>mean()<span class="sc">:+.3f}</span><span class="ss"> "</span></span>
+<span id="cb32-72"><a href="#cb32-72" aria-hidden="true" tabindex="-1"></a>      <span class="ss">f"(SD </span><span class="sc">{</span>ordinary_gain<span class="sc">.</span>std(ddof<span class="op">=</span><span class="dv">1</span>)<span class="sc">:.3f}</span><span class="ss">)"</span>)</span>
+<span id="cb32-73"><a href="#cb32-73" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"attention top-1 failures=0/</span><span class="sc">{</span><span class="bu">int</span>(ms_endpoint[:, <span class="dv">2</span>].<span class="bu">sum</span>())<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb32-74"><a href="#cb32-74" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"mean value MSE=</span><span class="sc">{</span>ms_endpoint[:, <span class="dv">5</span>]<span class="sc">.</span>mean()<span class="sc">:.2e}</span><span class="ss">; "</span></span>
+<span id="cb32-75"><a href="#cb32-75" aria-hidden="true" tabindex="-1"></a>      <span class="ss">f"max trial MSE=</span><span class="sc">{</span>ms_endpoint[:, <span class="dv">5</span>]<span class="sc">.</span><span class="bu">max</span>()<span class="sc">:.2e}</span><span class="ss">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
 <pre><code>study_seed=6050; development_tags=(0, 1); sealed_endpoint_tag=2
@@ -1838,39 +1782,39 @@ attention top-1 failures=0/26040
 mean value MSE=5.43e-06; max trial MSE=4.55e-04</code></pre>
 </div>
 </div>
-<div id="cell-fig-memory-capacity-spectrum" class="cell" data-execution_count="20">
+<div id="cell-fig-memory-capacity-spectrum" class="cell" data-execution_count="22">
 <details class="code-fold">
 <summary>Figure: compare full-table and fixed-state recall as load grows</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb32"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a>fig, axes <span class="op">=</span> plt.subplots(<span class="dv">1</span>, <span class="dv">2</span>, figsize<span class="op">=</span>(<span class="fl">8.4</span>, <span class="fl">3.35</span>), constrained_layout<span class="op">=</span><span class="va">True</span>)</span>
-<span id="cb32-2"><a href="#cb32-2" aria-hidden="true" tabindex="-1"></a>colors <span class="op">=</span> {<span class="dv">8</span>: <span class="st">"#E57200"</span>, <span class="dv">16</span>: <span class="st">"#2E7D32"</span>, <span class="dv">32</span>: <span class="st">"#722F37"</span>}</span>
-<span id="cb32-3"><a href="#cb32-3" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> d <span class="kw">in</span> MS_DIMS:</span>
-<span id="cb32-4"><a href="#cb32-4" aria-hidden="true" tabindex="-1"></a>    means <span class="op">=</span> [ms_endpoint[(ms_endpoint[:, <span class="dv">1</span>] <span class="op">==</span> d) <span class="op">&amp;</span></span>
-<span id="cb32-5"><a href="#cb32-5" aria-hidden="true" tabindex="-1"></a>                         (ms_endpoint[:, <span class="dv">3</span>] <span class="op">==</span> load), <span class="dv">6</span>].mean()</span>
-<span id="cb32-6"><a href="#cb32-6" aria-hidden="true" tabindex="-1"></a>             <span class="cf">for</span> load <span class="kw">in</span> MS_LOADS]</span>
-<span id="cb32-7"><a href="#cb32-7" aria-hidden="true" tabindex="-1"></a>    axes[<span class="dv">0</span>].plot(MS_LOADS, means, marker<span class="op">=</span><span class="st">"o"</span>, color<span class="op">=</span>colors[d], label<span class="op">=</span><span class="ss">f"Delta, d=</span><span class="sc">{</span>d<span class="sc">}</span><span class="ss">"</span>)</span>
-<span id="cb32-8"><a href="#cb32-8" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].plot(MS_LOADS, np.ones(<span class="bu">len</span>(MS_LOADS)), color<span class="op">=</span><span class="st">"#232D4B"</span>, lw<span class="op">=</span><span class="dv">2</span>,</span>
-<span id="cb32-9"><a href="#cb32-9" aria-hidden="true" tabindex="-1"></a>             label<span class="op">=</span><span class="st">"softmax table"</span>)</span>
-<span id="cb32-10"><a href="#cb32-10" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].<span class="bu">set</span>(xscale<span class="op">=</span><span class="st">"log"</span>, xlabel<span class="op">=</span><span class="st">"load N/d"</span>, ylabel<span class="op">=</span><span class="st">"top-1 recall"</span>,</span>
-<span id="cb32-11"><a href="#cb32-11" aria-hidden="true" tabindex="-1"></a>            title<span class="op">=</span><span class="st">"Fixed state meets capacity"</span>, ylim<span class="op">=</span>(<span class="op">-</span><span class="fl">0.03</span>, <span class="fl">1.05</span>))</span>
-<span id="cb32-12"><a href="#cb32-12" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].set_xticks(MS_LOADS, [<span class="bu">str</span>(x) <span class="cf">for</span> x <span class="kw">in</span> MS_LOADS])</span>
-<span id="cb32-13"><a href="#cb32-13" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].minorticks_off()</span>
-<span id="cb32-14"><a href="#cb32-14" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].legend(fontsize<span class="op">=</span><span class="fl">7.3</span>)</span>
-<span id="cb32-15"><a href="#cb32-15" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb32-16"><a href="#cb32-16" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> column, label, style, color <span class="kw">in</span> [</span>
-<span id="cb32-17"><a href="#cb32-17" aria-hidden="true" tabindex="-1"></a>    (<span class="dv">7</span>, <span class="st">"Delta: priority"</span>, <span class="st">"--"</span>, <span class="st">"#B45309"</span>),</span>
-<span id="cb32-18"><a href="#cb32-18" aria-hidden="true" tabindex="-1"></a>    (<span class="dv">8</span>, <span class="st">"Delta: ordinary"</span>, <span class="st">"--"</span>, <span class="st">"#64748B"</span>),</span>
-<span id="cb32-19"><a href="#cb32-19" aria-hidden="true" tabindex="-1"></a>    (<span class="dv">10</span>, <span class="st">"gated: priority"</span>, <span class="st">"-"</span>, <span class="st">"#E57200"</span>),</span>
-<span id="cb32-20"><a href="#cb32-20" aria-hidden="true" tabindex="-1"></a>    (<span class="dv">11</span>, <span class="st">"gated: ordinary"</span>, <span class="st">"-"</span>, <span class="st">"#232D4B"</span>),</span>
-<span id="cb32-21"><a href="#cb32-21" aria-hidden="true" tabindex="-1"></a>]:</span>
-<span id="cb32-22"><a href="#cb32-22" aria-hidden="true" tabindex="-1"></a>    means <span class="op">=</span> [ms_endpoint[ms_endpoint[:, <span class="dv">3</span>] <span class="op">==</span> load, column].mean()</span>
-<span id="cb32-23"><a href="#cb32-23" aria-hidden="true" tabindex="-1"></a>             <span class="cf">for</span> load <span class="kw">in</span> MS_LOADS]</span>
-<span id="cb32-24"><a href="#cb32-24" aria-hidden="true" tabindex="-1"></a>    axes[<span class="dv">1</span>].plot(MS_LOADS, means, marker<span class="op">=</span><span class="st">"o"</span>, ls<span class="op">=</span>style, color<span class="op">=</span>color, label<span class="op">=</span>label)</span>
-<span id="cb32-25"><a href="#cb32-25" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].<span class="bu">set</span>(xscale<span class="op">=</span><span class="st">"log"</span>, xlabel<span class="op">=</span><span class="st">"load N/d"</span>, ylabel<span class="op">=</span><span class="st">"top-1 recall"</span>,</span>
-<span id="cb32-26"><a href="#cb32-26" aria-hidden="true" tabindex="-1"></a>            title<span class="op">=</span><span class="st">"A gate chooses what to forget"</span>, ylim<span class="op">=</span>(<span class="op">-</span><span class="fl">0.03</span>, <span class="fl">1.05</span>))</span>
-<span id="cb32-27"><a href="#cb32-27" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].set_xticks(MS_LOADS, [<span class="bu">str</span>(x) <span class="cf">for</span> x <span class="kw">in</span> MS_LOADS])</span>
-<span id="cb32-28"><a href="#cb32-28" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].minorticks_off()</span>
-<span id="cb32-29"><a href="#cb32-29" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].legend(fontsize<span class="op">=</span><span class="fl">7.3</span>)</span>
-<span id="cb32-30"><a href="#cb32-30" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb34"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb34-1"><a href="#cb34-1" aria-hidden="true" tabindex="-1"></a>fig, axes <span class="op">=</span> plt.subplots(<span class="dv">1</span>, <span class="dv">2</span>, figsize<span class="op">=</span>(<span class="fl">8.4</span>, <span class="fl">3.35</span>), constrained_layout<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb34-2"><a href="#cb34-2" aria-hidden="true" tabindex="-1"></a>colors <span class="op">=</span> {<span class="dv">8</span>: <span class="st">"#E57200"</span>, <span class="dv">16</span>: <span class="st">"#2E7D32"</span>, <span class="dv">32</span>: <span class="st">"#722F37"</span>}</span>
+<span id="cb34-3"><a href="#cb34-3" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> d <span class="kw">in</span> MS_DIMS:</span>
+<span id="cb34-4"><a href="#cb34-4" aria-hidden="true" tabindex="-1"></a>    means <span class="op">=</span> [ms_endpoint[(ms_endpoint[:, <span class="dv">1</span>] <span class="op">==</span> d) <span class="op">&amp;</span></span>
+<span id="cb34-5"><a href="#cb34-5" aria-hidden="true" tabindex="-1"></a>                         (ms_endpoint[:, <span class="dv">3</span>] <span class="op">==</span> load), <span class="dv">6</span>].mean()</span>
+<span id="cb34-6"><a href="#cb34-6" aria-hidden="true" tabindex="-1"></a>             <span class="cf">for</span> load <span class="kw">in</span> MS_LOADS]</span>
+<span id="cb34-7"><a href="#cb34-7" aria-hidden="true" tabindex="-1"></a>    axes[<span class="dv">0</span>].plot(MS_LOADS, means, marker<span class="op">=</span><span class="st">"o"</span>, color<span class="op">=</span>colors[d], label<span class="op">=</span><span class="ss">f"Delta, d=</span><span class="sc">{</span>d<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb34-8"><a href="#cb34-8" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].plot(MS_LOADS, np.ones(<span class="bu">len</span>(MS_LOADS)), color<span class="op">=</span><span class="st">"#232D4B"</span>, lw<span class="op">=</span><span class="dv">2</span>,</span>
+<span id="cb34-9"><a href="#cb34-9" aria-hidden="true" tabindex="-1"></a>             label<span class="op">=</span><span class="st">"softmax table"</span>)</span>
+<span id="cb34-10"><a href="#cb34-10" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].<span class="bu">set</span>(xscale<span class="op">=</span><span class="st">"log"</span>, xlabel<span class="op">=</span><span class="st">"load N/d"</span>, ylabel<span class="op">=</span><span class="st">"top-1 recall"</span>,</span>
+<span id="cb34-11"><a href="#cb34-11" aria-hidden="true" tabindex="-1"></a>            title<span class="op">=</span><span class="st">"Fixed state meets capacity"</span>, ylim<span class="op">=</span>(<span class="op">-</span><span class="fl">0.03</span>, <span class="fl">1.05</span>))</span>
+<span id="cb34-12"><a href="#cb34-12" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].set_xticks(MS_LOADS, [<span class="bu">str</span>(x) <span class="cf">for</span> x <span class="kw">in</span> MS_LOADS])</span>
+<span id="cb34-13"><a href="#cb34-13" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].minorticks_off()</span>
+<span id="cb34-14"><a href="#cb34-14" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].legend(fontsize<span class="op">=</span><span class="fl">7.3</span>)</span>
+<span id="cb34-15"><a href="#cb34-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb34-16"><a href="#cb34-16" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> column, label, style, color <span class="kw">in</span> [</span>
+<span id="cb34-17"><a href="#cb34-17" aria-hidden="true" tabindex="-1"></a>    (<span class="dv">7</span>, <span class="st">"Delta: priority"</span>, <span class="st">"--"</span>, <span class="st">"#B45309"</span>),</span>
+<span id="cb34-18"><a href="#cb34-18" aria-hidden="true" tabindex="-1"></a>    (<span class="dv">8</span>, <span class="st">"Delta: ordinary"</span>, <span class="st">"--"</span>, <span class="st">"#64748B"</span>),</span>
+<span id="cb34-19"><a href="#cb34-19" aria-hidden="true" tabindex="-1"></a>    (<span class="dv">10</span>, <span class="st">"gated: priority"</span>, <span class="st">"-"</span>, <span class="st">"#E57200"</span>),</span>
+<span id="cb34-20"><a href="#cb34-20" aria-hidden="true" tabindex="-1"></a>    (<span class="dv">11</span>, <span class="st">"gated: ordinary"</span>, <span class="st">"-"</span>, <span class="st">"#232D4B"</span>),</span>
+<span id="cb34-21"><a href="#cb34-21" aria-hidden="true" tabindex="-1"></a>]:</span>
+<span id="cb34-22"><a href="#cb34-22" aria-hidden="true" tabindex="-1"></a>    means <span class="op">=</span> [ms_endpoint[ms_endpoint[:, <span class="dv">3</span>] <span class="op">==</span> load, column].mean()</span>
+<span id="cb34-23"><a href="#cb34-23" aria-hidden="true" tabindex="-1"></a>             <span class="cf">for</span> load <span class="kw">in</span> MS_LOADS]</span>
+<span id="cb34-24"><a href="#cb34-24" aria-hidden="true" tabindex="-1"></a>    axes[<span class="dv">1</span>].plot(MS_LOADS, means, marker<span class="op">=</span><span class="st">"o"</span>, ls<span class="op">=</span>style, color<span class="op">=</span>color, label<span class="op">=</span>label)</span>
+<span id="cb34-25"><a href="#cb34-25" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].<span class="bu">set</span>(xscale<span class="op">=</span><span class="st">"log"</span>, xlabel<span class="op">=</span><span class="st">"load N/d"</span>, ylabel<span class="op">=</span><span class="st">"top-1 recall"</span>,</span>
+<span id="cb34-26"><a href="#cb34-26" aria-hidden="true" tabindex="-1"></a>            title<span class="op">=</span><span class="st">"A gate chooses what to forget"</span>, ylim<span class="op">=</span>(<span class="op">-</span><span class="fl">0.03</span>, <span class="fl">1.05</span>))</span>
+<span id="cb34-27"><a href="#cb34-27" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].set_xticks(MS_LOADS, [<span class="bu">str</span>(x) <span class="cf">for</span> x <span class="kw">in</span> MS_LOADS])</span>
+<span id="cb34-28"><a href="#cb34-28" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].minorticks_off()</span>
+<span id="cb34-29"><a href="#cb34-29" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].legend(fontsize<span class="op">=</span><span class="fl">7.3</span>)</span>
+<span id="cb34-30"><a href="#cb34-30" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-display">
 <div id="fig-memory-capacity-spectrum" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Two line charts. In the left chart softmax top-1 recall stays at one while Delta recall falls with load for dimensions 8, 16, and 32. In the right chart a gated Delta update preserves priority items better than ordinary items, especially at high load, while the ungated update does not make that trade as strongly.">
