@@ -43,7 +43,7 @@ make those choices interchangeable.
 
 ```{python}
 #| label: generative-setup
-#| code-summary: "Setup: imports, reproducibility, plotting palette, and shared diagram helpers"
+#| echo: false
 
 import math
 
@@ -378,6 +378,31 @@ A $\beta$-weighted variant deliberately multiplies the KL term by
 $\beta\ne1$. That defines a different optimization objective from the ordinary ELBO
 for the same decoder model. It can change the reconstruction–regularization trade-off;
 it does not guarantee discovery of independent true factors.
+
+::: {.callout-note}
+## Why this batches
+
+The training objective is a population average of *per-example* quantities,
+
+$$
+\frac{1}{N}\sum_{i}\Big[\,\mathbb{E}_{q_\phi(\vect{z}\mid\vect{x}_i)}
+\log p_\theta(\vect{x}_i\mid\vect{z})
+\;-\;\beta\,\mathrm{KL}\big(q_\phi(\vect{z}\mid\vect{x}_i)\,\|\,p(\vect{z})\big)\Big],
+$$
+
+so a minibatch mean is an unbiased estimate of it — the same linearity-of-expectation
+license that justified SGD in Chapter 4. The KL that looks like "one global term" in
+the single-$\vect{x}$ derivation is, in training, one KL *per datapoint* inside the
+sum. The reduction sequence to remember: **sum coordinates within an example, then
+average examples across the batch.** In the five-row template — *Target*: the
+population ELBO; *Estimator*: batch mean of per-example ELBOs; *Reduction*: sum over
+pixels and latent coordinates, mean over examples; *Validity*: the objective is a
+per-example sum (estimator case i); *Boundary*: any term defined through the
+*aggregate* posterior $q_{\mathrm{agg}}(\vect{z}) = \frac{1}{N}\sum_i
+q_\phi(\vect{z}\mid\vect{x}_i)$ — as in total-correlation variants — is a
+nonlinear functional of the whole dataset (case ii), and naive per-batch code for it
+is silently biased. Exercises 4 and 5 make both boundaries fail in your hands.
+:::
 
 ### Move randomness outside the learned map
 
@@ -1291,6 +1316,9 @@ Close the book for one minute and rebuild the sampling contracts from memory.
 - [Goodfellow et al., *Generative Adversarial Nets*](https://proceedings.neurips.cc/paper/2014/hash/f033ed80deb0234979a61f95710dbe25-Abstract.html): the original minimax game, optimal discriminator, and divergence result.
 - [Ho, Jain, and Abbeel, *Denoising Diffusion Probabilistic Models*](https://arxiv.org/abs/2006.11239): Gaussian diffusion transitions, reverse parameterization, and the simplified noise objective.
 - [Song et al., *Score-Based Generative Modeling through Stochastic Differential Equations*](https://openreview.net/forum?id=PxTIG12RRHS): the score perspective and continuous-time forward/reverse processes.
+- [Chen et al., *Isolating Sources of Disentanglement in Variational Autoencoders*](https://arxiv.org/abs/1802.04942):
+  the total-correlation decomposition whose aggregate-posterior KL is Exercise 5's
+  boundary case — the term that does not batch naively.
 - [Rombach et al., *High-Resolution Image Synthesis with Latent Diffusion Models*](https://openaccess.thecvf.com/content/CVPR2022/html/Rombach_High-Resolution_Image_Synthesis_With_Latent_Diffusion_Models_CVPR_2022_paper.html): composing learned compression with diffusion in latent space.
 
 ## Exercises {.unnumbered}
@@ -1310,3 +1338,22 @@ Close the book for one minute and rebuild the sampling contracts from memory.
    Then design separate fidelity, coverage, and memorization checks for supplied
    samples from a VAE, GAN, and diffusion model; state what evidence would make each
    check fail.
+
+4. **(Audit.)** A colleague's β-VAE uses `F.mse_loss(recon, x) + beta * kl.mean()`,
+   with `kl` holding one KL per example. Before any algebra, predict the *direction*
+   of the defect: which term was silently divided by what? Then prove the identity —
+   with default `mean` reductions the loss equals
+   $\tfrac{1}{D_x}\big[\text{recon}_{\text{sum}} + (\beta D_x)\,\mathrm{KL}\big]$
+   exactly, so a nominal $\beta=1$ on $28\times28$ inputs trains an effective
+   $\beta=784$ — posterior collapse by construction. *Named wrong answer:* "the two
+   `mean`s cancel, so the trade-off is unchanged" — they average over different axis
+   sets ($B\!\cdot\!D_x$ versus $B$), and the mismatch is the bug.
+5. **(Audit.)** Now audit a "diversity" term that penalizes
+   $\mathrm{KL}(q_{\mathrm{agg}}\,\|\,p)$ by computing it on each batch's mixture
+   and averaging. Which of the three estimator cases is this, and in which direction
+   is the batch estimate biased? Verify numerically on synthetic Gaussian posteriors:
+   KL is convex in its first argument and a size-$B$ batch mixture is a noisier
+   $q_{\mathrm{agg}}$, so Jensen drives the estimate *upward* (in one run of this
+   audit: true 0.100, batch estimate 0.148 ± 0.006, while the per-example mean KL
+   stayed unbiased). *Named wrong answer:* "it averages out over batches like any
+   minibatch loss" — averaging removes noise around a biased center, not the bias.

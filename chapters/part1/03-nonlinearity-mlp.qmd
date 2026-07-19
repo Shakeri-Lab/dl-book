@@ -258,30 +258,10 @@ piecewise-linear outputs of the first $\rightarrow$ its boundaries are no longer
 straight lines. They *bend* wherever the first layer's boundaries cut the space.
 Boundaries composed of boundaries: each layer folds the space the previous layer drew.
 
-```{python}
-#| label: fig-polytopes
-#| fig-alt: "The input plane is tiled into many activation-pattern regions. Some boundaries are straight, while others change direction where earlier boundaries cross them."
-#| fig-cap: "The plane, colored by which ReLUs are on/off in a random 2-layer network (2 → 8 → 8): every cell is a region where the network is exactly linear. First-layer boundaries are straight; second-layer boundaries visibly bend where they cross them."
-#| code-summary: "Code: activation-pattern regions"
-torch.manual_seed(6050)
-net2 = nn.Sequential(nn.Linear(2, 8), nn.ReLU(), nn.Linear(8, 8), nn.ReLU())
-
-gx2, gy2 = np.meshgrid(np.linspace(-2, 2, 500), np.linspace(-2, 2, 500))
-G = torch.tensor(np.stack([gx2.ravel(), gy2.ravel()], 1), dtype=torch.float32)
-with torch.no_grad():
-    h1_ = torch.relu(net2[0](G))
-    h2_ = torch.relu(net2[2](h1_))
-    pattern = torch.cat([(h1_ > 0), (h2_ > 0)], 1).to(torch.int64)
-    raw_code = pattern @ (2 ** torch.arange(16, dtype=torch.int64))
-    _, region_id = torch.unique(raw_code, return_inverse=True)
-    region_id = region_id.reshape(gx2.shape)
-
-plt.figure(figsize=(5.4, 4.6))
-plt.imshow(region_id, extent=[-2, 2, -2, 2], origin="lower",
-           cmap="turbo", alpha=0.85)
-plt.xlabel("$x_1$"); plt.ylabel("$x_2$")
-plt.tight_layout(); plt.show()
-```
+Concretely: a ReLU network is exactly linear inside each region of input space
+where the on/off pattern of its units is constant, and those regions are polytopes
+whose walls are the units' boundaries. Deeper layers add walls that kink wherever
+they cross earlier ones. Exercise 4 has you draw this tiling and count its cells.
 
 This bending can compound dramatically. For suitable ReLU constructions at fixed input
 dimension, achievable region counts grow exponentially with depth, while a single
@@ -356,6 +336,48 @@ axes[0].set_ylabel("$x_2$")
 plt.tight_layout(); plt.show()
 ```
 
+Where did the curve go? Nowhere — and that is the chapter's deepest point. The MLP
+did not learn a curved boundary; it learned a **space in which the boundary is
+straight**. Its readout is still a linear model, $\vect{w}^\top \phi_\theta(x) + b$:
+project the hidden activations onto the readout direction
+$\hat{\vect{w}} = \vect{w}/\lVert\vect{w}\rVert$ and the decision boundary sits at
+the exact coordinate $-b/\lVert\vect{w}\rVert$, a straight line. This is the
+preface's central equation, drawn:
+
+```{python}
+#| label: fig-feature-space
+#| fig-alt: "Left: the two-moons input plane shaded by the learned scalar feature, with the decision boundary as a dashed piecewise-linear contour weaving between the crescents. Right: the same four hundred points plotted in learned feature coordinates, where the two classes form separated clouds split by an exact vertical line."
+#| fig-cap: "The learned feature space, on the trained moons MLP from the previous figure. Left: the scalar feature $\\hat{w}\\cdot\\phi_\\theta(x)$ over the input plane; the dashed contour is the decision boundary, kinked wherever hidden units switch on or off. Right: the same points with coordinates (readout direction, top orthogonal principal component of $\\phi_\\theta$): the classes separate, and the boundary is the exact vertical line $\\hat{w}\\cdot\\phi = -b/\\lVert w \\rVert$. Learning nonlinear features until a linear readout suffices is the book's central move."
+#| code-summary: "Code: the moons in the learned feature space"
+with torch.no_grad():
+    phi = torch.relu(mlp_m.hidden(X_m))              # phi_theta(x): (400, 16)
+    w = mlp_m.out.weight.squeeze(0)
+    b = mlp_m.out.bias.item()
+    w_hat = w / w.norm()
+    a1 = phi @ w_hat                                 # readout coordinate
+    resid = phi - a1[:, None] * w_hat                # remove readout direction
+    resid = resid - resid.mean(0)
+    a2 = resid @ torch.linalg.svd(resid, full_matrices=False).Vh[0]
+    boundary = -b / w.norm()                         # the line, exactly
+    field = (torch.relu(mlp_m.hidden(grid3)) @ w_hat).reshape(gx3.shape)
+
+fig, axes = plt.subplots(1, 2, figsize=(7.8, 3.4))
+axes[0].contourf(gx3, gy3, field, levels=18, cmap="RdBu_r")
+axes[0].contour(gx3, gy3, field, levels=[boundary], colors="k",
+                linewidths=1.6, linestyles="--")
+axes[0].scatter(X_m[y_m == 0, 0], X_m[y_m == 0, 1], s=7, c="#232D4B")
+axes[0].scatter(X_m[y_m == 1, 0], X_m[y_m == 1, 1], s=7, c="#E57200")
+axes[0].set_title(r"learned feature $\hat{w}\cdot\phi_\theta(x)$ over inputs")
+axes[0].set_xlabel("$x_1$"); axes[0].set_ylabel("$x_2$")
+axes[1].scatter(a1[y_m == 0], a2[y_m == 0], s=9, c="#232D4B")
+axes[1].scatter(a1[y_m == 1], a2[y_m == 1], s=9, c="#E57200")
+axes[1].axvline(boundary, color="k", lw=1.6)
+axes[1].set_title("the same data in feature space")
+axes[1].set_xlabel(r"$\hat{w}\cdot\phi_\theta(x)$")
+axes[1].set_ylabel("top orthogonal PC")
+plt.tight_layout(); plt.show()
+```
+
 One honest footnote on the XOR network: in principle *two* hidden units suffice, but
 such minimal networks are temperamental; across random seeds they frequently get stuck
 at 50% accuracy with silent units (you will verify this in Exercise 3). A few spare
@@ -424,8 +446,10 @@ knowledge into the architecture — is the turn the whole book pivots on.
 3. **(Code.)** Retrain the XOR network with `hidden_dim = 2` across ten different
    seeds. How often does it reach 100%? Inspect a failed run: what happened to its
    hidden units? (Hint: check how many are permanently silent.)
-4. **(Code.)** In the polytope figure, count distinct activation patterns as you vary
-   width at depth 1 versus depth at width 4 (keep total units comparable). Which grows
-   the region count faster?
+4. **(Code.)** Color the input plane by ReLU on/off pattern for a *random* 2 → 8 → 8
+   network (each constant-pattern cell is a region where the network is exactly
+   linear; second-layer walls kink where they cross first-layer ones). Then count
+   distinct patterns as you vary width at depth 1 versus depth at width 4 (keep
+   total units comparable). Which grows the region count faster?
 5. **(Code.)** Replace the moons MLP's ReLU with `nn.Identity()` and retrain. Explain
    the resulting boundary in one sentence using @eq-collapse.

@@ -211,6 +211,101 @@ retrieve from memory: title the mistaken inference, then state the repair.
    click away in HTML and prints in the PDF. Give visible figure cells a descriptive
    `#| code-summary`; use `echo: false` only for pure concept-diagram drawing cells.
 
+## The Editorial Contract (Plan v2, July 2026)
+
+The identity statement above everything here: **recognize the mechanism, read the
+estimator, audit the evidence.** Every rule below serves a student who must do those
+three things to code no human wrote.
+
+### Pedagogy block
+
+- **One instructional job, one primary representation, one check** per section. A
+  section earns at most one new concept, carried by one primary artifact (figure,
+  table, or listing), verified by one check the reader can perform.
+- **Replace, do not append.** Any PR adding a figure, section, or experiment names
+  what it displaces. Page count is a budget: v1.1 must not exceed v1.0.
+- **The five-question chapter contract.** Every "Okay, so —" recap must answer:
+  what was *Inherited*, what *Changed*, what was *Built in*, what was *Earned*
+  (evidence), and what *Remaining debt* is carried forward. The questions govern
+  content, not format — keep the numbered-narrative voice; do not use five headings.
+- **Internals are visualized only under three conditions**: a predeclared claim,
+  a falsifying control, and a caption that states what the figure does *not*
+  establish. (Founding instance: the Ch. 10 forget-gate diagnostic.)
+- **Prefer a rematch to a new benchmark.** New claims re-run existing tasks
+  (the shift cliff, the date task, the book corpus) before importing new data.
+- **The refusal ledger.** Topics deliberately not imported, with reasons, live at
+  the end of this guide; future revisions inherit the refusals.
+
+### Code block
+
+- **Equation / kernel / harness.** Each experiment's code divides into the
+  *equation* (the math being claimed), the *kernel* (the mechanism-bearing loop or
+  transform), and the *harness* (setup, styling, bookkeeping). Print equation and
+  kernel; fold the harness.
+- **The five-part visibility test.** A line prints iff changing it changes the
+  (1) function class, (2) objective, (3) estimator, (4) information visibility
+  (masks, padding, causality), or (5) experimental claim. Canonical rulings:
+  `pack_padded_sequence` prints (visibility); `ignore_index` prints (estimator);
+  `set_to_none=True` folds (harness); `.eval()` is explained once, then prints only
+  where train/eval mode is the claim.
+- **First occurrence in full; thereafter the semantic delta.** Canonical numbered
+  listings (the supervised update = Listing 4.1, masked softmax, padded
+  cross-entropy, autoregressive decoding, seed-panel record) are printed once and
+  cited by number. Later variants print only the lines that differ, introduced by
+  a prose reference or `# … as Listing 4.1 …` elision comments.
+- **Never abstract control flow that is the mechanism.** Teacher forcing, packed
+  sequences, masked-token selection, contrastive batch construction, GAN
+  alternation, diffusion timestep sampling, DPO masks, matched schedules stay
+  printed even when a canonical listing exists — presented as deltas.
+- **Every reduction names its axes.** Any `mean`/`sum` in printed code states, in
+  a comment or adjacent prose, what is summed within an example and what is
+  averaged across examples.
+- **Every printed snippet is transcluded from tested source.** Printed code and
+  executed code are the same artifact (executable cells or `#| file:`-included
+  scripts); CI executes the notebooks. Nothing on the page is retyped.
+- **Imported helpers carry a one-line contract** at first use per chapter
+  (`fit_supervised: Listing 4.1 with best-checkpoint selection, Ch. 6`).
+- **Stable semantics stay in the book; versioned engineering moves out.**
+  Shape/mask/reduction/mode/numerical-stability semantics belong in chapters.
+  Backend flags and version workarounds live in the repository's living
+  compatibility note with a tested-environment statement.
+
+### Estimator discipline
+
+- The general discussion lives beside Ch. 4's batching license and names **three
+  cases**: (i) decomposable per-example objectives (batch mean is an unbiased
+  estimator), (ii) nonlinear functionals of aggregates (naive batching is biased —
+  e.g., KL of the aggregate posterior, biased upward by Jensen), and
+  (iii) batch-defined objectives (the batch is part of the definition — in-batch
+  contrastive denominators; beam width is the decoding-side analogue; batch size
+  is protocol, not estimation error).
+- Later sites get one-to-two-sentence reminders using the five-row template:
+  **Target / Estimator / Reduction / Validity / Boundary.**
+
+### Exercise taxonomy
+
+Three tags book-wide: **(Pencil.)**, **(Code.)**, and **(Audit.)** — judge-this-code
+items where the reader predicts a defect's direction before deriving it. Every
+(Audit.) exercise has a named wrong answer.
+
+### Reading loop
+
+The book's loop is **read → predict → run → audit**. Experiments state a
+prediction before showing an outcome; recaps ask what evidence would falsify.
+
+### Refusal ledger (named non-imports, with reasons)
+
+- **Boltzmann machines, RBMs, wake–sleep** — answer a question the arc never asks
+  (undirected generative pretraining); the pretraining question is answered in
+  Ch. 15 in its modern form.
+- **Hopfield networks, echo-state / liquid-state machines** — superseded on this
+  arc; associative memory appears where it earns its keep (attention as soft
+  lookup).
+- **t-SNE / UMAP as additional projection tools** — the book standardizes on PCA
+  projections; a second projection tool is stuffing.
+- **Mixture-of-experts** — *not* refused as history: named in the epilogue's
+  roads-not-taken as the Hinton-era topic that became a frontier default.
+
 ## Closing Notes
 
 This guide reflects a teacher who believes:
