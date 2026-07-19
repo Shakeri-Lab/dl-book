@@ -505,25 +505,6 @@ window.Quarto = {
 <p>Chapter 17 ended with a distinction worth keeping in view—<strong>where the update lives is not what the update optimizes</strong>. Full fine-tuning, LoRA, and a soft prompt choose different places for gradient blame to write. None of them says what should count as a good answer.</p>
 <p>This chapter changes that second choice. Pretraining asks for the next corpus token. Instruction tuning asks a model to imitate demonstrated responses. Preference learning asks which response wins a comparison. Online policy optimization asks a changing model to produce responses that score well under a reward signal. These supervision interfaces can often be paired with different update locations:</p>
 <!-- NOVEL: needs sign-off -->
-<div id="alignment-setup" class="cell" data-execution_count="1">
-<details class="code-fold">
-<summary>Setup: imports, reproducibility, and the shared plotting palette</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> math</span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> matplotlib.axes <span class="im">import</span> Axes</span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> matplotlib.patches <span class="im">import</span> FancyArrowPatch, FancyBboxPatch</span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
-<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> torch <span class="im">import</span> Tensor, nn</span>
-<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch.nn.functional <span class="im">as</span> F</span>
-<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>torch.set_default_dtype(torch.float64)</span>
-<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>torch.set_num_threads(<span class="dv">6</span>)</span>
-<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>torch.manual_seed(<span class="dv">6050</span>)</span>
-<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>navy, orange, green, wine <span class="op">=</span> <span class="st">"#232D4B"</span>, <span class="st">"#E57200"</span>, <span class="st">"#2E7D32"</span>, <span class="st">"#722F37"</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-</details>
-</div>
 <div id="cell-fig-objective-write-map" class="cell" data-fig-height="5.1" data-fig-width="10" data-execution_count="2">
 <div class="cell-output cell-output-display">
 <div id="fig-objective-write-map" class="quarto-float quarto-figure quarto-figure-center anchored" alt="A three-by-three map places demonstration imitation, preference margin, and sampled reward on the vertical axis, and full weights, LoRA or adapters, and soft prompts on the horizontal axis. Every intersection is marked as a possible design.">
@@ -558,44 +539,44 @@ z=(x_1,\ldots,x_P,y_1,\ldots,y_T)
 <p>The denominator makes the displayed version a mean per scored response token. Some implementations sum instead—the choice changes gradient scale and must be stated. The prompt is still essential because it conditions every response probability. It simply does not receive target loss in this version.</p>
 <p>The tensor contract is explicit: <code>logits</code> has shape <span class="math inline">\((B,L,V)\)</span>, token IDs and the mask have shape <span class="math inline">\((B,L)\)</span>, and the returned sequence score has shape <span class="math inline">\((B,)\)</span>. The helper below audits that excluded prompt and padding targets cannot change that score.</p>
 <!-- NOVEL: needs sign-off -->
-<div id="1c89e3a6" class="cell" data-execution_count="3">
+<div id="320781e3" class="cell" data-execution_count="3">
 <details class="code-fold">
 <summary>Coding hygiene: audit completion-only sequence log probabilities</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> completion_log_probability(</span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    logits: Tensor, token_ids: Tensor, response_mask: Tensor</span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>) <span class="op">-&gt;</span> Tensor:</span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""Sum next-token log probabilities only at response positions."""</span></span>
-<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> logits.shape[:<span class="dv">2</span>] <span class="op">!=</span> token_ids.shape <span class="kw">or</span> token_ids.shape <span class="op">!=</span> response_mask.shape:</span>
-<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>        <span class="cf">raise</span> <span class="pp">ValueError</span>(<span class="st">"logits, token IDs, and mask must share batch and time"</span>)</span>
-<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    next_token_logps <span class="op">=</span> F.log_softmax(logits[:, :<span class="op">-</span><span class="dv">1</span>], dim<span class="op">=-</span><span class="dv">1</span>).gather(</span>
-<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>        dim<span class="op">=-</span><span class="dv">1</span>, index<span class="op">=</span>token_ids[:, <span class="dv">1</span>:].unsqueeze(<span class="op">-</span><span class="dv">1</span>)</span>
-<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    ).squeeze(<span class="op">-</span><span class="dv">1</span>)</span>
-<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> (next_token_logps <span class="op">*</span> response_mask[:, <span class="dv">1</span>:]).<span class="bu">sum</span>(dim<span class="op">=</span><span class="dv">1</span>)</span>
-<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>token_ids <span class="op">=</span> torch.tensor([</span>
-<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    [<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">3</span>, <span class="dv">4</span>, <span class="dv">5</span>, <span class="dv">6</span>, <span class="dv">0</span>],</span>
-<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    [<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">7</span>, <span class="dv">8</span>, <span class="dv">9</span>, <span class="dv">6</span>, <span class="dv">0</span>],</span>
-<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>])</span>
-<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>response_mask <span class="op">=</span> torch.tensor([</span>
-<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>    [<span class="va">False</span>, <span class="va">False</span>, <span class="va">False</span>, <span class="va">True</span>, <span class="va">True</span>, <span class="va">True</span>, <span class="va">False</span>],</span>
-<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>    [<span class="va">False</span>, <span class="va">False</span>, <span class="va">True</span>, <span class="va">True</span>, <span class="va">True</span>, <span class="va">True</span>, <span class="va">False</span>],</span>
-<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>])</span>
-<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>toy_logits <span class="op">=</span> torch.randn(<span class="dv">2</span>, <span class="dv">7</span>, <span class="dv">11</span>)</span>
-<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>original_logps <span class="op">=</span> completion_log_probability(toy_logits, token_ids, response_mask)</span>
-<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>perturbed_logits <span class="op">=</span> toy_logits.clone()</span>
-<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a>inactive_predictors <span class="op">=</span> <span class="op">~</span>response_mask[:, <span class="dv">1</span>:]</span>
-<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a>perturbed_logits[:, :<span class="op">-</span><span class="dv">1</span>][inactive_predictors] <span class="op">=</span> torch.linspace(<span class="op">-</span><span class="dv">5</span>, <span class="dv">5</span>, <span class="dv">11</span>)</span>
-<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a>perturbed_logps <span class="op">=</span> completion_log_probability(</span>
-<span id="cb2-28"><a href="#cb2-28" aria-hidden="true" tabindex="-1"></a>    perturbed_logits, token_ids, response_mask</span>
-<span id="cb2-29"><a href="#cb2-29" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb2-30"><a href="#cb2-30" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-31"><a href="#cb2-31" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"scored response tokens:"</span>, response_mask[:, <span class="dv">1</span>:].<span class="bu">sum</span>(dim<span class="op">=</span><span class="dv">1</span>).tolist())</span>
-<span id="cb2-32"><a href="#cb2-32" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(</span>
-<span id="cb2-33"><a href="#cb2-33" aria-hidden="true" tabindex="-1"></a>    <span class="st">"largest change after perturbing prompt/padding predictions:"</span>,</span>
-<span id="cb2-34"><a href="#cb2-34" aria-hidden="true" tabindex="-1"></a>    <span class="ss">f"</span><span class="sc">{</span>(perturbed_logps <span class="op">-</span> original_logps)<span class="sc">.</span><span class="bu">abs</span>()<span class="sc">.</span><span class="bu">max</span>()<span class="sc">.</span>item()<span class="sc">:.2e}</span><span class="ss">"</span>,</span>
-<span id="cb2-35"><a href="#cb2-35" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> completion_log_probability(</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    logits: Tensor, token_ids: Tensor, response_mask: Tensor</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>) <span class="op">-&gt;</span> Tensor:</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""Sum next-token log probabilities only at response positions."""</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> logits.shape[:<span class="dv">2</span>] <span class="op">!=</span> token_ids.shape <span class="kw">or</span> token_ids.shape <span class="op">!=</span> response_mask.shape:</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>        <span class="cf">raise</span> <span class="pp">ValueError</span>(<span class="st">"logits, token IDs, and mask must share batch and time"</span>)</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    next_token_logps <span class="op">=</span> F.log_softmax(logits[:, :<span class="op">-</span><span class="dv">1</span>], dim<span class="op">=-</span><span class="dv">1</span>).gather(</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>        dim<span class="op">=-</span><span class="dv">1</span>, index<span class="op">=</span>token_ids[:, <span class="dv">1</span>:].unsqueeze(<span class="op">-</span><span class="dv">1</span>)</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    ).squeeze(<span class="op">-</span><span class="dv">1</span>)</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> (next_token_logps <span class="op">*</span> response_mask[:, <span class="dv">1</span>:]).<span class="bu">sum</span>(dim<span class="op">=</span><span class="dv">1</span>)</span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>token_ids <span class="op">=</span> torch.tensor([</span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    [<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">3</span>, <span class="dv">4</span>, <span class="dv">5</span>, <span class="dv">6</span>, <span class="dv">0</span>],</span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    [<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">7</span>, <span class="dv">8</span>, <span class="dv">9</span>, <span class="dv">6</span>, <span class="dv">0</span>],</span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>])</span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>response_mask <span class="op">=</span> torch.tensor([</span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    [<span class="va">False</span>, <span class="va">False</span>, <span class="va">False</span>, <span class="va">True</span>, <span class="va">True</span>, <span class="va">True</span>, <span class="va">False</span>],</span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>    [<span class="va">False</span>, <span class="va">False</span>, <span class="va">True</span>, <span class="va">True</span>, <span class="va">True</span>, <span class="va">True</span>, <span class="va">False</span>],</span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>])</span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>toy_logits <span class="op">=</span> torch.randn(<span class="dv">2</span>, <span class="dv">7</span>, <span class="dv">11</span>)</span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>original_logps <span class="op">=</span> completion_log_probability(toy_logits, token_ids, response_mask)</span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>perturbed_logits <span class="op">=</span> toy_logits.clone()</span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>inactive_predictors <span class="op">=</span> <span class="op">~</span>response_mask[:, <span class="dv">1</span>:]</span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>perturbed_logits[:, :<span class="op">-</span><span class="dv">1</span>][inactive_predictors] <span class="op">=</span> torch.linspace(<span class="op">-</span><span class="dv">5</span>, <span class="dv">5</span>, <span class="dv">11</span>)</span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>perturbed_logps <span class="op">=</span> completion_log_probability(</span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a>    perturbed_logits, token_ids, response_mask</span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"scored response tokens:"</span>, response_mask[:, <span class="dv">1</span>:].<span class="bu">sum</span>(dim<span class="op">=</span><span class="dv">1</span>).tolist())</span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(</span>
+<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a>    <span class="st">"largest change after perturbing prompt/padding predictions:"</span>,</span>
+<span id="cb1-34"><a href="#cb1-34" aria-hidden="true" tabindex="-1"></a>    <span class="ss">f"</span><span class="sc">{</span>(perturbed_logps <span class="op">-</span> original_logps)<span class="sc">.</span><span class="bu">abs</span>()<span class="sc">.</span><span class="bu">max</span>()<span class="sc">.</span>item()<span class="sc">:.2e}</span><span class="ss">"</span>,</span>
+<span id="cb1-35"><a href="#cb1-35" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
 <pre><code>scored response tokens: [3, 4]
@@ -630,86 +611,86 @@ P_\phi(y_w\succ y_l\mid x)
 <div id="cell-fig-preference-consistency" class="cell" data-fig-height="3.8" data-fig-width="10" data-execution_count="4">
 <details class="code-fold">
 <summary>Experiment: make the scalar-reward assumption fail on a preference cycle</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>incidence <span class="op">=</span> torch.tensor([</span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    [<span class="fl">1.0</span>, <span class="op">-</span><span class="fl">1.0</span>, <span class="fl">0.0</span>],</span>
-<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    [<span class="fl">0.0</span>, <span class="fl">1.0</span>, <span class="op">-</span><span class="fl">1.0</span>],</span>
-<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    [<span class="op">-</span><span class="fl">1.0</span>, <span class="fl">0.0</span>, <span class="fl">1.0</span>],</span>
-<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>])</span>
-<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>transitive_scores <span class="op">=</span> torch.tensor([<span class="fl">1.0</span>, <span class="fl">0.0</span>, <span class="op">-</span><span class="fl">1.0</span>])</span>
-<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>transitive_targets <span class="op">=</span> torch.sigmoid(incidence <span class="op">@</span> transitive_scores)</span>
-<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>fitted_transitive <span class="op">=</span> torch.linalg.lstsq(</span>
-<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>    incidence, torch.logit(transitive_targets)</span>
-<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>).solution</span>
-<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>fitted_transitive <span class="op">-=</span> fitted_transitive.mean()</span>
-<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>cyclic_targets <span class="op">=</span> torch.full((<span class="dv">3</span>,), <span class="fl">0.70</span>)</span>
-<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a>fitted_cyclic <span class="op">=</span> torch.linalg.lstsq(</span>
-<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a>    incidence, torch.logit(cyclic_targets)</span>
-<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a>).solution</span>
-<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a>fitted_cyclic <span class="op">-=</span> fitted_cyclic.mean()</span>
-<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a>cyclic_predictions <span class="op">=</span> torch.sigmoid(incidence <span class="op">@</span> fitted_cyclic)</span>
-<span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a>scalar_loss <span class="op">=</span> F.binary_cross_entropy(cyclic_predictions, cyclic_targets)</span>
-<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a>edgewise_floor <span class="op">=</span> F.binary_cross_entropy(cyclic_targets, cyclic_targets)</span>
-<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-23"><a href="#cb4-23" aria-hidden="true" tabindex="-1"></a>fig, axes <span class="op">=</span> plt.subplots(<span class="dv">1</span>, <span class="dv">3</span>, figsize<span class="op">=</span>(<span class="dv">10</span>, <span class="fl">3.8</span>))</span>
-<span id="cb4-24"><a href="#cb4-24" aria-hidden="true" tabindex="-1"></a>positions <span class="op">=</span> {<span class="st">"A"</span>: (<span class="fl">0.5</span>, <span class="fl">0.92</span>), <span class="st">"B"</span>: (<span class="fl">0.08</span>, <span class="fl">0.12</span>), <span class="st">"C"</span>: (<span class="fl">0.92</span>, <span class="fl">0.12</span>)}</span>
-<span id="cb4-25"><a href="#cb4-25" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-26"><a href="#cb4-26" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> draw_preference_triangle(</span>
-<span id="cb4-27"><a href="#cb4-27" aria-hidden="true" tabindex="-1"></a>    axis: Axes, edges: <span class="bu">list</span>[<span class="bu">tuple</span>[<span class="bu">str</span>, <span class="bu">str</span>, <span class="bu">str</span>]], title: <span class="bu">str</span></span>
-<span id="cb4-28"><a href="#cb4-28" aria-hidden="true" tabindex="-1"></a>) <span class="op">-&gt;</span> <span class="va">None</span>:</span>
-<span id="cb4-29"><a href="#cb4-29" aria-hidden="true" tabindex="-1"></a>    axis.set_xlim(<span class="op">-</span><span class="fl">0.12</span>, <span class="fl">1.12</span>)</span>
-<span id="cb4-30"><a href="#cb4-30" aria-hidden="true" tabindex="-1"></a>    axis.set_ylim(<span class="op">-</span><span class="fl">0.08</span>, <span class="fl">1.08</span>)</span>
-<span id="cb4-31"><a href="#cb4-31" aria-hidden="true" tabindex="-1"></a>    axis.axis(<span class="st">"off"</span>)</span>
-<span id="cb4-32"><a href="#cb4-32" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> name, (x_pos, y_pos) <span class="kw">in</span> positions.items():</span>
-<span id="cb4-33"><a href="#cb4-33" aria-hidden="true" tabindex="-1"></a>        axis.scatter(x_pos, y_pos, s<span class="op">=</span><span class="dv">820</span>, color<span class="op">=</span><span class="st">"#F3F4F6"</span>, edgecolor<span class="op">=</span>navy, zorder<span class="op">=</span><span class="dv">3</span>)</span>
-<span id="cb4-34"><a href="#cb4-34" aria-hidden="true" tabindex="-1"></a>        axis.text(x_pos, y_pos, name, ha<span class="op">=</span><span class="st">"center"</span>, va<span class="op">=</span><span class="st">"center"</span>, color<span class="op">=</span>navy,</span>
-<span id="cb4-35"><a href="#cb4-35" aria-hidden="true" tabindex="-1"></a>                  fontsize<span class="op">=</span><span class="dv">12</span>, weight<span class="op">=</span><span class="st">"bold"</span>, zorder<span class="op">=</span><span class="dv">4</span>)</span>
-<span id="cb4-36"><a href="#cb4-36" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> start, end, label <span class="kw">in</span> edges:</span>
-<span id="cb4-37"><a href="#cb4-37" aria-hidden="true" tabindex="-1"></a>        x0, y0 <span class="op">=</span> positions[start]</span>
-<span id="cb4-38"><a href="#cb4-38" aria-hidden="true" tabindex="-1"></a>        x1, y1 <span class="op">=</span> positions[end]</span>
-<span id="cb4-39"><a href="#cb4-39" aria-hidden="true" tabindex="-1"></a>        axis.annotate(<span class="st">""</span>, xy<span class="op">=</span>(x1, y1), xytext<span class="op">=</span>(x0, y0),</span>
-<span id="cb4-40"><a href="#cb4-40" aria-hidden="true" tabindex="-1"></a>                      arrowprops<span class="op">=</span><span class="bu">dict</span>(arrowstyle<span class="op">=</span><span class="st">"-&gt;"</span>, color<span class="op">=</span>orange, lw<span class="op">=</span><span class="fl">1.8</span>,</span>
-<span id="cb4-41"><a href="#cb4-41" aria-hidden="true" tabindex="-1"></a>                                      shrinkA<span class="op">=</span><span class="dv">22</span>, shrinkB<span class="op">=</span><span class="dv">22</span>))</span>
-<span id="cb4-42"><a href="#cb4-42" aria-hidden="true" tabindex="-1"></a>        axis.text((x0 <span class="op">+</span> x1) <span class="op">/</span> <span class="dv">2</span>, (y0 <span class="op">+</span> y1) <span class="op">/</span> <span class="dv">2</span>, label, ha<span class="op">=</span><span class="st">"center"</span>, va<span class="op">=</span><span class="st">"center"</span>,</span>
-<span id="cb4-43"><a href="#cb4-43" aria-hidden="true" tabindex="-1"></a>                  fontsize<span class="op">=</span><span class="fl">8.2</span>, color<span class="op">=</span>wine,</span>
-<span id="cb4-44"><a href="#cb4-44" aria-hidden="true" tabindex="-1"></a>                  bbox<span class="op">=</span><span class="bu">dict</span>(facecolor<span class="op">=</span><span class="st">"white"</span>, edgecolor<span class="op">=</span><span class="st">"none"</span>, pad<span class="op">=</span><span class="fl">1.0</span>))</span>
-<span id="cb4-45"><a href="#cb4-45" aria-hidden="true" tabindex="-1"></a>    axis.set_title(title, color<span class="op">=</span>navy, fontsize<span class="op">=</span><span class="fl">10.5</span>, weight<span class="op">=</span><span class="st">"bold"</span>)</span>
-<span id="cb4-46"><a href="#cb4-46" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-47"><a href="#cb4-47" aria-hidden="true" tabindex="-1"></a>draw_preference_triangle(</span>
-<span id="cb4-48"><a href="#cb4-48" aria-hidden="true" tabindex="-1"></a>    axes[<span class="dv">0</span>], [(<span class="st">"A"</span>, <span class="st">"B"</span>, <span class="st">"0.731"</span>), (<span class="st">"B"</span>, <span class="st">"C"</span>, <span class="st">"0.731"</span>),</span>
-<span id="cb4-49"><a href="#cb4-49" aria-hidden="true" tabindex="-1"></a>              (<span class="st">"A"</span>, <span class="st">"C"</span>, <span class="st">"0.881"</span>)],</span>
-<span id="cb4-50"><a href="#cb4-50" aria-hidden="true" tabindex="-1"></a>    <span class="st">"scalar scores are consistent"</span>,</span>
-<span id="cb4-51"><a href="#cb4-51" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb4-52"><a href="#cb4-52" aria-hidden="true" tabindex="-1"></a>draw_preference_triangle(</span>
-<span id="cb4-53"><a href="#cb4-53" aria-hidden="true" tabindex="-1"></a>    axes[<span class="dv">1</span>], [(<span class="st">"A"</span>, <span class="st">"B"</span>, <span class="st">"0.70"</span>), (<span class="st">"B"</span>, <span class="st">"C"</span>, <span class="st">"0.70"</span>),</span>
-<span id="cb4-54"><a href="#cb4-54" aria-hidden="true" tabindex="-1"></a>              (<span class="st">"C"</span>, <span class="st">"A"</span>, <span class="st">"0.70"</span>)],</span>
-<span id="cb4-55"><a href="#cb4-55" aria-hidden="true" tabindex="-1"></a>    <span class="st">"the cycle has no scalar solution"</span>,</span>
-<span id="cb4-56"><a href="#cb4-56" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb4-57"><a href="#cb4-57" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">2</span>].bar([<span class="dv">0</span>, <span class="dv">1</span>], [edgewise_floor.item(), scalar_loss.item()],</span>
-<span id="cb4-58"><a href="#cb4-58" aria-hidden="true" tabindex="-1"></a>            color<span class="op">=</span>[green, orange], width<span class="op">=</span><span class="fl">0.62</span>)</span>
-<span id="cb4-59"><a href="#cb4-59" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">2</span>].set_xticks([<span class="dv">0</span>, <span class="dv">1</span>], [<span class="st">"edgewise</span><span class="ch">\n</span><span class="st">probabilities"</span>, <span class="st">"one scalar</span><span class="ch">\n</span><span class="st">reward"</span>])</span>
-<span id="cb4-60"><a href="#cb4-60" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">2</span>].set_ylabel(<span class="st">"mean preference log loss"</span>)</span>
-<span id="cb4-61"><a href="#cb4-61" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">2</span>].set_ylim(<span class="fl">0.57</span>, <span class="fl">0.72</span>)</span>
-<span id="cb4-62"><a href="#cb4-62" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">2</span>].grid(axis<span class="op">=</span><span class="st">"y"</span>, alpha<span class="op">=</span><span class="fl">0.18</span>)</span>
-<span id="cb4-63"><a href="#cb4-63" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">2</span>].set_title(<span class="st">"misspecification has a cost"</span>, color<span class="op">=</span>navy,</span>
-<span id="cb4-64"><a href="#cb4-64" aria-hidden="true" tabindex="-1"></a>                  fontsize<span class="op">=</span><span class="fl">10.5</span>, weight<span class="op">=</span><span class="st">"bold"</span>)</span>
-<span id="cb4-65"><a href="#cb4-65" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> index, value <span class="kw">in</span> <span class="bu">enumerate</span>([edgewise_floor.item(), scalar_loss.item()]):</span>
-<span id="cb4-66"><a href="#cb4-66" aria-hidden="true" tabindex="-1"></a>    axes[<span class="dv">2</span>].text(index, value <span class="op">+</span> <span class="fl">0.006</span>, <span class="ss">f"</span><span class="sc">{</span>value<span class="sc">:.6f}</span><span class="ss">"</span>, ha<span class="op">=</span><span class="st">"center"</span>, fontsize<span class="op">=</span><span class="fl">8.5</span>)</span>
-<span id="cb4-67"><a href="#cb4-67" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-68"><a href="#cb4-68" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
-<span id="cb4-69"><a href="#cb4-69" aria-hidden="true" tabindex="-1"></a>plt.show()</span>
-<span id="cb4-70"><a href="#cb4-70" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-71"><a href="#cb4-71" aria-hidden="true" tabindex="-1"></a>shifted_probabilities <span class="op">=</span> torch.sigmoid(incidence <span class="op">@</span> (fitted_transitive <span class="op">+</span> <span class="fl">37.0</span>))</span>
-<span id="cb4-72"><a href="#cb4-72" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"recovered centered scores:"</span>, [<span class="bu">round</span>(x, <span class="dv">6</span>) <span class="cf">for</span> x <span class="kw">in</span> fitted_transitive.tolist()])</span>
-<span id="cb4-73"><a href="#cb4-73" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"cyclic scalar predictions:"</span>, [<span class="bu">round</span>(x, <span class="dv">6</span>) <span class="cf">for</span> x <span class="kw">in</span> cyclic_predictions.tolist()])</span>
-<span id="cb4-74"><a href="#cb4-74" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"cyclic scalar loss: </span><span class="sc">{</span>scalar_loss<span class="sc">.</span>item()<span class="sc">:.6f}</span><span class="ss">"</span>)</span>
-<span id="cb4-75"><a href="#cb4-75" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"unconstrained edgewise floor: </span><span class="sc">{</span>edgewise_floor<span class="sc">.</span>item()<span class="sc">:.6f}</span><span class="ss">"</span>)</span>
-<span id="cb4-76"><a href="#cb4-76" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"irreducible scalar gap: </span><span class="sc">{</span>(scalar_loss <span class="op">-</span> edgewise_floor)<span class="sc">.</span>item()<span class="sc">:.6f}</span><span class="ss">"</span>)</span>
-<span id="cb4-77"><a href="#cb4-77" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(</span>
-<span id="cb4-78"><a href="#cb4-78" aria-hidden="true" tabindex="-1"></a>    <span class="st">"largest probability change after adding 37 to every reward:"</span>,</span>
-<span id="cb4-79"><a href="#cb4-79" aria-hidden="true" tabindex="-1"></a>    <span class="ss">f"</span><span class="sc">{</span>(shifted_probabilities <span class="op">-</span> transitive_targets)<span class="sc">.</span><span class="bu">abs</span>()<span class="sc">.</span><span class="bu">max</span>()<span class="sc">.</span>item()<span class="sc">:.2e}</span><span class="ss">"</span>,</span>
-<span id="cb4-80"><a href="#cb4-80" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>incidence <span class="op">=</span> torch.tensor([</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    [<span class="fl">1.0</span>, <span class="op">-</span><span class="fl">1.0</span>, <span class="fl">0.0</span>],</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    [<span class="fl">0.0</span>, <span class="fl">1.0</span>, <span class="op">-</span><span class="fl">1.0</span>],</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    [<span class="op">-</span><span class="fl">1.0</span>, <span class="fl">0.0</span>, <span class="fl">1.0</span>],</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>])</span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>transitive_scores <span class="op">=</span> torch.tensor([<span class="fl">1.0</span>, <span class="fl">0.0</span>, <span class="op">-</span><span class="fl">1.0</span>])</span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>transitive_targets <span class="op">=</span> torch.sigmoid(incidence <span class="op">@</span> transitive_scores)</span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>fitted_transitive <span class="op">=</span> torch.linalg.lstsq(</span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    incidence, torch.logit(transitive_targets)</span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>).solution</span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>fitted_transitive <span class="op">-=</span> fitted_transitive.mean()</span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>cyclic_targets <span class="op">=</span> torch.full((<span class="dv">3</span>,), <span class="fl">0.70</span>)</span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>fitted_cyclic <span class="op">=</span> torch.linalg.lstsq(</span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>    incidence, torch.logit(cyclic_targets)</span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>).solution</span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>fitted_cyclic <span class="op">-=</span> fitted_cyclic.mean()</span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>cyclic_predictions <span class="op">=</span> torch.sigmoid(incidence <span class="op">@</span> fitted_cyclic)</span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>scalar_loss <span class="op">=</span> F.binary_cross_entropy(cyclic_predictions, cyclic_targets)</span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>edgewise_floor <span class="op">=</span> F.binary_cross_entropy(cyclic_targets, cyclic_targets)</span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a>fig, axes <span class="op">=</span> plt.subplots(<span class="dv">1</span>, <span class="dv">3</span>, figsize<span class="op">=</span>(<span class="dv">10</span>, <span class="fl">3.8</span>))</span>
+<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a>positions <span class="op">=</span> {<span class="st">"A"</span>: (<span class="fl">0.5</span>, <span class="fl">0.92</span>), <span class="st">"B"</span>: (<span class="fl">0.08</span>, <span class="fl">0.12</span>), <span class="st">"C"</span>: (<span class="fl">0.92</span>, <span class="fl">0.12</span>)}</span>
+<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> draw_preference_triangle(</span>
+<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a>    axis: Axes, edges: <span class="bu">list</span>[<span class="bu">tuple</span>[<span class="bu">str</span>, <span class="bu">str</span>, <span class="bu">str</span>]], title: <span class="bu">str</span></span>
+<span id="cb3-28"><a href="#cb3-28" aria-hidden="true" tabindex="-1"></a>) <span class="op">-&gt;</span> <span class="va">None</span>:</span>
+<span id="cb3-29"><a href="#cb3-29" aria-hidden="true" tabindex="-1"></a>    axis.set_xlim(<span class="op">-</span><span class="fl">0.12</span>, <span class="fl">1.12</span>)</span>
+<span id="cb3-30"><a href="#cb3-30" aria-hidden="true" tabindex="-1"></a>    axis.set_ylim(<span class="op">-</span><span class="fl">0.08</span>, <span class="fl">1.08</span>)</span>
+<span id="cb3-31"><a href="#cb3-31" aria-hidden="true" tabindex="-1"></a>    axis.axis(<span class="st">"off"</span>)</span>
+<span id="cb3-32"><a href="#cb3-32" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> name, (x_pos, y_pos) <span class="kw">in</span> positions.items():</span>
+<span id="cb3-33"><a href="#cb3-33" aria-hidden="true" tabindex="-1"></a>        axis.scatter(x_pos, y_pos, s<span class="op">=</span><span class="dv">820</span>, color<span class="op">=</span><span class="st">"#F3F4F6"</span>, edgecolor<span class="op">=</span>navy, zorder<span class="op">=</span><span class="dv">3</span>)</span>
+<span id="cb3-34"><a href="#cb3-34" aria-hidden="true" tabindex="-1"></a>        axis.text(x_pos, y_pos, name, ha<span class="op">=</span><span class="st">"center"</span>, va<span class="op">=</span><span class="st">"center"</span>, color<span class="op">=</span>navy,</span>
+<span id="cb3-35"><a href="#cb3-35" aria-hidden="true" tabindex="-1"></a>                  fontsize<span class="op">=</span><span class="dv">12</span>, weight<span class="op">=</span><span class="st">"bold"</span>, zorder<span class="op">=</span><span class="dv">4</span>)</span>
+<span id="cb3-36"><a href="#cb3-36" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> start, end, label <span class="kw">in</span> edges:</span>
+<span id="cb3-37"><a href="#cb3-37" aria-hidden="true" tabindex="-1"></a>        x0, y0 <span class="op">=</span> positions[start]</span>
+<span id="cb3-38"><a href="#cb3-38" aria-hidden="true" tabindex="-1"></a>        x1, y1 <span class="op">=</span> positions[end]</span>
+<span id="cb3-39"><a href="#cb3-39" aria-hidden="true" tabindex="-1"></a>        axis.annotate(<span class="st">""</span>, xy<span class="op">=</span>(x1, y1), xytext<span class="op">=</span>(x0, y0),</span>
+<span id="cb3-40"><a href="#cb3-40" aria-hidden="true" tabindex="-1"></a>                      arrowprops<span class="op">=</span><span class="bu">dict</span>(arrowstyle<span class="op">=</span><span class="st">"-&gt;"</span>, color<span class="op">=</span>orange, lw<span class="op">=</span><span class="fl">1.8</span>,</span>
+<span id="cb3-41"><a href="#cb3-41" aria-hidden="true" tabindex="-1"></a>                                      shrinkA<span class="op">=</span><span class="dv">22</span>, shrinkB<span class="op">=</span><span class="dv">22</span>))</span>
+<span id="cb3-42"><a href="#cb3-42" aria-hidden="true" tabindex="-1"></a>        axis.text((x0 <span class="op">+</span> x1) <span class="op">/</span> <span class="dv">2</span>, (y0 <span class="op">+</span> y1) <span class="op">/</span> <span class="dv">2</span>, label, ha<span class="op">=</span><span class="st">"center"</span>, va<span class="op">=</span><span class="st">"center"</span>,</span>
+<span id="cb3-43"><a href="#cb3-43" aria-hidden="true" tabindex="-1"></a>                  fontsize<span class="op">=</span><span class="fl">8.2</span>, color<span class="op">=</span>wine,</span>
+<span id="cb3-44"><a href="#cb3-44" aria-hidden="true" tabindex="-1"></a>                  bbox<span class="op">=</span><span class="bu">dict</span>(facecolor<span class="op">=</span><span class="st">"white"</span>, edgecolor<span class="op">=</span><span class="st">"none"</span>, pad<span class="op">=</span><span class="fl">1.0</span>))</span>
+<span id="cb3-45"><a href="#cb3-45" aria-hidden="true" tabindex="-1"></a>    axis.set_title(title, color<span class="op">=</span>navy, fontsize<span class="op">=</span><span class="fl">10.5</span>, weight<span class="op">=</span><span class="st">"bold"</span>)</span>
+<span id="cb3-46"><a href="#cb3-46" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-47"><a href="#cb3-47" aria-hidden="true" tabindex="-1"></a>draw_preference_triangle(</span>
+<span id="cb3-48"><a href="#cb3-48" aria-hidden="true" tabindex="-1"></a>    axes[<span class="dv">0</span>], [(<span class="st">"A"</span>, <span class="st">"B"</span>, <span class="st">"0.731"</span>), (<span class="st">"B"</span>, <span class="st">"C"</span>, <span class="st">"0.731"</span>),</span>
+<span id="cb3-49"><a href="#cb3-49" aria-hidden="true" tabindex="-1"></a>              (<span class="st">"A"</span>, <span class="st">"C"</span>, <span class="st">"0.881"</span>)],</span>
+<span id="cb3-50"><a href="#cb3-50" aria-hidden="true" tabindex="-1"></a>    <span class="st">"scalar scores are consistent"</span>,</span>
+<span id="cb3-51"><a href="#cb3-51" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb3-52"><a href="#cb3-52" aria-hidden="true" tabindex="-1"></a>draw_preference_triangle(</span>
+<span id="cb3-53"><a href="#cb3-53" aria-hidden="true" tabindex="-1"></a>    axes[<span class="dv">1</span>], [(<span class="st">"A"</span>, <span class="st">"B"</span>, <span class="st">"0.70"</span>), (<span class="st">"B"</span>, <span class="st">"C"</span>, <span class="st">"0.70"</span>),</span>
+<span id="cb3-54"><a href="#cb3-54" aria-hidden="true" tabindex="-1"></a>              (<span class="st">"C"</span>, <span class="st">"A"</span>, <span class="st">"0.70"</span>)],</span>
+<span id="cb3-55"><a href="#cb3-55" aria-hidden="true" tabindex="-1"></a>    <span class="st">"the cycle has no scalar solution"</span>,</span>
+<span id="cb3-56"><a href="#cb3-56" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb3-57"><a href="#cb3-57" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">2</span>].bar([<span class="dv">0</span>, <span class="dv">1</span>], [edgewise_floor.item(), scalar_loss.item()],</span>
+<span id="cb3-58"><a href="#cb3-58" aria-hidden="true" tabindex="-1"></a>            color<span class="op">=</span>[green, orange], width<span class="op">=</span><span class="fl">0.62</span>)</span>
+<span id="cb3-59"><a href="#cb3-59" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">2</span>].set_xticks([<span class="dv">0</span>, <span class="dv">1</span>], [<span class="st">"edgewise</span><span class="ch">\n</span><span class="st">probabilities"</span>, <span class="st">"one scalar</span><span class="ch">\n</span><span class="st">reward"</span>])</span>
+<span id="cb3-60"><a href="#cb3-60" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">2</span>].set_ylabel(<span class="st">"mean preference log loss"</span>)</span>
+<span id="cb3-61"><a href="#cb3-61" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">2</span>].set_ylim(<span class="fl">0.57</span>, <span class="fl">0.72</span>)</span>
+<span id="cb3-62"><a href="#cb3-62" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">2</span>].grid(axis<span class="op">=</span><span class="st">"y"</span>, alpha<span class="op">=</span><span class="fl">0.18</span>)</span>
+<span id="cb3-63"><a href="#cb3-63" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">2</span>].set_title(<span class="st">"misspecification has a cost"</span>, color<span class="op">=</span>navy,</span>
+<span id="cb3-64"><a href="#cb3-64" aria-hidden="true" tabindex="-1"></a>                  fontsize<span class="op">=</span><span class="fl">10.5</span>, weight<span class="op">=</span><span class="st">"bold"</span>)</span>
+<span id="cb3-65"><a href="#cb3-65" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> index, value <span class="kw">in</span> <span class="bu">enumerate</span>([edgewise_floor.item(), scalar_loss.item()]):</span>
+<span id="cb3-66"><a href="#cb3-66" aria-hidden="true" tabindex="-1"></a>    axes[<span class="dv">2</span>].text(index, value <span class="op">+</span> <span class="fl">0.006</span>, <span class="ss">f"</span><span class="sc">{</span>value<span class="sc">:.6f}</span><span class="ss">"</span>, ha<span class="op">=</span><span class="st">"center"</span>, fontsize<span class="op">=</span><span class="fl">8.5</span>)</span>
+<span id="cb3-67"><a href="#cb3-67" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-68"><a href="#cb3-68" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
+<span id="cb3-69"><a href="#cb3-69" aria-hidden="true" tabindex="-1"></a>plt.show()</span>
+<span id="cb3-70"><a href="#cb3-70" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-71"><a href="#cb3-71" aria-hidden="true" tabindex="-1"></a>shifted_probabilities <span class="op">=</span> torch.sigmoid(incidence <span class="op">@</span> (fitted_transitive <span class="op">+</span> <span class="fl">37.0</span>))</span>
+<span id="cb3-72"><a href="#cb3-72" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"recovered centered scores:"</span>, [<span class="bu">round</span>(x, <span class="dv">6</span>) <span class="cf">for</span> x <span class="kw">in</span> fitted_transitive.tolist()])</span>
+<span id="cb3-73"><a href="#cb3-73" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"cyclic scalar predictions:"</span>, [<span class="bu">round</span>(x, <span class="dv">6</span>) <span class="cf">for</span> x <span class="kw">in</span> cyclic_predictions.tolist()])</span>
+<span id="cb3-74"><a href="#cb3-74" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"cyclic scalar loss: </span><span class="sc">{</span>scalar_loss<span class="sc">.</span>item()<span class="sc">:.6f}</span><span class="ss">"</span>)</span>
+<span id="cb3-75"><a href="#cb3-75" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"unconstrained edgewise floor: </span><span class="sc">{</span>edgewise_floor<span class="sc">.</span>item()<span class="sc">:.6f}</span><span class="ss">"</span>)</span>
+<span id="cb3-76"><a href="#cb3-76" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"irreducible scalar gap: </span><span class="sc">{</span>(scalar_loss <span class="op">-</span> edgewise_floor)<span class="sc">.</span>item()<span class="sc">:.6f}</span><span class="ss">"</span>)</span>
+<span id="cb3-77"><a href="#cb3-77" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(</span>
+<span id="cb3-78"><a href="#cb3-78" aria-hidden="true" tabindex="-1"></a>    <span class="st">"largest probability change after adding 37 to every reward:"</span>,</span>
+<span id="cb3-79"><a href="#cb3-79" aria-hidden="true" tabindex="-1"></a>    <span class="ss">f"</span><span class="sc">{</span>(shifted_probabilities <span class="op">-</span> transitive_targets)<span class="sc">.</span><span class="bu">abs</span>()<span class="sc">.</span><span class="bu">max</span>()<span class="sc">.</span>item()<span class="sc">:.2e}</span><span class="ss">"</span>,</span>
+<span id="cb3-80"><a href="#cb3-80" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-display">
 <div id="fig-preference-consistency" class="quarto-float quarto-figure quarto-figure-center anchored" alt="The left triangle shows transitive arrows consistent with scores one, zero, and minus one. The middle triangle shows a cyclic 0.70 preference on all three arrows. The right bars compare the unconstrained and scalar-model log losses.">
@@ -818,72 +799,72 @@ Z(x)=\sum_{j=1}^K\pi_{\mathrm{ref}}(y_j\mid x)
 <div id="cell-fig-reference-tilt" class="cell" data-fig-height="4.2" data-fig-width="10" data-execution_count="6">
 <details class="code-fold">
 <summary>Experiment: solve the KL-regularized finite-response policy exactly</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> gibbs_policy(reference: Tensor, reward: Tensor, beta: <span class="bu">float</span>) <span class="op">-&gt;</span> Tensor:</span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> torch.softmax(torch.log(reference) <span class="op">+</span> reward <span class="op">/</span> beta, dim<span class="op">=</span><span class="dv">0</span>)</span>
-<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> kl_divergence(policy: Tensor, reference: Tensor) <span class="op">-&gt;</span> Tensor:</span>
-<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> (policy <span class="op">*</span> (torch.log(policy) <span class="op">-</span> torch.log(reference))).<span class="bu">sum</span>()</span>
-<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>reference <span class="op">=</span> torch.tensor([<span class="fl">0.55</span>, <span class="fl">0.25</span>, <span class="fl">0.15</span>, <span class="fl">0.05</span>])</span>
-<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>reward <span class="op">=</span> torch.tensor([<span class="fl">0.0</span>, <span class="fl">1.0</span>, <span class="fl">2.0</span>, <span class="fl">3.0</span>])</span>
-<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>shown_betas <span class="op">=</span> [<span class="fl">4.0</span>, <span class="fl">1.0</span>, <span class="fl">0.5</span>]</span>
-<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>shown_policies <span class="op">=</span> [gibbs_policy(reference, reward, beta) <span class="cf">for</span> beta <span class="kw">in</span> shown_betas]</span>
-<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a>fig, axes <span class="op">=</span> plt.subplots(<span class="dv">1</span>, <span class="dv">2</span>, figsize<span class="op">=</span>(<span class="dv">10</span>, <span class="fl">4.2</span>))</span>
-<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a>x_positions <span class="op">=</span> torch.arange(<span class="dv">4</span>).numpy()</span>
-<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a>width <span class="op">=</span> <span class="fl">0.18</span></span>
-<span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].bar(x_positions <span class="op">-</span> <span class="fl">1.5</span> <span class="op">*</span> width, reference.numpy(), width,</span>
-<span id="cb6-18"><a href="#cb6-18" aria-hidden="true" tabindex="-1"></a>            label<span class="op">=</span><span class="st">"reference"</span>, color<span class="op">=</span><span class="st">"#B8BCC4"</span>)</span>
-<span id="cb6-19"><a href="#cb6-19" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> offset, beta, policy, color <span class="kw">in</span> <span class="bu">zip</span>(</span>
-<span id="cb6-20"><a href="#cb6-20" aria-hidden="true" tabindex="-1"></a>    [<span class="op">-</span><span class="fl">0.5</span>, <span class="fl">0.5</span>, <span class="fl">1.5</span>], shown_betas, shown_policies, [green, orange, wine]</span>
-<span id="cb6-21"><a href="#cb6-21" aria-hidden="true" tabindex="-1"></a>):</span>
-<span id="cb6-22"><a href="#cb6-22" aria-hidden="true" tabindex="-1"></a>    axes[<span class="dv">0</span>].bar(x_positions <span class="op">+</span> offset <span class="op">*</span> width, policy.numpy(), width,</span>
-<span id="cb6-23"><a href="#cb6-23" aria-hidden="true" tabindex="-1"></a>                label<span class="op">=</span><span class="vs">fr"</span><span class="dv">$\b</span><span class="vs">eta=</span><span class="sc">{</span>beta<span class="sc">:g}</span><span class="dv">$</span><span class="vs">"</span>, color<span class="op">=</span>color)</span>
-<span id="cb6-24"><a href="#cb6-24" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].set_xticks(x_positions, [<span class="st">"A"</span>, <span class="st">"B"</span>, <span class="st">"C"</span>, <span class="st">"D"</span>])</span>
-<span id="cb6-25"><a href="#cb6-25" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].set_ylabel(<span class="st">"response probability"</span>)</span>
-<span id="cb6-26"><a href="#cb6-26" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].set_title(<span class="st">"reward tilts a reference"</span>, color<span class="op">=</span>navy, weight<span class="op">=</span><span class="st">"bold"</span>)</span>
-<span id="cb6-27"><a href="#cb6-27" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].legend(frameon<span class="op">=</span><span class="va">False</span>, fontsize<span class="op">=</span><span class="dv">8</span>)</span>
-<span id="cb6-28"><a href="#cb6-28" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].grid(axis<span class="op">=</span><span class="st">"y"</span>, alpha<span class="op">=</span><span class="fl">0.18</span>)</span>
-<span id="cb6-29"><a href="#cb6-29" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-30"><a href="#cb6-30" aria-hidden="true" tabindex="-1"></a>sweep_betas <span class="op">=</span> torch.logspace(math.log10(<span class="fl">8.0</span>), math.log10(<span class="fl">0.2</span>), <span class="dv">80</span>)</span>
-<span id="cb6-31"><a href="#cb6-31" aria-hidden="true" tabindex="-1"></a>sweep_policies <span class="op">=</span> torch.stack([</span>
-<span id="cb6-32"><a href="#cb6-32" aria-hidden="true" tabindex="-1"></a>    gibbs_policy(reference, reward, beta.item()) <span class="cf">for</span> beta <span class="kw">in</span> sweep_betas</span>
-<span id="cb6-33"><a href="#cb6-33" aria-hidden="true" tabindex="-1"></a>])</span>
-<span id="cb6-34"><a href="#cb6-34" aria-hidden="true" tabindex="-1"></a>sweep_rewards <span class="op">=</span> sweep_policies <span class="op">@</span> reward</span>
-<span id="cb6-35"><a href="#cb6-35" aria-hidden="true" tabindex="-1"></a>sweep_kls <span class="op">=</span> torch.stack([</span>
-<span id="cb6-36"><a href="#cb6-36" aria-hidden="true" tabindex="-1"></a>    kl_divergence(policy, reference) <span class="cf">for</span> policy <span class="kw">in</span> sweep_policies</span>
-<span id="cb6-37"><a href="#cb6-37" aria-hidden="true" tabindex="-1"></a>])</span>
-<span id="cb6-38"><a href="#cb6-38" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].plot(sweep_kls.numpy(), sweep_rewards.numpy(), color<span class="op">=</span>wine, lw<span class="op">=</span><span class="fl">2.2</span>)</span>
-<span id="cb6-39"><a href="#cb6-39" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> beta, color <span class="kw">in</span> <span class="bu">zip</span>(shown_betas, [green, orange, wine]):</span>
-<span id="cb6-40"><a href="#cb6-40" aria-hidden="true" tabindex="-1"></a>    policy <span class="op">=</span> gibbs_policy(reference, reward, beta)</span>
-<span id="cb6-41"><a href="#cb6-41" aria-hidden="true" tabindex="-1"></a>    axes[<span class="dv">1</span>].scatter(kl_divergence(policy, reference).item(),</span>
-<span id="cb6-42"><a href="#cb6-42" aria-hidden="true" tabindex="-1"></a>                    (policy <span class="op">@</span> reward).item(), color<span class="op">=</span>color, s<span class="op">=</span><span class="dv">45</span>, zorder<span class="op">=</span><span class="dv">3</span>)</span>
-<span id="cb6-43"><a href="#cb6-43" aria-hidden="true" tabindex="-1"></a>    axes[<span class="dv">1</span>].annotate(<span class="vs">fr"</span><span class="dv">$\b</span><span class="vs">eta=</span><span class="sc">{</span>beta<span class="sc">:g}</span><span class="dv">$</span><span class="vs">"</span>,</span>
-<span id="cb6-44"><a href="#cb6-44" aria-hidden="true" tabindex="-1"></a>                     (kl_divergence(policy, reference).item(), (policy <span class="op">@</span> reward).item()),</span>
-<span id="cb6-45"><a href="#cb6-45" aria-hidden="true" tabindex="-1"></a>                     xytext<span class="op">=</span>(<span class="dv">5</span>, <span class="dv">5</span>), textcoords<span class="op">=</span><span class="st">"offset points"</span>, fontsize<span class="op">=</span><span class="dv">8</span>)</span>
-<span id="cb6-46"><a href="#cb6-46" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].set_xlabel(<span class="vs">r"</span><span class="dv">$</span><span class="vs">D_{</span><span class="dv">\m</span><span class="vs">athrm{KL}}</span><span class="kw">(</span><span class="er">\</span><span class="vs">pi</span><span class="er">\</span><span class="vs">Vert</span><span class="er">\</span><span class="vs">pi_{</span><span class="ch">\r</span><span class="vs">m ref}</span><span class="kw">)</span><span class="dv">$</span><span class="vs">"</span>)</span>
-<span id="cb6-47"><a href="#cb6-47" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].set_ylabel(<span class="st">"expected proxy reward"</span>)</span>
-<span id="cb6-48"><a href="#cb6-48" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].set_title(<span class="st">"more pressure buys more proxy score"</span>, color<span class="op">=</span>navy, weight<span class="op">=</span><span class="st">"bold"</span>)</span>
-<span id="cb6-49"><a href="#cb6-49" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].grid(alpha<span class="op">=</span><span class="fl">0.18</span>)</span>
-<span id="cb6-50"><a href="#cb6-50" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
-<span id="cb6-51"><a href="#cb6-51" aria-hidden="true" tabindex="-1"></a>plt.show()</span>
-<span id="cb6-52"><a href="#cb6-52" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-53"><a href="#cb6-53" aria-hidden="true" tabindex="-1"></a>target_policy <span class="op">=</span> gibbs_policy(reference, reward, <span class="fl">1.0</span>)</span>
-<span id="cb6-54"><a href="#cb6-54" aria-hidden="true" tabindex="-1"></a>shifted_target <span class="op">=</span> gibbs_policy(reference, reward <span class="op">+</span> <span class="fl">37.0</span>, <span class="fl">1.0</span>)</span>
-<span id="cb6-55"><a href="#cb6-55" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"beta  expected reward  KL to reference"</span>)</span>
-<span id="cb6-56"><a href="#cb6-56" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> beta <span class="kw">in</span> [<span class="fl">4.0</span>, <span class="fl">2.0</span>, <span class="fl">1.0</span>, <span class="fl">0.5</span>, <span class="fl">0.25</span>]:</span>
-<span id="cb6-57"><a href="#cb6-57" aria-hidden="true" tabindex="-1"></a>    policy <span class="op">=</span> gibbs_policy(reference, reward, beta)</span>
-<span id="cb6-58"><a href="#cb6-58" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(</span>
-<span id="cb6-59"><a href="#cb6-59" aria-hidden="true" tabindex="-1"></a>        <span class="ss">f"</span><span class="sc">{</span>beta<span class="sc">:4.3g}</span><span class="ss">      </span><span class="sc">{</span>(policy <span class="op">@</span> reward)<span class="sc">.</span>item()<span class="sc">:.6f}</span><span class="ss">"</span></span>
-<span id="cb6-60"><a href="#cb6-60" aria-hidden="true" tabindex="-1"></a>        <span class="ss">f"          </span><span class="sc">{</span>kl_divergence(policy, reference)<span class="sc">.</span>item()<span class="sc">:.6f}</span><span class="ss">"</span></span>
-<span id="cb6-61"><a href="#cb6-61" aria-hidden="true" tabindex="-1"></a>    )</span>
-<span id="cb6-62"><a href="#cb6-62" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"beta=1 policy:"</span>, [<span class="bu">round</span>(x, <span class="dv">6</span>) <span class="cf">for</span> x <span class="kw">in</span> target_policy.tolist()])</span>
-<span id="cb6-63"><a href="#cb6-63" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(</span>
-<span id="cb6-64"><a href="#cb6-64" aria-hidden="true" tabindex="-1"></a>    <span class="st">"largest policy change after adding 37 to every reward:"</span>,</span>
-<span id="cb6-65"><a href="#cb6-65" aria-hidden="true" tabindex="-1"></a>    <span class="ss">f"</span><span class="sc">{</span>(shifted_target <span class="op">-</span> target_policy)<span class="sc">.</span><span class="bu">abs</span>()<span class="sc">.</span><span class="bu">max</span>()<span class="sc">.</span>item()<span class="sc">:.2e}</span><span class="ss">"</span>,</span>
-<span id="cb6-66"><a href="#cb6-66" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> gibbs_policy(reference: Tensor, reward: Tensor, beta: <span class="bu">float</span>) <span class="op">-&gt;</span> Tensor:</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> torch.softmax(torch.log(reference) <span class="op">+</span> reward <span class="op">/</span> beta, dim<span class="op">=</span><span class="dv">0</span>)</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> kl_divergence(policy: Tensor, reference: Tensor) <span class="op">-&gt;</span> Tensor:</span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> (policy <span class="op">*</span> (torch.log(policy) <span class="op">-</span> torch.log(reference))).<span class="bu">sum</span>()</span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>reference <span class="op">=</span> torch.tensor([<span class="fl">0.55</span>, <span class="fl">0.25</span>, <span class="fl">0.15</span>, <span class="fl">0.05</span>])</span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>reward <span class="op">=</span> torch.tensor([<span class="fl">0.0</span>, <span class="fl">1.0</span>, <span class="fl">2.0</span>, <span class="fl">3.0</span>])</span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>shown_betas <span class="op">=</span> [<span class="fl">4.0</span>, <span class="fl">1.0</span>, <span class="fl">0.5</span>]</span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>shown_policies <span class="op">=</span> [gibbs_policy(reference, reward, beta) <span class="cf">for</span> beta <span class="kw">in</span> shown_betas]</span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>fig, axes <span class="op">=</span> plt.subplots(<span class="dv">1</span>, <span class="dv">2</span>, figsize<span class="op">=</span>(<span class="dv">10</span>, <span class="fl">4.2</span>))</span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>x_positions <span class="op">=</span> torch.arange(<span class="dv">4</span>).numpy()</span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>width <span class="op">=</span> <span class="fl">0.18</span></span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].bar(x_positions <span class="op">-</span> <span class="fl">1.5</span> <span class="op">*</span> width, reference.numpy(), width,</span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>            label<span class="op">=</span><span class="st">"reference"</span>, color<span class="op">=</span><span class="st">"#B8BCC4"</span>)</span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> offset, beta, policy, color <span class="kw">in</span> <span class="bu">zip</span>(</span>
+<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a>    [<span class="op">-</span><span class="fl">0.5</span>, <span class="fl">0.5</span>, <span class="fl">1.5</span>], shown_betas, shown_policies, [green, orange, wine]</span>
+<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a>):</span>
+<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a>    axes[<span class="dv">0</span>].bar(x_positions <span class="op">+</span> offset <span class="op">*</span> width, policy.numpy(), width,</span>
+<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a>                label<span class="op">=</span><span class="vs">fr"</span><span class="dv">$\b</span><span class="vs">eta=</span><span class="sc">{</span>beta<span class="sc">:g}</span><span class="dv">$</span><span class="vs">"</span>, color<span class="op">=</span>color)</span>
+<span id="cb5-24"><a href="#cb5-24" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].set_xticks(x_positions, [<span class="st">"A"</span>, <span class="st">"B"</span>, <span class="st">"C"</span>, <span class="st">"D"</span>])</span>
+<span id="cb5-25"><a href="#cb5-25" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].set_ylabel(<span class="st">"response probability"</span>)</span>
+<span id="cb5-26"><a href="#cb5-26" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].set_title(<span class="st">"reward tilts a reference"</span>, color<span class="op">=</span>navy, weight<span class="op">=</span><span class="st">"bold"</span>)</span>
+<span id="cb5-27"><a href="#cb5-27" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].legend(frameon<span class="op">=</span><span class="va">False</span>, fontsize<span class="op">=</span><span class="dv">8</span>)</span>
+<span id="cb5-28"><a href="#cb5-28" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].grid(axis<span class="op">=</span><span class="st">"y"</span>, alpha<span class="op">=</span><span class="fl">0.18</span>)</span>
+<span id="cb5-29"><a href="#cb5-29" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-30"><a href="#cb5-30" aria-hidden="true" tabindex="-1"></a>sweep_betas <span class="op">=</span> torch.logspace(math.log10(<span class="fl">8.0</span>), math.log10(<span class="fl">0.2</span>), <span class="dv">80</span>)</span>
+<span id="cb5-31"><a href="#cb5-31" aria-hidden="true" tabindex="-1"></a>sweep_policies <span class="op">=</span> torch.stack([</span>
+<span id="cb5-32"><a href="#cb5-32" aria-hidden="true" tabindex="-1"></a>    gibbs_policy(reference, reward, beta.item()) <span class="cf">for</span> beta <span class="kw">in</span> sweep_betas</span>
+<span id="cb5-33"><a href="#cb5-33" aria-hidden="true" tabindex="-1"></a>])</span>
+<span id="cb5-34"><a href="#cb5-34" aria-hidden="true" tabindex="-1"></a>sweep_rewards <span class="op">=</span> sweep_policies <span class="op">@</span> reward</span>
+<span id="cb5-35"><a href="#cb5-35" aria-hidden="true" tabindex="-1"></a>sweep_kls <span class="op">=</span> torch.stack([</span>
+<span id="cb5-36"><a href="#cb5-36" aria-hidden="true" tabindex="-1"></a>    kl_divergence(policy, reference) <span class="cf">for</span> policy <span class="kw">in</span> sweep_policies</span>
+<span id="cb5-37"><a href="#cb5-37" aria-hidden="true" tabindex="-1"></a>])</span>
+<span id="cb5-38"><a href="#cb5-38" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].plot(sweep_kls.numpy(), sweep_rewards.numpy(), color<span class="op">=</span>wine, lw<span class="op">=</span><span class="fl">2.2</span>)</span>
+<span id="cb5-39"><a href="#cb5-39" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> beta, color <span class="kw">in</span> <span class="bu">zip</span>(shown_betas, [green, orange, wine]):</span>
+<span id="cb5-40"><a href="#cb5-40" aria-hidden="true" tabindex="-1"></a>    policy <span class="op">=</span> gibbs_policy(reference, reward, beta)</span>
+<span id="cb5-41"><a href="#cb5-41" aria-hidden="true" tabindex="-1"></a>    axes[<span class="dv">1</span>].scatter(kl_divergence(policy, reference).item(),</span>
+<span id="cb5-42"><a href="#cb5-42" aria-hidden="true" tabindex="-1"></a>                    (policy <span class="op">@</span> reward).item(), color<span class="op">=</span>color, s<span class="op">=</span><span class="dv">45</span>, zorder<span class="op">=</span><span class="dv">3</span>)</span>
+<span id="cb5-43"><a href="#cb5-43" aria-hidden="true" tabindex="-1"></a>    axes[<span class="dv">1</span>].annotate(<span class="vs">fr"</span><span class="dv">$\b</span><span class="vs">eta=</span><span class="sc">{</span>beta<span class="sc">:g}</span><span class="dv">$</span><span class="vs">"</span>,</span>
+<span id="cb5-44"><a href="#cb5-44" aria-hidden="true" tabindex="-1"></a>                     (kl_divergence(policy, reference).item(), (policy <span class="op">@</span> reward).item()),</span>
+<span id="cb5-45"><a href="#cb5-45" aria-hidden="true" tabindex="-1"></a>                     xytext<span class="op">=</span>(<span class="dv">5</span>, <span class="dv">5</span>), textcoords<span class="op">=</span><span class="st">"offset points"</span>, fontsize<span class="op">=</span><span class="dv">8</span>)</span>
+<span id="cb5-46"><a href="#cb5-46" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].set_xlabel(<span class="vs">r"</span><span class="dv">$</span><span class="vs">D_{</span><span class="dv">\m</span><span class="vs">athrm{KL}}</span><span class="kw">(</span><span class="er">\</span><span class="vs">pi</span><span class="er">\</span><span class="vs">Vert</span><span class="er">\</span><span class="vs">pi_{</span><span class="ch">\r</span><span class="vs">m ref}</span><span class="kw">)</span><span class="dv">$</span><span class="vs">"</span>)</span>
+<span id="cb5-47"><a href="#cb5-47" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].set_ylabel(<span class="st">"expected proxy reward"</span>)</span>
+<span id="cb5-48"><a href="#cb5-48" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].set_title(<span class="st">"more pressure buys more proxy score"</span>, color<span class="op">=</span>navy, weight<span class="op">=</span><span class="st">"bold"</span>)</span>
+<span id="cb5-49"><a href="#cb5-49" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].grid(alpha<span class="op">=</span><span class="fl">0.18</span>)</span>
+<span id="cb5-50"><a href="#cb5-50" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
+<span id="cb5-51"><a href="#cb5-51" aria-hidden="true" tabindex="-1"></a>plt.show()</span>
+<span id="cb5-52"><a href="#cb5-52" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-53"><a href="#cb5-53" aria-hidden="true" tabindex="-1"></a>target_policy <span class="op">=</span> gibbs_policy(reference, reward, <span class="fl">1.0</span>)</span>
+<span id="cb5-54"><a href="#cb5-54" aria-hidden="true" tabindex="-1"></a>shifted_target <span class="op">=</span> gibbs_policy(reference, reward <span class="op">+</span> <span class="fl">37.0</span>, <span class="fl">1.0</span>)</span>
+<span id="cb5-55"><a href="#cb5-55" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"beta  expected reward  KL to reference"</span>)</span>
+<span id="cb5-56"><a href="#cb5-56" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> beta <span class="kw">in</span> [<span class="fl">4.0</span>, <span class="fl">2.0</span>, <span class="fl">1.0</span>, <span class="fl">0.5</span>, <span class="fl">0.25</span>]:</span>
+<span id="cb5-57"><a href="#cb5-57" aria-hidden="true" tabindex="-1"></a>    policy <span class="op">=</span> gibbs_policy(reference, reward, beta)</span>
+<span id="cb5-58"><a href="#cb5-58" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(</span>
+<span id="cb5-59"><a href="#cb5-59" aria-hidden="true" tabindex="-1"></a>        <span class="ss">f"</span><span class="sc">{</span>beta<span class="sc">:4.3g}</span><span class="ss">      </span><span class="sc">{</span>(policy <span class="op">@</span> reward)<span class="sc">.</span>item()<span class="sc">:.6f}</span><span class="ss">"</span></span>
+<span id="cb5-60"><a href="#cb5-60" aria-hidden="true" tabindex="-1"></a>        <span class="ss">f"          </span><span class="sc">{</span>kl_divergence(policy, reference)<span class="sc">.</span>item()<span class="sc">:.6f}</span><span class="ss">"</span></span>
+<span id="cb5-61"><a href="#cb5-61" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb5-62"><a href="#cb5-62" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"beta=1 policy:"</span>, [<span class="bu">round</span>(x, <span class="dv">6</span>) <span class="cf">for</span> x <span class="kw">in</span> target_policy.tolist()])</span>
+<span id="cb5-63"><a href="#cb5-63" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(</span>
+<span id="cb5-64"><a href="#cb5-64" aria-hidden="true" tabindex="-1"></a>    <span class="st">"largest policy change after adding 37 to every reward:"</span>,</span>
+<span id="cb5-65"><a href="#cb5-65" aria-hidden="true" tabindex="-1"></a>    <span class="ss">f"</span><span class="sc">{</span>(shifted_target <span class="op">-</span> target_policy)<span class="sc">.</span><span class="bu">abs</span>()<span class="sc">.</span><span class="bu">max</span>()<span class="sc">.</span>item()<span class="sc">:.2e}</span><span class="ss">"</span>,</span>
+<span id="cb5-66"><a href="#cb5-66" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-display">
 <div id="fig-reference-tilt" class="quarto-float quarto-figure quarto-figure-center anchored" alt="The left grouped bars show reference probabilities and exact policies at beta four, one, and one half for responses A through D. The right curve shows expected proxy reward increasing with KL divergence from the reference as beta decreases.">
@@ -982,113 +963,113 @@ u(e,\ell)
 \]</span></p>
 <p>Five complete runs use seeds 6050–6054. A <strong>narrow-feedback</strong> arm sees only <span class="math inline">\(\ell\in[0,1]\)</span>. A <strong>coverage-repair</strong> arm draws 20% of individual comparison responses from <span class="math inline">\(\ell\in[1,4)\)</span>, where the missing curvature becomes observable. Both models have the same feature class and optimizer:</p>
 <!-- NOVEL: needs sign-off -->
-<div id="6402ebfc" class="cell" data-execution_count="7">
+<div id="6f53ae1a" class="cell" data-execution_count="7">
 <details class="code-fold">
 <summary>Experiment: fit five reward models with and without the missing feedback region</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> reward_features(responses: Tensor) <span class="op">-&gt;</span> Tensor:</span>
-<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>    evidence <span class="op">=</span> responses[:, <span class="dv">0</span>]</span>
-<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    length <span class="op">=</span> responses[:, <span class="dv">1</span>]</span>
-<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> torch.stack(</span>
-<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>        (evidence, length, torch.relu(length <span class="op">-</span> <span class="fl">1.0</span>).square()), dim<span class="op">=</span><span class="dv">1</span></span>
-<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>    )</span>
-<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> designed_utility(responses: Tensor) <span class="op">-&gt;</span> Tensor:</span>
-<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a>    designed_weights <span class="op">=</span> torch.tensor([<span class="fl">1.0</span>, <span class="fl">0.6</span>, <span class="op">-</span><span class="fl">1.2</span>])</span>
-<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> reward_features(responses) <span class="op">@</span> designed_weights</span>
-<span id="cb8-12"><a href="#cb8-12" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-13"><a href="#cb8-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-14"><a href="#cb8-14" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> draw_responses(</span>
-<span id="cb8-15"><a href="#cb8-15" aria-hidden="true" tabindex="-1"></a>    count: <span class="bu">int</span>, generator: torch.Generator, out_of_range_fraction: <span class="bu">float</span></span>
-<span id="cb8-16"><a href="#cb8-16" aria-hidden="true" tabindex="-1"></a>) <span class="op">-&gt;</span> Tensor:</span>
-<span id="cb8-17"><a href="#cb8-17" aria-hidden="true" tabindex="-1"></a>    evidence <span class="op">=</span> torch.rand(count, generator<span class="op">=</span>generator)</span>
-<span id="cb8-18"><a href="#cb8-18" aria-hidden="true" tabindex="-1"></a>    length <span class="op">=</span> torch.rand(count, generator<span class="op">=</span>generator)</span>
-<span id="cb8-19"><a href="#cb8-19" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> out_of_range_fraction <span class="op">&gt;</span> <span class="fl">0.0</span>:</span>
-<span id="cb8-20"><a href="#cb8-20" aria-hidden="true" tabindex="-1"></a>        outside <span class="op">=</span> torch.rand(count, generator<span class="op">=</span>generator) <span class="op">&lt;</span> out_of_range_fraction</span>
-<span id="cb8-21"><a href="#cb8-21" aria-hidden="true" tabindex="-1"></a>        extended_length <span class="op">=</span> <span class="fl">1.0</span> <span class="op">+</span> <span class="fl">3.0</span> <span class="op">*</span> torch.rand(count, generator<span class="op">=</span>generator)</span>
-<span id="cb8-22"><a href="#cb8-22" aria-hidden="true" tabindex="-1"></a>        length <span class="op">=</span> torch.where(outside, extended_length, length)</span>
-<span id="cb8-23"><a href="#cb8-23" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> torch.stack((evidence, length), dim<span class="op">=</span><span class="dv">1</span>)</span>
-<span id="cb8-24"><a href="#cb8-24" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-25"><a href="#cb8-25" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-26"><a href="#cb8-26" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> fit_reward_model(</span>
-<span id="cb8-27"><a href="#cb8-27" aria-hidden="true" tabindex="-1"></a>    seed: <span class="bu">int</span>, out_of_range_fraction: <span class="bu">float</span></span>
-<span id="cb8-28"><a href="#cb8-28" aria-hidden="true" tabindex="-1"></a>) <span class="op">-&gt;</span> <span class="bu">tuple</span>[Tensor, <span class="bu">dict</span>[<span class="bu">str</span>, <span class="bu">float</span>]]:</span>
-<span id="cb8-29"><a href="#cb8-29" aria-hidden="true" tabindex="-1"></a>    generator <span class="op">=</span> torch.Generator().manual_seed(seed)</span>
-<span id="cb8-30"><a href="#cb8-30" aria-hidden="true" tabindex="-1"></a>    count <span class="op">=</span> <span class="dv">20_000</span></span>
-<span id="cb8-31"><a href="#cb8-31" aria-hidden="true" tabindex="-1"></a>    left <span class="op">=</span> draw_responses(count, generator, out_of_range_fraction)</span>
-<span id="cb8-32"><a href="#cb8-32" aria-hidden="true" tabindex="-1"></a>    right <span class="op">=</span> draw_responses(count, generator, out_of_range_fraction)</span>
-<span id="cb8-33"><a href="#cb8-33" aria-hidden="true" tabindex="-1"></a>    feature_differences <span class="op">=</span> reward_features(left) <span class="op">-</span> reward_features(right)</span>
-<span id="cb8-34"><a href="#cb8-34" aria-hidden="true" tabindex="-1"></a>    preference_probabilities <span class="op">=</span> torch.sigmoid(</span>
-<span id="cb8-35"><a href="#cb8-35" aria-hidden="true" tabindex="-1"></a>        designed_utility(left) <span class="op">-</span> designed_utility(right)</span>
-<span id="cb8-36"><a href="#cb8-36" aria-hidden="true" tabindex="-1"></a>    )</span>
-<span id="cb8-37"><a href="#cb8-37" aria-hidden="true" tabindex="-1"></a>    labels <span class="op">=</span> torch.bernoulli(preference_probabilities, generator<span class="op">=</span>generator)</span>
-<span id="cb8-38"><a href="#cb8-38" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-39"><a href="#cb8-39" aria-hidden="true" tabindex="-1"></a>    weights <span class="op">=</span> nn.Parameter(torch.zeros(<span class="dv">3</span>))</span>
-<span id="cb8-40"><a href="#cb8-40" aria-hidden="true" tabindex="-1"></a>    optimizer <span class="op">=</span> torch.optim.Adam([weights], lr<span class="op">=</span><span class="fl">0.05</span>)</span>
-<span id="cb8-41"><a href="#cb8-41" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">900</span>):</span>
-<span id="cb8-42"><a href="#cb8-42" aria-hidden="true" tabindex="-1"></a>        logits <span class="op">=</span> feature_differences <span class="op">@</span> weights</span>
-<span id="cb8-43"><a href="#cb8-43" aria-hidden="true" tabindex="-1"></a>        loss <span class="op">=</span> F.binary_cross_entropy_with_logits(logits, labels)</span>
-<span id="cb8-44"><a href="#cb8-44" aria-hidden="true" tabindex="-1"></a>        optimizer.zero_grad()</span>
-<span id="cb8-45"><a href="#cb8-45" aria-hidden="true" tabindex="-1"></a>        loss.backward()</span>
-<span id="cb8-46"><a href="#cb8-46" aria-hidden="true" tabindex="-1"></a>        optimizer.step()</span>
-<span id="cb8-47"><a href="#cb8-47" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-48"><a href="#cb8-48" aria-hidden="true" tabindex="-1"></a>    held_left <span class="op">=</span> draw_responses(<span class="dv">10_000</span>, generator, <span class="fl">0.0</span>)</span>
-<span id="cb8-49"><a href="#cb8-49" aria-hidden="true" tabindex="-1"></a>    held_right <span class="op">=</span> draw_responses(<span class="dv">10_000</span>, generator, <span class="fl">0.0</span>)</span>
-<span id="cb8-50"><a href="#cb8-50" aria-hidden="true" tabindex="-1"></a>    held_differences <span class="op">=</span> reward_features(held_left) <span class="op">-</span> reward_features(held_right)</span>
-<span id="cb8-51"><a href="#cb8-51" aria-hidden="true" tabindex="-1"></a>    held_probabilities <span class="op">=</span> torch.sigmoid(</span>
-<span id="cb8-52"><a href="#cb8-52" aria-hidden="true" tabindex="-1"></a>        designed_utility(held_left) <span class="op">-</span> designed_utility(held_right)</span>
-<span id="cb8-53"><a href="#cb8-53" aria-hidden="true" tabindex="-1"></a>    )</span>
-<span id="cb8-54"><a href="#cb8-54" aria-hidden="true" tabindex="-1"></a>    held_labels <span class="op">=</span> torch.bernoulli(held_probabilities, generator<span class="op">=</span>generator)</span>
-<span id="cb8-55"><a href="#cb8-55" aria-hidden="true" tabindex="-1"></a>    held_logits <span class="op">=</span> held_differences <span class="op">@</span> weights.detach()</span>
-<span id="cb8-56"><a href="#cb8-56" aria-hidden="true" tabindex="-1"></a>    held_nll <span class="op">=</span> F.binary_cross_entropy_with_logits(held_logits, held_labels)</span>
-<span id="cb8-57"><a href="#cb8-57" aria-hidden="true" tabindex="-1"></a>    oracle_nll <span class="op">=</span> F.binary_cross_entropy(held_probabilities, held_labels)</span>
-<span id="cb8-58"><a href="#cb8-58" aria-hidden="true" tabindex="-1"></a>    order_accuracy <span class="op">=</span> (</span>
-<span id="cb8-59"><a href="#cb8-59" aria-hidden="true" tabindex="-1"></a>        torch.sign(held_logits)</span>
-<span id="cb8-60"><a href="#cb8-60" aria-hidden="true" tabindex="-1"></a>        <span class="op">==</span> torch.sign(designed_utility(held_left) <span class="op">-</span> designed_utility(held_right))</span>
-<span id="cb8-61"><a href="#cb8-61" aria-hidden="true" tabindex="-1"></a>    ).double().mean()</span>
-<span id="cb8-62"><a href="#cb8-62" aria-hidden="true" tabindex="-1"></a>    metrics <span class="op">=</span> {</span>
-<span id="cb8-63"><a href="#cb8-63" aria-hidden="true" tabindex="-1"></a>        <span class="st">"held_nll"</span>: held_nll.item(),</span>
-<span id="cb8-64"><a href="#cb8-64" aria-hidden="true" tabindex="-1"></a>        <span class="st">"oracle_nll"</span>: oracle_nll.item(),</span>
-<span id="cb8-65"><a href="#cb8-65" aria-hidden="true" tabindex="-1"></a>        <span class="st">"order_accuracy"</span>: order_accuracy.item(),</span>
-<span id="cb8-66"><a href="#cb8-66" aria-hidden="true" tabindex="-1"></a>    }</span>
-<span id="cb8-67"><a href="#cb8-67" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> weights.detach(), metrics</span>
-<span id="cb8-68"><a href="#cb8-68" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-69"><a href="#cb8-69" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-70"><a href="#cb8-70" aria-hidden="true" tabindex="-1"></a>seeds <span class="op">=</span> <span class="bu">list</span>(<span class="bu">range</span>(<span class="dv">6050</span>, <span class="dv">6055</span>))</span>
-<span id="cb8-71"><a href="#cb8-71" aria-hidden="true" tabindex="-1"></a>narrow_fits <span class="op">=</span> [fit_reward_model(seed, <span class="fl">0.0</span>) <span class="cf">for</span> seed <span class="kw">in</span> seeds]</span>
-<span id="cb8-72"><a href="#cb8-72" aria-hidden="true" tabindex="-1"></a>repaired_fits <span class="op">=</span> [fit_reward_model(seed, <span class="fl">0.20</span>) <span class="cf">for</span> seed <span class="kw">in</span> seeds]</span>
-<span id="cb8-73"><a href="#cb8-73" aria-hidden="true" tabindex="-1"></a>narrow_weights <span class="op">=</span> torch.stack([fit[<span class="dv">0</span>] <span class="cf">for</span> fit <span class="kw">in</span> narrow_fits])</span>
-<span id="cb8-74"><a href="#cb8-74" aria-hidden="true" tabindex="-1"></a>repaired_weights <span class="op">=</span> torch.stack([fit[<span class="dv">0</span>] <span class="cf">for</span> fit <span class="kw">in</span> repaired_fits])</span>
-<span id="cb8-75"><a href="#cb8-75" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-76"><a href="#cb8-76" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> mean_and_seed_sd(values: Tensor) <span class="op">-&gt;</span> <span class="bu">tuple</span>[Tensor, Tensor]:</span>
-<span id="cb8-77"><a href="#cb8-77" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> values.mean(dim<span class="op">=</span><span class="dv">0</span>), values.std(dim<span class="op">=</span><span class="dv">0</span>, unbiased<span class="op">=</span><span class="va">True</span>)</span>
-<span id="cb8-78"><a href="#cb8-78" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-79"><a href="#cb8-79" aria-hidden="true" tabindex="-1"></a>narrow_mean, narrow_sd <span class="op">=</span> mean_and_seed_sd(narrow_weights)</span>
-<span id="cb8-80"><a href="#cb8-80" aria-hidden="true" tabindex="-1"></a>repaired_mean, repaired_sd <span class="op">=</span> mean_and_seed_sd(repaired_weights)</span>
-<span id="cb8-81"><a href="#cb8-81" aria-hidden="true" tabindex="-1"></a>narrow_nlls <span class="op">=</span> torch.tensor([fit[<span class="dv">1</span>][<span class="st">"held_nll"</span>] <span class="cf">for</span> fit <span class="kw">in</span> narrow_fits])</span>
-<span id="cb8-82"><a href="#cb8-82" aria-hidden="true" tabindex="-1"></a>oracle_nlls <span class="op">=</span> torch.tensor([fit[<span class="dv">1</span>][<span class="st">"oracle_nll"</span>] <span class="cf">for</span> fit <span class="kw">in</span> narrow_fits])</span>
-<span id="cb8-83"><a href="#cb8-83" aria-hidden="true" tabindex="-1"></a>narrow_accuracies <span class="op">=</span> torch.tensor([</span>
-<span id="cb8-84"><a href="#cb8-84" aria-hidden="true" tabindex="-1"></a>    fit[<span class="dv">1</span>][<span class="st">"order_accuracy"</span>] <span class="cf">for</span> fit <span class="kw">in</span> narrow_fits</span>
-<span id="cb8-85"><a href="#cb8-85" aria-hidden="true" tabindex="-1"></a>])</span>
-<span id="cb8-86"><a href="#cb8-86" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-87"><a href="#cb8-87" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"feedback               w_e       w_length   w_curve"</span>)</span>
-<span id="cb8-88"><a href="#cb8-88" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"narrow mean       "</span>, <span class="st">"  "</span>.join(<span class="ss">f"</span><span class="sc">{</span>x<span class="sc">:.6f}</span><span class="ss">"</span> <span class="cf">for</span> x <span class="kw">in</span> narrow_mean))</span>
-<span id="cb8-89"><a href="#cb8-89" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"narrow seed sd    "</span>, <span class="st">"  "</span>.join(<span class="ss">f"</span><span class="sc">{</span>x<span class="sc">:.6f}</span><span class="ss">"</span> <span class="cf">for</span> x <span class="kw">in</span> narrow_sd))</span>
-<span id="cb8-90"><a href="#cb8-90" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"repaired mean     "</span>, <span class="st">"  "</span>.join(<span class="ss">f"</span><span class="sc">{</span>x<span class="sc">:.6f}</span><span class="ss">"</span> <span class="cf">for</span> x <span class="kw">in</span> repaired_mean))</span>
-<span id="cb8-91"><a href="#cb8-91" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"repaired seed sd  "</span>, <span class="st">"  "</span>.join(<span class="ss">f"</span><span class="sc">{</span>x<span class="sc">:.6f}</span><span class="ss">"</span> <span class="cf">for</span> x <span class="kw">in</span> repaired_sd))</span>
-<span id="cb8-92"><a href="#cb8-92" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(</span>
-<span id="cb8-93"><a href="#cb8-93" aria-hidden="true" tabindex="-1"></a>    <span class="st">"narrow in-range NLL:"</span>,</span>
-<span id="cb8-94"><a href="#cb8-94" aria-hidden="true" tabindex="-1"></a>    <span class="ss">f"</span><span class="sc">{</span>narrow_nlls<span class="sc">.</span>mean()<span class="sc">.</span>item()<span class="sc">:.6f}</span><span class="ss"> +/- </span><span class="sc">{</span>narrow_nlls<span class="sc">.</span>std(unbiased<span class="op">=</span><span class="va">True</span>)<span class="sc">.</span>item()<span class="sc">:.6f}</span><span class="ss">"</span>,</span>
-<span id="cb8-95"><a href="#cb8-95" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb8-96"><a href="#cb8-96" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(</span>
-<span id="cb8-97"><a href="#cb8-97" aria-hidden="true" tabindex="-1"></a>    <span class="st">"oracle in-range NLL:"</span>,</span>
-<span id="cb8-98"><a href="#cb8-98" aria-hidden="true" tabindex="-1"></a>    <span class="ss">f"</span><span class="sc">{</span>oracle_nlls<span class="sc">.</span>mean()<span class="sc">.</span>item()<span class="sc">:.6f}</span><span class="ss"> +/- </span><span class="sc">{</span>oracle_nlls<span class="sc">.</span>std(unbiased<span class="op">=</span><span class="va">True</span>)<span class="sc">.</span>item()<span class="sc">:.6f}</span><span class="ss">"</span>,</span>
-<span id="cb8-99"><a href="#cb8-99" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb8-100"><a href="#cb8-100" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(</span>
-<span id="cb8-101"><a href="#cb8-101" aria-hidden="true" tabindex="-1"></a>    <span class="st">"narrow designed-order accuracy:"</span>,</span>
-<span id="cb8-102"><a href="#cb8-102" aria-hidden="true" tabindex="-1"></a>    <span class="ss">f"</span><span class="sc">{</span>narrow_accuracies<span class="sc">.</span>mean()<span class="sc">.</span>item()<span class="sc">:.6f}</span><span class="ss"> +/- "</span></span>
-<span id="cb8-103"><a href="#cb8-103" aria-hidden="true" tabindex="-1"></a>    <span class="ss">f"</span><span class="sc">{</span>narrow_accuracies<span class="sc">.</span>std(unbiased<span class="op">=</span><span class="va">True</span>)<span class="sc">.</span>item()<span class="sc">:.6f}</span><span class="ss">"</span>,</span>
-<span id="cb8-104"><a href="#cb8-104" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> reward_features(responses: Tensor) <span class="op">-&gt;</span> Tensor:</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    evidence <span class="op">=</span> responses[:, <span class="dv">0</span>]</span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    length <span class="op">=</span> responses[:, <span class="dv">1</span>]</span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> torch.stack(</span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>        (evidence, length, torch.relu(length <span class="op">-</span> <span class="fl">1.0</span>).square()), dim<span class="op">=</span><span class="dv">1</span></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> designed_utility(responses: Tensor) <span class="op">-&gt;</span> Tensor:</span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>    designed_weights <span class="op">=</span> torch.tensor([<span class="fl">1.0</span>, <span class="fl">0.6</span>, <span class="op">-</span><span class="fl">1.2</span>])</span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> reward_features(responses) <span class="op">@</span> designed_weights</span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> draw_responses(</span>
+<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a>    count: <span class="bu">int</span>, generator: torch.Generator, out_of_range_fraction: <span class="bu">float</span></span>
+<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a>) <span class="op">-&gt;</span> Tensor:</span>
+<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a>    evidence <span class="op">=</span> torch.rand(count, generator<span class="op">=</span>generator)</span>
+<span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a>    length <span class="op">=</span> torch.rand(count, generator<span class="op">=</span>generator)</span>
+<span id="cb7-19"><a href="#cb7-19" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> out_of_range_fraction <span class="op">&gt;</span> <span class="fl">0.0</span>:</span>
+<span id="cb7-20"><a href="#cb7-20" aria-hidden="true" tabindex="-1"></a>        outside <span class="op">=</span> torch.rand(count, generator<span class="op">=</span>generator) <span class="op">&lt;</span> out_of_range_fraction</span>
+<span id="cb7-21"><a href="#cb7-21" aria-hidden="true" tabindex="-1"></a>        extended_length <span class="op">=</span> <span class="fl">1.0</span> <span class="op">+</span> <span class="fl">3.0</span> <span class="op">*</span> torch.rand(count, generator<span class="op">=</span>generator)</span>
+<span id="cb7-22"><a href="#cb7-22" aria-hidden="true" tabindex="-1"></a>        length <span class="op">=</span> torch.where(outside, extended_length, length)</span>
+<span id="cb7-23"><a href="#cb7-23" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> torch.stack((evidence, length), dim<span class="op">=</span><span class="dv">1</span>)</span>
+<span id="cb7-24"><a href="#cb7-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-25"><a href="#cb7-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-26"><a href="#cb7-26" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> fit_reward_model(</span>
+<span id="cb7-27"><a href="#cb7-27" aria-hidden="true" tabindex="-1"></a>    seed: <span class="bu">int</span>, out_of_range_fraction: <span class="bu">float</span></span>
+<span id="cb7-28"><a href="#cb7-28" aria-hidden="true" tabindex="-1"></a>) <span class="op">-&gt;</span> <span class="bu">tuple</span>[Tensor, <span class="bu">dict</span>[<span class="bu">str</span>, <span class="bu">float</span>]]:</span>
+<span id="cb7-29"><a href="#cb7-29" aria-hidden="true" tabindex="-1"></a>    generator <span class="op">=</span> torch.Generator().manual_seed(seed)</span>
+<span id="cb7-30"><a href="#cb7-30" aria-hidden="true" tabindex="-1"></a>    count <span class="op">=</span> <span class="dv">20_000</span></span>
+<span id="cb7-31"><a href="#cb7-31" aria-hidden="true" tabindex="-1"></a>    left <span class="op">=</span> draw_responses(count, generator, out_of_range_fraction)</span>
+<span id="cb7-32"><a href="#cb7-32" aria-hidden="true" tabindex="-1"></a>    right <span class="op">=</span> draw_responses(count, generator, out_of_range_fraction)</span>
+<span id="cb7-33"><a href="#cb7-33" aria-hidden="true" tabindex="-1"></a>    feature_differences <span class="op">=</span> reward_features(left) <span class="op">-</span> reward_features(right)</span>
+<span id="cb7-34"><a href="#cb7-34" aria-hidden="true" tabindex="-1"></a>    preference_probabilities <span class="op">=</span> torch.sigmoid(</span>
+<span id="cb7-35"><a href="#cb7-35" aria-hidden="true" tabindex="-1"></a>        designed_utility(left) <span class="op">-</span> designed_utility(right)</span>
+<span id="cb7-36"><a href="#cb7-36" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb7-37"><a href="#cb7-37" aria-hidden="true" tabindex="-1"></a>    labels <span class="op">=</span> torch.bernoulli(preference_probabilities, generator<span class="op">=</span>generator)</span>
+<span id="cb7-38"><a href="#cb7-38" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-39"><a href="#cb7-39" aria-hidden="true" tabindex="-1"></a>    weights <span class="op">=</span> nn.Parameter(torch.zeros(<span class="dv">3</span>))</span>
+<span id="cb7-40"><a href="#cb7-40" aria-hidden="true" tabindex="-1"></a>    optimizer <span class="op">=</span> torch.optim.Adam([weights], lr<span class="op">=</span><span class="fl">0.05</span>)</span>
+<span id="cb7-41"><a href="#cb7-41" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">900</span>):</span>
+<span id="cb7-42"><a href="#cb7-42" aria-hidden="true" tabindex="-1"></a>        logits <span class="op">=</span> feature_differences <span class="op">@</span> weights</span>
+<span id="cb7-43"><a href="#cb7-43" aria-hidden="true" tabindex="-1"></a>        loss <span class="op">=</span> F.binary_cross_entropy_with_logits(logits, labels)</span>
+<span id="cb7-44"><a href="#cb7-44" aria-hidden="true" tabindex="-1"></a>        optimizer.zero_grad()</span>
+<span id="cb7-45"><a href="#cb7-45" aria-hidden="true" tabindex="-1"></a>        loss.backward()</span>
+<span id="cb7-46"><a href="#cb7-46" aria-hidden="true" tabindex="-1"></a>        optimizer.step()</span>
+<span id="cb7-47"><a href="#cb7-47" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-48"><a href="#cb7-48" aria-hidden="true" tabindex="-1"></a>    held_left <span class="op">=</span> draw_responses(<span class="dv">10_000</span>, generator, <span class="fl">0.0</span>)</span>
+<span id="cb7-49"><a href="#cb7-49" aria-hidden="true" tabindex="-1"></a>    held_right <span class="op">=</span> draw_responses(<span class="dv">10_000</span>, generator, <span class="fl">0.0</span>)</span>
+<span id="cb7-50"><a href="#cb7-50" aria-hidden="true" tabindex="-1"></a>    held_differences <span class="op">=</span> reward_features(held_left) <span class="op">-</span> reward_features(held_right)</span>
+<span id="cb7-51"><a href="#cb7-51" aria-hidden="true" tabindex="-1"></a>    held_probabilities <span class="op">=</span> torch.sigmoid(</span>
+<span id="cb7-52"><a href="#cb7-52" aria-hidden="true" tabindex="-1"></a>        designed_utility(held_left) <span class="op">-</span> designed_utility(held_right)</span>
+<span id="cb7-53"><a href="#cb7-53" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb7-54"><a href="#cb7-54" aria-hidden="true" tabindex="-1"></a>    held_labels <span class="op">=</span> torch.bernoulli(held_probabilities, generator<span class="op">=</span>generator)</span>
+<span id="cb7-55"><a href="#cb7-55" aria-hidden="true" tabindex="-1"></a>    held_logits <span class="op">=</span> held_differences <span class="op">@</span> weights.detach()</span>
+<span id="cb7-56"><a href="#cb7-56" aria-hidden="true" tabindex="-1"></a>    held_nll <span class="op">=</span> F.binary_cross_entropy_with_logits(held_logits, held_labels)</span>
+<span id="cb7-57"><a href="#cb7-57" aria-hidden="true" tabindex="-1"></a>    oracle_nll <span class="op">=</span> F.binary_cross_entropy(held_probabilities, held_labels)</span>
+<span id="cb7-58"><a href="#cb7-58" aria-hidden="true" tabindex="-1"></a>    order_accuracy <span class="op">=</span> (</span>
+<span id="cb7-59"><a href="#cb7-59" aria-hidden="true" tabindex="-1"></a>        torch.sign(held_logits)</span>
+<span id="cb7-60"><a href="#cb7-60" aria-hidden="true" tabindex="-1"></a>        <span class="op">==</span> torch.sign(designed_utility(held_left) <span class="op">-</span> designed_utility(held_right))</span>
+<span id="cb7-61"><a href="#cb7-61" aria-hidden="true" tabindex="-1"></a>    ).double().mean()</span>
+<span id="cb7-62"><a href="#cb7-62" aria-hidden="true" tabindex="-1"></a>    metrics <span class="op">=</span> {</span>
+<span id="cb7-63"><a href="#cb7-63" aria-hidden="true" tabindex="-1"></a>        <span class="st">"held_nll"</span>: held_nll.item(),</span>
+<span id="cb7-64"><a href="#cb7-64" aria-hidden="true" tabindex="-1"></a>        <span class="st">"oracle_nll"</span>: oracle_nll.item(),</span>
+<span id="cb7-65"><a href="#cb7-65" aria-hidden="true" tabindex="-1"></a>        <span class="st">"order_accuracy"</span>: order_accuracy.item(),</span>
+<span id="cb7-66"><a href="#cb7-66" aria-hidden="true" tabindex="-1"></a>    }</span>
+<span id="cb7-67"><a href="#cb7-67" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> weights.detach(), metrics</span>
+<span id="cb7-68"><a href="#cb7-68" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-69"><a href="#cb7-69" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-70"><a href="#cb7-70" aria-hidden="true" tabindex="-1"></a>seeds <span class="op">=</span> <span class="bu">list</span>(<span class="bu">range</span>(<span class="dv">6050</span>, <span class="dv">6055</span>))</span>
+<span id="cb7-71"><a href="#cb7-71" aria-hidden="true" tabindex="-1"></a>narrow_fits <span class="op">=</span> [fit_reward_model(seed, <span class="fl">0.0</span>) <span class="cf">for</span> seed <span class="kw">in</span> seeds]</span>
+<span id="cb7-72"><a href="#cb7-72" aria-hidden="true" tabindex="-1"></a>repaired_fits <span class="op">=</span> [fit_reward_model(seed, <span class="fl">0.20</span>) <span class="cf">for</span> seed <span class="kw">in</span> seeds]</span>
+<span id="cb7-73"><a href="#cb7-73" aria-hidden="true" tabindex="-1"></a>narrow_weights <span class="op">=</span> torch.stack([fit[<span class="dv">0</span>] <span class="cf">for</span> fit <span class="kw">in</span> narrow_fits])</span>
+<span id="cb7-74"><a href="#cb7-74" aria-hidden="true" tabindex="-1"></a>repaired_weights <span class="op">=</span> torch.stack([fit[<span class="dv">0</span>] <span class="cf">for</span> fit <span class="kw">in</span> repaired_fits])</span>
+<span id="cb7-75"><a href="#cb7-75" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-76"><a href="#cb7-76" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> mean_and_seed_sd(values: Tensor) <span class="op">-&gt;</span> <span class="bu">tuple</span>[Tensor, Tensor]:</span>
+<span id="cb7-77"><a href="#cb7-77" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> values.mean(dim<span class="op">=</span><span class="dv">0</span>), values.std(dim<span class="op">=</span><span class="dv">0</span>, unbiased<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb7-78"><a href="#cb7-78" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-79"><a href="#cb7-79" aria-hidden="true" tabindex="-1"></a>narrow_mean, narrow_sd <span class="op">=</span> mean_and_seed_sd(narrow_weights)</span>
+<span id="cb7-80"><a href="#cb7-80" aria-hidden="true" tabindex="-1"></a>repaired_mean, repaired_sd <span class="op">=</span> mean_and_seed_sd(repaired_weights)</span>
+<span id="cb7-81"><a href="#cb7-81" aria-hidden="true" tabindex="-1"></a>narrow_nlls <span class="op">=</span> torch.tensor([fit[<span class="dv">1</span>][<span class="st">"held_nll"</span>] <span class="cf">for</span> fit <span class="kw">in</span> narrow_fits])</span>
+<span id="cb7-82"><a href="#cb7-82" aria-hidden="true" tabindex="-1"></a>oracle_nlls <span class="op">=</span> torch.tensor([fit[<span class="dv">1</span>][<span class="st">"oracle_nll"</span>] <span class="cf">for</span> fit <span class="kw">in</span> narrow_fits])</span>
+<span id="cb7-83"><a href="#cb7-83" aria-hidden="true" tabindex="-1"></a>narrow_accuracies <span class="op">=</span> torch.tensor([</span>
+<span id="cb7-84"><a href="#cb7-84" aria-hidden="true" tabindex="-1"></a>    fit[<span class="dv">1</span>][<span class="st">"order_accuracy"</span>] <span class="cf">for</span> fit <span class="kw">in</span> narrow_fits</span>
+<span id="cb7-85"><a href="#cb7-85" aria-hidden="true" tabindex="-1"></a>])</span>
+<span id="cb7-86"><a href="#cb7-86" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-87"><a href="#cb7-87" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"feedback               w_e       w_length   w_curve"</span>)</span>
+<span id="cb7-88"><a href="#cb7-88" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"narrow mean       "</span>, <span class="st">"  "</span>.join(<span class="ss">f"</span><span class="sc">{</span>x<span class="sc">:.6f}</span><span class="ss">"</span> <span class="cf">for</span> x <span class="kw">in</span> narrow_mean))</span>
+<span id="cb7-89"><a href="#cb7-89" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"narrow seed sd    "</span>, <span class="st">"  "</span>.join(<span class="ss">f"</span><span class="sc">{</span>x<span class="sc">:.6f}</span><span class="ss">"</span> <span class="cf">for</span> x <span class="kw">in</span> narrow_sd))</span>
+<span id="cb7-90"><a href="#cb7-90" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"repaired mean     "</span>, <span class="st">"  "</span>.join(<span class="ss">f"</span><span class="sc">{</span>x<span class="sc">:.6f}</span><span class="ss">"</span> <span class="cf">for</span> x <span class="kw">in</span> repaired_mean))</span>
+<span id="cb7-91"><a href="#cb7-91" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"repaired seed sd  "</span>, <span class="st">"  "</span>.join(<span class="ss">f"</span><span class="sc">{</span>x<span class="sc">:.6f}</span><span class="ss">"</span> <span class="cf">for</span> x <span class="kw">in</span> repaired_sd))</span>
+<span id="cb7-92"><a href="#cb7-92" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(</span>
+<span id="cb7-93"><a href="#cb7-93" aria-hidden="true" tabindex="-1"></a>    <span class="st">"narrow in-range NLL:"</span>,</span>
+<span id="cb7-94"><a href="#cb7-94" aria-hidden="true" tabindex="-1"></a>    <span class="ss">f"</span><span class="sc">{</span>narrow_nlls<span class="sc">.</span>mean()<span class="sc">.</span>item()<span class="sc">:.6f}</span><span class="ss"> +/- </span><span class="sc">{</span>narrow_nlls<span class="sc">.</span>std(unbiased<span class="op">=</span><span class="va">True</span>)<span class="sc">.</span>item()<span class="sc">:.6f}</span><span class="ss">"</span>,</span>
+<span id="cb7-95"><a href="#cb7-95" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb7-96"><a href="#cb7-96" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(</span>
+<span id="cb7-97"><a href="#cb7-97" aria-hidden="true" tabindex="-1"></a>    <span class="st">"oracle in-range NLL:"</span>,</span>
+<span id="cb7-98"><a href="#cb7-98" aria-hidden="true" tabindex="-1"></a>    <span class="ss">f"</span><span class="sc">{</span>oracle_nlls<span class="sc">.</span>mean()<span class="sc">.</span>item()<span class="sc">:.6f}</span><span class="ss"> +/- </span><span class="sc">{</span>oracle_nlls<span class="sc">.</span>std(unbiased<span class="op">=</span><span class="va">True</span>)<span class="sc">.</span>item()<span class="sc">:.6f}</span><span class="ss">"</span>,</span>
+<span id="cb7-99"><a href="#cb7-99" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb7-100"><a href="#cb7-100" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(</span>
+<span id="cb7-101"><a href="#cb7-101" aria-hidden="true" tabindex="-1"></a>    <span class="st">"narrow designed-order accuracy:"</span>,</span>
+<span id="cb7-102"><a href="#cb7-102" aria-hidden="true" tabindex="-1"></a>    <span class="ss">f"</span><span class="sc">{</span>narrow_accuracies<span class="sc">.</span>mean()<span class="sc">.</span>item()<span class="sc">:.6f}</span><span class="ss"> +/- "</span></span>
+<span id="cb7-103"><a href="#cb7-103" aria-hidden="true" tabindex="-1"></a>    <span class="ss">f"</span><span class="sc">{</span>narrow_accuracies<span class="sc">.</span>std(unbiased<span class="op">=</span><span class="va">True</span>)<span class="sc">.</span>item()<span class="sc">:.6f}</span><span class="ss">"</span>,</span>
+<span id="cb7-104"><a href="#cb7-104" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
 <pre><code>feedback               w_e       w_length   w_curve
@@ -1107,135 +1088,135 @@ narrow designed-order accuracy: 0.992940 +/- 0.002548</code></pre>
 <div id="cell-fig-proxy-pressure" class="cell" data-fig-height="4.4" data-fig-width="10" data-execution_count="8">
 <details class="code-fold">
 <summary>Experiment: optimize the proxy outside its comparison coverage</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>lengths <span class="op">=</span> torch.linspace(<span class="fl">0.0</span>, <span class="fl">4.0</span>, <span class="dv">401</span>)</span>
-<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>evidence <span class="op">=</span> torch.full_like(lengths, <span class="fl">0.72</span>)</span>
-<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>candidates <span class="op">=</span> torch.stack((evidence, lengths), dim<span class="op">=</span><span class="dv">1</span>)</span>
-<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>candidate_features <span class="op">=</span> reward_features(candidates)</span>
-<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>candidate_designed_utility <span class="op">=</span> designed_utility(candidates)</span>
-<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>reference_policy <span class="op">=</span> torch.softmax(</span>
-<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">-</span><span class="fl">0.5</span> <span class="op">*</span> ((lengths <span class="op">-</span> <span class="fl">0.695</span>) <span class="op">/</span> <span class="fl">0.5</span>).square(), dim<span class="op">=</span><span class="dv">0</span></span>
-<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a>pressure_betas <span class="op">=</span> [<span class="fl">1.0</span>, <span class="fl">0.5</span>, <span class="fl">0.25</span>, <span class="fl">0.125</span>]</span>
-<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> policy_metrics(weights_by_seed: Tensor) <span class="op">-&gt;</span> <span class="bu">dict</span>[<span class="bu">float</span>, Tensor]:</span>
-<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a>    rows: <span class="bu">dict</span>[<span class="bu">float</span>, Tensor] <span class="op">=</span> {}</span>
-<span id="cb10-13"><a href="#cb10-13" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> beta <span class="kw">in</span> pressure_betas:</span>
-<span id="cb10-14"><a href="#cb10-14" aria-hidden="true" tabindex="-1"></a>        seed_rows <span class="op">=</span> []</span>
-<span id="cb10-15"><a href="#cb10-15" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> weights <span class="kw">in</span> weights_by_seed:</span>
-<span id="cb10-16"><a href="#cb10-16" aria-hidden="true" tabindex="-1"></a>            proxy <span class="op">=</span> candidate_features <span class="op">@</span> weights</span>
-<span id="cb10-17"><a href="#cb10-17" aria-hidden="true" tabindex="-1"></a>            policy <span class="op">=</span> torch.softmax(</span>
-<span id="cb10-18"><a href="#cb10-18" aria-hidden="true" tabindex="-1"></a>                torch.log(reference_policy) <span class="op">+</span> proxy <span class="op">/</span> beta, dim<span class="op">=</span><span class="dv">0</span></span>
-<span id="cb10-19"><a href="#cb10-19" aria-hidden="true" tabindex="-1"></a>            )</span>
-<span id="cb10-20"><a href="#cb10-20" aria-hidden="true" tabindex="-1"></a>            seed_rows.append(torch.stack((</span>
-<span id="cb10-21"><a href="#cb10-21" aria-hidden="true" tabindex="-1"></a>                policy <span class="op">@</span> lengths,</span>
-<span id="cb10-22"><a href="#cb10-22" aria-hidden="true" tabindex="-1"></a>                policy <span class="op">@</span> proxy,</span>
-<span id="cb10-23"><a href="#cb10-23" aria-hidden="true" tabindex="-1"></a>                policy <span class="op">@</span> candidate_designed_utility,</span>
-<span id="cb10-24"><a href="#cb10-24" aria-hidden="true" tabindex="-1"></a>                kl_divergence(policy, reference_policy),</span>
-<span id="cb10-25"><a href="#cb10-25" aria-hidden="true" tabindex="-1"></a>            )))</span>
-<span id="cb10-26"><a href="#cb10-26" aria-hidden="true" tabindex="-1"></a>        rows[beta] <span class="op">=</span> torch.stack(seed_rows)</span>
-<span id="cb10-27"><a href="#cb10-27" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> rows</span>
-<span id="cb10-28"><a href="#cb10-28" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-29"><a href="#cb10-29" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-30"><a href="#cb10-30" aria-hidden="true" tabindex="-1"></a>narrow_rows <span class="op">=</span> policy_metrics(narrow_weights)</span>
-<span id="cb10-31"><a href="#cb10-31" aria-hidden="true" tabindex="-1"></a>repaired_rows <span class="op">=</span> policy_metrics(repaired_weights)</span>
-<span id="cb10-32"><a href="#cb10-32" aria-hidden="true" tabindex="-1"></a>reference_length <span class="op">=</span> reference_policy <span class="op">@</span> lengths</span>
-<span id="cb10-33"><a href="#cb10-33" aria-hidden="true" tabindex="-1"></a>reference_designed_utility <span class="op">=</span> reference_policy <span class="op">@</span> candidate_designed_utility</span>
-<span id="cb10-34"><a href="#cb10-34" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-35"><a href="#cb10-35" aria-hidden="true" tabindex="-1"></a>fig, axes <span class="op">=</span> plt.subplots(<span class="dv">1</span>, <span class="dv">3</span>, figsize<span class="op">=</span>(<span class="dv">10</span>, <span class="fl">4.4</span>))</span>
-<span id="cb10-36"><a href="#cb10-36" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].axvspan(<span class="dv">0</span>, <span class="dv">1</span>, color<span class="op">=</span>green, alpha<span class="op">=</span><span class="fl">0.10</span>, label<span class="op">=</span><span class="st">"narrow feedback"</span>)</span>
-<span id="cb10-37"><a href="#cb10-37" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].plot(lengths, candidate_designed_utility, color<span class="op">=</span>navy, lw<span class="op">=</span><span class="fl">2.2</span>,</span>
-<span id="cb10-38"><a href="#cb10-38" aria-hidden="true" tabindex="-1"></a>             label<span class="op">=</span><span class="st">"designed utility"</span>)</span>
-<span id="cb10-39"><a href="#cb10-39" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].plot(lengths, candidate_features <span class="op">@</span> narrow_mean, color<span class="op">=</span>orange, lw<span class="op">=</span><span class="fl">2.0</span>,</span>
-<span id="cb10-40"><a href="#cb10-40" aria-hidden="true" tabindex="-1"></a>             linestyle<span class="op">=</span><span class="st">"--"</span>, label<span class="op">=</span><span class="st">"narrow proxy"</span>)</span>
-<span id="cb10-41"><a href="#cb10-41" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].plot(lengths, candidate_features <span class="op">@</span> repaired_mean, color<span class="op">=</span>green, lw<span class="op">=</span><span class="fl">2.0</span>,</span>
-<span id="cb10-42"><a href="#cb10-42" aria-hidden="true" tabindex="-1"></a>             linestyle<span class="op">=</span><span class="st">":"</span>, label<span class="op">=</span><span class="st">"repaired proxy"</span>)</span>
-<span id="cb10-43"><a href="#cb10-43" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].axvline(<span class="fl">1.25</span>, color<span class="op">=</span><span class="st">"#888888"</span>, lw<span class="op">=</span><span class="dv">1</span>, linestyle<span class="op">=</span><span class="st">"--"</span>)</span>
-<span id="cb10-44"><a href="#cb10-44" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].set_xlabel(<span class="st">"response length feature"</span>)</span>
-<span id="cb10-45"><a href="#cb10-45" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].set_ylabel(<span class="st">"score at evidence = 0.72"</span>)</span>
-<span id="cb10-46"><a href="#cb10-46" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].set_title(<span class="st">"coverage hides curvature"</span>, color<span class="op">=</span>navy, weight<span class="op">=</span><span class="st">"bold"</span>)</span>
-<span id="cb10-47"><a href="#cb10-47" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].legend(frameon<span class="op">=</span><span class="va">False</span>, fontsize<span class="op">=</span><span class="fl">7.2</span>)</span>
-<span id="cb10-48"><a href="#cb10-48" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].grid(alpha<span class="op">=</span><span class="fl">0.15</span>)</span>
-<span id="cb10-49"><a href="#cb10-49" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-50"><a href="#cb10-50" aria-hidden="true" tabindex="-1"></a>narrow_stack <span class="op">=</span> torch.stack([narrow_rows[beta] <span class="cf">for</span> beta <span class="kw">in</span> pressure_betas])</span>
-<span id="cb10-51"><a href="#cb10-51" aria-hidden="true" tabindex="-1"></a>narrow_policy_mean <span class="op">=</span> narrow_stack.mean(dim<span class="op">=</span><span class="dv">1</span>)</span>
-<span id="cb10-52"><a href="#cb10-52" aria-hidden="true" tabindex="-1"></a>narrow_policy_sd <span class="op">=</span> narrow_stack.std(dim<span class="op">=</span><span class="dv">1</span>, unbiased<span class="op">=</span><span class="va">True</span>)</span>
-<span id="cb10-53"><a href="#cb10-53" aria-hidden="true" tabindex="-1"></a>reference_proxy_by_seed <span class="op">=</span> torch.stack([</span>
-<span id="cb10-54"><a href="#cb10-54" aria-hidden="true" tabindex="-1"></a>    reference_policy <span class="op">@</span> (candidate_features <span class="op">@</span> weights) <span class="cf">for</span> weights <span class="kw">in</span> narrow_weights</span>
-<span id="cb10-55"><a href="#cb10-55" aria-hidden="true" tabindex="-1"></a>])</span>
-<span id="cb10-56"><a href="#cb10-56" aria-hidden="true" tabindex="-1"></a>narrow_kls <span class="op">=</span> torch.cat((torch.tensor([<span class="fl">0.0</span>]), narrow_policy_mean[:, <span class="dv">3</span>]))</span>
-<span id="cb10-57"><a href="#cb10-57" aria-hidden="true" tabindex="-1"></a>narrow_proxy_means <span class="op">=</span> torch.cat((</span>
-<span id="cb10-58"><a href="#cb10-58" aria-hidden="true" tabindex="-1"></a>    reference_proxy_by_seed.mean().view(<span class="dv">1</span>), narrow_policy_mean[:, <span class="dv">1</span>]</span>
-<span id="cb10-59"><a href="#cb10-59" aria-hidden="true" tabindex="-1"></a>))</span>
-<span id="cb10-60"><a href="#cb10-60" aria-hidden="true" tabindex="-1"></a>narrow_designed_means <span class="op">=</span> torch.cat((</span>
-<span id="cb10-61"><a href="#cb10-61" aria-hidden="true" tabindex="-1"></a>    reference_designed_utility.view(<span class="dv">1</span>), narrow_policy_mean[:, <span class="dv">2</span>]</span>
-<span id="cb10-62"><a href="#cb10-62" aria-hidden="true" tabindex="-1"></a>))</span>
-<span id="cb10-63"><a href="#cb10-63" aria-hidden="true" tabindex="-1"></a>narrow_designed_sds <span class="op">=</span> torch.cat((torch.tensor([<span class="fl">0.0</span>]), narrow_policy_sd[:, <span class="dv">2</span>]))</span>
-<span id="cb10-64"><a href="#cb10-64" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].plot(narrow_kls, narrow_proxy_means, <span class="st">"o-"</span>, color<span class="op">=</span>orange,</span>
-<span id="cb10-65"><a href="#cb10-65" aria-hidden="true" tabindex="-1"></a>             label<span class="op">=</span><span class="st">"expected proxy"</span>)</span>
-<span id="cb10-66"><a href="#cb10-66" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].plot(narrow_kls, narrow_designed_means, <span class="st">"o-"</span>, color<span class="op">=</span>navy,</span>
-<span id="cb10-67"><a href="#cb10-67" aria-hidden="true" tabindex="-1"></a>             label<span class="op">=</span><span class="st">"designed utility"</span>)</span>
-<span id="cb10-68"><a href="#cb10-68" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].fill_between(</span>
-<span id="cb10-69"><a href="#cb10-69" aria-hidden="true" tabindex="-1"></a>    narrow_kls.numpy(),</span>
-<span id="cb10-70"><a href="#cb10-70" aria-hidden="true" tabindex="-1"></a>    (narrow_designed_means <span class="op">-</span> narrow_designed_sds).numpy(),</span>
-<span id="cb10-71"><a href="#cb10-71" aria-hidden="true" tabindex="-1"></a>    (narrow_designed_means <span class="op">+</span> narrow_designed_sds).numpy(),</span>
-<span id="cb10-72"><a href="#cb10-72" aria-hidden="true" tabindex="-1"></a>    color<span class="op">=</span>navy, alpha<span class="op">=</span><span class="fl">0.12</span>,</span>
-<span id="cb10-73"><a href="#cb10-73" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb10-74"><a href="#cb10-74" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].set_xlabel(<span class="vs">r"realized </span><span class="dv">$</span><span class="vs">D_{</span><span class="dv">\m</span><span class="vs">athrm{KL}}</span><span class="dv">$</span><span class="vs">"</span>)</span>
-<span id="cb10-75"><a href="#cb10-75" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].set_ylabel(<span class="st">"policy expectation"</span>)</span>
-<span id="cb10-76"><a href="#cb10-76" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].set_title(<span class="st">"proxy up, target down"</span>, color<span class="op">=</span>navy, weight<span class="op">=</span><span class="st">"bold"</span>)</span>
-<span id="cb10-77"><a href="#cb10-77" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].legend(frameon<span class="op">=</span><span class="va">False</span>, fontsize<span class="op">=</span><span class="fl">7.5</span>)</span>
-<span id="cb10-78"><a href="#cb10-78" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].grid(alpha<span class="op">=</span><span class="fl">0.15</span>)</span>
-<span id="cb10-79"><a href="#cb10-79" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-80"><a href="#cb10-80" aria-hidden="true" tabindex="-1"></a>repaired_stack <span class="op">=</span> torch.stack([repaired_rows[beta] <span class="cf">for</span> beta <span class="kw">in</span> pressure_betas])</span>
-<span id="cb10-81"><a href="#cb10-81" aria-hidden="true" tabindex="-1"></a>repaired_policy_mean <span class="op">=</span> repaired_stack.mean(dim<span class="op">=</span><span class="dv">1</span>)</span>
-<span id="cb10-82"><a href="#cb10-82" aria-hidden="true" tabindex="-1"></a>repaired_policy_sd <span class="op">=</span> repaired_stack.std(dim<span class="op">=</span><span class="dv">1</span>, unbiased<span class="op">=</span><span class="va">True</span>)</span>
-<span id="cb10-83"><a href="#cb10-83" aria-hidden="true" tabindex="-1"></a>repaired_kls <span class="op">=</span> torch.cat((torch.tensor([<span class="fl">0.0</span>]), repaired_policy_mean[:, <span class="dv">3</span>]))</span>
-<span id="cb10-84"><a href="#cb10-84" aria-hidden="true" tabindex="-1"></a>repaired_designed_means <span class="op">=</span> torch.cat((</span>
-<span id="cb10-85"><a href="#cb10-85" aria-hidden="true" tabindex="-1"></a>    reference_designed_utility.view(<span class="dv">1</span>), repaired_policy_mean[:, <span class="dv">2</span>]</span>
-<span id="cb10-86"><a href="#cb10-86" aria-hidden="true" tabindex="-1"></a>))</span>
-<span id="cb10-87"><a href="#cb10-87" aria-hidden="true" tabindex="-1"></a>repaired_designed_sds <span class="op">=</span> torch.cat((torch.tensor([<span class="fl">0.0</span>]), repaired_policy_sd[:, <span class="dv">2</span>]))</span>
-<span id="cb10-88"><a href="#cb10-88" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">2</span>].plot(narrow_kls, narrow_designed_means, <span class="st">"o-"</span>, color<span class="op">=</span>orange,</span>
-<span id="cb10-89"><a href="#cb10-89" aria-hidden="true" tabindex="-1"></a>             label<span class="op">=</span><span class="st">"narrow feedback"</span>)</span>
-<span id="cb10-90"><a href="#cb10-90" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">2</span>].fill_between(</span>
-<span id="cb10-91"><a href="#cb10-91" aria-hidden="true" tabindex="-1"></a>    narrow_kls.numpy(),</span>
-<span id="cb10-92"><a href="#cb10-92" aria-hidden="true" tabindex="-1"></a>    (narrow_designed_means <span class="op">-</span> narrow_designed_sds).numpy(),</span>
-<span id="cb10-93"><a href="#cb10-93" aria-hidden="true" tabindex="-1"></a>    (narrow_designed_means <span class="op">+</span> narrow_designed_sds).numpy(),</span>
-<span id="cb10-94"><a href="#cb10-94" aria-hidden="true" tabindex="-1"></a>    color<span class="op">=</span>orange, alpha<span class="op">=</span><span class="fl">0.12</span>,</span>
-<span id="cb10-95"><a href="#cb10-95" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb10-96"><a href="#cb10-96" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">2</span>].plot(repaired_kls, repaired_designed_means, <span class="st">"o-"</span>, color<span class="op">=</span>green,</span>
-<span id="cb10-97"><a href="#cb10-97" aria-hidden="true" tabindex="-1"></a>             label<span class="op">=</span><span class="st">"coverage repair"</span>)</span>
-<span id="cb10-98"><a href="#cb10-98" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">2</span>].fill_between(</span>
-<span id="cb10-99"><a href="#cb10-99" aria-hidden="true" tabindex="-1"></a>    repaired_kls.numpy(),</span>
-<span id="cb10-100"><a href="#cb10-100" aria-hidden="true" tabindex="-1"></a>    (repaired_designed_means <span class="op">-</span> repaired_designed_sds).numpy(),</span>
-<span id="cb10-101"><a href="#cb10-101" aria-hidden="true" tabindex="-1"></a>    (repaired_designed_means <span class="op">+</span> repaired_designed_sds).numpy(),</span>
-<span id="cb10-102"><a href="#cb10-102" aria-hidden="true" tabindex="-1"></a>    color<span class="op">=</span>green, alpha<span class="op">=</span><span class="fl">0.12</span>,</span>
-<span id="cb10-103"><a href="#cb10-103" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb10-104"><a href="#cb10-104" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">2</span>].set_xlabel(<span class="vs">r"realized </span><span class="dv">$</span><span class="vs">D_{</span><span class="dv">\m</span><span class="vs">athrm{KL}}</span><span class="dv">$</span><span class="vs">"</span>)</span>
-<span id="cb10-105"><a href="#cb10-105" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">2</span>].set_ylabel(<span class="st">"designed policy utility"</span>)</span>
-<span id="cb10-106"><a href="#cb10-106" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">2</span>].set_title(<span class="st">"feedback coverage repairs reward"</span>, color<span class="op">=</span>navy, weight<span class="op">=</span><span class="st">"bold"</span>)</span>
-<span id="cb10-107"><a href="#cb10-107" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">2</span>].legend(frameon<span class="op">=</span><span class="va">False</span>, fontsize<span class="op">=</span><span class="fl">7.5</span>)</span>
-<span id="cb10-108"><a href="#cb10-108" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">2</span>].grid(alpha<span class="op">=</span><span class="fl">0.15</span>)</span>
-<span id="cb10-109"><a href="#cb10-109" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
-<span id="cb10-110"><a href="#cb10-110" aria-hidden="true" tabindex="-1"></a>plt.show()</span>
-<span id="cb10-111"><a href="#cb10-111" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-112"><a href="#cb10-112" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"reference mean length: </span><span class="sc">{</span>reference_length<span class="sc">.</span>item()<span class="sc">:.6f}</span><span class="ss">"</span>)</span>
-<span id="cb10-113"><a href="#cb10-113" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"reference designed utility: </span><span class="sc">{</span>reference_designed_utility<span class="sc">.</span>item()<span class="sc">:.6f}</span><span class="ss">"</span>)</span>
-<span id="cb10-114"><a href="#cb10-114" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"narrow feedback: beta  length  proxy  designed  KL"</span>)</span>
-<span id="cb10-115"><a href="#cb10-115" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> beta, values <span class="kw">in</span> narrow_rows.items():</span>
-<span id="cb10-116"><a href="#cb10-116" aria-hidden="true" tabindex="-1"></a>    mean, seed_sd <span class="op">=</span> mean_and_seed_sd(values)</span>
-<span id="cb10-117"><a href="#cb10-117" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(</span>
-<span id="cb10-118"><a href="#cb10-118" aria-hidden="true" tabindex="-1"></a>        <span class="ss">f"</span><span class="sc">{</span>beta<span class="sc">:5.3f}</span><span class="ss">  </span><span class="sc">{</span>mean[<span class="dv">0</span>]<span class="sc">.</span>item()<span class="sc">:.6f}</span><span class="ss">  </span><span class="sc">{</span>mean[<span class="dv">1</span>]<span class="sc">.</span>item()<span class="sc">:.6f}</span><span class="ss">"</span></span>
-<span id="cb10-119"><a href="#cb10-119" aria-hidden="true" tabindex="-1"></a>        <span class="ss">f"  </span><span class="sc">{</span>mean[<span class="dv">2</span>]<span class="sc">.</span>item()<span class="sc">:.6f}</span><span class="ss">  </span><span class="sc">{</span>mean[<span class="dv">3</span>]<span class="sc">.</span>item()<span class="sc">:.6f}</span><span class="ss">"</span></span>
-<span id="cb10-120"><a href="#cb10-120" aria-hidden="true" tabindex="-1"></a>        <span class="ss">f"  (designed sd </span><span class="sc">{</span>seed_sd[<span class="dv">2</span>]<span class="sc">.</span>item()<span class="sc">:.6f}</span><span class="ss">)"</span></span>
-<span id="cb10-121"><a href="#cb10-121" aria-hidden="true" tabindex="-1"></a>    )</span>
-<span id="cb10-122"><a href="#cb10-122" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"repaired feedback: beta  length  proxy  designed  KL"</span>)</span>
-<span id="cb10-123"><a href="#cb10-123" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> beta, values <span class="kw">in</span> repaired_rows.items():</span>
-<span id="cb10-124"><a href="#cb10-124" aria-hidden="true" tabindex="-1"></a>    mean, seed_sd <span class="op">=</span> mean_and_seed_sd(values)</span>
-<span id="cb10-125"><a href="#cb10-125" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(</span>
-<span id="cb10-126"><a href="#cb10-126" aria-hidden="true" tabindex="-1"></a>        <span class="ss">f"</span><span class="sc">{</span>beta<span class="sc">:5.3f}</span><span class="ss">  </span><span class="sc">{</span>mean[<span class="dv">0</span>]<span class="sc">.</span>item()<span class="sc">:.6f}</span><span class="ss">  </span><span class="sc">{</span>mean[<span class="dv">1</span>]<span class="sc">.</span>item()<span class="sc">:.6f}</span><span class="ss">"</span></span>
-<span id="cb10-127"><a href="#cb10-127" aria-hidden="true" tabindex="-1"></a>        <span class="ss">f"  </span><span class="sc">{</span>mean[<span class="dv">2</span>]<span class="sc">.</span>item()<span class="sc">:.6f}</span><span class="ss">  </span><span class="sc">{</span>mean[<span class="dv">3</span>]<span class="sc">.</span>item()<span class="sc">:.6f}</span><span class="ss">"</span></span>
-<span id="cb10-128"><a href="#cb10-128" aria-hidden="true" tabindex="-1"></a>        <span class="ss">f"  (designed sd </span><span class="sc">{</span>seed_sd[<span class="dv">2</span>]<span class="sc">.</span>item()<span class="sc">:.6f}</span><span class="ss">)"</span></span>
-<span id="cb10-129"><a href="#cb10-129" aria-hidden="true" tabindex="-1"></a>    )</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>lengths <span class="op">=</span> torch.linspace(<span class="fl">0.0</span>, <span class="fl">4.0</span>, <span class="dv">401</span>)</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>evidence <span class="op">=</span> torch.full_like(lengths, <span class="fl">0.72</span>)</span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>candidates <span class="op">=</span> torch.stack((evidence, lengths), dim<span class="op">=</span><span class="dv">1</span>)</span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>candidate_features <span class="op">=</span> reward_features(candidates)</span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>candidate_designed_utility <span class="op">=</span> designed_utility(candidates)</span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>reference_policy <span class="op">=</span> torch.softmax(</span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">-</span><span class="fl">0.5</span> <span class="op">*</span> ((lengths <span class="op">-</span> <span class="fl">0.695</span>) <span class="op">/</span> <span class="fl">0.5</span>).square(), dim<span class="op">=</span><span class="dv">0</span></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a>pressure_betas <span class="op">=</span> [<span class="fl">1.0</span>, <span class="fl">0.5</span>, <span class="fl">0.25</span>, <span class="fl">0.125</span>]</span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> policy_metrics(weights_by_seed: Tensor) <span class="op">-&gt;</span> <span class="bu">dict</span>[<span class="bu">float</span>, Tensor]:</span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a>    rows: <span class="bu">dict</span>[<span class="bu">float</span>, Tensor] <span class="op">=</span> {}</span>
+<span id="cb9-13"><a href="#cb9-13" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> beta <span class="kw">in</span> pressure_betas:</span>
+<span id="cb9-14"><a href="#cb9-14" aria-hidden="true" tabindex="-1"></a>        seed_rows <span class="op">=</span> []</span>
+<span id="cb9-15"><a href="#cb9-15" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> weights <span class="kw">in</span> weights_by_seed:</span>
+<span id="cb9-16"><a href="#cb9-16" aria-hidden="true" tabindex="-1"></a>            proxy <span class="op">=</span> candidate_features <span class="op">@</span> weights</span>
+<span id="cb9-17"><a href="#cb9-17" aria-hidden="true" tabindex="-1"></a>            policy <span class="op">=</span> torch.softmax(</span>
+<span id="cb9-18"><a href="#cb9-18" aria-hidden="true" tabindex="-1"></a>                torch.log(reference_policy) <span class="op">+</span> proxy <span class="op">/</span> beta, dim<span class="op">=</span><span class="dv">0</span></span>
+<span id="cb9-19"><a href="#cb9-19" aria-hidden="true" tabindex="-1"></a>            )</span>
+<span id="cb9-20"><a href="#cb9-20" aria-hidden="true" tabindex="-1"></a>            seed_rows.append(torch.stack((</span>
+<span id="cb9-21"><a href="#cb9-21" aria-hidden="true" tabindex="-1"></a>                policy <span class="op">@</span> lengths,</span>
+<span id="cb9-22"><a href="#cb9-22" aria-hidden="true" tabindex="-1"></a>                policy <span class="op">@</span> proxy,</span>
+<span id="cb9-23"><a href="#cb9-23" aria-hidden="true" tabindex="-1"></a>                policy <span class="op">@</span> candidate_designed_utility,</span>
+<span id="cb9-24"><a href="#cb9-24" aria-hidden="true" tabindex="-1"></a>                kl_divergence(policy, reference_policy),</span>
+<span id="cb9-25"><a href="#cb9-25" aria-hidden="true" tabindex="-1"></a>            )))</span>
+<span id="cb9-26"><a href="#cb9-26" aria-hidden="true" tabindex="-1"></a>        rows[beta] <span class="op">=</span> torch.stack(seed_rows)</span>
+<span id="cb9-27"><a href="#cb9-27" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> rows</span>
+<span id="cb9-28"><a href="#cb9-28" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-29"><a href="#cb9-29" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-30"><a href="#cb9-30" aria-hidden="true" tabindex="-1"></a>narrow_rows <span class="op">=</span> policy_metrics(narrow_weights)</span>
+<span id="cb9-31"><a href="#cb9-31" aria-hidden="true" tabindex="-1"></a>repaired_rows <span class="op">=</span> policy_metrics(repaired_weights)</span>
+<span id="cb9-32"><a href="#cb9-32" aria-hidden="true" tabindex="-1"></a>reference_length <span class="op">=</span> reference_policy <span class="op">@</span> lengths</span>
+<span id="cb9-33"><a href="#cb9-33" aria-hidden="true" tabindex="-1"></a>reference_designed_utility <span class="op">=</span> reference_policy <span class="op">@</span> candidate_designed_utility</span>
+<span id="cb9-34"><a href="#cb9-34" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-35"><a href="#cb9-35" aria-hidden="true" tabindex="-1"></a>fig, axes <span class="op">=</span> plt.subplots(<span class="dv">1</span>, <span class="dv">3</span>, figsize<span class="op">=</span>(<span class="dv">10</span>, <span class="fl">4.4</span>))</span>
+<span id="cb9-36"><a href="#cb9-36" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].axvspan(<span class="dv">0</span>, <span class="dv">1</span>, color<span class="op">=</span>green, alpha<span class="op">=</span><span class="fl">0.10</span>, label<span class="op">=</span><span class="st">"narrow feedback"</span>)</span>
+<span id="cb9-37"><a href="#cb9-37" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].plot(lengths, candidate_designed_utility, color<span class="op">=</span>navy, lw<span class="op">=</span><span class="fl">2.2</span>,</span>
+<span id="cb9-38"><a href="#cb9-38" aria-hidden="true" tabindex="-1"></a>             label<span class="op">=</span><span class="st">"designed utility"</span>)</span>
+<span id="cb9-39"><a href="#cb9-39" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].plot(lengths, candidate_features <span class="op">@</span> narrow_mean, color<span class="op">=</span>orange, lw<span class="op">=</span><span class="fl">2.0</span>,</span>
+<span id="cb9-40"><a href="#cb9-40" aria-hidden="true" tabindex="-1"></a>             linestyle<span class="op">=</span><span class="st">"--"</span>, label<span class="op">=</span><span class="st">"narrow proxy"</span>)</span>
+<span id="cb9-41"><a href="#cb9-41" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].plot(lengths, candidate_features <span class="op">@</span> repaired_mean, color<span class="op">=</span>green, lw<span class="op">=</span><span class="fl">2.0</span>,</span>
+<span id="cb9-42"><a href="#cb9-42" aria-hidden="true" tabindex="-1"></a>             linestyle<span class="op">=</span><span class="st">":"</span>, label<span class="op">=</span><span class="st">"repaired proxy"</span>)</span>
+<span id="cb9-43"><a href="#cb9-43" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].axvline(<span class="fl">1.25</span>, color<span class="op">=</span><span class="st">"#888888"</span>, lw<span class="op">=</span><span class="dv">1</span>, linestyle<span class="op">=</span><span class="st">"--"</span>)</span>
+<span id="cb9-44"><a href="#cb9-44" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].set_xlabel(<span class="st">"response length feature"</span>)</span>
+<span id="cb9-45"><a href="#cb9-45" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].set_ylabel(<span class="st">"score at evidence = 0.72"</span>)</span>
+<span id="cb9-46"><a href="#cb9-46" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].set_title(<span class="st">"coverage hides curvature"</span>, color<span class="op">=</span>navy, weight<span class="op">=</span><span class="st">"bold"</span>)</span>
+<span id="cb9-47"><a href="#cb9-47" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].legend(frameon<span class="op">=</span><span class="va">False</span>, fontsize<span class="op">=</span><span class="fl">7.2</span>)</span>
+<span id="cb9-48"><a href="#cb9-48" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].grid(alpha<span class="op">=</span><span class="fl">0.15</span>)</span>
+<span id="cb9-49"><a href="#cb9-49" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-50"><a href="#cb9-50" aria-hidden="true" tabindex="-1"></a>narrow_stack <span class="op">=</span> torch.stack([narrow_rows[beta] <span class="cf">for</span> beta <span class="kw">in</span> pressure_betas])</span>
+<span id="cb9-51"><a href="#cb9-51" aria-hidden="true" tabindex="-1"></a>narrow_policy_mean <span class="op">=</span> narrow_stack.mean(dim<span class="op">=</span><span class="dv">1</span>)</span>
+<span id="cb9-52"><a href="#cb9-52" aria-hidden="true" tabindex="-1"></a>narrow_policy_sd <span class="op">=</span> narrow_stack.std(dim<span class="op">=</span><span class="dv">1</span>, unbiased<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb9-53"><a href="#cb9-53" aria-hidden="true" tabindex="-1"></a>reference_proxy_by_seed <span class="op">=</span> torch.stack([</span>
+<span id="cb9-54"><a href="#cb9-54" aria-hidden="true" tabindex="-1"></a>    reference_policy <span class="op">@</span> (candidate_features <span class="op">@</span> weights) <span class="cf">for</span> weights <span class="kw">in</span> narrow_weights</span>
+<span id="cb9-55"><a href="#cb9-55" aria-hidden="true" tabindex="-1"></a>])</span>
+<span id="cb9-56"><a href="#cb9-56" aria-hidden="true" tabindex="-1"></a>narrow_kls <span class="op">=</span> torch.cat((torch.tensor([<span class="fl">0.0</span>]), narrow_policy_mean[:, <span class="dv">3</span>]))</span>
+<span id="cb9-57"><a href="#cb9-57" aria-hidden="true" tabindex="-1"></a>narrow_proxy_means <span class="op">=</span> torch.cat((</span>
+<span id="cb9-58"><a href="#cb9-58" aria-hidden="true" tabindex="-1"></a>    reference_proxy_by_seed.mean().view(<span class="dv">1</span>), narrow_policy_mean[:, <span class="dv">1</span>]</span>
+<span id="cb9-59"><a href="#cb9-59" aria-hidden="true" tabindex="-1"></a>))</span>
+<span id="cb9-60"><a href="#cb9-60" aria-hidden="true" tabindex="-1"></a>narrow_designed_means <span class="op">=</span> torch.cat((</span>
+<span id="cb9-61"><a href="#cb9-61" aria-hidden="true" tabindex="-1"></a>    reference_designed_utility.view(<span class="dv">1</span>), narrow_policy_mean[:, <span class="dv">2</span>]</span>
+<span id="cb9-62"><a href="#cb9-62" aria-hidden="true" tabindex="-1"></a>))</span>
+<span id="cb9-63"><a href="#cb9-63" aria-hidden="true" tabindex="-1"></a>narrow_designed_sds <span class="op">=</span> torch.cat((torch.tensor([<span class="fl">0.0</span>]), narrow_policy_sd[:, <span class="dv">2</span>]))</span>
+<span id="cb9-64"><a href="#cb9-64" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].plot(narrow_kls, narrow_proxy_means, <span class="st">"o-"</span>, color<span class="op">=</span>orange,</span>
+<span id="cb9-65"><a href="#cb9-65" aria-hidden="true" tabindex="-1"></a>             label<span class="op">=</span><span class="st">"expected proxy"</span>)</span>
+<span id="cb9-66"><a href="#cb9-66" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].plot(narrow_kls, narrow_designed_means, <span class="st">"o-"</span>, color<span class="op">=</span>navy,</span>
+<span id="cb9-67"><a href="#cb9-67" aria-hidden="true" tabindex="-1"></a>             label<span class="op">=</span><span class="st">"designed utility"</span>)</span>
+<span id="cb9-68"><a href="#cb9-68" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].fill_between(</span>
+<span id="cb9-69"><a href="#cb9-69" aria-hidden="true" tabindex="-1"></a>    narrow_kls.numpy(),</span>
+<span id="cb9-70"><a href="#cb9-70" aria-hidden="true" tabindex="-1"></a>    (narrow_designed_means <span class="op">-</span> narrow_designed_sds).numpy(),</span>
+<span id="cb9-71"><a href="#cb9-71" aria-hidden="true" tabindex="-1"></a>    (narrow_designed_means <span class="op">+</span> narrow_designed_sds).numpy(),</span>
+<span id="cb9-72"><a href="#cb9-72" aria-hidden="true" tabindex="-1"></a>    color<span class="op">=</span>navy, alpha<span class="op">=</span><span class="fl">0.12</span>,</span>
+<span id="cb9-73"><a href="#cb9-73" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb9-74"><a href="#cb9-74" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].set_xlabel(<span class="vs">r"realized </span><span class="dv">$</span><span class="vs">D_{</span><span class="dv">\m</span><span class="vs">athrm{KL}}</span><span class="dv">$</span><span class="vs">"</span>)</span>
+<span id="cb9-75"><a href="#cb9-75" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].set_ylabel(<span class="st">"policy expectation"</span>)</span>
+<span id="cb9-76"><a href="#cb9-76" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].set_title(<span class="st">"proxy up, target down"</span>, color<span class="op">=</span>navy, weight<span class="op">=</span><span class="st">"bold"</span>)</span>
+<span id="cb9-77"><a href="#cb9-77" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].legend(frameon<span class="op">=</span><span class="va">False</span>, fontsize<span class="op">=</span><span class="fl">7.5</span>)</span>
+<span id="cb9-78"><a href="#cb9-78" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].grid(alpha<span class="op">=</span><span class="fl">0.15</span>)</span>
+<span id="cb9-79"><a href="#cb9-79" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-80"><a href="#cb9-80" aria-hidden="true" tabindex="-1"></a>repaired_stack <span class="op">=</span> torch.stack([repaired_rows[beta] <span class="cf">for</span> beta <span class="kw">in</span> pressure_betas])</span>
+<span id="cb9-81"><a href="#cb9-81" aria-hidden="true" tabindex="-1"></a>repaired_policy_mean <span class="op">=</span> repaired_stack.mean(dim<span class="op">=</span><span class="dv">1</span>)</span>
+<span id="cb9-82"><a href="#cb9-82" aria-hidden="true" tabindex="-1"></a>repaired_policy_sd <span class="op">=</span> repaired_stack.std(dim<span class="op">=</span><span class="dv">1</span>, unbiased<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb9-83"><a href="#cb9-83" aria-hidden="true" tabindex="-1"></a>repaired_kls <span class="op">=</span> torch.cat((torch.tensor([<span class="fl">0.0</span>]), repaired_policy_mean[:, <span class="dv">3</span>]))</span>
+<span id="cb9-84"><a href="#cb9-84" aria-hidden="true" tabindex="-1"></a>repaired_designed_means <span class="op">=</span> torch.cat((</span>
+<span id="cb9-85"><a href="#cb9-85" aria-hidden="true" tabindex="-1"></a>    reference_designed_utility.view(<span class="dv">1</span>), repaired_policy_mean[:, <span class="dv">2</span>]</span>
+<span id="cb9-86"><a href="#cb9-86" aria-hidden="true" tabindex="-1"></a>))</span>
+<span id="cb9-87"><a href="#cb9-87" aria-hidden="true" tabindex="-1"></a>repaired_designed_sds <span class="op">=</span> torch.cat((torch.tensor([<span class="fl">0.0</span>]), repaired_policy_sd[:, <span class="dv">2</span>]))</span>
+<span id="cb9-88"><a href="#cb9-88" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">2</span>].plot(narrow_kls, narrow_designed_means, <span class="st">"o-"</span>, color<span class="op">=</span>orange,</span>
+<span id="cb9-89"><a href="#cb9-89" aria-hidden="true" tabindex="-1"></a>             label<span class="op">=</span><span class="st">"narrow feedback"</span>)</span>
+<span id="cb9-90"><a href="#cb9-90" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">2</span>].fill_between(</span>
+<span id="cb9-91"><a href="#cb9-91" aria-hidden="true" tabindex="-1"></a>    narrow_kls.numpy(),</span>
+<span id="cb9-92"><a href="#cb9-92" aria-hidden="true" tabindex="-1"></a>    (narrow_designed_means <span class="op">-</span> narrow_designed_sds).numpy(),</span>
+<span id="cb9-93"><a href="#cb9-93" aria-hidden="true" tabindex="-1"></a>    (narrow_designed_means <span class="op">+</span> narrow_designed_sds).numpy(),</span>
+<span id="cb9-94"><a href="#cb9-94" aria-hidden="true" tabindex="-1"></a>    color<span class="op">=</span>orange, alpha<span class="op">=</span><span class="fl">0.12</span>,</span>
+<span id="cb9-95"><a href="#cb9-95" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb9-96"><a href="#cb9-96" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">2</span>].plot(repaired_kls, repaired_designed_means, <span class="st">"o-"</span>, color<span class="op">=</span>green,</span>
+<span id="cb9-97"><a href="#cb9-97" aria-hidden="true" tabindex="-1"></a>             label<span class="op">=</span><span class="st">"coverage repair"</span>)</span>
+<span id="cb9-98"><a href="#cb9-98" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">2</span>].fill_between(</span>
+<span id="cb9-99"><a href="#cb9-99" aria-hidden="true" tabindex="-1"></a>    repaired_kls.numpy(),</span>
+<span id="cb9-100"><a href="#cb9-100" aria-hidden="true" tabindex="-1"></a>    (repaired_designed_means <span class="op">-</span> repaired_designed_sds).numpy(),</span>
+<span id="cb9-101"><a href="#cb9-101" aria-hidden="true" tabindex="-1"></a>    (repaired_designed_means <span class="op">+</span> repaired_designed_sds).numpy(),</span>
+<span id="cb9-102"><a href="#cb9-102" aria-hidden="true" tabindex="-1"></a>    color<span class="op">=</span>green, alpha<span class="op">=</span><span class="fl">0.12</span>,</span>
+<span id="cb9-103"><a href="#cb9-103" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb9-104"><a href="#cb9-104" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">2</span>].set_xlabel(<span class="vs">r"realized </span><span class="dv">$</span><span class="vs">D_{</span><span class="dv">\m</span><span class="vs">athrm{KL}}</span><span class="dv">$</span><span class="vs">"</span>)</span>
+<span id="cb9-105"><a href="#cb9-105" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">2</span>].set_ylabel(<span class="st">"designed policy utility"</span>)</span>
+<span id="cb9-106"><a href="#cb9-106" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">2</span>].set_title(<span class="st">"feedback coverage repairs reward"</span>, color<span class="op">=</span>navy, weight<span class="op">=</span><span class="st">"bold"</span>)</span>
+<span id="cb9-107"><a href="#cb9-107" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">2</span>].legend(frameon<span class="op">=</span><span class="va">False</span>, fontsize<span class="op">=</span><span class="fl">7.5</span>)</span>
+<span id="cb9-108"><a href="#cb9-108" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">2</span>].grid(alpha<span class="op">=</span><span class="fl">0.15</span>)</span>
+<span id="cb9-109"><a href="#cb9-109" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
+<span id="cb9-110"><a href="#cb9-110" aria-hidden="true" tabindex="-1"></a>plt.show()</span>
+<span id="cb9-111"><a href="#cb9-111" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-112"><a href="#cb9-112" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"reference mean length: </span><span class="sc">{</span>reference_length<span class="sc">.</span>item()<span class="sc">:.6f}</span><span class="ss">"</span>)</span>
+<span id="cb9-113"><a href="#cb9-113" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"reference designed utility: </span><span class="sc">{</span>reference_designed_utility<span class="sc">.</span>item()<span class="sc">:.6f}</span><span class="ss">"</span>)</span>
+<span id="cb9-114"><a href="#cb9-114" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"narrow feedback: beta  length  proxy  designed  KL"</span>)</span>
+<span id="cb9-115"><a href="#cb9-115" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> beta, values <span class="kw">in</span> narrow_rows.items():</span>
+<span id="cb9-116"><a href="#cb9-116" aria-hidden="true" tabindex="-1"></a>    mean, seed_sd <span class="op">=</span> mean_and_seed_sd(values)</span>
+<span id="cb9-117"><a href="#cb9-117" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(</span>
+<span id="cb9-118"><a href="#cb9-118" aria-hidden="true" tabindex="-1"></a>        <span class="ss">f"</span><span class="sc">{</span>beta<span class="sc">:5.3f}</span><span class="ss">  </span><span class="sc">{</span>mean[<span class="dv">0</span>]<span class="sc">.</span>item()<span class="sc">:.6f}</span><span class="ss">  </span><span class="sc">{</span>mean[<span class="dv">1</span>]<span class="sc">.</span>item()<span class="sc">:.6f}</span><span class="ss">"</span></span>
+<span id="cb9-119"><a href="#cb9-119" aria-hidden="true" tabindex="-1"></a>        <span class="ss">f"  </span><span class="sc">{</span>mean[<span class="dv">2</span>]<span class="sc">.</span>item()<span class="sc">:.6f}</span><span class="ss">  </span><span class="sc">{</span>mean[<span class="dv">3</span>]<span class="sc">.</span>item()<span class="sc">:.6f}</span><span class="ss">"</span></span>
+<span id="cb9-120"><a href="#cb9-120" aria-hidden="true" tabindex="-1"></a>        <span class="ss">f"  (designed sd </span><span class="sc">{</span>seed_sd[<span class="dv">2</span>]<span class="sc">.</span>item()<span class="sc">:.6f}</span><span class="ss">)"</span></span>
+<span id="cb9-121"><a href="#cb9-121" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb9-122"><a href="#cb9-122" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"repaired feedback: beta  length  proxy  designed  KL"</span>)</span>
+<span id="cb9-123"><a href="#cb9-123" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> beta, values <span class="kw">in</span> repaired_rows.items():</span>
+<span id="cb9-124"><a href="#cb9-124" aria-hidden="true" tabindex="-1"></a>    mean, seed_sd <span class="op">=</span> mean_and_seed_sd(values)</span>
+<span id="cb9-125"><a href="#cb9-125" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(</span>
+<span id="cb9-126"><a href="#cb9-126" aria-hidden="true" tabindex="-1"></a>        <span class="ss">f"</span><span class="sc">{</span>beta<span class="sc">:5.3f}</span><span class="ss">  </span><span class="sc">{</span>mean[<span class="dv">0</span>]<span class="sc">.</span>item()<span class="sc">:.6f}</span><span class="ss">  </span><span class="sc">{</span>mean[<span class="dv">1</span>]<span class="sc">.</span>item()<span class="sc">:.6f}</span><span class="ss">"</span></span>
+<span id="cb9-127"><a href="#cb9-127" aria-hidden="true" tabindex="-1"></a>        <span class="ss">f"  </span><span class="sc">{</span>mean[<span class="dv">2</span>]<span class="sc">.</span>item()<span class="sc">:.6f}</span><span class="ss">  </span><span class="sc">{</span>mean[<span class="dv">3</span>]<span class="sc">.</span>item()<span class="sc">:.6f}</span><span class="ss">"</span></span>
+<span id="cb9-128"><a href="#cb9-128" aria-hidden="true" tabindex="-1"></a>        <span class="ss">f"  (designed sd </span><span class="sc">{</span>seed_sd[<span class="dv">2</span>]<span class="sc">.</span>item()<span class="sc">:.6f}</span><span class="ss">)"</span></span>
+<span id="cb9-129"><a href="#cb9-129" aria-hidden="true" tabindex="-1"></a>    )</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-display">
 <div id="fig-proxy-pressure" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Three panels show designed and learned reward curves over response length, proxy and designed utility under narrow-feedback policies, and designed utility for narrow versus coverage-repaired policies as KL grows. The narrow proxy keeps rising after designed utility falls, while coverage repair avoids the collapse.">
@@ -1325,40 +1306,40 @@ s_\theta(x,y)
 <p>The completion mask audited near <a href="#eq-sft-response-mask" class="quarto-xref">Equation&nbsp;<span>18.1</span></a> applies here as well. Prompt and padding targets contribute zero—length-normalizing that sum would define a different objective and should be named as such.</p>
 <p>Does the algebra work in the finite world? Use all six response pairs, but train on their exact stochastic Bradley–Terry probabilities rather than separable hard winners. For this identity check, set <span class="math inline">\(\beta=1\)</span>. The DPO logit for pair <span class="math inline">\((i,j)\)</span> is <span class="math inline">\(\beta(s_i-s_j)\)</span>. Starting from the reference, optimize four unconstrained reference-relative offsets, identifiable only up to a shared additive constant:</p>
 <!-- NOVEL: needs sign-off -->
-<div id="53ebd36f" class="cell" data-execution_count="10">
+<div id="af84d77b" class="cell" data-execution_count="10">
 <details class="code-fold">
 <summary>Identity test: recover the exact regularized policy with DPO</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>pairs <span class="op">=</span> torch.tensor([</span>
-<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>    [<span class="dv">0</span>, <span class="dv">1</span>], [<span class="dv">0</span>, <span class="dv">2</span>], [<span class="dv">0</span>, <span class="dv">3</span>], [<span class="dv">1</span>, <span class="dv">2</span>], [<span class="dv">1</span>, <span class="dv">3</span>], [<span class="dv">2</span>, <span class="dv">3</span>]</span>
-<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>])</span>
-<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>dpo_beta <span class="op">=</span> <span class="fl">1.0</span></span>
-<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>pair_probabilities <span class="op">=</span> torch.sigmoid(</span>
-<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>    reward[pairs[:, <span class="dv">0</span>]] <span class="op">-</span> reward[pairs[:, <span class="dv">1</span>]]</span>
-<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>target_policy <span class="op">=</span> gibbs_policy(reference, reward, dpo_beta)</span>
-<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>log_ratio <span class="op">=</span> nn.Parameter(torch.zeros(<span class="dv">4</span>))</span>
-<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a>dpo_optimizer <span class="op">=</span> torch.optim.Adam([log_ratio], lr<span class="op">=</span><span class="fl">0.05</span>)</span>
-<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">4000</span>):</span>
-<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a>    comparison_logits <span class="op">=</span> dpo_beta <span class="op">*</span> (</span>
-<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a>        log_ratio[pairs[:, <span class="dv">0</span>]] <span class="op">-</span> log_ratio[pairs[:, <span class="dv">1</span>]]</span>
-<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a>    )</span>
-<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a>    dpo_loss <span class="op">=</span> F.binary_cross_entropy_with_logits(</span>
-<span id="cb12-17"><a href="#cb12-17" aria-hidden="true" tabindex="-1"></a>        comparison_logits, pair_probabilities</span>
-<span id="cb12-18"><a href="#cb12-18" aria-hidden="true" tabindex="-1"></a>    )</span>
-<span id="cb12-19"><a href="#cb12-19" aria-hidden="true" tabindex="-1"></a>    dpo_optimizer.zero_grad()</span>
-<span id="cb12-20"><a href="#cb12-20" aria-hidden="true" tabindex="-1"></a>    dpo_loss.backward()</span>
-<span id="cb12-21"><a href="#cb12-21" aria-hidden="true" tabindex="-1"></a>    dpo_optimizer.step()</span>
-<span id="cb12-22"><a href="#cb12-22" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-23"><a href="#cb12-23" aria-hidden="true" tabindex="-1"></a>dpo_policy <span class="op">=</span> torch.softmax(</span>
-<span id="cb12-24"><a href="#cb12-24" aria-hidden="true" tabindex="-1"></a>    torch.log(reference) <span class="op">+</span> log_ratio.detach(), dim<span class="op">=</span><span class="dv">0</span></span>
-<span id="cb12-25"><a href="#cb12-25" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb12-26"><a href="#cb12-26" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"analytic policy:"</span>, [<span class="bu">round</span>(x, <span class="dv">6</span>) <span class="cf">for</span> x <span class="kw">in</span> target_policy.tolist()])</span>
-<span id="cb12-27"><a href="#cb12-27" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"DPO policy:     "</span>, [<span class="bu">round</span>(x, <span class="dv">6</span>) <span class="cf">for</span> x <span class="kw">in</span> dpo_policy.tolist()])</span>
-<span id="cb12-28"><a href="#cb12-28" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(</span>
-<span id="cb12-29"><a href="#cb12-29" aria-hidden="true" tabindex="-1"></a>    <span class="st">"largest policy difference:"</span>,</span>
-<span id="cb12-30"><a href="#cb12-30" aria-hidden="true" tabindex="-1"></a>    <span class="ss">f"</span><span class="sc">{</span>(dpo_policy <span class="op">-</span> target_policy)<span class="sc">.</span><span class="bu">abs</span>()<span class="sc">.</span><span class="bu">max</span>()<span class="sc">.</span>item()<span class="sc">:.2e}</span><span class="ss">"</span>,</span>
-<span id="cb12-31"><a href="#cb12-31" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>pairs <span class="op">=</span> torch.tensor([</span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>    [<span class="dv">0</span>, <span class="dv">1</span>], [<span class="dv">0</span>, <span class="dv">2</span>], [<span class="dv">0</span>, <span class="dv">3</span>], [<span class="dv">1</span>, <span class="dv">2</span>], [<span class="dv">1</span>, <span class="dv">3</span>], [<span class="dv">2</span>, <span class="dv">3</span>]</span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>])</span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>dpo_beta <span class="op">=</span> <span class="fl">1.0</span></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>pair_probabilities <span class="op">=</span> torch.sigmoid(</span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>    reward[pairs[:, <span class="dv">0</span>]] <span class="op">-</span> reward[pairs[:, <span class="dv">1</span>]]</span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>target_policy <span class="op">=</span> gibbs_policy(reference, reward, dpo_beta)</span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a>log_ratio <span class="op">=</span> nn.Parameter(torch.zeros(<span class="dv">4</span>))</span>
+<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a>dpo_optimizer <span class="op">=</span> torch.optim.Adam([log_ratio], lr<span class="op">=</span><span class="fl">0.05</span>)</span>
+<span id="cb11-12"><a href="#cb11-12" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">4000</span>):</span>
+<span id="cb11-13"><a href="#cb11-13" aria-hidden="true" tabindex="-1"></a>    comparison_logits <span class="op">=</span> dpo_beta <span class="op">*</span> (</span>
+<span id="cb11-14"><a href="#cb11-14" aria-hidden="true" tabindex="-1"></a>        log_ratio[pairs[:, <span class="dv">0</span>]] <span class="op">-</span> log_ratio[pairs[:, <span class="dv">1</span>]]</span>
+<span id="cb11-15"><a href="#cb11-15" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb11-16"><a href="#cb11-16" aria-hidden="true" tabindex="-1"></a>    dpo_loss <span class="op">=</span> F.binary_cross_entropy_with_logits(</span>
+<span id="cb11-17"><a href="#cb11-17" aria-hidden="true" tabindex="-1"></a>        comparison_logits, pair_probabilities</span>
+<span id="cb11-18"><a href="#cb11-18" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb11-19"><a href="#cb11-19" aria-hidden="true" tabindex="-1"></a>    dpo_optimizer.zero_grad()</span>
+<span id="cb11-20"><a href="#cb11-20" aria-hidden="true" tabindex="-1"></a>    dpo_loss.backward()</span>
+<span id="cb11-21"><a href="#cb11-21" aria-hidden="true" tabindex="-1"></a>    dpo_optimizer.step()</span>
+<span id="cb11-22"><a href="#cb11-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-23"><a href="#cb11-23" aria-hidden="true" tabindex="-1"></a>dpo_policy <span class="op">=</span> torch.softmax(</span>
+<span id="cb11-24"><a href="#cb11-24" aria-hidden="true" tabindex="-1"></a>    torch.log(reference) <span class="op">+</span> log_ratio.detach(), dim<span class="op">=</span><span class="dv">0</span></span>
+<span id="cb11-25"><a href="#cb11-25" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb11-26"><a href="#cb11-26" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"analytic policy:"</span>, [<span class="bu">round</span>(x, <span class="dv">6</span>) <span class="cf">for</span> x <span class="kw">in</span> target_policy.tolist()])</span>
+<span id="cb11-27"><a href="#cb11-27" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"DPO policy:     "</span>, [<span class="bu">round</span>(x, <span class="dv">6</span>) <span class="cf">for</span> x <span class="kw">in</span> dpo_policy.tolist()])</span>
+<span id="cb11-28"><a href="#cb11-28" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(</span>
+<span id="cb11-29"><a href="#cb11-29" aria-hidden="true" tabindex="-1"></a>    <span class="st">"largest policy difference:"</span>,</span>
+<span id="cb11-30"><a href="#cb11-30" aria-hidden="true" tabindex="-1"></a>    <span class="ss">f"</span><span class="sc">{</span>(dpo_policy <span class="op">-</span> target_policy)<span class="sc">.</span><span class="bu">abs</span>()<span class="sc">.</span><span class="bu">max</span>()<span class="sc">.</span>item()<span class="sc">:.2e}</span><span class="ss">"</span>,</span>
+<span id="cb11-31"><a href="#cb11-31" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
 <pre><code>analytic policy: [0.164562, 0.20333, 0.331625, 0.300483]
