@@ -781,9 +781,10 @@ across chapters, so treat it as a stable validation benchmark—not a newly seal
 test set.
 
 ```{python}
-#| label: transformer-data-model
-#| code-summary: "Code: exact Chapter 10 corpus and schedule, plus a custom tiny Transformer"
-
+#| label: transformer-harness
+#| echo: false
+# Environment, constants, and the pinned Chapter 10 corpus (protocol stated in
+# prose; SHA-256 assert enforces the shared benchmark).
 import hashlib
 from pathlib import Path
 import torch.nn.functional as F
@@ -813,6 +814,24 @@ data = torch.tensor([stoi[char] for char in text])
 split = int(0.9 * len(data))
 train_data, valid_data = data[:split], data[split:]
 
+class HistoricalCharLSTM(nn.Module):
+    def __init__(self, vocab: int, hidden: int = 128) -> None:
+        super().__init__()
+        self.vocab = vocab
+        self.lstm = nn.LSTM(vocab, hidden, batch_first=True)
+        self.out = nn.Linear(hidden, vocab)
+
+def state_digest(state: dict[str, torch.Tensor]) -> str:
+    digest = hashlib.sha256()
+    for name, value in state.items():
+        digest.update(name.encode())
+        digest.update(value.detach().cpu().numpy().tobytes())
+    return digest.hexdigest()
+```
+
+```{python}
+#| label: transformer-kernel
+#| code-summary: "Code: the tiny Transformer — positions, block, model"
 def sinusoidal_positions(length: int, width: int) -> torch.Tensor:
     position = torch.arange(length, dtype=torch.float32).unsqueeze(1)
     frequency = torch.exp(
@@ -880,20 +899,13 @@ class TinyTransformerLM(nn.Module):
         logits = self.output(self.final_norm(x))
         return (logits, maps) if return_weights else logits
 
-class HistoricalCharLSTM(nn.Module):
-    def __init__(self, vocab: int, hidden: int = 128) -> None:
-        super().__init__()
-        self.vocab = vocab
-        self.lstm = nn.LSTM(vocab, hidden, batch_first=True)
-        self.out = nn.Linear(hidden, vocab)
+```
 
-def state_digest(state: dict[str, torch.Tensor]) -> str:
-    digest = hashlib.sha256()
-    for name, value in state.items():
-        digest.update(name.encode())
-        digest.update(value.detach().cpu().numpy().tobytes())
-    return digest.hexdigest()
+The paired protocol is worth printing in full — it *is* the experimental design:
 
+```{python}
+#| label: transformer-protocol
+#| code-summary: "Code: the paired protocol — shared schedule, identical initial tensors"
 # Reconstruct the random-number state immediately after Chapter 10 created
 # its LSTM, then draw that chapter's complete minibatch-start schedule.
 torch.manual_seed(SEED)
@@ -953,58 +965,32 @@ saved initialization into both models. It also prints fingerprints for both
 artifacts.
 :::
 
+Training and evaluation are Chapter 10's canonical listings, imported. The
+signature of the imported trainer, for reference:
+
+```{.python include="../../code/dlbook/training.py" start-line=11 end-line=24}
+```
+
+*… body exactly as Listing 10.1 — this chapter prints only what it changes.*
+
 ```{python}
 #| label: transformer-training-function
-#| code-summary: "Code: one matched training and evaluation protocol"
+#| code-summary: "Code: Chapter 10's trainer, imported — only the deltas printed"
+
+from dlbook.training import fit_next_token      # Listing 10.1, Ch. 10
+from dlbook.evaluation import fixed_window_loss  # Listing 10.2, Ch. 10
 
 def train_transformer(
     positions: bool,
 ) -> tuple[nn.Module, list[tuple[int, float]]]:
     net = TinyTransformerLM(len(chars), positions=positions)
-    net.load_state_dict(initial_state, strict=True)
+    net.load_state_dict(initial_state, strict=True)  # paired start: same tensors
     assert state_digest(net.state_dict()) == initial_hash
-    optimizer = torch.optim.Adam(net.parameters(), lr=2e-3)
-    curve = []
-    for step, batch_starts in enumerate(starts):
-        xb = torch.stack([
-            train_data[j : j + CONTEXT] for j in batch_starts
-        ])
-        yb = torch.stack([
-            train_data[j + 1 : j + CONTEXT + 1] for j in batch_starts
-        ])
-        logits = net(xb)
-        loss = F.cross_entropy(
-            logits.reshape(-1, len(chars)), yb.reshape(-1)
-        )
-        optimizer.zero_grad()
-        loss.backward()
-        nn.utils.clip_grad_norm_(net.parameters(), 1.0)
-        optimizer.step()
-        if step % 250 == 0:
-            curve.append((step, loss.item()))
-            print(f"step {step:4d}   loss {loss.item():.4f}")
-    return net, curve
-
-@torch.no_grad()
-def fixed_window_loss(
-    net: nn.Module,
-    sequence: torch.Tensor,
-    window: int = CONTEXT,
-) -> float:
-    net.eval()
-    total_loss, n_tokens = 0.0, 0
-    for start in range(0, len(sequence) - 1, window):
-        stop = min(start + window, len(sequence) - 1)
-        xb = sequence[start:stop].unsqueeze(0)
-        yb = sequence[start + 1 : stop + 1]
-        logits = net(xb)
-        total_loss += F.cross_entropy(
-            logits.reshape(-1, len(chars)),
-            yb,
-            reduction="sum",
-        ).item()
-        n_tokens += yb.numel()
-    return total_loss / n_tokens
+    return fit_next_token(
+        net, train_data, vocab=len(chars),
+        schedule=starts,                 # minibatch order is protocol, not chance
+        log_every=250, log_decimals=4,
+    )
 
 @torch.no_grad()
 def transformer_sample(
@@ -1036,8 +1022,8 @@ substantial run stays within the chapter's execution budget.
 #| code-summary: "Code: train the positional Transformer"
 
 position_model, position_curve = train_transformer(positions=True)
-position_train_loss = fixed_window_loss(position_model, train_data)
-position_valid_loss = fixed_window_loss(position_model, valid_data)
+position_train_loss = fixed_window_loss(position_model, train_data, vocab=len(chars))
+position_valid_loss = fixed_window_loss(position_model, valid_data, vocab=len(chars))
 print(f"fixed-window train loss: {position_train_loss:.4f}")
 print(f"fixed-window held-out loss: {position_valid_loss:.4f}")
 ```
@@ -1047,8 +1033,8 @@ print(f"fixed-window held-out loss: {position_valid_loss:.4f}")
 #| code-summary: "Code: repeat with position removed and everything else fixed"
 
 no_position_model, no_position_curve = train_transformer(positions=False)
-no_position_train_loss = fixed_window_loss(no_position_model, train_data)
-no_position_valid_loss = fixed_window_loss(no_position_model, valid_data)
+no_position_train_loss = fixed_window_loss(no_position_model, train_data, vocab=len(chars))
+no_position_valid_loss = fixed_window_loss(no_position_model, valid_data, vocab=len(chars))
 print(f"fixed-window train loss: {no_position_train_loss:.4f}")
 print(f"fixed-window held-out loss: {no_position_valid_loss:.4f}")
 ```

@@ -893,3 +893,27 @@ Do not add AI attribution anywhere in git history: no `Co-Authored-By: Claude ..
 trailers, no "Generated with Claude Code" lines, in this or any of the author's
 repositories. The pre-July-17 history was rewritten to strip these; do not
 reintroduce them.
+
+## Plan v2 execution ledger (July 19, 2026)
+
+Author decisions taken: (a) feature-space figure replaced fig-polytopes;
+(b) delta typography — pilot trials `…`-elision-via-include (ch. 14) and prose-ref
+(ch. 14 trainer); (c) **(Audit.) book-wide**; (d) **transclusion + CI book-wide**.
+
+Done: Phase 0 (harness folds: ch. 17/18/19 setups, ch. 10 unrolled schematic;
+padding-mask kept as kernel). Phase 1 (editorial contract in style-guide.md;
+preface tweaks; read→predict→run→audit loop). Pilot leg 1 (ch. 3 feature-space
+figure). Pilot leg 2 (ch. 19 "Why this batches" + (Audit.) 4/5, both traps
+verified fresh; β-TC-VAE cited). Infrastructure: Execution Audit workflow
+(weekly, from-scratch re-execution), include-code-files vendored + registered,
+`code/` is an installable `dlbook` package (`pip install -e ./code`, in
+requirements.txt). Pilot leg 3 (in flight): Listings 10.1 (fit_next_token) and
+10.2 (fixed_window_loss) live in code/dlbook/, displayed via include in ch. 10,
+imported by ch. 14 whose trainer prints only its deltas (paired guard + explicit
+schedule). Acceptance: ch. 10 outputs bit-identical; ch. 14 digests must pass.
+
+Remaining: pilot measurements + author read; Phase 3 (Listing 4.1, module
+rollout), Phase 4 (three-case taxonomy in ch. 4 + reminder sites + (Audit.)
+sweep), Phase 5 (Hinton devices: digit-embedding exercise, forget-gate
+diagnostic, predict-lines, refusal footnotes already in style guide), Phase 6
+(compatibility note), Phase 7 (verification, page count ≤ v1.0, tag v1.1).

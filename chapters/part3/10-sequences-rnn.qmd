@@ -604,38 +604,38 @@ class CharLSTM(nn.Module):
         o, state = self.lstm(F.one_hot(x, self.vocab).float(), state)
         return self.out(o), state                      # logits at EVERY step
 
+```
+
+The training loop below is the book's **canonical next-token trainer** — Listing
+10.1. Chunk sampling *is* truncated backpropagation through time: fresh random
+100-character windows every step, gradients clipped, no state carried across
+chunk boundaries. The listing lives in the support module as tested source
+(`code/dlbook/training.py`); what you read here is included from that file, and
+the cell after it imports and runs the *same artifact* — printed code and
+executed code cannot drift apart.
+
+**Listing 10.1** — the canonical next-token trainer:
+
+```{.python include="../../code/dlbook/training.py"}
+```
+
+**Listing 10.2** — the fixed-window evaluation protocol (state reset at every
+window boundary, so train and held-out numbers stay comparable across chapters):
+
+```{.python include="../../code/dlbook/evaluation.py"}
+```
+
+```{python}
+#| label: char-lm-train-run
+from dlbook.training import fit_next_token   # Listing 10.1, imported
+
 torch.manual_seed(6050)
 model = CharLSTM(len(chars))
-opt = torch.optim.Adam(model.parameters(), lr=2e-3)
-chunk, batch = 100, 64                                 # random fixed-context windows
-for step in range(2501):
-    s = torch.randint(0, len(train_data) - chunk - 1, (batch,))
-    xb = torch.stack([train_data[j:j + chunk] for j in s])
-    yb = torch.stack([train_data[j + 1:j + chunk + 1] for j in s])
-    logits, _ = model(xb)
-    loss = F.cross_entropy(logits.reshape(-1, len(chars)), yb.reshape(-1))
-    opt.zero_grad(); loss.backward()
-    nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-    opt.step()
-    if step % 500 == 0:
-        print(f"step {step:4d}   loss {loss.item():.2f}")
+model, _ = fit_next_token(model, train_data, vocab=len(chars))
 
-@torch.no_grad()
-def fixed_window_loss(net: nn.Module, sequence: torch.Tensor,
-                      window: int = 100) -> float:
-    net.eval()
-    total_loss, n_tokens = 0.0, 0
-    for start in range(0, len(sequence) - 1, window):
-        stop = min(start + window, len(sequence) - 1)
-        xb = sequence[start:stop].unsqueeze(0)
-        yb = sequence[start + 1:stop + 1]
-        logits, _ = net(xb)                         # state resets at each window
-        total_loss += F.cross_entropy(
-            logits.reshape(-1, len(chars)), yb, reduction="sum").item()
-        n_tokens += yb.numel()
-    return total_loss / n_tokens
+from dlbook.evaluation import fixed_window_loss   # Listing 10.2, imported
 
-print(f"held-out fixed-window loss {fixed_window_loss(model, valid_data):.2f}")
+print(f"held-out fixed-window loss {fixed_window_loss(model, valid_data, vocab=len(chars)):.2f}")
 ```
 
 The loss falls from $\ln(V) \approx 4.6$ for the printed vocabulary size (uniform guessing)
