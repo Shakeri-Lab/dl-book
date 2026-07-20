@@ -440,7 +440,8 @@ early bit across a long stretch of identical noise. Here is that story as an
 executable task: sequences of 80 random tokens, where the label to predict at the
 end is simply *the first token*. Chance is 25%. Three contenders, three seeds
 each: the vanilla RNN, the LSTM as PyTorch hands it to you, and the LSTM with the
-lecture's remember-by-default initialization.
+lecture's remember-by-default initialization. Predict the three rows before
+running — in particular, does the *architecture* alone earn its keep?
 
 ```{python}
 #| label: recall-task
@@ -482,15 +483,18 @@ def train_recall(cell: str, T: int, seed: int, forget_bias: float | None = None,
             nn.utils.clip_grad_norm_(net.parameters(), 1.0)
             opt.step()
     with torch.no_grad():
-        return (net(X_te).argmax(1) == y_te).float().mean().item()
+        return (net(X_te).argmax(1) == y_te).float().mean().item(), net
 
 T = 80
 configs = [("vanilla RNN", "rnn", None),
            ("LSTM, default init", "lstm", None),
            ("LSTM, forget bias +1", "lstm", 1.0)]
+probe_nets: dict[str, nn.Module] = {}                # kept for the diagnostic below
 print(f"recall accuracy at lag {T} (chance 25%), seeds 0 / 1 / 6050:")
 for label, cell, fb in configs:
-    accs = [train_recall(cell, T, s, fb) for s in [0, 1, 6050]]
+    results = [train_recall(cell, T, s, fb) for s in [0, 1, 6050]]
+    accs = [a for a, _ in results]
+    probe_nets[label] = results[-1][1]                # seed 6050's model
     print(f"  {label:22s} " + "   ".join(f"{a:.0%}" for a in accs))
 ```
 
@@ -511,6 +515,61 @@ And the deliverable is not raw capability but **reliability**: what the gates bu
 is that memory stops being a lottery. (For shorter stretches the drama disappears:
 at lag 20 all three rows solve the task under this budget. The gates earn their
 keep precisely where @eq-bptt says the vanilla cell must fail.)
+
+
+### Watching the valves
+
+The table's story makes a checkable claim about mechanism: if the forget-bias
+model solves the task by *holding its valve open* across the eighty-step gap,
+the gates themselves should show it. The falsifying control is already trained:
+the default-initialized LSTM has the identical architecture, saw the identical
+data, and sits at chance. Prediction, per @eq-lstm-highway: the solver's mean
+forget gate should hold clearly above the half-open point, step after step; the
+failed twin's should sag near $\sigma(0) = \tfrac12$.
+
+```{python}
+#| label: fig-forget-gate-diagnostic
+#| fig-cap: "The valve, observed. Mean forget-gate activation per timestep on 64 fresh probe sequences, replayed through the two trained seed-6050 LSTMs from the table above. The task-solving model (navy) holds its gates flat around 0.76 for all eighty steps — the conveyor belt stays open, and the first token survives to the readout. The default-initialized model (orange), same architecture and data, hovers near σ(0) ≈ ½ at about 0.56: a half-closed valve compounded eighty times, and chance accuracy. One task, one seed each, means over units and probes — a diagnostic of this experiment, not a general theory of trained LSTMs."
+#| fig-alt: "Two lines over timesteps one to eighty. The navy line for the forget-bias model stays flat near 0.76. The orange line for the default model stays flat near 0.56, just above a dotted half line."
+#| code-summary: "Code: replay the trained LSTMs and read their forget gates"
+@torch.no_grad()
+def forget_gate_trace(net: SeqClassifier, T: int = 80) -> list[float]:
+    X_probe, _ = make_recall(64, T, seed=3)           # fresh probe sequences
+    lstm = net.rec
+    W_ih, W_hh = lstm.weight_ih_l0, lstm.weight_hh_l0
+    b = lstm.bias_ih_l0 + lstm.bias_hh_l0
+    hidden = W_hh.shape[1]
+    h = torch.zeros(64, hidden)
+    c = torch.zeros(64, hidden)
+    means = []
+    for t in range(T):                                # @eq-lstm, replayed by hand
+        z = X_probe[:, t] @ W_ih.T + h @ W_hh.T + b
+        i_gate, f_gate, g_cand, o_gate = z.chunk(4, dim=1)
+        f = torch.sigmoid(f_gate)
+        c = f * c + torch.sigmoid(i_gate) * torch.tanh(g_cand)
+        h = torch.sigmoid(o_gate) * torch.tanh(c)
+        means.append(f.mean().item())
+    out_ref, _ = lstm(X_probe)                        # replay must match the module
+    assert torch.allclose(h, out_ref[:, -1], atol=1e-5)
+    return means
+
+plt.figure(figsize=(6.2, 3.2))
+for label, color in [("LSTM, forget bias +1", "#232D4B"),
+                     ("LSTM, default init", "#E57200")]:
+    plt.plot(range(1, T + 1), forget_gate_trace(probe_nets[label]),
+             color=color, lw=2, label=label)
+plt.axhline(0.5, ls=":", color="#B8B8A8")
+plt.ylim(0, 1.02)
+plt.xlabel("timestep $t$")
+plt.ylabel("mean forget gate")
+plt.legend()
+plt.tight_layout(); plt.show()
+```
+
+The replay is @eq-lstm executed by hand with the trained weights — the assert
+guarantees it reproduces the module's own output — so the curves are the model's
+actual gates, not a cartoon. Architecture proposed the highway; initialization
+opened it; here is the valve position, measured.
 
 ## GRU: the streamlined cousin
 
