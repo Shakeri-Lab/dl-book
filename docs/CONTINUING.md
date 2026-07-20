@@ -917,3 +917,14 @@ rollout), Phase 4 (three-case taxonomy in ch. 4 + reminder sites + (Audit.)
 sweep), Phase 5 (Hinton devices: digit-embedding exercise, forget-gate
 diagnostic, predict-lines, refusal footnotes already in style guide), Phase 6
 (compatibility note), Phase 7 (verification, page count ≤ v1.0, tag v1.1).
+
+## Plan v2: COMPLETE (July 20, 2026, v1.1 tagged)
+
+All seven phases shipped, every refactor bit-identical on acceptance. Remaining
+for the author: (1) sign off the NOVEL markers (16 chapter files carry them —
+grep -rl "NOVEL: needs sign-off" chapters/ --include="*.qmd"); (2) judge the two
+delta typographies both live in ch. 14 (elided include vs. prose-ref) and the
+ch. 4 listing presentation; (3) the GPU queue (docs/backlog.md) is unchanged.
+Page arithmetic is in CHANGELOG.md. Verification habits now standing: bit-diff
+acceptance per refactored chapter; span-safe greps for include checks; captions
+carry measured numbers only.
