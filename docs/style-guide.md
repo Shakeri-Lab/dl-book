@@ -222,7 +222,23 @@ retrieve from memory: title the mistaken inference, then state the repair.
 7. **Use colour as a redundant explanatory channel.** Colour-code corresponding
    parts of an equation and figure when it makes a mapping visible, such as feature
    columns to the column space or targets to their fitted weighted combination.
-   Labels, order, and notation must still carry the meaning in greyscale.
+   Carry that same colour into the immediately adjacent explanation when it helps the
+   reader track the object. Labels, order, and notation must still carry the meaning
+   in greyscale. The semantic vocabulary is book-wide:
+
+   | Colour | Semantic role | Canonical macro |
+   |---|---|---|
+   | Blue | inputs, features, design matrices ($\vect{x},\matr{X}$) | `\featurepart{}` |
+   | Orange | learnable parameters ($\vect{w},b,\theta$) | `\parameterpart{}` |
+   | Purple | observed targets ($y,\vect{y}$) | `\targetpart{}` |
+   | Green | predictions and model outputs ($\hat y,\hat{\vect{y}}$) | `\predictionpart{}` |
+   | Wine | residuals and errors ($e,y-\hat y$) | `\residualpart{}` |
+
+   Operators and neutral structure stay black or grey. This vocabulary governs
+   semantic equations, their matching prose, and conceptual diagrams; it does not
+   force experimental series or categorical comparisons into those roles. Colour an
+   occurrence only when the mapping earns the ink, but never give the same semantic
+   object a conflicting colour.
 8. **Write for a reader, not a presumed career stage.** Do not assume the reader is
    currently a student or is pursuing a particular career. Prefer durable language
    such as “worth keeping” or “we will reuse this” over “for the rest of your career.”
@@ -336,11 +352,12 @@ Rules:
   long model, trainer, or experiment maps its major phases: construct the data,
   define the mechanism, run the protocol, verify the claim, report the result.
   Do not turn syntax into fake pseudocode.
-- **Map every step.** Each plan index must appear in the code as `[n]`; each
-  marker must name a plan step. A marker at the start of a function or region
-  covers that implementation until the next marker at the same or shallower
-  indentation. Fused markers such as `[2][5]` are allowed when vectorization
-  combines conceptual steps.
+- **Map every step without repeating it.** Each plan index must appear in the code as
+  a bracket-only marker such as `# [1]`; the plan already carries the words. A marker
+  at the start of a function or region covers that implementation until the next
+  marker at the same or shallower indentation. Fused markers such as `# [2][5]` are
+  allowed when vectorization combines conceptual steps. Keep separate comments only
+  when they add nonredundant information about shapes, numerics, or behavior.
 - **Absorb repetition.** When adjacent prose already enumerates the algorithm,
   let the plan replace or compress that enumeration. The universal panel is not
   a reason to narrate the same sequence three times.

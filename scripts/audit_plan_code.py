@@ -13,7 +13,7 @@ DIV_OPEN_RE = re.compile(r"^(:{3,})\s+\{([^}]*)\}\s*$")
 DIV_CLOSE_RE = re.compile(r"^(:{3,})\s*$")
 CODE_OPEN_RE = re.compile(r"^```(.*)$")
 STEP_RE = re.compile(r"^(\d+)\.\s+")
-MARKER_RE = re.compile(r"#.*?((?:\[\d+\])+)")
+MARKER_RE = re.compile(r"#\s*((?:\[\d+\])+)(.*)$", re.MULTILINE)
 INCLUDE_RE = re.compile(r'book-include="([^"]+)"')
 START_RE = re.compile(r"start-line=(\d+)")
 END_RE = re.compile(r"end-line=(\d+)")
@@ -30,9 +30,17 @@ class Div:
 
 def marker_numbers(source: str) -> set[int]:
     numbers: set[int] = set()
-    for marker in MARKER_RE.findall(source):
+    for marker, _ in MARKER_RE.findall(source):
         numbers.update(int(value) for value in re.findall(r"\[(\d+)\]", marker))
     return numbers
+
+
+def descriptive_marker_lines(source: str) -> list[int]:
+    return [
+        line_number
+        for line_number, line in enumerate(source.splitlines(), start=1)
+        if (match := MARKER_RE.search(line)) is not None and match.group(2).strip()
+    ]
 
 
 def included_source(path: Path, opener: str) -> str:
@@ -126,6 +134,12 @@ def audit(path: Path) -> tuple[int, int, list[str]]:
                         expected = set(range(1, len(panel.steps) + 1))
                         source = included_source(path, opener) if is_include else body
                         actual = marker_numbers(source)
+                        descriptive = descriptive_marker_lines(source)
+                        if descriptive:
+                            errors.append(
+                                f"{path}:{index + 1}: marker comments must contain "
+                                f"only bracketed indices; source line(s) {descriptive}"
+                            )
                         if panel.steps != list(range(1, len(panel.steps) + 1)):
                             errors.append(
                                 f"{path}:{panel.line}: plan steps are not consecutive from 1"

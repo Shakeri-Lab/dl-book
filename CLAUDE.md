@@ -32,7 +32,7 @@ chapter must respect. Those two files replace any account-local memory.
   uses the committed freeze). **Pre-test every experiment regime in a scratch
   script before writing prose** (see `docs/CONTINUING.md` §2 and §5).
 - **Numbers must match prose.** If a cell's printed output contradicts the surrounding
-  narrative, fix the experiment or the narrative (see Chapter 1's ridge/lasso regime,
+  narrative, fix the experiment or the narrative (see Chapter 1's ridge regime,
   tuned to n=25 so OLS genuinely overfits).
 
 ## Environment (this machine)
@@ -140,8 +140,10 @@ updating **both**:
   `name: ["body", nargs]`)
 
 Available: `\vect{}`, `\matr{}`, `\E`, `\Ex`, `\var`, `\cov`, `\norm{}`, `\argmax`,
-`\argmin`, `\imp`, `\R`, `\dd`, `\loss`. Seed-local `\newcommand`s are carried over by
-`tex2qmd.sh` automatically during conversion, but chapters should use the canonical set.
+`\argmin`, `\imp`, `\R`, `\dd`, `\loss`, plus the semantic colour macros
+`\featurepart{}`, `\parameterpart{}`, `\targetpart{}`, `\predictionpart{}`, and
+`\residualpart{}`. Seed-local `\newcommand`s are carried over by `tex2qmd.sh`
+automatically during conversion, but chapters should use the canonical set.
 
 ## Known failure modes
 

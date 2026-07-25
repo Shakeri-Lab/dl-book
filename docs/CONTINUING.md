@@ -14,8 +14,8 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 >
 > The manuscript is **complete and released**: tag **v1.1** carries the stable
 > 502-page PDF. The post-release `main` revision is 536 pages after the
-> author-requested universal Plan → Code pass and the first Chapter 1 author
-> revision; it remains chapters 1–20 + two interludes + four appendices +
+> author-requested universal Plan → Code pass and two Chapter 1 author
+> revisions; it remains chapters 1–20 + two interludes + four appendices +
 > epilogue, live in HTML and PDF after deployment. **Nothing is mid-flight.**
 > Plan v2 (the readable-code and estimator-discipline overhaul) finished all
 > seven phases on July 20; the Plan → Code component became universal July 25.
@@ -24,8 +24,10 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 >
 > The universal code pass covers all 201 learner-visible Python surfaces; 28
 > `echo: false` execution-support cells are intentionally exempt. Every plan has
-> at most six steps and every step maps to a numbered marker in executed or
-> tested source. Project-root-aware `book-include=` keeps the four canonical
+> at most six steps and every step maps to a bracket-only numbered marker
+> (`# [1]`, or fused `# [2][5]`) in executed or tested source. Descriptive text
+> after a marker is a contract violation. Project-root-aware `book-include=`
+> keeps the four canonical
 > transclusions stable in chapter and whole-book renders. The audit lives at
 > `scripts/audit_plan_code.py`.
 >
@@ -33,12 +35,21 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > show-then-name geometry, three new TikZ figures, colour-linked equations,
 > rank-aware `torch.linalg.lstsq`, a 3-D loss landscape, a three-method loss
 > diagnostic, concise empirical/population risk, and a Gaussian
-> likelihood/CLT/maximum-entropy bridge. Chapter 6 names shifted risk
-> $R_{T_\#P}$ and the augmentation population objective $R_{\mathcal A}$.
-> The July 25 verification parsed 229 executable cells/modules, executed the
-> affected Chapters 1, 4, 5, 6, 7, 10, 14, and 20 in both formats, completed a
-> frozen full render, and visually checked the affected HTML/PDF. The rendered
-> book contains no stale code-include or MathJax macro errors.
+> likelihood/CLT/maximum-entropy bridge. Its second author pass reverses Figure
+> 1.1's row annotation, makes semantic colours consistent across equations,
+> prose, and diagrams, distinguishes the early two-parameter drawing loop from
+> the complete three-way implementation, removes the Lasso detour, and leaves a
+> ridge-only exercise plus a careful angular-responsiveness footnote. Chapter 6
+> names shifted risk $R_{T_\#P}$ and the augmentation population objective
+> $R_{\mathcal A}$.
+> The final July 25 verification parsed all 229 executable cells/modules and
+> exercised all 26 changed executable units in both formats without a runtime
+> failure. Nine stochastic units changed numerical samples under the current
+> environment, so their accepted bit-identical output evidence was retained;
+> Chapter 1 was freshly executed in both formats. The final frozen full render
+> preserves all 266 stdout blocks exactly, remains 536 pages, and passed
+> HTML/PDF visual checks. The rendered book contains no descriptive Plan → Code
+> markers, Lasso/Figure 1.9 remnants, stale includes, or MathJax macro errors.
 >
 > Fresh session? Read `CLAUDE.md`, then §9 and §2 of this file, then
 > `docs/style-guide.md` and `docs/arc-seeds.md`. A paste-ready bootstrap prompt
@@ -978,25 +989,30 @@ reintroduce them.
   `docs/compatibility.md` is the living home of version-fragile engineering, with
   Appendix B pointing at it.
 
-**Plan → Code panels (author's sketch, July 25).** One mechanism shown twice: the
-plan in the reader's language beside the terse kernel, output beneath the code.
+**Universal Plan → Code panels (July 25).** One mechanism shown twice: the plan
+in the reader's language beside the terse kernel, output beneath the code.
 
 | Piece | Path |
 |---|---|
 | Two-column grid, chips, Output strip (HTML) | `dlbook.scss` |
 | Stacked print form | `filters/plan-code.lua` + `planbox` in `tex/macros.tex` |
 | Rules, authoring form, six-step ceiling | `docs/style-guide.md` |
-| Working exemplar | ch. 7 `manual-conv` (§7.3) |
+| Audit | `scripts/audit_plan_code.py` |
 
-Design decisions worth keeping: markers are `[n]` comments in the executed source
-(number first, colour second — never colour alone, never drawn arrows); the print
-panel is an unbreakable box preceded by a page-room check, because the first two
-builds split the plan across a page and then stranded its code overleaf.
+All 201 learner-visible Python surfaces now use the panel; 28 `echo: false`
+execution-only cells are exempt. Markers in executed/tested source are
+bracket-only (`# [1]`, or fused `# [2][5]`) and never repeat the plan text.
+Comments remain only when they explain shapes, numerical choices, or non-obvious
+behaviour. The audit rejects descriptive marker suffixes. Number carries the
+mapping first and colour supports it—never colour alone and never drawn arrows.
+The print panel remains an unbreakable box preceded by a page-room check.
 
-Page cost, recorded honestly: the single ch. 7 panel took the book from 502 to
-**504 pages** — the room check buys the juxtaposition by forcing a page break
-when the pair does not fit. Budget roughly a page per two panels when deciding
-the rollout, and prefer panels that absorb an existing prose list.
+**Semantic colour contract (July 25).** Blue identifies inputs/features/design
+matrices; orange learnable parameters; purple observed targets; green
+predictions/model outputs; wine residuals/errors; neutral gray/black operators
+and structure. The PDF and HTML macros are synchronized. Local experimental
+series and categorical palettes remain free, and meaning never depends on
+colour alone. Selective use is preferred over colouring every variable.
 
 ### Standing verification habits (learned the hard way)
 
@@ -1020,16 +1036,10 @@ the rollout, and prefer panels that absorb an existing prose list.
    `<!-- NOVEL: needs sign-off -->` markers (invisible in output) on passages
    written without a direct lecture/seed source. List them with:
    `grep -rl "NOVEL: needs sign-off" chapters/ --include="*.qmd"`
-2. **Plan → Code rollout.** The exemplar is live; the curated candidates, in
-   priority order: ch. 13 `scaled-dot-snapshot` (strongest — the book's
-   destination recipe), ch. 10 `char-lm-sample`, ch. 11 `beam-demo`, ch. 1
-   `closed-form`, ch. 3 `mlp-class`, ch. 7 `equivariance`, ch. 8
-   `pool-invariance`, Appendix C `a3-softmax-stability`. Each costs render time
-   and a little page budget.
-3. **Delta typography.** Both trials are live in chapter 14 — the elided
+2. **Delta typography.** Both trials are live in chapter 14 — the elided
    `include` of an imported signature versus the prose-referenced delta cell.
    Pick one and it becomes book-wide.
-4. **GPU queue.** `docs/backlog.md` §5 lists the runs that need real hardware
+3. **GPU queue.** `docs/backlog.md` §5 lists the runs that need real hardware
    (full-data architecture scorecard; ImageNet ResNet-18 transfer at 224px;
    scaled language model). Chapters quote the lecture's numbers meanwhile — per
    the author's rule, **no placeholder callouts in published chapters**.

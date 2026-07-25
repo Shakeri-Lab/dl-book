@@ -12,7 +12,7 @@ import torch.nn.functional as F
 from torch import nn
 
 
-# [1] declare the shared training interface
+# [1]
 def fit_supervised(
     model_fn: Callable[[], nn.Module],
     X: torch.Tensor,
@@ -28,19 +28,19 @@ def fit_supervised(
     Seeding precedes construction, so a given (model_fn, seed) pair always
     starts from the same tensors; each epoch reshuffles example order.
     """
-    # [2] seed first, then build the model and optimizer
+    # [2]
     torch.manual_seed(seed)
     model = model_fn()
     opt = torch.optim.Adam(model.parameters(), lr=lr)
-    # [3] reshuffle and visit every minibatch each epoch
+    # [3]
     for _ in range(epochs):
         perm = torch.randperm(len(X))
         for i in range(0, len(X), batch):
             idx = perm[i : i + batch]
-            # [4] predict, measure, differentiate, and update
+            # [4]
             loss = F.cross_entropy(model(X[idx]), y[idx])
             opt.zero_grad()
             loss.backward()
             opt.step()
-    # [5] return the trained artifact
+    # [5]
     return model

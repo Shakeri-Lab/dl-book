@@ -1,4 +1,21 @@
 
+# Post-v1.1 main — Chapter 1 and universal code-surface revision (July 2026)
+
+Editorial: Chapter 1 now carries one semantic colour contract across equations,
+nearby prose, and conceptual diagrams; Figure 1.1's first-row annotation is
+corrected; the early visualization loop is distinguished from the complete
+three-way implementation; and the regularization close is ridge-only, with the
+Lasso comparison and Figure 1.9 removed.
+
+Code: all 201 learner-visible Plan → Code surfaces use compact bracket-only
+markers (`# [1]`, including fused forms such as `# [2][5]`). The audit rejects
+descriptive marker suffixes; the 28 `echo: false` execution-only cells remain
+exempt.
+
+Acceptance: all 229 executable cells/modules parse, the accepted 266 frozen
+stdout blocks remain byte-identical, and the complete HTML/PDF render remains
+536 pages.
+
 ## v1.1 — the readable-code and estimator-discipline release (July 2026)
 
 Pedagogy: the learned-feature-space figure (ch. 3); the forget-gate diagnostic
