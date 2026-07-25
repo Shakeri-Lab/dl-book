@@ -11,29 +11,40 @@ Budget about 30 minutes, most of it downloads.
 
 ## 0. Where to put the repo
 
+The project lives in Box with the rest of the 6050 teaching material, so on a
+machine signed into Box it arrives by sync:
+
+```
+~/Library/CloudStorage/Box-Box/Teaching/6050/dl-book
+```
+
+Wait for Box to finish downloading it before building (the folder should show as
+fully synced, not "online only"). If you would rather work from a fresh clone —
+faster, and immune to sync hiccups — that is equally valid, since GitHub is the
+source of truth:
+
 ```bash
 git clone https://github.com/Shakeri-Lab/dl-book.git ~/dl-book
-cd ~/dl-book
 ```
 
-**Keep the working tree on local disk — not in Box, iCloud Drive, or Dropbox.**
-This is not fussiness: on this project a Box-hosted git repo corrupted three
-separate `git fetch` runs (`fatal: mmap failed`, `early EOF`,
-`invalid index-pack output`) and had to be repaired by transplanting `.git` from
-outside Box. A cloud file provider can also hand back a stale or
-partially-materialised file, and the place that would surface is a freeze cache —
-i.e. as a *wrong number in a printed chapter* rather than an obvious crash.
+**Either way, keep the virtualenv out of Box** (§3). It is ~1.1 GB of
+platform-specific binaries, it is useless on another machine, and syncing 47,000
+files of it will bog Box down for hours.
 
-GitHub is the backup; that is what it is for. If you want the project visible
-beside your teaching material, symlink it and keep the real tree local:
+Two cautions that come with a cloud-hosted working tree, learned on this project:
 
-```bash
-ln -s ~/dl-book "$HOME/Library/CloudStorage/Box-Box/Teaching/6050/dl-book"
-```
+- A Box-hosted git repo here corrupted three separate `git fetch` runs
+  (`fatal: mmap failed`, `early EOF`, `invalid index-pack output`) and had to be
+  repaired by transplanting `.git`. **The fix is always to re-clone from GitHub**,
+  never to repair in place. Push often so there is nothing to lose.
+- A cloud provider can hand back a stale or partially-materialised file. The place
+  that would surface is a freeze cache — as a *wrong number in a printed chapter*
+  rather than a crash. If a number ever looks off, re-render that chapter and
+  diff (§5B) before believing it.
 
-Sizes, for calibration: the manuscript is ~13 MB; `.git` is ~114 MB; `.venv` is
-~1.1 GB (PyTorch, ~47k files); `_book` + `_freeze` are ~32 MB and are rewritten
-on every render.
+Sizes, for calibration: the manuscript is ~13 MB; `.git` is ~114 MB;
+`_book` + `_freeze` are ~32 MB and are rewritten on every render; the excluded
+`.venv` is ~1.1 GB.
 
 ---
 
@@ -90,33 +101,35 @@ export PATH="$HOME/.local/bin:$HOME/Library/TinyTeX/bin/universal-darwin:/opt/ho
 
 ## 3. Python environment
 
+Create the environment **outside the Box folder**, then install from inside the
+repo so the editable `-e ./code` entry resolves:
+
 ```bash
-cd ~/dl-book
-python3.12 -m venv .venv
-source .venv/bin/activate
-pip install --upgrade pip
-pip install -r requirements.txt
+python3.12 -m venv ~/.venvs/dl-book
+cd ~/Library/CloudStorage/Box-Box/Teaching/6050/dl-book    # or your clone
+~/.venvs/dl-book/bin/pip install --upgrade pip
+~/.venvs/dl-book/bin/pip install -r requirements.txt
+```
+
+Point Quarto at it (put this in `~/.zshrc` to make it permanent):
+
+```bash
+export QUARTO_PYTHON="$HOME/.venvs/dl-book/bin/python"
 ```
 
 That last line also installs the book's own package in editable mode (the
 `-e ./code` entry), which is what makes the canonical listings importable:
 
 ```bash
-python -c "from dlbook.supervised import fit_supervised; \
-           from dlbook.training import fit_next_token; print('dlbook ok')"
+~/.venvs/dl-book/bin/python -c "from dlbook.supervised import fit_supervised; \
+    from dlbook.training import fit_next_token; print('dlbook ok')"
 ```
 
 The versions that produced the committed caches, for reference: Python 3.12.13,
 torch 2.12.1, numpy 2.5.1, matplotlib 3.11.0. Newer point releases are normally
 fine; see §6 before you trust a re-executed number.
 
-Quarto must use this interpreter, not the system one:
-
-```bash
-export QUARTO_PYTHON="$PWD/.venv/bin/python"
-```
-
-(If you skip this and see `ModuleNotFoundError: No module named 'yaml'` during a
+(If you skip the `QUARTO_PYTHON` export and see `ModuleNotFoundError: No module named 'yaml'` during a
 render, that is the symptom: Quarto found a Python without Jupyter.)
 
 ---
@@ -148,7 +161,8 @@ committed, so this exercises Quarto, LuaLaTeX, and the filters, and should take 
 few minutes rather than forty:
 
 ```bash
-cd ~/dl-book && source .venv/bin/activate
+cd ~/Library/CloudStorage/Box-Box/Teaching/6050/dl-book
+export QUARTO_PYTHON="$HOME/.venvs/dl-book/bin/python"
 quarto render
 ls -la _book/Deep-Learning--Making-It-Learnable.pdf     # expect ~4 MB
 pdfinfo _book/Deep-Learning--Making-It-Learnable.pdf | grep Pages   # 504 on current main
@@ -228,7 +242,8 @@ on Box being present — those are drafting inputs, not build inputs.
 ## 8. First session on the new machine
 
 ```bash
-cd ~/dl-book && source .venv/bin/activate
+cd ~/Library/CloudStorage/Box-Box/Teaching/6050/dl-book
+export QUARTO_PYTHON="$HOME/.venvs/dl-book/bin/python"
 ```
 
 Then paste `docs/NEW-CHAT-PROMPT.md` into a fresh Claude Code session. It points

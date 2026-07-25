@@ -50,7 +50,7 @@ export PATH="$HOME/.local/bin:$HOME/Library/TinyTeX/bin/universal-darwin:/opt/ho
 | quarto 1.9 | `~/.local/bin/quarto` | user-land tarball (brew cask needs sudo — unavailable) |
 | pandoc | bundled: `quarto pandoc` | |
 | TinyTeX | `~/Library/TinyTeX` | for PDF + TikZ; `tlmgr update --self` before `tlmgr install <pkg>` |
-| Python venv | `.venv/` (python3.12, torch, matplotlib, sklearn) | always render with `QUARTO_PYTHON=.venv/bin/python` |
+| Python venv | `~/.venvs/dl-book` (python3.12, torch, matplotlib, sklearn) — **outside Box on purpose** | always render with `QUARTO_PYTHON=$HOME/.venvs/dl-book/bin/python` |
 | TikZ→SVG | latexmk + `pdftocairo` (poppler) | dvisvgm is broken here (ghostscript linkage) — don't use it |
 | gh | `/opt/homebrew/bin/gh` | not logged in; authenticate per-command: |
 
@@ -62,10 +62,20 @@ Remote: `https://github.com/Shakeri-Lab/dl-book` (push to `main` → CI renders 
 publishes to `gh-pages` → https://shakeri-lab.github.io/dl-book/). Never commit to
 `gh-pages` manually.
 
-**Do not move this repo into Box.** Box's cloud filesystem times out on dense file
-I/O (venv, `_book`), and a Box-hosted git repo corrupted three separate `git fetch`
-runs on this project (`mmap failed`, `early EOF`, `invalid index-pack output`).
-Symlink it into Box if you want it visible there; see `docs/NEW-MACHINE-SETUP.md` §0. Course materials live in Box at
+**This repo lives in Box** (author's decision, July 25 2026):
+`~/Library/CloudStorage/Box-Box/Teaching/6050/dl-book`, alongside the rest of the
+6050 teaching material. Two things make that safe enough:
+
+- **The virtualenv is outside Box** at `~/.venvs/dl-book` — 1.1 GB of
+  platform-specific binaries that Box should never sync. Always render with
+  `QUARTO_PYTHON=$HOME/.venvs/dl-book/bin/python` (or activate it first).
+- **GitHub remains the source of truth.** Box has corrupted git objects on this
+  project before (`mmap failed`, `early EOF`, `invalid index-pack output`, all on
+  the course-site repo). If `git fsck` ever complains here, do not repair in
+  place: re-clone from GitHub and copy back any uncommitted work.
+
+Push before long breaks, and avoid heavy git operations (fetch/gc) while Box is
+mid-sync. Course materials: `../` (LaTeX seeds, `dl-course-site/transcripts/`). Course materials live in Box at
 `/Users/setup/Library/CloudStorage/Box-Box/Teaching/6050/` (read-only inputs: `LaTeX/`
 seeds, `dl-course-site/transcripts/`).
 
@@ -107,8 +117,8 @@ compositions for figures. Full guide: `docs/dl-course-code.md`.
    implementation or evidence.
 7. **Execute + render** (this refreshes the committed freeze cache — CI never executes):
    ```bash
-   QUARTO_PYTHON=.venv/bin/python quarto render chapters/partN/XX-*.qmd  # NO --to flag!
-   QUARTO_PYTHON=.venv/bin/python quarto render        # full book, HTML + PDF
+   QUARTO_PYTHON=$HOME/.venvs/dl-book/bin/python quarto render chapters/partN/XX-*.qmd  # NO --to flag!
+   QUARTO_PYTHON=$HOME/.venvs/dl-book/bin/python quarto render        # full book, HTML + PDF
    ```
    An `--to html` single-file render leaves the PDF freeze (`tex.json`) stale → the
    book PDF ships without your changes. Any later prose edit invalidates the freeze

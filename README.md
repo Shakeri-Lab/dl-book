@@ -35,12 +35,12 @@ replays that one move, in his course's order and voice.
 ## Building locally
 
 ```bash
-python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
-QUARTO_PYTHON=.venv/bin/python quarto render  # HTML + PDF; install TinyTeX once
+python3.12 -m venv ~/.venvs/dl-book && ~/.venvs/dl-book/bin/pip install -r requirements.txt
+QUARTO_PYTHON=$HOME/.venvs/dl-book/bin/python quarto render  # HTML + PDF; install TinyTeX once
 ```
 
 Execution uses Quarto **freeze** — CI never runs cells; refresh a chapter's cache with
-`QUARTO_PYTHON=.venv/bin/python quarto render chapters/part1/01-linear-regression.qmd --execute`
+`QUARTO_PYTHON=$HOME/.venvs/dl-book/bin/python quarto render chapters/part1/01-linear-regression.qmd --execute`
 before committing.
 
 ## Authoring pipeline

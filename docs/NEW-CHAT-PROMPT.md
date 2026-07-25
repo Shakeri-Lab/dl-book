@@ -1,7 +1,7 @@
 # Bootstrap prompt for a fresh chat session
 
 Paste everything between the rules into a new Claude Code session started in
-`/Users/setup/dl-book`. It orients the agent, pins the non-negotiables, and stops
+`~/Library/CloudStorage/Box-Box/Teaching/6050/dl-book`. It orients the agent, pins the non-negotiables, and stops
 it from editing before you have said what you want done.
 
 Keep this file current: if a rule changes or the state moves, edit the prompt here
@@ -13,8 +13,8 @@ I'm Heman Shakeri (UVA School of Data Science). You're helping me with my
 deep-learning textbook, **_Deep Learning: Making It Learnable_** — a Quarto book
 rendering to HTML + PDF, the course text for DS 6050.
 
-**Repo:** `/Users/setup/dl-book` (local disk — never move it into Box; Box I/O
-breaks builds). Remote `https://github.com/Shakeri-Lab/dl-book`, live at
+**Repo:** `~/Library/CloudStorage/Box-Box/Teaching/6050/dl-book` (in Box with the
+rest of my 6050 material; the virtualenv is deliberately outside it). Remote `https://github.com/Shakeri-Lab/dl-book`, live at
 `https://shakeri-lab.github.io/dl-book/`, PDF at
 `https://shakeri-lab.github.io/dl-book/Deep-Learning--Making-It-Learnable.pdf`.
 Current release **v1.1** — 502 pages, chapters 1–20 plus two interludes, four
@@ -46,6 +46,7 @@ answer.**
 - **Printed code is executed code.** Every snippet is either an executed cell or
   tested source in `code/dlbook/` shown via `include=`. Never retype an "essence"
   version of real code.
+- **Box caution.** The working tree is in Box; GitHub is the source of truth. If git objects ever look corrupt, re-clone rather than repair in place, and never let a render run while Box is mid-sync of the same folder.
 - **Freeze discipline.** Any prose edit invalidates that chapter's freeze cache.
   Re-render the chapter with **no `--to` flag** (both formats), then the project —
   otherwise the PDF ships stale. Renders are slow: a heavy chapter is 20–40
@@ -56,7 +57,7 @@ answer.**
 - **Pre-test every experiment** before writing prose about its numbers, and put
   only measured numbers in captions.
 
-**Environment:** `cd /Users/setup/dl-book && source .venv/bin/activate` (on a machine that has never built the book, `docs/NEW-MACHINE-SETUP.md` sets it up from bare); Quarto at
+**Environment:** `cd ~/Library/CloudStorage/Box-Box/Teaching/6050/dl-book && export QUARTO_PYTHON="$HOME/.venvs/dl-book/bin/python"` (on a machine that has never built the book, `docs/NEW-MACHINE-SETUP.md` sets it up from bare); Quarto at
 `~/.local/bin/quarto`; TinyTeX for PDF; `gh` at `/opt/homebrew/bin/gh`,
 authenticated per command via
 `export GH_TOKEN=$(printf "protocol=https\nhost=github.com\n" | git credential fill | sed -n 's/^password=//p')`

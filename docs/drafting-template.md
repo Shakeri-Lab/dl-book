@@ -79,6 +79,6 @@ Prompt a second, independent session:
 > correctness independently. Check every code cell runs mentally (shapes, imports,
 > seeds). Return the claim table + a fix list.
 
-Then: his edit → `QUARTO_PYTHON=.venv/bin/python quarto render CHAPTER` (no `--to`
+Then: his edit → `QUARTO_PYTHON=$HOME/.venvs/dl-book/bin/python quarto render CHAPTER` (no `--to`
 flag; this refreshes both freezes) → inspect both formats → full `quarto render` →
 merge.

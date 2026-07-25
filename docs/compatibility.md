@@ -9,15 +9,32 @@ lives here, where it can be updated without reprinting a chapter.
 | Component | Version | Where it matters |
 |---|---|---|
 | Python | 3.12 | all executable cells |
-| PyTorch | 2.12.1 (CPU) | all executable cells |
+| PyTorch | 2.12.1 (CPU) — **2.13.0 verified equivalent**, see below | all executable cells |
 | Quarto | 1.9.38 | rendering only |
 | OS | macOS 15 (arm64) / ubuntu-latest (CI) | render + Execution Audit |
+
+Working tree location: `~/Library/CloudStorage/Box-Box/Teaching/6050/dl-book` (in
+Box, by the author's choice). The virtualenv is deliberately **outside** Box at
+`~/.venvs/dl-book`; render with `QUARTO_PYTHON=$HOME/.venvs/dl-book/bin/python`.
+GitHub is the source of truth — if Box ever corrupts git objects, re-clone rather
+than repair in place.
 
 The **Execution Audit** workflow re-executes every cell from scratch weekly on
 `ubuntu-latest`; a green run is the current compatibility statement. Reproduction
 policy: on this pinned environment, rendered outputs are expected byte-stable;
 across versions and platforms, expect agreement within each figure's declared
 invariants, not bitwise identity (see PyTorch's reproducibility notes).
+
+### Verified version equivalence
+
+**torch 2.13.0 (July 25, 2026).** A fresh environment pulled 2.13.0 rather than the
+2.12.1 that built the caches. Re-executing Chapter 7 produced **no change whatsoever
+to `execute-results/*.json`** — every printed number reproduced exactly. Six figure
+binaries changed bytes while being **pixel-identical** (PNG/PDF metadata churn), and
+were discarded rather than committed. That is the two-tier policy working as intended:
+bit-identical where it is claimed, invariant-identical where it is not. Discard
+metadata-only figure churn rather than committing it; it pollutes history and hides
+real changes.
 
 ## Version-fragile engineering the chapters rely on
 

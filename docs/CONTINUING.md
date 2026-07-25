@@ -324,7 +324,7 @@ failed their first design (see §5 case law). The loop that works:
 2. **Plan the experiments** — every figure and quantitative claim needs an
    executable cell behind it.
 3. **Pre-test in the scratchpad** (a throwaway script outside the repo, run with
-   `.venv/bin/python`): tune regimes until the phenomenon honestly appears; pin
+   `$HOME/.venvs/dl-book/bin/python`): tune regimes until the phenomenon honestly appears; pin
    exact numbers, seeds, and wall-clock times. Iterate here, not in the chapter.
    If the textbook phenomenon will not appear honestly at CPU scale, reframe it (the
    honest null result IS often the better lesson — see ch. 9 transfer and ch. 10
@@ -361,6 +361,12 @@ generator seeds 0/1/2/100+L etc. — keep them deterministic).
 
 ## 3. Environment quick-recheck (new account)
 
+*Location note (July 25, 2026): the working tree moved into Box at
+`~/Library/CloudStorage/Box-Box/Teaching/6050/dl-book`, by the author's choice, to
+sit with the rest of the 6050 material. The virtualenv stays outside at
+`~/.venvs/dl-book`; GitHub remains the source of truth, and a corrupted object
+store is repaired by re-cloning, never in place.*
+
 *Setting up a machine from scratch rather than re-checking one? Use
 `docs/NEW-MACHINE-SETUP.md`, which covers the toolchain, the Python environment,
 credentials, and a two-step verification that the new machine reproduces the
@@ -370,7 +376,8 @@ Everything in CLAUDE.md §Environment still applies. On a fresh account verify:
 - `~/dl-book` exists locally (NOT in Box) and `git remote -v` points to
   `Shakeri-Lab/dl-book`.
 - `gh` authenticates via the `git credential fill` pattern (never echo the token).
-- `.venv` intact: `.venv/bin/python -c "import torch; print(torch.__version__)"`.
+- venv intact: `~/.venvs/dl-book/bin/python -c "import torch; print(torch.__version__)"`
+  (it lives outside Box on purpose).
 - `~/dl-course-code` clone present; `git pull` before use; read-only.
 - Box course materials at
   `~/Library/CloudStorage/Box-Box/Teaching/6050/` (LaTeX seeds, transcripts at
