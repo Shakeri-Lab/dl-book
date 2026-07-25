@@ -82,7 +82,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../../site_libs/bootstrap/bootstrap-45e50fd1758228873a75ad4773f602b7.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../../site_libs/bootstrap/bootstrap-0d0d6ae9cec151a14954493566677543.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -129,7 +129,11 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
         matr: ["\\boldsymbol{#1}", 1],
         R: "\\mathbb{R}",
         dd: "\\mathrm{d}",
-        loss: "\\mathcal{L}"
+        loss: "\\mathcal{L}",
+        featurepart: ["\\color{steelblue}{#1}", 1],
+        parameterpart: ["\\color{chocolate}{#1}", 1],
+        targetpart: ["\\color{mediumpurple}{#1}", 1],
+        predictionpart: ["\\color{seagreen}{#1}", 1]
       }
     }
   };
@@ -592,14 +596,43 @@ p^{I\rightarrow T}_{ij}
 <h3 class="anchored" data-anchor-id="what-counts-as-a-negative">What counts as a negative?</h3>
 <p>The loss knows <strong>declared mates</strong>—not semantic truth. An off-diagonal caption may describe the same concept as the diagonal caption. Two photographs may show the same event. In those cases the standard one-positive loss treats a plausible match as an alternative to suppress. Larger batches provide more alternatives—but they can also provide more false negatives.</p>
 <p>This distinction is easy to miss because the code is so compact:</p>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>image_embedding <span class="op">=</span> F.normalize(image_encoder(image), dim<span class="op">=-</span><span class="dv">1</span>)  <span class="co"># (B, d)</span></span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>text_embedding <span class="op">=</span> F.normalize(text_encoder(text), dim<span class="op">=-</span><span class="dv">1</span>)     <span class="co"># (B, d)</span></span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>logits <span class="op">=</span> image_embedding <span class="op">@</span> text_embedding.T <span class="op">/</span> temperature   <span class="co"># (B, B)</span></span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>labels <span class="op">=</span> torch.arange(logits.shape[<span class="dv">0</span>])</span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>loss <span class="op">=</span> <span class="fl">0.5</span> <span class="op">*</span> (</span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    F.cross_entropy(logits, labels)</span>
-<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">+</span> F.cross_entropy(logits.T, labels)</span>
-<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="plan-code">
+<div class="plan">
+<ol type="1">
+<li>Encode both modalities and normalize them into one comparison space.</li>
+<li>Score every image against every text at the chosen temperature.</li>
+<li>Declare the batch diagonal as the supplied pair relation.</li>
+<li>Average image-to-text and text-to-image cross-entropy.</li>
+</ol>
+</div>
+<div id="symmetric-contrastive-loss" class="cell" data-execution_count="2">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> symmetric_contrastive_loss(</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    image: Tensor,</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    text: Tensor,</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    image_encoder: nn.Module,</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    text_encoder: nn.Module,</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    temperature: <span class="bu">float</span>,</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>) <span class="op">-&gt;</span> Tensor:</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="co"># [1] encode and normalize both views</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    image_embedding <span class="op">=</span> F.normalize(image_encoder(image), dim<span class="op">=-</span><span class="dv">1</span>)</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    text_embedding <span class="op">=</span> F.normalize(text_encoder(text), dim<span class="op">=-</span><span class="dv">1</span>)</span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="co"># [2] score all cross-modal pairs</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    logits <span class="op">=</span> image_embedding <span class="op">@</span> text_embedding.T <span class="op">/</span> temperature</span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="co"># [3] identify the declared mates on the diagonal</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    labels <span class="op">=</span> torch.arange(logits.shape[<span class="dv">0</span>], device<span class="op">=</span>logits.device)</span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="co"># [4] average both retrieval directions</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="fl">0.5</span> <span class="op">*</span> (</span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>        F.cross_entropy(logits, labels)</span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>        <span class="op">+</span> F.cross_entropy(logits.T, labels)</span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>identity_batch <span class="op">=</span> torch.eye(<span class="dv">3</span>)</span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>loss_check <span class="op">=</span> symmetric_contrastive_loss(</span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>    identity_batch, identity_batch, nn.Identity(), nn.Identity(), <span class="fl">0.1</span></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> torch.isfinite(loss_check)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+</div>
 <p>Every line has a contract. The two encoders end at the same width; normalization makes the dot product angular; the transpose reverses retrieval direction; and the target indices assert that the batch diagonal contains the pair relation. If the data loader shuffles one modality without shuffling the other, the program still runs—the supervision has simply become false.</p>
 </section>
 </section>
@@ -616,206 +649,218 @@ p^{I\rightarrow T}_{ij}
 </ul>
 <p>The metric is <strong>Recall@<span class="math inline">\(k\)</span></strong>—for each query, rank every candidate in the other modality. Recall@<span class="math inline">\(k\)</span> is one when the declared mate lies among the first <span class="math inline">\(k\)</span> candidates and zero otherwise, then averaged across queries. With 300 unique candidates, random ranking has expected Recall@1 of <span class="math inline">\(1/300=0.0033\)</span> and Recall@5 of <span class="math inline">\(5/300=0.0167\)</span>.</p>
 <!-- NOVEL: needs sign-off -->
-<div id="ch20-paired-study" class="cell" data-execution_count="2">
-<details class="code-fold">
-<summary>Run the five-seed paired-versus-shuffled retrieval study</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="at">@dataclass</span>(frozen<span class="op">=</span><span class="va">True</span>)</span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> PairedSplit:</span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    image: Tensor</span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    text: Tensor</span>
-<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a></span>
+<div class="plan-code plan-code-wide">
+<div class="plan">
+<ol type="1">
+<li>Define the reusable helpers: <code>PairedSplit</code>, <code>make_paired_data</code>, <code>TwoTower</code>, <code>symmetric_loss</code>, and <code>pair_loss</code>.</li>
+<li>Define the reusable helpers: <code>retrieval_metrics</code>, <code>derangement</code>, <code>train_tower</code>, <code>report</code>, and <code>report_paired_contrast</code>.</li>
+<li>Prepare the inputs and fixed settings for the example.</li>
+<li>Run the five-seed paired-versus-shuffled retrieval study.</li>
+<li>Report or visualize the measured result.</li>
+</ol>
+</div>
+<div id="ch20-paired-study" class="cell" data-execution_count="3">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co"># [1] define the reusable mechanism</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="at">@dataclass</span>(frozen<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> PairedSplit:</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    image: Tensor</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    text: Tensor</span>
 <span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> make_paired_data() <span class="op">-&gt;</span> <span class="bu">tuple</span>[PairedSplit, PairedSplit, PairedSplit]:</span>
-<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    generator <span class="op">=</span> torch.Generator().manual_seed(<span class="dv">1206050</span>)</span>
-<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    latent_dim, image_dim, text_dim <span class="op">=</span> <span class="dv">5</span>, <span class="dv">14</span>, <span class="dv">11</span></span>
-<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    latent <span class="op">=</span> torch.randn(<span class="dv">1_200</span>, latent_dim, generator<span class="op">=</span>generator)</span>
-<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    image_map <span class="op">=</span> torch.randn(latent_dim, image_dim, generator<span class="op">=</span>generator)</span>
-<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    text_map <span class="op">=</span> torch.randn(latent_dim, text_dim, generator<span class="op">=</span>generator)</span>
-<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    image <span class="op">=</span> torch.tanh(latent <span class="op">@</span> image_map <span class="op">/</span> latent_dim<span class="op">**</span><span class="fl">0.5</span>)</span>
-<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    text <span class="op">=</span> torch.tanh(latent <span class="op">@</span> text_map <span class="op">/</span> latent_dim<span class="op">**</span><span class="fl">0.5</span>)</span>
-<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>    image <span class="op">+=</span> <span class="fl">0.045</span> <span class="op">*</span> torch.randn(image.shape, generator<span class="op">=</span>generator)</span>
-<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>    text <span class="op">+=</span> <span class="fl">0.045</span> <span class="op">*</span> torch.randn(text.shape, generator<span class="op">=</span>generator)</span>
-<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>    fit_end, validation_end <span class="op">=</span> <span class="dv">720</span>, <span class="dv">900</span></span>
-<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>    image_mean <span class="op">=</span> image[:fit_end].mean(<span class="dv">0</span>, keepdim<span class="op">=</span><span class="va">True</span>)</span>
-<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>    image_std <span class="op">=</span> image[:fit_end].std(<span class="dv">0</span>, keepdim<span class="op">=</span><span class="va">True</span>).clamp_min(<span class="fl">1e-6</span>)</span>
-<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>    text_mean <span class="op">=</span> text[:fit_end].mean(<span class="dv">0</span>, keepdim<span class="op">=</span><span class="va">True</span>)</span>
-<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a>    text_std <span class="op">=</span> text[:fit_end].std(<span class="dv">0</span>, keepdim<span class="op">=</span><span class="va">True</span>).clamp_min(<span class="fl">1e-6</span>)</span>
-<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>    image <span class="op">=</span> (image <span class="op">-</span> image_mean) <span class="op">/</span> image_std</span>
-<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a>    text <span class="op">=</span> (text <span class="op">-</span> text_mean) <span class="op">/</span> text_std</span>
-<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> (</span>
-<span id="cb2-28"><a href="#cb2-28" aria-hidden="true" tabindex="-1"></a>        PairedSplit(image[:fit_end], text[:fit_end]),</span>
-<span id="cb2-29"><a href="#cb2-29" aria-hidden="true" tabindex="-1"></a>        PairedSplit(image[fit_end:validation_end], text[fit_end:validation_end]),</span>
-<span id="cb2-30"><a href="#cb2-30" aria-hidden="true" tabindex="-1"></a>        PairedSplit(image[validation_end:], text[validation_end:]),</span>
-<span id="cb2-31"><a href="#cb2-31" aria-hidden="true" tabindex="-1"></a>    )</span>
-<span id="cb2-32"><a href="#cb2-32" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> make_paired_data() <span class="op">-&gt;</span> <span class="bu">tuple</span>[PairedSplit, PairedSplit, PairedSplit]:</span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    generator <span class="op">=</span> torch.Generator().manual_seed(<span class="dv">1206050</span>)</span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    latent_dim, image_dim, text_dim <span class="op">=</span> <span class="dv">5</span>, <span class="dv">14</span>, <span class="dv">11</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    latent <span class="op">=</span> torch.randn(<span class="dv">1_200</span>, latent_dim, generator<span class="op">=</span>generator)</span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    image_map <span class="op">=</span> torch.randn(latent_dim, image_dim, generator<span class="op">=</span>generator)</span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>    text_map <span class="op">=</span> torch.randn(latent_dim, text_dim, generator<span class="op">=</span>generator)</span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    image <span class="op">=</span> torch.tanh(latent <span class="op">@</span> image_map <span class="op">/</span> latent_dim<span class="op">**</span><span class="fl">0.5</span>)</span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>    text <span class="op">=</span> torch.tanh(latent <span class="op">@</span> text_map <span class="op">/</span> latent_dim<span class="op">**</span><span class="fl">0.5</span>)</span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>    image <span class="op">+=</span> <span class="fl">0.045</span> <span class="op">*</span> torch.randn(image.shape, generator<span class="op">=</span>generator)</span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>    text <span class="op">+=</span> <span class="fl">0.045</span> <span class="op">*</span> torch.randn(text.shape, generator<span class="op">=</span>generator)</span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>    fit_end, validation_end <span class="op">=</span> <span class="dv">720</span>, <span class="dv">900</span></span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>    image_mean <span class="op">=</span> image[:fit_end].mean(<span class="dv">0</span>, keepdim<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>    image_std <span class="op">=</span> image[:fit_end].std(<span class="dv">0</span>, keepdim<span class="op">=</span><span class="va">True</span>).clamp_min(<span class="fl">1e-6</span>)</span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a>    text_mean <span class="op">=</span> text[:fit_end].mean(<span class="dv">0</span>, keepdim<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>    text_std <span class="op">=</span> text[:fit_end].std(<span class="dv">0</span>, keepdim<span class="op">=</span><span class="va">True</span>).clamp_min(<span class="fl">1e-6</span>)</span>
+<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a>    image <span class="op">=</span> (image <span class="op">-</span> image_mean) <span class="op">/</span> image_std</span>
+<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a>    text <span class="op">=</span> (text <span class="op">-</span> text_mean) <span class="op">/</span> text_std</span>
+<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-28"><a href="#cb2-28" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> (</span>
+<span id="cb2-29"><a href="#cb2-29" aria-hidden="true" tabindex="-1"></a>        PairedSplit(image[:fit_end], text[:fit_end]),</span>
+<span id="cb2-30"><a href="#cb2-30" aria-hidden="true" tabindex="-1"></a>        PairedSplit(image[fit_end:validation_end], text[fit_end:validation_end]),</span>
+<span id="cb2-31"><a href="#cb2-31" aria-hidden="true" tabindex="-1"></a>        PairedSplit(image[validation_end:], text[validation_end:]),</span>
+<span id="cb2-32"><a href="#cb2-32" aria-hidden="true" tabindex="-1"></a>    )</span>
 <span id="cb2-33"><a href="#cb2-33" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-34"><a href="#cb2-34" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> TwoTower(nn.Module):</span>
-<span id="cb2-35"><a href="#cb2-35" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, image_dim: <span class="bu">int</span>, text_dim: <span class="bu">int</span>, width: <span class="bu">int</span> <span class="op">=</span> <span class="dv">40</span>, embed_dim: <span class="bu">int</span> <span class="op">=</span> <span class="dv">16</span>):</span>
-<span id="cb2-36"><a href="#cb2-36" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().<span class="fu">__init__</span>()</span>
-<span id="cb2-37"><a href="#cb2-37" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.image_encoder <span class="op">=</span> nn.Sequential(</span>
-<span id="cb2-38"><a href="#cb2-38" aria-hidden="true" tabindex="-1"></a>            nn.Linear(image_dim, width), nn.ReLU(), nn.Linear(width, embed_dim)</span>
-<span id="cb2-39"><a href="#cb2-39" aria-hidden="true" tabindex="-1"></a>        )</span>
-<span id="cb2-40"><a href="#cb2-40" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.text_encoder <span class="op">=</span> nn.Sequential(</span>
-<span id="cb2-41"><a href="#cb2-41" aria-hidden="true" tabindex="-1"></a>            nn.Linear(text_dim, width), nn.ReLU(), nn.Linear(width, embed_dim)</span>
-<span id="cb2-42"><a href="#cb2-42" aria-hidden="true" tabindex="-1"></a>        )</span>
-<span id="cb2-43"><a href="#cb2-43" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-44"><a href="#cb2-44" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> forward(<span class="va">self</span>, image: Tensor, text: Tensor) <span class="op">-&gt;</span> <span class="bu">tuple</span>[Tensor, Tensor]:</span>
-<span id="cb2-45"><a href="#cb2-45" aria-hidden="true" tabindex="-1"></a>        image_embedding <span class="op">=</span> F.normalize(<span class="va">self</span>.image_encoder(image), dim<span class="op">=-</span><span class="dv">1</span>)</span>
-<span id="cb2-46"><a href="#cb2-46" aria-hidden="true" tabindex="-1"></a>        text_embedding <span class="op">=</span> F.normalize(<span class="va">self</span>.text_encoder(text), dim<span class="op">=-</span><span class="dv">1</span>)</span>
-<span id="cb2-47"><a href="#cb2-47" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> image_embedding, text_embedding</span>
-<span id="cb2-48"><a href="#cb2-48" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-34"><a href="#cb2-34" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-35"><a href="#cb2-35" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> TwoTower(nn.Module):</span>
+<span id="cb2-36"><a href="#cb2-36" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, image_dim: <span class="bu">int</span>, text_dim: <span class="bu">int</span>, width: <span class="bu">int</span> <span class="op">=</span> <span class="dv">40</span>, embed_dim: <span class="bu">int</span> <span class="op">=</span> <span class="dv">16</span>):</span>
+<span id="cb2-37"><a href="#cb2-37" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().<span class="fu">__init__</span>()</span>
+<span id="cb2-38"><a href="#cb2-38" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.image_encoder <span class="op">=</span> nn.Sequential(</span>
+<span id="cb2-39"><a href="#cb2-39" aria-hidden="true" tabindex="-1"></a>            nn.Linear(image_dim, width), nn.ReLU(), nn.Linear(width, embed_dim)</span>
+<span id="cb2-40"><a href="#cb2-40" aria-hidden="true" tabindex="-1"></a>        )</span>
+<span id="cb2-41"><a href="#cb2-41" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.text_encoder <span class="op">=</span> nn.Sequential(</span>
+<span id="cb2-42"><a href="#cb2-42" aria-hidden="true" tabindex="-1"></a>            nn.Linear(text_dim, width), nn.ReLU(), nn.Linear(width, embed_dim)</span>
+<span id="cb2-43"><a href="#cb2-43" aria-hidden="true" tabindex="-1"></a>        )</span>
+<span id="cb2-44"><a href="#cb2-44" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-45"><a href="#cb2-45" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> forward(<span class="va">self</span>, image: Tensor, text: Tensor) <span class="op">-&gt;</span> <span class="bu">tuple</span>[Tensor, Tensor]:</span>
+<span id="cb2-46"><a href="#cb2-46" aria-hidden="true" tabindex="-1"></a>        image_embedding <span class="op">=</span> F.normalize(<span class="va">self</span>.image_encoder(image), dim<span class="op">=-</span><span class="dv">1</span>)</span>
+<span id="cb2-47"><a href="#cb2-47" aria-hidden="true" tabindex="-1"></a>        text_embedding <span class="op">=</span> F.normalize(<span class="va">self</span>.text_encoder(text), dim<span class="op">=-</span><span class="dv">1</span>)</span>
+<span id="cb2-48"><a href="#cb2-48" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> image_embedding, text_embedding</span>
 <span id="cb2-49"><a href="#cb2-49" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-50"><a href="#cb2-50" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> symmetric_loss(image_embedding: Tensor, text_embedding: Tensor, tau: <span class="bu">float</span> <span class="op">=</span> <span class="fl">0.08</span>) <span class="op">-&gt;</span> Tensor:</span>
-<span id="cb2-51"><a href="#cb2-51" aria-hidden="true" tabindex="-1"></a>    logits <span class="op">=</span> image_embedding <span class="op">@</span> text_embedding.T <span class="op">/</span> tau  <span class="co"># (B, B)</span></span>
-<span id="cb2-52"><a href="#cb2-52" aria-hidden="true" tabindex="-1"></a>    labels <span class="op">=</span> torch.arange(logits.shape[<span class="dv">0</span>])</span>
-<span id="cb2-53"><a href="#cb2-53" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="fl">0.5</span> <span class="op">*</span> (</span>
-<span id="cb2-54"><a href="#cb2-54" aria-hidden="true" tabindex="-1"></a>        F.cross_entropy(logits, labels) <span class="op">+</span> F.cross_entropy(logits.T, labels)</span>
-<span id="cb2-55"><a href="#cb2-55" aria-hidden="true" tabindex="-1"></a>    )</span>
-<span id="cb2-56"><a href="#cb2-56" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-50"><a href="#cb2-50" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-51"><a href="#cb2-51" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> symmetric_loss(image_embedding: Tensor, text_embedding: Tensor, tau: <span class="bu">float</span> <span class="op">=</span> <span class="fl">0.08</span>) <span class="op">-&gt;</span> Tensor:</span>
+<span id="cb2-52"><a href="#cb2-52" aria-hidden="true" tabindex="-1"></a>    logits <span class="op">=</span> image_embedding <span class="op">@</span> text_embedding.T <span class="op">/</span> tau  <span class="co"># (B, B)</span></span>
+<span id="cb2-53"><a href="#cb2-53" aria-hidden="true" tabindex="-1"></a>    labels <span class="op">=</span> torch.arange(logits.shape[<span class="dv">0</span>])</span>
+<span id="cb2-54"><a href="#cb2-54" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="fl">0.5</span> <span class="op">*</span> (</span>
+<span id="cb2-55"><a href="#cb2-55" aria-hidden="true" tabindex="-1"></a>        F.cross_entropy(logits, labels) <span class="op">+</span> F.cross_entropy(logits.T, labels)</span>
+<span id="cb2-56"><a href="#cb2-56" aria-hidden="true" tabindex="-1"></a>    )</span>
 <span id="cb2-57"><a href="#cb2-57" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-58"><a href="#cb2-58" aria-hidden="true" tabindex="-1"></a><span class="at">@torch.no_grad</span>()</span>
-<span id="cb2-59"><a href="#cb2-59" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> pair_loss(model: TwoTower, split: PairedSplit) <span class="op">-&gt;</span> <span class="bu">float</span>:</span>
-<span id="cb2-60"><a href="#cb2-60" aria-hidden="true" tabindex="-1"></a>    model.<span class="bu">eval</span>()</span>
-<span id="cb2-61"><a href="#cb2-61" aria-hidden="true" tabindex="-1"></a>    image_embedding, text_embedding <span class="op">=</span> model(split.image, split.text)</span>
-<span id="cb2-62"><a href="#cb2-62" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="bu">float</span>(symmetric_loss(image_embedding, text_embedding))</span>
-<span id="cb2-63"><a href="#cb2-63" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-58"><a href="#cb2-58" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-59"><a href="#cb2-59" aria-hidden="true" tabindex="-1"></a><span class="at">@torch.no_grad</span>()</span>
+<span id="cb2-60"><a href="#cb2-60" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> pair_loss(model: TwoTower, split: PairedSplit) <span class="op">-&gt;</span> <span class="bu">float</span>:</span>
+<span id="cb2-61"><a href="#cb2-61" aria-hidden="true" tabindex="-1"></a>    model.<span class="bu">eval</span>()</span>
+<span id="cb2-62"><a href="#cb2-62" aria-hidden="true" tabindex="-1"></a>    image_embedding, text_embedding <span class="op">=</span> model(split.image, split.text)</span>
+<span id="cb2-63"><a href="#cb2-63" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="bu">float</span>(symmetric_loss(image_embedding, text_embedding))</span>
 <span id="cb2-64"><a href="#cb2-64" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-65"><a href="#cb2-65" aria-hidden="true" tabindex="-1"></a><span class="at">@torch.no_grad</span>()</span>
-<span id="cb2-66"><a href="#cb2-66" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> retrieval_metrics(model: TwoTower, split: PairedSplit) <span class="op">-&gt;</span> <span class="bu">dict</span>[<span class="bu">str</span>, <span class="bu">float</span>]:</span>
-<span id="cb2-67"><a href="#cb2-67" aria-hidden="true" tabindex="-1"></a>    model.<span class="bu">eval</span>()</span>
-<span id="cb2-68"><a href="#cb2-68" aria-hidden="true" tabindex="-1"></a>    image_embedding, text_embedding <span class="op">=</span> model(split.image, split.text)</span>
-<span id="cb2-69"><a href="#cb2-69" aria-hidden="true" tabindex="-1"></a>    scores <span class="op">=</span> image_embedding <span class="op">@</span> text_embedding.T</span>
-<span id="cb2-70"><a href="#cb2-70" aria-hidden="true" tabindex="-1"></a>    target <span class="op">=</span> torch.arange(scores.shape[<span class="dv">0</span>])</span>
-<span id="cb2-71"><a href="#cb2-71" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-72"><a href="#cb2-72" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> recall_at_k(matrix: Tensor, k: <span class="bu">int</span>) <span class="op">-&gt;</span> <span class="bu">float</span>:</span>
-<span id="cb2-73"><a href="#cb2-73" aria-hidden="true" tabindex="-1"></a>        candidates <span class="op">=</span> matrix.topk(k, dim<span class="op">=</span><span class="dv">1</span>).indices</span>
-<span id="cb2-74"><a href="#cb2-74" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="bu">float</span>((candidates <span class="op">==</span> target[:, <span class="va">None</span>]).<span class="bu">any</span>(dim<span class="op">=</span><span class="dv">1</span>).<span class="bu">float</span>().mean())</span>
-<span id="cb2-75"><a href="#cb2-75" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-76"><a href="#cb2-76" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> {</span>
-<span id="cb2-77"><a href="#cb2-77" aria-hidden="true" tabindex="-1"></a>        <span class="st">"I→T R@1"</span>: recall_at_k(scores, <span class="dv">1</span>),</span>
-<span id="cb2-78"><a href="#cb2-78" aria-hidden="true" tabindex="-1"></a>        <span class="st">"T→I R@1"</span>: recall_at_k(scores.T, <span class="dv">1</span>),</span>
-<span id="cb2-79"><a href="#cb2-79" aria-hidden="true" tabindex="-1"></a>        <span class="st">"I→T R@5"</span>: recall_at_k(scores, <span class="dv">5</span>),</span>
-<span id="cb2-80"><a href="#cb2-80" aria-hidden="true" tabindex="-1"></a>        <span class="st">"T→I R@5"</span>: recall_at_k(scores.T, <span class="dv">5</span>),</span>
-<span id="cb2-81"><a href="#cb2-81" aria-hidden="true" tabindex="-1"></a>    }</span>
-<span id="cb2-82"><a href="#cb2-82" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-83"><a href="#cb2-83" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-84"><a href="#cb2-84" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> derangement(size: <span class="bu">int</span>, generator: torch.Generator) <span class="op">-&gt;</span> Tensor:</span>
-<span id="cb2-85"><a href="#cb2-85" aria-hidden="true" tabindex="-1"></a>    target <span class="op">=</span> torch.arange(size)</span>
-<span id="cb2-86"><a href="#cb2-86" aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> <span class="va">True</span>:</span>
-<span id="cb2-87"><a href="#cb2-87" aria-hidden="true" tabindex="-1"></a>        order <span class="op">=</span> torch.randperm(size, generator<span class="op">=</span>generator)</span>
-<span id="cb2-88"><a href="#cb2-88" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="kw">not</span> <span class="bu">bool</span>((order <span class="op">==</span> target).<span class="bu">any</span>()):</span>
-<span id="cb2-89"><a href="#cb2-89" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> order</span>
-<span id="cb2-90"><a href="#cb2-90" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-91"><a href="#cb2-91" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-92"><a href="#cb2-92" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> train_tower(</span>
-<span id="cb2-93"><a href="#cb2-93" aria-hidden="true" tabindex="-1"></a>    seed: <span class="bu">int</span>,</span>
-<span id="cb2-94"><a href="#cb2-94" aria-hidden="true" tabindex="-1"></a>    fit_split: PairedSplit,</span>
-<span id="cb2-95"><a href="#cb2-95" aria-hidden="true" tabindex="-1"></a>    validation_split: PairedSplit,</span>
-<span id="cb2-96"><a href="#cb2-96" aria-hidden="true" tabindex="-1"></a>    shuffled_pairs: <span class="bu">bool</span>,</span>
-<span id="cb2-97"><a href="#cb2-97" aria-hidden="true" tabindex="-1"></a>) <span class="op">-&gt;</span> TwoTower:</span>
-<span id="cb2-98"><a href="#cb2-98" aria-hidden="true" tabindex="-1"></a>    torch.manual_seed(seed)</span>
-<span id="cb2-99"><a href="#cb2-99" aria-hidden="true" tabindex="-1"></a>    model <span class="op">=</span> TwoTower(fit_split.image.shape[<span class="dv">1</span>], fit_split.text.shape[<span class="dv">1</span>])</span>
-<span id="cb2-100"><a href="#cb2-100" aria-hidden="true" tabindex="-1"></a>    optimizer <span class="op">=</span> torch.optim.AdamW(model.parameters(), lr<span class="op">=</span><span class="fl">2e-3</span>, weight_decay<span class="op">=</span><span class="fl">1e-3</span>)</span>
-<span id="cb2-101"><a href="#cb2-101" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-102"><a href="#cb2-102" aria-hidden="true" tabindex="-1"></a>    pair_generator <span class="op">=</span> torch.Generator().manual_seed(<span class="dv">88_000</span>)</span>
-<span id="cb2-103"><a href="#cb2-103" aria-hidden="true" tabindex="-1"></a>    text_order <span class="op">=</span> (</span>
-<span id="cb2-104"><a href="#cb2-104" aria-hidden="true" tabindex="-1"></a>        derangement(<span class="bu">len</span>(fit_split.text), pair_generator)</span>
-<span id="cb2-105"><a href="#cb2-105" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> shuffled_pairs <span class="cf">else</span> torch.arange(<span class="bu">len</span>(fit_split.text))</span>
-<span id="cb2-106"><a href="#cb2-106" aria-hidden="true" tabindex="-1"></a>    )</span>
-<span id="cb2-107"><a href="#cb2-107" aria-hidden="true" tabindex="-1"></a>    schedule_generator <span class="op">=</span> torch.Generator().manual_seed(<span class="dv">99_000</span> <span class="op">+</span> seed)</span>
-<span id="cb2-108"><a href="#cb2-108" aria-hidden="true" tabindex="-1"></a>    schedules <span class="op">=</span> [</span>
-<span id="cb2-109"><a href="#cb2-109" aria-hidden="true" tabindex="-1"></a>        torch.randperm(<span class="bu">len</span>(fit_split.image), generator<span class="op">=</span>schedule_generator)</span>
-<span id="cb2-110"><a href="#cb2-110" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">160</span>)</span>
-<span id="cb2-111"><a href="#cb2-111" aria-hidden="true" tabindex="-1"></a>    ]</span>
-<span id="cb2-112"><a href="#cb2-112" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-113"><a href="#cb2-113" aria-hidden="true" tabindex="-1"></a>    best_validation <span class="op">=</span> <span class="bu">float</span>(<span class="st">"inf"</span>)</span>
-<span id="cb2-114"><a href="#cb2-114" aria-hidden="true" tabindex="-1"></a>    best_state: <span class="bu">dict</span>[<span class="bu">str</span>, Tensor] <span class="op">|</span> <span class="va">None</span> <span class="op">=</span> <span class="va">None</span></span>
-<span id="cb2-115"><a href="#cb2-115" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> epoch, order <span class="kw">in</span> <span class="bu">enumerate</span>(schedules, start<span class="op">=</span><span class="dv">1</span>):</span>
-<span id="cb2-116"><a href="#cb2-116" aria-hidden="true" tabindex="-1"></a>        model.train()</span>
-<span id="cb2-117"><a href="#cb2-117" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> rows <span class="kw">in</span> order.split(<span class="dv">120</span>):</span>
-<span id="cb2-118"><a href="#cb2-118" aria-hidden="true" tabindex="-1"></a>            image_embedding, text_embedding <span class="op">=</span> model(</span>
-<span id="cb2-119"><a href="#cb2-119" aria-hidden="true" tabindex="-1"></a>                fit_split.image[rows], fit_split.text[text_order[rows]]</span>
-<span id="cb2-120"><a href="#cb2-120" aria-hidden="true" tabindex="-1"></a>            )</span>
-<span id="cb2-121"><a href="#cb2-121" aria-hidden="true" tabindex="-1"></a>            loss <span class="op">=</span> symmetric_loss(image_embedding, text_embedding)</span>
-<span id="cb2-122"><a href="#cb2-122" aria-hidden="true" tabindex="-1"></a>            optimizer.zero_grad(set_to_none<span class="op">=</span><span class="va">True</span>)</span>
-<span id="cb2-123"><a href="#cb2-123" aria-hidden="true" tabindex="-1"></a>            loss.backward()</span>
-<span id="cb2-124"><a href="#cb2-124" aria-hidden="true" tabindex="-1"></a>            optimizer.step()</span>
-<span id="cb2-125"><a href="#cb2-125" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-126"><a href="#cb2-126" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> epoch <span class="op">%</span> <span class="dv">5</span> <span class="op">==</span> <span class="dv">0</span>:</span>
-<span id="cb2-127"><a href="#cb2-127" aria-hidden="true" tabindex="-1"></a>            validation_loss <span class="op">=</span> pair_loss(model, validation_split)</span>
-<span id="cb2-128"><a href="#cb2-128" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> validation_loss <span class="op">&lt;</span> best_validation:</span>
-<span id="cb2-129"><a href="#cb2-129" aria-hidden="true" tabindex="-1"></a>                best_validation <span class="op">=</span> validation_loss</span>
-<span id="cb2-130"><a href="#cb2-130" aria-hidden="true" tabindex="-1"></a>                best_state <span class="op">=</span> copy.deepcopy(model.state_dict())</span>
-<span id="cb2-131"><a href="#cb2-131" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-132"><a href="#cb2-132" aria-hidden="true" tabindex="-1"></a>    <span class="cf">assert</span> best_state <span class="kw">is</span> <span class="kw">not</span> <span class="va">None</span></span>
-<span id="cb2-133"><a href="#cb2-133" aria-hidden="true" tabindex="-1"></a>    model.load_state_dict(best_state)</span>
-<span id="cb2-134"><a href="#cb2-134" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> model</span>
-<span id="cb2-135"><a href="#cb2-135" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-136"><a href="#cb2-136" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-137"><a href="#cb2-137" aria-hidden="true" tabindex="-1"></a>fit_split, validation_split, held_out_split <span class="op">=</span> make_paired_data()</span>
-<span id="cb2-138"><a href="#cb2-138" aria-hidden="true" tabindex="-1"></a>models: <span class="bu">dict</span>[<span class="bu">tuple</span>[<span class="bu">int</span>, <span class="bu">str</span>], TwoTower] <span class="op">=</span> {}</span>
-<span id="cb2-139"><a href="#cb2-139" aria-hidden="true" tabindex="-1"></a>records: <span class="bu">list</span>[<span class="bu">dict</span>[<span class="bu">str</span>, <span class="bu">object</span>]] <span class="op">=</span> []</span>
-<span id="cb2-140"><a href="#cb2-140" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-141"><a href="#cb2-141" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> seed <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">6050</span>, <span class="dv">6055</span>):</span>
-<span id="cb2-142"><a href="#cb2-142" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> condition, shuffled_pairs <span class="kw">in</span> ((<span class="st">"paired"</span>, <span class="va">False</span>), (<span class="st">"shuffled"</span>, <span class="va">True</span>)):</span>
-<span id="cb2-143"><a href="#cb2-143" aria-hidden="true" tabindex="-1"></a>        model <span class="op">=</span> train_tower(seed, fit_split, validation_split, shuffled_pairs)</span>
-<span id="cb2-144"><a href="#cb2-144" aria-hidden="true" tabindex="-1"></a>        models[(seed, condition)] <span class="op">=</span> model</span>
-<span id="cb2-145"><a href="#cb2-145" aria-hidden="true" tabindex="-1"></a>        records.append({</span>
-<span id="cb2-146"><a href="#cb2-146" aria-hidden="true" tabindex="-1"></a>            <span class="st">"seed"</span>: seed,</span>
-<span id="cb2-147"><a href="#cb2-147" aria-hidden="true" tabindex="-1"></a>            <span class="st">"condition"</span>: condition,</span>
-<span id="cb2-148"><a href="#cb2-148" aria-hidden="true" tabindex="-1"></a>            <span class="st">"validation"</span>: retrieval_metrics(model, validation_split),</span>
-<span id="cb2-149"><a href="#cb2-149" aria-hidden="true" tabindex="-1"></a>        })</span>
-<span id="cb2-150"><a href="#cb2-150" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-151"><a href="#cb2-151" aria-hidden="true" tabindex="-1"></a><span class="co"># The endpoint is consulted after every design and checkpoint decision above.</span></span>
-<span id="cb2-152"><a href="#cb2-152" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> record <span class="kw">in</span> records:</span>
-<span id="cb2-153"><a href="#cb2-153" aria-hidden="true" tabindex="-1"></a>    model <span class="op">=</span> models[(<span class="bu">int</span>(record[<span class="st">"seed"</span>]), <span class="bu">str</span>(record[<span class="st">"condition"</span>]))]</span>
-<span id="cb2-154"><a href="#cb2-154" aria-hidden="true" tabindex="-1"></a>    record[<span class="st">"held_out"</span>] <span class="op">=</span> retrieval_metrics(model, held_out_split)</span>
-<span id="cb2-155"><a href="#cb2-155" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-156"><a href="#cb2-156" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-157"><a href="#cb2-157" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> report(split_name: <span class="bu">str</span>, key: <span class="bu">str</span>) <span class="op">-&gt;</span> <span class="va">None</span>:</span>
-<span id="cb2-158"><a href="#cb2-158" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(split_name)</span>
-<span id="cb2-159"><a href="#cb2-159" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> condition <span class="kw">in</span> (<span class="st">"paired"</span>, <span class="st">"shuffled"</span>):</span>
-<span id="cb2-160"><a href="#cb2-160" aria-hidden="true" tabindex="-1"></a>        chosen <span class="op">=</span> [record <span class="cf">for</span> record <span class="kw">in</span> records <span class="cf">if</span> record[<span class="st">"condition"</span>] <span class="op">==</span> condition]</span>
-<span id="cb2-161"><a href="#cb2-161" aria-hidden="true" tabindex="-1"></a>        fields <span class="op">=</span> <span class="bu">list</span>(chosen[<span class="dv">0</span>][key].keys())</span>
-<span id="cb2-162"><a href="#cb2-162" aria-hidden="true" tabindex="-1"></a>        summary <span class="op">=</span> []</span>
-<span id="cb2-163"><a href="#cb2-163" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> field <span class="kw">in</span> fields:</span>
-<span id="cb2-164"><a href="#cb2-164" aria-hidden="true" tabindex="-1"></a>            values <span class="op">=</span> [<span class="bu">float</span>(record[key][field]) <span class="cf">for</span> record <span class="kw">in</span> chosen]</span>
-<span id="cb2-165"><a href="#cb2-165" aria-hidden="true" tabindex="-1"></a>            summary.append(<span class="ss">f"</span><span class="sc">{</span>field<span class="sc">}</span><span class="ss"> </span><span class="sc">{</span>mean(values)<span class="sc">:.4f}</span><span class="ss"> (SD </span><span class="sc">{</span>stdev(values)<span class="sc">:.4f}</span><span class="ss">)"</span>)</span>
-<span id="cb2-166"><a href="#cb2-166" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(<span class="ss">f"  </span><span class="sc">{</span>condition<span class="sc">:8s}</span><span class="ss">: "</span> <span class="op">+</span> <span class="st">"; "</span>.join(summary))</span>
-<span id="cb2-167"><a href="#cb2-167" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-168"><a href="#cb2-168" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-169"><a href="#cb2-169" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> report_paired_contrast(field: <span class="bu">str</span>) <span class="op">-&gt;</span> <span class="va">None</span>:</span>
-<span id="cb2-170"><a href="#cb2-170" aria-hidden="true" tabindex="-1"></a>    differences <span class="op">=</span> []</span>
-<span id="cb2-171"><a href="#cb2-171" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> seed <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">6050</span>, <span class="dv">6055</span>):</span>
-<span id="cb2-172"><a href="#cb2-172" aria-hidden="true" tabindex="-1"></a>        paired <span class="op">=</span> <span class="bu">next</span>(</span>
-<span id="cb2-173"><a href="#cb2-173" aria-hidden="true" tabindex="-1"></a>            record <span class="cf">for</span> record <span class="kw">in</span> records</span>
-<span id="cb2-174"><a href="#cb2-174" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> record[<span class="st">"seed"</span>] <span class="op">==</span> seed <span class="kw">and</span> record[<span class="st">"condition"</span>] <span class="op">==</span> <span class="st">"paired"</span></span>
-<span id="cb2-175"><a href="#cb2-175" aria-hidden="true" tabindex="-1"></a>        )</span>
-<span id="cb2-176"><a href="#cb2-176" aria-hidden="true" tabindex="-1"></a>        shuffled <span class="op">=</span> <span class="bu">next</span>(</span>
+<span id="cb2-65"><a href="#cb2-65" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-66"><a href="#cb2-66" aria-hidden="true" tabindex="-1"></a><span class="co"># [2] define the reusable mechanism</span></span>
+<span id="cb2-67"><a href="#cb2-67" aria-hidden="true" tabindex="-1"></a><span class="at">@torch.no_grad</span>()</span>
+<span id="cb2-68"><a href="#cb2-68" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> retrieval_metrics(model: TwoTower, split: PairedSplit) <span class="op">-&gt;</span> <span class="bu">dict</span>[<span class="bu">str</span>, <span class="bu">float</span>]:</span>
+<span id="cb2-69"><a href="#cb2-69" aria-hidden="true" tabindex="-1"></a>    model.<span class="bu">eval</span>()</span>
+<span id="cb2-70"><a href="#cb2-70" aria-hidden="true" tabindex="-1"></a>    image_embedding, text_embedding <span class="op">=</span> model(split.image, split.text)</span>
+<span id="cb2-71"><a href="#cb2-71" aria-hidden="true" tabindex="-1"></a>    scores <span class="op">=</span> image_embedding <span class="op">@</span> text_embedding.T</span>
+<span id="cb2-72"><a href="#cb2-72" aria-hidden="true" tabindex="-1"></a>    target <span class="op">=</span> torch.arange(scores.shape[<span class="dv">0</span>])</span>
+<span id="cb2-73"><a href="#cb2-73" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-74"><a href="#cb2-74" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> recall_at_k(matrix: Tensor, k: <span class="bu">int</span>) <span class="op">-&gt;</span> <span class="bu">float</span>:</span>
+<span id="cb2-75"><a href="#cb2-75" aria-hidden="true" tabindex="-1"></a>        candidates <span class="op">=</span> matrix.topk(k, dim<span class="op">=</span><span class="dv">1</span>).indices</span>
+<span id="cb2-76"><a href="#cb2-76" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="bu">float</span>((candidates <span class="op">==</span> target[:, <span class="va">None</span>]).<span class="bu">any</span>(dim<span class="op">=</span><span class="dv">1</span>).<span class="bu">float</span>().mean())</span>
+<span id="cb2-77"><a href="#cb2-77" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-78"><a href="#cb2-78" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> {</span>
+<span id="cb2-79"><a href="#cb2-79" aria-hidden="true" tabindex="-1"></a>        <span class="st">"I→T R@1"</span>: recall_at_k(scores, <span class="dv">1</span>),</span>
+<span id="cb2-80"><a href="#cb2-80" aria-hidden="true" tabindex="-1"></a>        <span class="st">"T→I R@1"</span>: recall_at_k(scores.T, <span class="dv">1</span>),</span>
+<span id="cb2-81"><a href="#cb2-81" aria-hidden="true" tabindex="-1"></a>        <span class="st">"I→T R@5"</span>: recall_at_k(scores, <span class="dv">5</span>),</span>
+<span id="cb2-82"><a href="#cb2-82" aria-hidden="true" tabindex="-1"></a>        <span class="st">"T→I R@5"</span>: recall_at_k(scores.T, <span class="dv">5</span>),</span>
+<span id="cb2-83"><a href="#cb2-83" aria-hidden="true" tabindex="-1"></a>    }</span>
+<span id="cb2-84"><a href="#cb2-84" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-85"><a href="#cb2-85" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-86"><a href="#cb2-86" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> derangement(size: <span class="bu">int</span>, generator: torch.Generator) <span class="op">-&gt;</span> Tensor:</span>
+<span id="cb2-87"><a href="#cb2-87" aria-hidden="true" tabindex="-1"></a>    target <span class="op">=</span> torch.arange(size)</span>
+<span id="cb2-88"><a href="#cb2-88" aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> <span class="va">True</span>:</span>
+<span id="cb2-89"><a href="#cb2-89" aria-hidden="true" tabindex="-1"></a>        order <span class="op">=</span> torch.randperm(size, generator<span class="op">=</span>generator)</span>
+<span id="cb2-90"><a href="#cb2-90" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="kw">not</span> <span class="bu">bool</span>((order <span class="op">==</span> target).<span class="bu">any</span>()):</span>
+<span id="cb2-91"><a href="#cb2-91" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> order</span>
+<span id="cb2-92"><a href="#cb2-92" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-93"><a href="#cb2-93" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-94"><a href="#cb2-94" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> train_tower(</span>
+<span id="cb2-95"><a href="#cb2-95" aria-hidden="true" tabindex="-1"></a>    seed: <span class="bu">int</span>,</span>
+<span id="cb2-96"><a href="#cb2-96" aria-hidden="true" tabindex="-1"></a>    fit_split: PairedSplit,</span>
+<span id="cb2-97"><a href="#cb2-97" aria-hidden="true" tabindex="-1"></a>    validation_split: PairedSplit,</span>
+<span id="cb2-98"><a href="#cb2-98" aria-hidden="true" tabindex="-1"></a>    shuffled_pairs: <span class="bu">bool</span>,</span>
+<span id="cb2-99"><a href="#cb2-99" aria-hidden="true" tabindex="-1"></a>) <span class="op">-&gt;</span> TwoTower:</span>
+<span id="cb2-100"><a href="#cb2-100" aria-hidden="true" tabindex="-1"></a>    torch.manual_seed(seed)</span>
+<span id="cb2-101"><a href="#cb2-101" aria-hidden="true" tabindex="-1"></a>    model <span class="op">=</span> TwoTower(fit_split.image.shape[<span class="dv">1</span>], fit_split.text.shape[<span class="dv">1</span>])</span>
+<span id="cb2-102"><a href="#cb2-102" aria-hidden="true" tabindex="-1"></a>    optimizer <span class="op">=</span> torch.optim.AdamW(model.parameters(), lr<span class="op">=</span><span class="fl">2e-3</span>, weight_decay<span class="op">=</span><span class="fl">1e-3</span>)</span>
+<span id="cb2-103"><a href="#cb2-103" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-104"><a href="#cb2-104" aria-hidden="true" tabindex="-1"></a>    pair_generator <span class="op">=</span> torch.Generator().manual_seed(<span class="dv">88_000</span>)</span>
+<span id="cb2-105"><a href="#cb2-105" aria-hidden="true" tabindex="-1"></a>    text_order <span class="op">=</span> (</span>
+<span id="cb2-106"><a href="#cb2-106" aria-hidden="true" tabindex="-1"></a>        derangement(<span class="bu">len</span>(fit_split.text), pair_generator)</span>
+<span id="cb2-107"><a href="#cb2-107" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> shuffled_pairs <span class="cf">else</span> torch.arange(<span class="bu">len</span>(fit_split.text))</span>
+<span id="cb2-108"><a href="#cb2-108" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb2-109"><a href="#cb2-109" aria-hidden="true" tabindex="-1"></a>    schedule_generator <span class="op">=</span> torch.Generator().manual_seed(<span class="dv">99_000</span> <span class="op">+</span> seed)</span>
+<span id="cb2-110"><a href="#cb2-110" aria-hidden="true" tabindex="-1"></a>    schedules <span class="op">=</span> [</span>
+<span id="cb2-111"><a href="#cb2-111" aria-hidden="true" tabindex="-1"></a>        torch.randperm(<span class="bu">len</span>(fit_split.image), generator<span class="op">=</span>schedule_generator)</span>
+<span id="cb2-112"><a href="#cb2-112" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">160</span>)</span>
+<span id="cb2-113"><a href="#cb2-113" aria-hidden="true" tabindex="-1"></a>    ]</span>
+<span id="cb2-114"><a href="#cb2-114" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-115"><a href="#cb2-115" aria-hidden="true" tabindex="-1"></a>    best_validation <span class="op">=</span> <span class="bu">float</span>(<span class="st">"inf"</span>)</span>
+<span id="cb2-116"><a href="#cb2-116" aria-hidden="true" tabindex="-1"></a>    best_state: <span class="bu">dict</span>[<span class="bu">str</span>, Tensor] <span class="op">|</span> <span class="va">None</span> <span class="op">=</span> <span class="va">None</span></span>
+<span id="cb2-117"><a href="#cb2-117" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> epoch, order <span class="kw">in</span> <span class="bu">enumerate</span>(schedules, start<span class="op">=</span><span class="dv">1</span>):</span>
+<span id="cb2-118"><a href="#cb2-118" aria-hidden="true" tabindex="-1"></a>        model.train()</span>
+<span id="cb2-119"><a href="#cb2-119" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> rows <span class="kw">in</span> order.split(<span class="dv">120</span>):</span>
+<span id="cb2-120"><a href="#cb2-120" aria-hidden="true" tabindex="-1"></a>            image_embedding, text_embedding <span class="op">=</span> model(</span>
+<span id="cb2-121"><a href="#cb2-121" aria-hidden="true" tabindex="-1"></a>                fit_split.image[rows], fit_split.text[text_order[rows]]</span>
+<span id="cb2-122"><a href="#cb2-122" aria-hidden="true" tabindex="-1"></a>            )</span>
+<span id="cb2-123"><a href="#cb2-123" aria-hidden="true" tabindex="-1"></a>            loss <span class="op">=</span> symmetric_loss(image_embedding, text_embedding)</span>
+<span id="cb2-124"><a href="#cb2-124" aria-hidden="true" tabindex="-1"></a>            optimizer.zero_grad(set_to_none<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb2-125"><a href="#cb2-125" aria-hidden="true" tabindex="-1"></a>            loss.backward()</span>
+<span id="cb2-126"><a href="#cb2-126" aria-hidden="true" tabindex="-1"></a>            optimizer.step()</span>
+<span id="cb2-127"><a href="#cb2-127" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-128"><a href="#cb2-128" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> epoch <span class="op">%</span> <span class="dv">5</span> <span class="op">==</span> <span class="dv">0</span>:</span>
+<span id="cb2-129"><a href="#cb2-129" aria-hidden="true" tabindex="-1"></a>            validation_loss <span class="op">=</span> pair_loss(model, validation_split)</span>
+<span id="cb2-130"><a href="#cb2-130" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> validation_loss <span class="op">&lt;</span> best_validation:</span>
+<span id="cb2-131"><a href="#cb2-131" aria-hidden="true" tabindex="-1"></a>                best_validation <span class="op">=</span> validation_loss</span>
+<span id="cb2-132"><a href="#cb2-132" aria-hidden="true" tabindex="-1"></a>                best_state <span class="op">=</span> copy.deepcopy(model.state_dict())</span>
+<span id="cb2-133"><a href="#cb2-133" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-134"><a href="#cb2-134" aria-hidden="true" tabindex="-1"></a>    <span class="cf">assert</span> best_state <span class="kw">is</span> <span class="kw">not</span> <span class="va">None</span></span>
+<span id="cb2-135"><a href="#cb2-135" aria-hidden="true" tabindex="-1"></a>    model.load_state_dict(best_state)</span>
+<span id="cb2-136"><a href="#cb2-136" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> model</span>
+<span id="cb2-137"><a href="#cb2-137" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-138"><a href="#cb2-138" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-139"><a href="#cb2-139" aria-hidden="true" tabindex="-1"></a><span class="co"># [3] prepare inputs and conditions</span></span>
+<span id="cb2-140"><a href="#cb2-140" aria-hidden="true" tabindex="-1"></a>fit_split, validation_split, held_out_split <span class="op">=</span> make_paired_data()</span>
+<span id="cb2-141"><a href="#cb2-141" aria-hidden="true" tabindex="-1"></a>models: <span class="bu">dict</span>[<span class="bu">tuple</span>[<span class="bu">int</span>, <span class="bu">str</span>], TwoTower] <span class="op">=</span> {}</span>
+<span id="cb2-142"><a href="#cb2-142" aria-hidden="true" tabindex="-1"></a>records: <span class="bu">list</span>[<span class="bu">dict</span>[<span class="bu">str</span>, <span class="bu">object</span>]] <span class="op">=</span> []</span>
+<span id="cb2-143"><a href="#cb2-143" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-144"><a href="#cb2-144" aria-hidden="true" tabindex="-1"></a><span class="co"># [4] run the core mechanism</span></span>
+<span id="cb2-145"><a href="#cb2-145" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> seed <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">6050</span>, <span class="dv">6055</span>):</span>
+<span id="cb2-146"><a href="#cb2-146" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> condition, shuffled_pairs <span class="kw">in</span> ((<span class="st">"paired"</span>, <span class="va">False</span>), (<span class="st">"shuffled"</span>, <span class="va">True</span>)):</span>
+<span id="cb2-147"><a href="#cb2-147" aria-hidden="true" tabindex="-1"></a>        model <span class="op">=</span> train_tower(seed, fit_split, validation_split, shuffled_pairs)</span>
+<span id="cb2-148"><a href="#cb2-148" aria-hidden="true" tabindex="-1"></a>        models[(seed, condition)] <span class="op">=</span> model</span>
+<span id="cb2-149"><a href="#cb2-149" aria-hidden="true" tabindex="-1"></a>        records.append({</span>
+<span id="cb2-150"><a href="#cb2-150" aria-hidden="true" tabindex="-1"></a>            <span class="st">"seed"</span>: seed,</span>
+<span id="cb2-151"><a href="#cb2-151" aria-hidden="true" tabindex="-1"></a>            <span class="st">"condition"</span>: condition,</span>
+<span id="cb2-152"><a href="#cb2-152" aria-hidden="true" tabindex="-1"></a>            <span class="st">"validation"</span>: retrieval_metrics(model, validation_split),</span>
+<span id="cb2-153"><a href="#cb2-153" aria-hidden="true" tabindex="-1"></a>        })</span>
+<span id="cb2-154"><a href="#cb2-154" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-155"><a href="#cb2-155" aria-hidden="true" tabindex="-1"></a><span class="co"># The endpoint is consulted after every design and checkpoint decision above.</span></span>
+<span id="cb2-156"><a href="#cb2-156" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> record <span class="kw">in</span> records:</span>
+<span id="cb2-157"><a href="#cb2-157" aria-hidden="true" tabindex="-1"></a>    model <span class="op">=</span> models[(<span class="bu">int</span>(record[<span class="st">"seed"</span>]), <span class="bu">str</span>(record[<span class="st">"condition"</span>]))]</span>
+<span id="cb2-158"><a href="#cb2-158" aria-hidden="true" tabindex="-1"></a>    record[<span class="st">"held_out"</span>] <span class="op">=</span> retrieval_metrics(model, held_out_split)</span>
+<span id="cb2-159"><a href="#cb2-159" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-160"><a href="#cb2-160" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-161"><a href="#cb2-161" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> report(split_name: <span class="bu">str</span>, key: <span class="bu">str</span>) <span class="op">-&gt;</span> <span class="va">None</span>:</span>
+<span id="cb2-162"><a href="#cb2-162" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(split_name)</span>
+<span id="cb2-163"><a href="#cb2-163" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> condition <span class="kw">in</span> (<span class="st">"paired"</span>, <span class="st">"shuffled"</span>):</span>
+<span id="cb2-164"><a href="#cb2-164" aria-hidden="true" tabindex="-1"></a>        chosen <span class="op">=</span> [record <span class="cf">for</span> record <span class="kw">in</span> records <span class="cf">if</span> record[<span class="st">"condition"</span>] <span class="op">==</span> condition]</span>
+<span id="cb2-165"><a href="#cb2-165" aria-hidden="true" tabindex="-1"></a>        fields <span class="op">=</span> <span class="bu">list</span>(chosen[<span class="dv">0</span>][key].keys())</span>
+<span id="cb2-166"><a href="#cb2-166" aria-hidden="true" tabindex="-1"></a>        summary <span class="op">=</span> []</span>
+<span id="cb2-167"><a href="#cb2-167" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> field <span class="kw">in</span> fields:</span>
+<span id="cb2-168"><a href="#cb2-168" aria-hidden="true" tabindex="-1"></a>            values <span class="op">=</span> [<span class="bu">float</span>(record[key][field]) <span class="cf">for</span> record <span class="kw">in</span> chosen]</span>
+<span id="cb2-169"><a href="#cb2-169" aria-hidden="true" tabindex="-1"></a>            summary.append(<span class="ss">f"</span><span class="sc">{</span>field<span class="sc">}</span><span class="ss"> </span><span class="sc">{</span>mean(values)<span class="sc">:.4f}</span><span class="ss"> (SD </span><span class="sc">{</span>stdev(values)<span class="sc">:.4f}</span><span class="ss">)"</span>)</span>
+<span id="cb2-170"><a href="#cb2-170" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(<span class="ss">f"  </span><span class="sc">{</span>condition<span class="sc">:8s}</span><span class="ss">: "</span> <span class="op">+</span> <span class="st">"; "</span>.join(summary))</span>
+<span id="cb2-171"><a href="#cb2-171" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-172"><a href="#cb2-172" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-173"><a href="#cb2-173" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> report_paired_contrast(field: <span class="bu">str</span>) <span class="op">-&gt;</span> <span class="va">None</span>:</span>
+<span id="cb2-174"><a href="#cb2-174" aria-hidden="true" tabindex="-1"></a>    differences <span class="op">=</span> []</span>
+<span id="cb2-175"><a href="#cb2-175" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> seed <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">6050</span>, <span class="dv">6055</span>):</span>
+<span id="cb2-176"><a href="#cb2-176" aria-hidden="true" tabindex="-1"></a>        paired <span class="op">=</span> <span class="bu">next</span>(</span>
 <span id="cb2-177"><a href="#cb2-177" aria-hidden="true" tabindex="-1"></a>            record <span class="cf">for</span> record <span class="kw">in</span> records</span>
-<span id="cb2-178"><a href="#cb2-178" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> record[<span class="st">"seed"</span>] <span class="op">==</span> seed <span class="kw">and</span> record[<span class="st">"condition"</span>] <span class="op">==</span> <span class="st">"shuffled"</span></span>
+<span id="cb2-178"><a href="#cb2-178" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> record[<span class="st">"seed"</span>] <span class="op">==</span> seed <span class="kw">and</span> record[<span class="st">"condition"</span>] <span class="op">==</span> <span class="st">"paired"</span></span>
 <span id="cb2-179"><a href="#cb2-179" aria-hidden="true" tabindex="-1"></a>        )</span>
-<span id="cb2-180"><a href="#cb2-180" aria-hidden="true" tabindex="-1"></a>        differences.append(</span>
-<span id="cb2-181"><a href="#cb2-181" aria-hidden="true" tabindex="-1"></a>            <span class="bu">float</span>(paired[<span class="st">"held_out"</span>][field]) <span class="op">-</span> <span class="bu">float</span>(shuffled[<span class="st">"held_out"</span>][field])</span>
-<span id="cb2-182"><a href="#cb2-182" aria-hidden="true" tabindex="-1"></a>        )</span>
-<span id="cb2-183"><a href="#cb2-183" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(</span>
-<span id="cb2-184"><a href="#cb2-184" aria-hidden="true" tabindex="-1"></a>        <span class="ss">f"paired−shuffled held-out </span><span class="sc">{</span>field<span class="sc">}</span><span class="ss">: "</span></span>
-<span id="cb2-185"><a href="#cb2-185" aria-hidden="true" tabindex="-1"></a>        <span class="ss">f"</span><span class="sc">{</span>mean(differences)<span class="sc">:.4f}</span><span class="ss"> (paired SD </span><span class="sc">{</span>stdev(differences)<span class="sc">:.4f}</span><span class="ss">)"</span></span>
-<span id="cb2-186"><a href="#cb2-186" aria-hidden="true" tabindex="-1"></a>    )</span>
-<span id="cb2-187"><a href="#cb2-187" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-188"><a href="#cb2-188" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-189"><a href="#cb2-189" aria-hidden="true" tabindex="-1"></a>parameter_count <span class="op">=</span> <span class="bu">sum</span>(parameter.numel() <span class="cf">for</span> parameter <span class="kw">in</span> models[(<span class="dv">6050</span>, <span class="st">"paired"</span>)].parameters())</span>
-<span id="cb2-190"><a href="#cb2-190" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"split sizes: fit=</span><span class="sc">{</span><span class="bu">len</span>(fit_split.image)<span class="sc">}</span><span class="ss">, validation=</span><span class="sc">{</span><span class="bu">len</span>(validation_split.image)<span class="sc">}</span><span class="ss">, held-out=</span><span class="sc">{</span><span class="bu">len</span>(held_out_split.image)<span class="sc">}</span><span class="ss">"</span>)</span>
-<span id="cb2-191"><a href="#cb2-191" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"parameters: </span><span class="sc">{</span>parameter_count<span class="sc">:,}</span><span class="ss">; model seeds: 6050–6054"</span>)</span>
-<span id="cb2-192"><a href="#cb2-192" aria-hidden="true" tabindex="-1"></a>report(<span class="st">"validation"</span>, <span class="st">"validation"</span>)</span>
-<span id="cb2-193"><a href="#cb2-193" aria-hidden="true" tabindex="-1"></a>report(<span class="st">"held-out endpoint"</span>, <span class="st">"held_out"</span>)</span>
-<span id="cb2-194"><a href="#cb2-194" aria-hidden="true" tabindex="-1"></a>report_paired_contrast(<span class="st">"I→T R@1"</span>)</span>
-<span id="cb2-195"><a href="#cb2-195" aria-hidden="true" tabindex="-1"></a>report_paired_contrast(<span class="st">"T→I R@1"</span>)</span>
-<span id="cb2-196"><a href="#cb2-196" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"held-out random-ranking expectations: R@1=</span><span class="sc">{</span><span class="dv">1</span> <span class="op">/</span> <span class="dv">300</span><span class="sc">:.4f}</span><span class="ss">; R@5=</span><span class="sc">{</span><span class="dv">5</span> <span class="op">/</span> <span class="dv">300</span><span class="sc">:.4f}</span><span class="ss">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-</details>
+<span id="cb2-180"><a href="#cb2-180" aria-hidden="true" tabindex="-1"></a>        shuffled <span class="op">=</span> <span class="bu">next</span>(</span>
+<span id="cb2-181"><a href="#cb2-181" aria-hidden="true" tabindex="-1"></a>            record <span class="cf">for</span> record <span class="kw">in</span> records</span>
+<span id="cb2-182"><a href="#cb2-182" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> record[<span class="st">"seed"</span>] <span class="op">==</span> seed <span class="kw">and</span> record[<span class="st">"condition"</span>] <span class="op">==</span> <span class="st">"shuffled"</span></span>
+<span id="cb2-183"><a href="#cb2-183" aria-hidden="true" tabindex="-1"></a>        )</span>
+<span id="cb2-184"><a href="#cb2-184" aria-hidden="true" tabindex="-1"></a>        differences.append(</span>
+<span id="cb2-185"><a href="#cb2-185" aria-hidden="true" tabindex="-1"></a>            <span class="bu">float</span>(paired[<span class="st">"held_out"</span>][field]) <span class="op">-</span> <span class="bu">float</span>(shuffled[<span class="st">"held_out"</span>][field])</span>
+<span id="cb2-186"><a href="#cb2-186" aria-hidden="true" tabindex="-1"></a>        )</span>
+<span id="cb2-187"><a href="#cb2-187" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(</span>
+<span id="cb2-188"><a href="#cb2-188" aria-hidden="true" tabindex="-1"></a>        <span class="ss">f"paired−shuffled held-out </span><span class="sc">{</span>field<span class="sc">}</span><span class="ss">: "</span></span>
+<span id="cb2-189"><a href="#cb2-189" aria-hidden="true" tabindex="-1"></a>        <span class="ss">f"</span><span class="sc">{</span>mean(differences)<span class="sc">:.4f}</span><span class="ss"> (paired SD </span><span class="sc">{</span>stdev(differences)<span class="sc">:.4f}</span><span class="ss">)"</span></span>
+<span id="cb2-190"><a href="#cb2-190" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb2-191"><a href="#cb2-191" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-192"><a href="#cb2-192" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-193"><a href="#cb2-193" aria-hidden="true" tabindex="-1"></a>parameter_count <span class="op">=</span> <span class="bu">sum</span>(parameter.numel() <span class="cf">for</span> parameter <span class="kw">in</span> models[(<span class="dv">6050</span>, <span class="st">"paired"</span>)].parameters())</span>
+<span id="cb2-194"><a href="#cb2-194" aria-hidden="true" tabindex="-1"></a><span class="co"># [5] report the result</span></span>
+<span id="cb2-195"><a href="#cb2-195" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"split sizes: fit=</span><span class="sc">{</span><span class="bu">len</span>(fit_split.image)<span class="sc">}</span><span class="ss">, validation=</span><span class="sc">{</span><span class="bu">len</span>(validation_split.image)<span class="sc">}</span><span class="ss">, held-out=</span><span class="sc">{</span><span class="bu">len</span>(held_out_split.image)<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb2-196"><a href="#cb2-196" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"parameters: </span><span class="sc">{</span>parameter_count<span class="sc">:,}</span><span class="ss">; model seeds: 6050–6054"</span>)</span>
+<span id="cb2-197"><a href="#cb2-197" aria-hidden="true" tabindex="-1"></a>report(<span class="st">"validation"</span>, <span class="st">"validation"</span>)</span>
+<span id="cb2-198"><a href="#cb2-198" aria-hidden="true" tabindex="-1"></a>report(<span class="st">"held-out endpoint"</span>, <span class="st">"held_out"</span>)</span>
+<span id="cb2-199"><a href="#cb2-199" aria-hidden="true" tabindex="-1"></a>report_paired_contrast(<span class="st">"I→T R@1"</span>)</span>
+<span id="cb2-200"><a href="#cb2-200" aria-hidden="true" tabindex="-1"></a>report_paired_contrast(<span class="st">"T→I R@1"</span>)</span>
+<span id="cb2-201"><a href="#cb2-201" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"held-out random-ranking expectations: R@1=</span><span class="sc">{</span><span class="dv">1</span> <span class="op">/</span> <span class="dv">300</span><span class="sc">:.4f}</span><span class="ss">; R@5=</span><span class="sc">{</span><span class="dv">5</span> <span class="op">/</span> <span class="dv">300</span><span class="sc">:.4f}</span><span class="ss">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>split sizes: fit=720, validation=180, held-out=300
 parameters: 2,392; model seeds: 6050–6054
@@ -830,68 +875,75 @@ paired−shuffled held-out T→I R@1: 0.9633 (paired SD 0.0105)
 held-out random-ranking expectations: R@1=0.0033; R@5=0.0167</code></pre>
 </div>
 </div>
+</div>
 <p>Across the five seeds, the paired condition reaches validation Recall@1 of 0.9911 image-to-text and 0.9900 text-to-image. The shuffled control reaches only 0.0044 and 0.0078. That validation separation is the predeclared mechanism check—the towers can align unseen views only when the fit pairs carry the true correspondence.</p>
 <p>On the single held-out endpoint, paired image-to-text Recall@1 is <strong>0.9747</strong> (sample SD 0.0038 across model seeds), and paired text-to-image Recall@1 is <strong>0.9660</strong> (SD 0.0092). Both Recall@5 means are 1.0000. The shuffled condition stays at 0.0027 (SD 0.0028) and 0.0027 (SD 0.0043) for Recall@1, close to the 0.0033 random-ranking expectation. Its Recall@5 means, 0.0113 and 0.0100, remain in the same small-sample neighborhood as the 0.0167 random expectation.</p>
 <p>Because the two conditions share seeds, the primary top-1 comparison is paired within seed rather than reconstructed from those marginal summaries. The paired-minus-shuffled held-out contrast is <strong>0.9720</strong> (paired SD 0.0038) image-to-text and <strong>0.9633</strong> (paired SD 0.0105) text-to-image. The endpoint made none of the model, hyperparameter, checkpoint, stopping, or analysis-design decisions above; its values are reported and interpreted only after that lock. It is not being reserved for unrelated future work.</p>
 <p>These standard deviations describe optimization variation on one fixed synthetic dataset and one fixed derangement—they are not uncertainty intervals for a population of image–text tasks. The study establishes one finite mechanism: correct pair structure is sufficient for these small towers to learn cross-view retrieval, while the matched derangement removes that generalizable signal. It does not estimate what CLIP, ALIGN, or any natural-data model will achieve.</p>
 <!-- NOVEL: needs sign-off -->
-<div id="cell-fig-paired-retrieval-audit" class="cell" data-fig-height="4.2" data-fig-width="11" data-execution_count="3">
-<details class="code-fold">
-<summary>Figure code: held-out retrieval and representative score matrices</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> held_values(condition: <span class="bu">str</span>, field: <span class="bu">str</span>) <span class="op">-&gt;</span> <span class="bu">list</span>[<span class="bu">float</span>]:</span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> [</span>
-<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>        <span class="bu">float</span>(record[<span class="st">"held_out"</span>][field])</span>
-<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> record <span class="kw">in</span> records</span>
-<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> record[<span class="st">"condition"</span>] <span class="op">==</span> condition</span>
-<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>    ]</span>
-<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a></span>
+<div class="plan-code plan-code-wide">
+<div class="plan">
+<ol type="1">
+<li>Define the reusable helpers: <code>held_values</code> and <code>score_window</code>.</li>
+<li>Held-out retrieval and representative score matrices.</li>
+</ol>
+</div>
+<div id="cell-fig-paired-retrieval-audit" class="cell" data-fig-height="4.2" data-fig-width="11" data-execution_count="4">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co"># [1] define the reusable mechanism</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> held_values(condition: <span class="bu">str</span>, field: <span class="bu">str</span>) <span class="op">-&gt;</span> <span class="bu">list</span>[<span class="bu">float</span>]:</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> [</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>        <span class="bu">float</span>(record[<span class="st">"held_out"</span>][field])</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> record <span class="kw">in</span> records</span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> record[<span class="st">"condition"</span>] <span class="op">==</span> condition</span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>    ]</span>
 <span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a><span class="at">@torch.no_grad</span>()</span>
-<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> score_window(model: TwoTower, split: PairedSplit, size: <span class="bu">int</span> <span class="op">=</span> <span class="dv">40</span>) <span class="op">-&gt;</span> Tensor:</span>
-<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>    model.<span class="bu">eval</span>()</span>
-<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>    image_embedding, text_embedding <span class="op">=</span> model(split.image[:size], split.text[:size])</span>
-<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> image_embedding <span class="op">@</span> text_embedding.T</span>
-<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a><span class="at">@torch.no_grad</span>()</span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> score_window(model: TwoTower, split: PairedSplit, size: <span class="bu">int</span> <span class="op">=</span> <span class="dv">40</span>) <span class="op">-&gt;</span> Tensor:</span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>    model.<span class="bu">eval</span>()</span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>    image_embedding, text_embedding <span class="op">=</span> model(split.image[:size], split.text[:size])</span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> image_embedding <span class="op">@</span> text_embedding.T</span>
 <span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a>fig, axes <span class="op">=</span> plt.subplots(<span class="dv">1</span>, <span class="dv">3</span>, figsize<span class="op">=</span>(<span class="dv">11</span>, <span class="fl">4.2</span>), gridspec_kw<span class="op">=</span>{<span class="st">"width_ratios"</span>: [<span class="fl">1.15</span>, <span class="dv">1</span>, <span class="dv">1</span>]})</span>
-<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a>conditions <span class="op">=</span> [<span class="st">"paired"</span>, <span class="st">"shuffled"</span>]</span>
-<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a>directions <span class="op">=</span> [<span class="st">"I→T R@1"</span>, <span class="st">"T→I R@1"</span>]</span>
-<span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a>x <span class="op">=</span> np.arange(<span class="bu">len</span>(directions))</span>
-<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a>width <span class="op">=</span> <span class="fl">0.32</span></span>
-<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> offset, condition, color <span class="kw">in</span> ((<span class="op">-</span>width <span class="op">/</span> <span class="dv">2</span>, <span class="st">"paired"</span>, green), (width <span class="op">/</span> <span class="dv">2</span>, <span class="st">"shuffled"</span>, orange)):</span>
-<span id="cb4-23"><a href="#cb4-23" aria-hidden="true" tabindex="-1"></a>    values <span class="op">=</span> [held_values(condition, field) <span class="cf">for</span> field <span class="kw">in</span> directions]</span>
-<span id="cb4-24"><a href="#cb4-24" aria-hidden="true" tabindex="-1"></a>    axes[<span class="dv">0</span>].bar(</span>
-<span id="cb4-25"><a href="#cb4-25" aria-hidden="true" tabindex="-1"></a>        x <span class="op">+</span> offset,</span>
-<span id="cb4-26"><a href="#cb4-26" aria-hidden="true" tabindex="-1"></a>        [mean(value) <span class="cf">for</span> value <span class="kw">in</span> values],</span>
-<span id="cb4-27"><a href="#cb4-27" aria-hidden="true" tabindex="-1"></a>        width,</span>
-<span id="cb4-28"><a href="#cb4-28" aria-hidden="true" tabindex="-1"></a>        yerr<span class="op">=</span>[stdev(value) <span class="cf">for</span> value <span class="kw">in</span> values],</span>
-<span id="cb4-29"><a href="#cb4-29" aria-hidden="true" tabindex="-1"></a>        capsize<span class="op">=</span><span class="dv">3</span>,</span>
-<span id="cb4-30"><a href="#cb4-30" aria-hidden="true" tabindex="-1"></a>        color<span class="op">=</span>color,</span>
-<span id="cb4-31"><a href="#cb4-31" aria-hidden="true" tabindex="-1"></a>        alpha<span class="op">=</span><span class="fl">0.88</span>,</span>
-<span id="cb4-32"><a href="#cb4-32" aria-hidden="true" tabindex="-1"></a>        label<span class="op">=</span>condition,</span>
-<span id="cb4-33"><a href="#cb4-33" aria-hidden="true" tabindex="-1"></a>    )</span>
-<span id="cb4-34"><a href="#cb4-34" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].axhline(<span class="dv">1</span> <span class="op">/</span> <span class="dv">300</span>, color<span class="op">=</span>wine, lw<span class="op">=</span><span class="fl">1.2</span>, ls<span class="op">=</span><span class="st">"--"</span>, label<span class="op">=</span><span class="st">"random R@1"</span>)</span>
-<span id="cb4-35"><a href="#cb4-35" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].set_xticks(x, [<span class="st">"image→text"</span>, <span class="st">"text→image"</span>])</span>
-<span id="cb4-36"><a href="#cb4-36" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].set_ylim(<span class="dv">0</span>, <span class="fl">1.05</span>)</span>
-<span id="cb4-37"><a href="#cb4-37" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].set_ylabel(<span class="st">"held-out Recall@1"</span>)</span>
-<span id="cb4-38"><a href="#cb4-38" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].set_title(<span class="st">"five-seed endpoint"</span>)</span>
-<span id="cb4-39"><a href="#cb4-39" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].legend(frameon<span class="op">=</span><span class="va">False</span>, fontsize<span class="op">=</span><span class="dv">8</span>, loc<span class="op">=</span><span class="st">"center right"</span>)</span>
-<span id="cb4-40"><a href="#cb4-40" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].grid(axis<span class="op">=</span><span class="st">"y"</span>, alpha<span class="op">=</span><span class="fl">0.2</span>)</span>
-<span id="cb4-41"><a href="#cb4-41" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-42"><a href="#cb4-42" aria-hidden="true" tabindex="-1"></a>last_image <span class="op">=</span> <span class="va">None</span></span>
-<span id="cb4-43"><a href="#cb4-43" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> axis, condition <span class="kw">in</span> <span class="bu">zip</span>(axes[<span class="dv">1</span>:], conditions):</span>
-<span id="cb4-44"><a href="#cb4-44" aria-hidden="true" tabindex="-1"></a>    matrix <span class="op">=</span> score_window(models[(<span class="dv">6052</span>, condition)], held_out_split)</span>
-<span id="cb4-45"><a href="#cb4-45" aria-hidden="true" tabindex="-1"></a>    last_image <span class="op">=</span> axis.imshow(matrix, cmap<span class="op">=</span><span class="st">"coolwarm"</span>, vmin<span class="op">=-</span><span class="fl">0.5</span>, vmax<span class="op">=</span><span class="fl">1.0</span>, aspect<span class="op">=</span><span class="st">"auto"</span>)</span>
-<span id="cb4-46"><a href="#cb4-46" aria-hidden="true" tabindex="-1"></a>    axis.set_title(<span class="ss">f"</span><span class="sc">{</span>condition<span class="sc">}</span><span class="ss"> · seed 6052"</span>)</span>
-<span id="cb4-47"><a href="#cb4-47" aria-hidden="true" tabindex="-1"></a>    axis.set_xlabel(<span class="st">"text candidate"</span>)</span>
-<span id="cb4-48"><a href="#cb4-48" aria-hidden="true" tabindex="-1"></a>    axis.set_ylabel(<span class="st">"image query"</span>)</span>
-<span id="cb4-49"><a href="#cb4-49" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-50"><a href="#cb4-50" aria-hidden="true" tabindex="-1"></a>fig.colorbar(last_image, ax<span class="op">=</span>axes[<span class="dv">1</span>:], fraction<span class="op">=</span><span class="fl">0.025</span>, pad<span class="op">=</span><span class="fl">0.03</span>, label<span class="op">=</span><span class="st">"cosine score"</span>)</span>
-<span id="cb4-51"><a href="#cb4-51" aria-hidden="true" tabindex="-1"></a>fig.suptitle(<span class="st">"The pair relation, not matching width alone, creates alignment"</span>, color<span class="op">=</span>navy,</span>
-<span id="cb4-52"><a href="#cb4-52" aria-hidden="true" tabindex="-1"></a>             fontsize<span class="op">=</span><span class="dv">12</span>, weight<span class="op">=</span><span class="st">"bold"</span>)</span>
-<span id="cb4-53"><a href="#cb4-53" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-</details>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a><span class="co"># [2] run the core mechanism</span></span>
+<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a>fig, axes <span class="op">=</span> plt.subplots(<span class="dv">1</span>, <span class="dv">3</span>, figsize<span class="op">=</span>(<span class="dv">11</span>, <span class="fl">4.2</span>), gridspec_kw<span class="op">=</span>{<span class="st">"width_ratios"</span>: [<span class="fl">1.15</span>, <span class="dv">1</span>, <span class="dv">1</span>]})</span>
+<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a>conditions <span class="op">=</span> [<span class="st">"paired"</span>, <span class="st">"shuffled"</span>]</span>
+<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a>directions <span class="op">=</span> [<span class="st">"I→T R@1"</span>, <span class="st">"T→I R@1"</span>]</span>
+<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a>x <span class="op">=</span> np.arange(<span class="bu">len</span>(directions))</span>
+<span id="cb4-23"><a href="#cb4-23" aria-hidden="true" tabindex="-1"></a>width <span class="op">=</span> <span class="fl">0.32</span></span>
+<span id="cb4-24"><a href="#cb4-24" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> offset, condition, color <span class="kw">in</span> ((<span class="op">-</span>width <span class="op">/</span> <span class="dv">2</span>, <span class="st">"paired"</span>, green), (width <span class="op">/</span> <span class="dv">2</span>, <span class="st">"shuffled"</span>, orange)):</span>
+<span id="cb4-25"><a href="#cb4-25" aria-hidden="true" tabindex="-1"></a>    values <span class="op">=</span> [held_values(condition, field) <span class="cf">for</span> field <span class="kw">in</span> directions]</span>
+<span id="cb4-26"><a href="#cb4-26" aria-hidden="true" tabindex="-1"></a>    axes[<span class="dv">0</span>].bar(</span>
+<span id="cb4-27"><a href="#cb4-27" aria-hidden="true" tabindex="-1"></a>        x <span class="op">+</span> offset,</span>
+<span id="cb4-28"><a href="#cb4-28" aria-hidden="true" tabindex="-1"></a>        [mean(value) <span class="cf">for</span> value <span class="kw">in</span> values],</span>
+<span id="cb4-29"><a href="#cb4-29" aria-hidden="true" tabindex="-1"></a>        width,</span>
+<span id="cb4-30"><a href="#cb4-30" aria-hidden="true" tabindex="-1"></a>        yerr<span class="op">=</span>[stdev(value) <span class="cf">for</span> value <span class="kw">in</span> values],</span>
+<span id="cb4-31"><a href="#cb4-31" aria-hidden="true" tabindex="-1"></a>        capsize<span class="op">=</span><span class="dv">3</span>,</span>
+<span id="cb4-32"><a href="#cb4-32" aria-hidden="true" tabindex="-1"></a>        color<span class="op">=</span>color,</span>
+<span id="cb4-33"><a href="#cb4-33" aria-hidden="true" tabindex="-1"></a>        alpha<span class="op">=</span><span class="fl">0.88</span>,</span>
+<span id="cb4-34"><a href="#cb4-34" aria-hidden="true" tabindex="-1"></a>        label<span class="op">=</span>condition,</span>
+<span id="cb4-35"><a href="#cb4-35" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb4-36"><a href="#cb4-36" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].axhline(<span class="dv">1</span> <span class="op">/</span> <span class="dv">300</span>, color<span class="op">=</span>wine, lw<span class="op">=</span><span class="fl">1.2</span>, ls<span class="op">=</span><span class="st">"--"</span>, label<span class="op">=</span><span class="st">"random R@1"</span>)</span>
+<span id="cb4-37"><a href="#cb4-37" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].set_xticks(x, [<span class="st">"image→text"</span>, <span class="st">"text→image"</span>])</span>
+<span id="cb4-38"><a href="#cb4-38" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].set_ylim(<span class="dv">0</span>, <span class="fl">1.05</span>)</span>
+<span id="cb4-39"><a href="#cb4-39" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].set_ylabel(<span class="st">"held-out Recall@1"</span>)</span>
+<span id="cb4-40"><a href="#cb4-40" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].set_title(<span class="st">"five-seed endpoint"</span>)</span>
+<span id="cb4-41"><a href="#cb4-41" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].legend(frameon<span class="op">=</span><span class="va">False</span>, fontsize<span class="op">=</span><span class="dv">8</span>, loc<span class="op">=</span><span class="st">"center right"</span>)</span>
+<span id="cb4-42"><a href="#cb4-42" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].grid(axis<span class="op">=</span><span class="st">"y"</span>, alpha<span class="op">=</span><span class="fl">0.2</span>)</span>
+<span id="cb4-43"><a href="#cb4-43" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-44"><a href="#cb4-44" aria-hidden="true" tabindex="-1"></a>last_image <span class="op">=</span> <span class="va">None</span></span>
+<span id="cb4-45"><a href="#cb4-45" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> axis, condition <span class="kw">in</span> <span class="bu">zip</span>(axes[<span class="dv">1</span>:], conditions):</span>
+<span id="cb4-46"><a href="#cb4-46" aria-hidden="true" tabindex="-1"></a>    matrix <span class="op">=</span> score_window(models[(<span class="dv">6052</span>, condition)], held_out_split)</span>
+<span id="cb4-47"><a href="#cb4-47" aria-hidden="true" tabindex="-1"></a>    last_image <span class="op">=</span> axis.imshow(matrix, cmap<span class="op">=</span><span class="st">"coolwarm"</span>, vmin<span class="op">=-</span><span class="fl">0.5</span>, vmax<span class="op">=</span><span class="fl">1.0</span>, aspect<span class="op">=</span><span class="st">"auto"</span>)</span>
+<span id="cb4-48"><a href="#cb4-48" aria-hidden="true" tabindex="-1"></a>    axis.set_title(<span class="ss">f"</span><span class="sc">{</span>condition<span class="sc">}</span><span class="ss"> · seed 6052"</span>)</span>
+<span id="cb4-49"><a href="#cb4-49" aria-hidden="true" tabindex="-1"></a>    axis.set_xlabel(<span class="st">"text candidate"</span>)</span>
+<span id="cb4-50"><a href="#cb4-50" aria-hidden="true" tabindex="-1"></a>    axis.set_ylabel(<span class="st">"image query"</span>)</span>
+<span id="cb4-51"><a href="#cb4-51" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-52"><a href="#cb4-52" aria-hidden="true" tabindex="-1"></a>fig.colorbar(last_image, ax<span class="op">=</span>axes[<span class="dv">1</span>:], fraction<span class="op">=</span><span class="fl">0.025</span>, pad<span class="op">=</span><span class="fl">0.03</span>, label<span class="op">=</span><span class="st">"cosine score"</span>)</span>
+<span id="cb4-53"><a href="#cb4-53" aria-hidden="true" tabindex="-1"></a>fig.suptitle(<span class="st">"The pair relation, not matching width alone, creates alignment"</span>, color<span class="op">=</span>navy,</span>
+<span id="cb4-54"><a href="#cb4-54" aria-hidden="true" tabindex="-1"></a>             fontsize<span class="op">=</span><span class="dv">12</span>, weight<span class="op">=</span><span class="st">"bold"</span>)</span>
+<span id="cb4-55"><a href="#cb4-55" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display">
 <div id="fig-paired-retrieval-audit" class="quarto-float quarto-figure quarto-figure-center anchored" alt="A bar chart shows paired Recall at 1 near 0.97 in both directions and shuffled Recall at 1 near zero. Two forty by forty heatmaps show a bright diagonal after paired training and no consistent diagonal after shuffled-pair training.">
 <figure class="quarto-float quarto-float-fig figure">
@@ -905,44 +957,53 @@ Figure&nbsp;20.2: The held-out audit separates aggregate retrieval from one scor
 </div>
 </div>
 </div>
+</div>
 <p>The control is stronger than showing a falling training loss—with shuffled pairs, the model can spend capacity fitting accidental associations in the fit table. The correct validation relation refuses to reward that memorization. This is exactly why the experimentation interlude insisted: <strong>tune the contender; ablate the claim</strong>. Here the claim is that paired correspondence teaches alignment, so pairing is the variable the ablation breaks.</p>
 <p>There is also a picture of what training <em>did</em> to the geometry. Project the two towers’ embeddings of the same held-out rows into two dimensions, before and after training:</p>
-<div id="cell-fig-shared-space" class="cell" data-execution_count="4">
-<details class="code-fold">
-<summary>Code: PCA view of both towers, untrained vs.&nbsp;trained</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> two_dim_view(model: TwoTower, count: <span class="bu">int</span> <span class="op">=</span> <span class="dv">20</span>) <span class="op">-&gt;</span> <span class="bu">tuple</span>[Tensor, Tensor]:</span>
-<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    model.<span class="bu">eval</span>()</span>
-<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">with</span> torch.no_grad():</span>
-<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>        image_embedding, text_embedding <span class="op">=</span> model(</span>
-<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>            held_out_split.image[:count], held_out_split.text[:count]</span>
-<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>        )</span>
-<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>    both <span class="op">=</span> torch.cat([image_embedding, text_embedding])</span>
-<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>    centered <span class="op">=</span> both <span class="op">-</span> both.mean(<span class="dv">0</span>)</span>
-<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>    _, _, right <span class="op">=</span> torch.linalg.svd(centered, full_matrices<span class="op">=</span><span class="va">False</span>)</span>
-<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>    projected <span class="op">=</span> centered <span class="op">@</span> right[:<span class="dv">2</span>].T</span>
-<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> projected[:count], projected[count:]</span>
-<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>torch.manual_seed(<span class="dv">6050</span>)</span>
-<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>untrained <span class="op">=</span> TwoTower(held_out_split.image.shape[<span class="dv">1</span>], held_out_split.text.shape[<span class="dv">1</span>])</span>
-<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>views <span class="op">=</span> [(untrained, <span class="st">"before training:</span><span class="ch">\n</span><span class="st">same width, unrelated coordinates"</span>),</span>
-<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>         (models[(<span class="dv">6050</span>, <span class="st">"paired"</span>)], <span class="st">"after paired training:</span><span class="ch">\n</span><span class="st">mates land together"</span>)]</span>
-<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>fig, axes <span class="op">=</span> plt.subplots(<span class="dv">1</span>, <span class="dv">2</span>, figsize<span class="op">=</span>(<span class="fl">8.6</span>, <span class="fl">3.6</span>))</span>
-<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> axis, (model, title) <span class="kw">in</span> <span class="bu">zip</span>(axes, views):</span>
-<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a>    image_2d, text_2d <span class="op">=</span> two_dim_view(model)</span>
-<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(<span class="bu">len</span>(image_2d)):</span>
-<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a>        axis.plot([image_2d[i, <span class="dv">0</span>], text_2d[i, <span class="dv">0</span>]],</span>
-<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a>                  [image_2d[i, <span class="dv">1</span>], text_2d[i, <span class="dv">1</span>]],</span>
-<span id="cb5-24"><a href="#cb5-24" aria-hidden="true" tabindex="-1"></a>                  color<span class="op">=</span><span class="st">"#B8B8A8"</span>, lw<span class="op">=</span><span class="fl">0.8</span>, zorder<span class="op">=</span><span class="dv">1</span>)</span>
-<span id="cb5-25"><a href="#cb5-25" aria-hidden="true" tabindex="-1"></a>    axis.scatter(image_2d[:, <span class="dv">0</span>], image_2d[:, <span class="dv">1</span>], s<span class="op">=</span><span class="dv">42</span>, color<span class="op">=</span>navy,</span>
-<span id="cb5-26"><a href="#cb5-26" aria-hidden="true" tabindex="-1"></a>                 label<span class="op">=</span><span class="st">"image view"</span>, zorder<span class="op">=</span><span class="dv">2</span>)</span>
-<span id="cb5-27"><a href="#cb5-27" aria-hidden="true" tabindex="-1"></a>    axis.scatter(text_2d[:, <span class="dv">0</span>], text_2d[:, <span class="dv">1</span>], s<span class="op">=</span><span class="dv">42</span>, marker<span class="op">=</span><span class="st">"^"</span>, color<span class="op">=</span>orange,</span>
-<span id="cb5-28"><a href="#cb5-28" aria-hidden="true" tabindex="-1"></a>                 label<span class="op">=</span><span class="st">"text view"</span>, zorder<span class="op">=</span><span class="dv">2</span>)</span>
-<span id="cb5-29"><a href="#cb5-29" aria-hidden="true" tabindex="-1"></a>    axis.set_title(title, fontsize<span class="op">=</span><span class="fl">9.5</span>)</span>
-<span id="cb5-30"><a href="#cb5-30" aria-hidden="true" tabindex="-1"></a>    axis.set_xticks([])<span class="op">;</span> axis.set_yticks([])</span>
-<span id="cb5-31"><a href="#cb5-31" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].legend(frameon<span class="op">=</span><span class="va">False</span>, fontsize<span class="op">=</span><span class="dv">8</span>, loc<span class="op">=</span><span class="st">"upper left"</span>)</span>
-<span id="cb5-32"><a href="#cb5-32" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()<span class="op">;</span> plt.show()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-</details>
+<div class="plan-code plan-code-wide">
+<div class="plan">
+<ol type="1">
+<li>Define the reusable <code>two_dim_view</code> helper.</li>
+<li>Prepare the inputs and fixed settings for the example.</li>
+<li>PCA view of both towers, untrained vs.&nbsp;trained.</li>
+</ol>
+</div>
+<div id="cell-fig-shared-space" class="cell" data-execution_count="5">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co"># [1] define the reusable mechanism</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> two_dim_view(model: TwoTower, count: <span class="bu">int</span> <span class="op">=</span> <span class="dv">20</span>) <span class="op">-&gt;</span> <span class="bu">tuple</span>[Tensor, Tensor]:</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    model.<span class="bu">eval</span>()</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">with</span> torch.no_grad():</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>        image_embedding, text_embedding <span class="op">=</span> model(</span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>            held_out_split.image[:count], held_out_split.text[:count]</span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>        )</span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>    both <span class="op">=</span> torch.cat([image_embedding, text_embedding])</span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>    centered <span class="op">=</span> both <span class="op">-</span> both.mean(<span class="dv">0</span>)</span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>    _, _, right <span class="op">=</span> torch.linalg.svd(centered, full_matrices<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>    projected <span class="op">=</span> centered <span class="op">@</span> right[:<span class="dv">2</span>].T</span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> projected[:count], projected[count:]</span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a><span class="co"># [2] prepare inputs and conditions</span></span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>torch.manual_seed(<span class="dv">6050</span>)</span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>untrained <span class="op">=</span> TwoTower(held_out_split.image.shape[<span class="dv">1</span>], held_out_split.text.shape[<span class="dv">1</span>])</span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>views <span class="op">=</span> [(untrained, <span class="st">"before training:</span><span class="ch">\n</span><span class="st">same width, unrelated coordinates"</span>),</span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>         (models[(<span class="dv">6050</span>, <span class="st">"paired"</span>)], <span class="st">"after paired training:</span><span class="ch">\n</span><span class="st">mates land together"</span>)]</span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a>fig, axes <span class="op">=</span> plt.subplots(<span class="dv">1</span>, <span class="dv">2</span>, figsize<span class="op">=</span>(<span class="fl">8.6</span>, <span class="fl">3.6</span>))</span>
+<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a><span class="co"># [3] run the core mechanism</span></span>
+<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> axis, (model, title) <span class="kw">in</span> <span class="bu">zip</span>(axes, views):</span>
+<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a>    image_2d, text_2d <span class="op">=</span> two_dim_view(model)</span>
+<span id="cb5-24"><a href="#cb5-24" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(<span class="bu">len</span>(image_2d)):</span>
+<span id="cb5-25"><a href="#cb5-25" aria-hidden="true" tabindex="-1"></a>        axis.plot([image_2d[i, <span class="dv">0</span>], text_2d[i, <span class="dv">0</span>]],</span>
+<span id="cb5-26"><a href="#cb5-26" aria-hidden="true" tabindex="-1"></a>                  [image_2d[i, <span class="dv">1</span>], text_2d[i, <span class="dv">1</span>]],</span>
+<span id="cb5-27"><a href="#cb5-27" aria-hidden="true" tabindex="-1"></a>                  color<span class="op">=</span><span class="st">"#B8B8A8"</span>, lw<span class="op">=</span><span class="fl">0.8</span>, zorder<span class="op">=</span><span class="dv">1</span>)</span>
+<span id="cb5-28"><a href="#cb5-28" aria-hidden="true" tabindex="-1"></a>    axis.scatter(image_2d[:, <span class="dv">0</span>], image_2d[:, <span class="dv">1</span>], s<span class="op">=</span><span class="dv">42</span>, color<span class="op">=</span>navy,</span>
+<span id="cb5-29"><a href="#cb5-29" aria-hidden="true" tabindex="-1"></a>                 label<span class="op">=</span><span class="st">"image view"</span>, zorder<span class="op">=</span><span class="dv">2</span>)</span>
+<span id="cb5-30"><a href="#cb5-30" aria-hidden="true" tabindex="-1"></a>    axis.scatter(text_2d[:, <span class="dv">0</span>], text_2d[:, <span class="dv">1</span>], s<span class="op">=</span><span class="dv">42</span>, marker<span class="op">=</span><span class="st">"^"</span>, color<span class="op">=</span>orange,</span>
+<span id="cb5-31"><a href="#cb5-31" aria-hidden="true" tabindex="-1"></a>                 label<span class="op">=</span><span class="st">"text view"</span>, zorder<span class="op">=</span><span class="dv">2</span>)</span>
+<span id="cb5-32"><a href="#cb5-32" aria-hidden="true" tabindex="-1"></a>    axis.set_title(title, fontsize<span class="op">=</span><span class="fl">9.5</span>)</span>
+<span id="cb5-33"><a href="#cb5-33" aria-hidden="true" tabindex="-1"></a>    axis.set_xticks([])<span class="op">;</span> axis.set_yticks([])</span>
+<span id="cb5-34"><a href="#cb5-34" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].legend(frameon<span class="op">=</span><span class="va">False</span>, fontsize<span class="op">=</span><span class="dv">8</span>, loc<span class="op">=</span><span class="st">"upper left"</span>)</span>
+<span id="cb5-35"><a href="#cb5-35" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()<span class="op">;</span> plt.show()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display">
 <div id="fig-shared-space" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-fig figure">
@@ -953,6 +1014,7 @@ Figure&nbsp;20.2: The held-out audit separates aggregate retrieval from one scor
 Figure&nbsp;20.3: What the contrastive loss does to the shared space. Twenty held-out events, embedded by freshly initialized towers (left) and by the trained paired model (right); each gray segment connects an image embedding to its declared text mate, and each panel is a 2-D principal-component view of the 16-dimensional embeddings. Before training the two views occupy unrelated coordinates and the mate segments sprawl; after training, mates land next to each other — which is precisely why the diagonal of the score matrix lights up. A projection understates 16-D distances, so read the segments qualitatively.
 </figcaption>
 </figure>
+</div>
 </div>
 </div>
 </div>
