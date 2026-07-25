@@ -37,6 +37,10 @@ chapter must respect. Those two files replace any account-local memory.
 
 ## Environment (this machine)
 
+*New Mac? `docs/NEW-MACHINE-SETUP.md` reproduces everything below from a bare
+machine — toolchain, venv, credentials, and a verification pass that proves the
+new machine reproduces the committed book.*
+
 ```bash
 export PATH="$HOME/.local/bin:$HOME/Library/TinyTeX/bin/universal-darwin:/opt/homebrew/bin:$PATH"
 ```
@@ -58,8 +62,10 @@ Remote: `https://github.com/Shakeri-Lab/dl-book` (push to `main` → CI renders 
 publishes to `gh-pages` → https://shakeri-lab.github.io/dl-book/). Never commit to
 `gh-pages` manually.
 
-**Do not move this repo into Box.** Box's cloud filesystem times out on dense file I/O
-(venv, `_book`). Course materials live in Box at
+**Do not move this repo into Box.** Box's cloud filesystem times out on dense file
+I/O (venv, `_book`), and a Box-hosted git repo corrupted three separate `git fetch`
+runs on this project (`mmap failed`, `early EOF`, `invalid index-pack output`).
+Symlink it into Box if you want it visible there; see `docs/NEW-MACHINE-SETUP.md` §0. Course materials live in Box at
 `/Users/setup/Library/CloudStorage/Box-Box/Teaching/6050/` (read-only inputs: `LaTeX/`
 seeds, `dl-course-site/transcripts/`).
 

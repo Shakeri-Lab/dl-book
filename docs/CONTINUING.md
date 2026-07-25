@@ -361,6 +361,11 @@ generator seeds 0/1/2/100+L etc. — keep them deterministic).
 
 ## 3. Environment quick-recheck (new account)
 
+*Setting up a machine from scratch rather than re-checking one? Use
+`docs/NEW-MACHINE-SETUP.md`, which covers the toolchain, the Python environment,
+credentials, and a two-step verification that the new machine reproduces the
+committed book.*
+
 Everything in CLAUDE.md §Environment still applies. On a fresh account verify:
 - `~/dl-book` exists locally (NOT in Box) and `git remote -v` points to
   `Shakeri-Lab/dl-book`.
@@ -897,6 +902,7 @@ experiment, and verification contract:
 | `docs/drafting-template.md` | per-chapter drafting prompt/checklist |
 | `docs/backlog.md` | author-requested future work + GPU experiment queue |
 | `docs/NEW-CHAT-PROMPT.md` | paste-ready bootstrap prompt for a fresh session |
+| `docs/NEW-MACHINE-SETUP.md` | bare-Mac setup: toolchain, venv, credentials, verification |
 | `docs/compatibility.md` | living note: tested environment + version-fragile engineering |
 | `docs/test-time-memory-control-exercise-bank.md` | D7 maintainer/course bank + concise solution sketches; intentionally outside book navigation |
 | `docs/dl-course-code.md` | how to use his Manim repo (module spines, scenes) |
@@ -959,6 +965,11 @@ Design decisions worth keeping: markers are `[n]` comments in the executed sourc
 (number first, colour second — never colour alone, never drawn arrows); the print
 panel is an unbreakable box preceded by a page-room check, because the first two
 builds split the plan across a page and then stranded its code overleaf.
+
+Page cost, recorded honestly: the single ch. 7 panel took the book from 502 to
+**504 pages** — the room check buys the juxtaposition by forcing a page break
+when the pair does not fit. Budget roughly a page per two panels when deciding
+the rollout, and prefer panels that absorb an existing prose list.
 
 ### Standing verification habits (learned the hard way)
 

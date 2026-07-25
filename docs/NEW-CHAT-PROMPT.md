@@ -56,7 +56,7 @@ answer.**
 - **Pre-test every experiment** before writing prose about its numbers, and put
   only measured numbers in captions.
 
-**Environment:** `cd /Users/setup/dl-book && source .venv/bin/activate`; Quarto at
+**Environment:** `cd /Users/setup/dl-book && source .venv/bin/activate` (on a machine that has never built the book, `docs/NEW-MACHINE-SETUP.md` sets it up from bare); Quarto at
 `~/.local/bin/quarto`; TinyTeX for PDF; `gh` at `/opt/homebrew/bin/gh`,
 authenticated per command via
 `export GH_TOKEN=$(printf "protocol=https\nhost=github.com\n" | git credential fill | sed -n 's/^password=//p')`
