@@ -1,5 +1,11 @@
 # CLAUDE.md — Pipeline Runbook
 
+> **Fresh session?** Paste `docs/NEW-CHAT-PROMPT.md` to bootstrap, then read
+> `docs/CONTINUING.md` — its top state block and §9 carry the current picture
+> (release v1.1; Plan v2 complete; Plan → Code panels shipped; open decisions
+> listed). Version-fragile engineering lives in `docs/compatibility.md`, not in
+> the chapters.
+
 This repo is *Deep Learning: Making It Learnable*, the Quarto companion textbook for
 DS 6050 (Heman Shakeri, UVA). This file is the operating manual for working on it with
 Claude Code. Read `docs/style-guide.md` before writing any prose — every chapter must

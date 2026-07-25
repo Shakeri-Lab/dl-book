@@ -10,6 +10,22 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 
 ---
 
+> ## Current state — 2026-07-25 (read this first)
+>
+> The manuscript is **complete and released**: tag **v1.1** with a GitHub release
+> carrying the PDF, 502 pages, chapters 1–20 + two interludes + four appendices +
+> epilogue, live in HTML and PDF. **Nothing is mid-flight.** Plan v2 (the
+> readable-code and estimator-discipline overhaul) finished all seven phases on
+> July 20; the Plan → Code panel component shipped July 25. Every open item is a
+> decision waiting on the author — see **§9**, which supersedes any older status
+> text below it.
+>
+> Fresh session? Read `CLAUDE.md`, then §9 and §2 of this file, then
+> `docs/style-guide.md` and `docs/arc-seeds.md`. A paste-ready bootstrap prompt
+> lives in `docs/NEW-CHAT-PROMPT.md`.
+
+---
+
 ## 1. Where the project stands
 
 **Live:** https://shakeri-lab.github.io/dl-book/ (HTML + PDF, auto-deployed from
@@ -880,6 +896,8 @@ experiment, and verification contract:
 | `docs/style-guide.md` | voice guide + Book-Specific Writing Rules |
 | `docs/drafting-template.md` | per-chapter drafting prompt/checklist |
 | `docs/backlog.md` | author-requested future work + GPU experiment queue |
+| `docs/NEW-CHAT-PROMPT.md` | paste-ready bootstrap prompt for a fresh session |
+| `docs/compatibility.md` | living note: tested environment + version-fragile engineering |
 | `docs/test-time-memory-control-exercise-bank.md` | D7 maintainer/course bank + concise solution sketches; intentionally outside book navigation |
 | `docs/dl-course-code.md` | how to use his Manim repo (module spines, scenes) |
 | `docs/enhancement-proposal.md` (in dl-course-site repo) | course-site history |
@@ -894,53 +912,90 @@ trailers, no "Generated with Claude Code" lines, in this or any of the author's
 repositories. The pre-July-17 history was rewritten to strip these; do not
 reintroduce them.
 
-## Plan v2 execution ledger (July 19, 2026)
+## 9. Recent passes and open decisions (July 17–25, 2026)
 
-Author decisions taken: (a) feature-space figure replaced fig-polytopes;
-(b) delta typography — pilot trials `…`-elision-via-include (ch. 14) and prose-ref
-(ch. 14 trainer); (c) **(Audit.) book-wide**; (d) **transclusion + CI book-wide**.
+*This section supersedes older status text above it.*
 
-Done: Phase 0 (harness folds: ch. 17/18/19 setups, ch. 10 unrolled schematic;
-padding-mask kept as kernel). Phase 1 (editorial contract in style-guide.md;
-preface tweaks; read→predict→run→audit loop). Pilot leg 1 (ch. 3 feature-space
-figure). Pilot leg 2 (ch. 19 "Why this batches" + (Audit.) 4/5, both traps
-verified fresh; β-TC-VAE cited). Infrastructure: Execution Audit workflow
-(weekly, from-scratch re-execution), include-code-files vendored + registered,
-`code/` is an installable `dlbook` package (`pip install -e ./code`, in
-requirements.txt). Pilot leg 3 (in flight): Listings 10.1 (fit_next_token) and
-10.2 (fixed_window_loss) live in code/dlbook/, displayed via include in ch. 10,
-imported by ch. 14 whose trainer prints only its deltas (paired guard + explicit
-schedule). Acceptance: ch. 10 outputs bit-identical; ch. 14 digests must pass.
+### What shipped
 
-Remaining: pilot measurements + author read; Phase 3 (Listing 4.1, module
-rollout), Phase 4 (three-case taxonomy in ch. 4 + reminder sites + (Audit.)
-sweep), Phase 5 (Hinton devices: digit-embedding exercise, forget-gate
-diagnostic, predict-lines, refusal footnotes already in style guide), Phase 6
-(compatibility note), Phase 7 (verification, page count ≤ v1.0, tag v1.1).
+**Plan v2 — readable code and estimator discipline (all seven phases, tag v1.1).**
 
-## Plan v2: COMPLETE (July 20, 2026, v1.1 tagged)
+- **Editorial contract** in `docs/style-guide.md`: equation / kernel / harness with
+  the five-part visibility test; the five-question chapter contract; three
+  conditions before visualising internals; replace-don't-append; the refusal
+  ledger (named non-imports, with reasons).
+- **Canonical listings as tested source.** `code/` is an installable package
+  (`pip install -e ./code`, already in `requirements.txt`): Listing 4.1
+  `fit_supervised` (`code/dlbook/supervised.py`), Listings 10.1/10.2
+  `fit_next_token` / `fixed_window_loss` (`code/dlbook/training.py`,
+  `evaluation.py`). Printed once via `include=`; chapters 6, 8, 14 import them and
+  print only their deltas.
+- **Estimator discipline.** `#sec-04-estimator-cases` states three cases exactly
+  once — decomposable, nonlinear-functional-of-aggregate, batch-defined — with
+  one-sentence case reminders at chapters 11, 15, 18, 19, 20 and the two verified
+  `(Audit.)` traps in chapter 19 (the β·D_x reduction identity; the
+  aggregate-posterior Jensen bias, β-TC-VAE cited).
+- **Pedagogical devices.** Learned-feature-space figure (ch. 3); forget-gate
+  diagnostic (ch. 10, replay-asserted, 0.76 vs 0.56); seven predict-before-run
+  prompts; RMSProp and weights-as-images provenance footnotes; digit-embedding
+  `(Audit.)` exercise (ch. 13); mixture-of-experts in the epilogue.
+- **Infrastructure.** Weekly **Execution Audit** workflow
+  (`.github/workflows/execute-audit.yml`) deletes freeze caches and re-executes
+  every cell from scratch; `include-code-files` extension vendored;
+  `docs/compatibility.md` is the living home of version-fragile engineering, with
+  Appendix B pointing at it.
 
-All seven phases shipped, every refactor bit-identical on acceptance. Remaining
-for the author: (1) sign off the NOVEL markers (16 chapter files carry them —
-grep -rl "NOVEL: needs sign-off" chapters/ --include="*.qmd"); (2) judge the two
-delta typographies both live in ch. 14 (elided include vs. prose-ref) and the
-ch. 4 listing presentation; (3) the GPU queue (docs/backlog.md) is unchanged.
-Page arithmetic is in CHANGELOG.md. Verification habits now standing: bit-diff
-acceptance per refactored chapter; span-safe greps for include checks; captions
-carry measured numbers only.
+**Plan → Code panels (author's sketch, July 25).** One mechanism shown twice: the
+plan in the reader's language beside the terse kernel, output beneath the code.
 
-## Plan → Code panels (author sketch, July 25 2026)
+| Piece | Path |
+|---|---|
+| Two-column grid, chips, Output strip (HTML) | `dlbook.scss` |
+| Stacked print form | `filters/plan-code.lua` + `planbox` in `tex/macros.tex` |
+| Rules, authoring form, six-step ceiling | `docs/style-guide.md` |
+| Working exemplar | ch. 7 `manual-conv` (§7.3) |
 
-Component shipped: `.plan-code` / `.plan` divs, `dlbook.scss` grid (HTML),
-`filters/plan-code.lua` + `planbox` in `tex/macros.tex` (print stacks them),
-`[n]` comment markers mapping plan steps to kernel lines, `Output` strip under
-the code. Rules and authoring form: style-guide.md, "Plan → Code panels".
-Exemplar: ch. 7 `manual-conv` (the five-step recipe list became the plan column,
-so the panel cost no prose). Verified: HTML two-column layout and colour chips
-by computed style; print panel by LaTeX probe; ch. 7 output bit-identical.
+Design decisions worth keeping: markers are `[n]` comments in the executed source
+(number first, colour second — never colour alone, never drawn arrows); the print
+panel is an unbreakable box preceded by a page-room check, because the first two
+builds split the plan across a page and then stranded its code overleaf.
 
-Curated rollout candidates (author's call before applying — each costs render
-time and a little page): ch. 1 `closed-form`, ch. 3 `mlp-class`, ch. 7
-`equivariance`, ch. 8 `pool-invariance`, ch. 10 `char-lm-sample`, ch. 11
-`beam-demo`, ch. 13 `scaled-dot-snapshot` (the strongest — the book's
-destination recipe), Appendix C `a3-softmax-stability`.
+### Standing verification habits (learned the hard way)
+
+- **Bit-diff acceptance.** A refactor must leave the frozen stdout
+  content-bit-identical. Snapshot before, re-render, diff
+  (`_freeze/<chapter>/execute-results/html.json` → `result.markdown` → the
+  `cell-output-stdout` blocks).
+- **Span-safe greps** when checking includes: syntax highlighting splits
+  `def name` across HTML spans, so grep a bare identifier or a docstring phrase.
+- **`include=` paths are file-relative** (`../../code/dlbook/...`), not
+  project-relative.
+- **Captions carry measured numbers only** — a standalone pre-test is not
+  RNG-identical to the chapter's own cell.
+- **Renders are slow** (heavy chapter 20–40 min, full book ~40 min). Run in the
+  background; never use `--to html` alone for a chapter you intend to ship, or the
+  PDF ships stale.
+
+### Open decisions — waiting on the author
+
+1. **NOVEL sign-offs.** Sixteen chapter files carry
+   `<!-- NOVEL: needs sign-off -->` markers (invisible in output) on passages
+   written without a direct lecture/seed source. List them with:
+   `grep -rl "NOVEL: needs sign-off" chapters/ --include="*.qmd"`
+2. **Plan → Code rollout.** The exemplar is live; the curated candidates, in
+   priority order: ch. 13 `scaled-dot-snapshot` (strongest — the book's
+   destination recipe), ch. 10 `char-lm-sample`, ch. 11 `beam-demo`, ch. 1
+   `closed-form`, ch. 3 `mlp-class`, ch. 7 `equivariance`, ch. 8
+   `pool-invariance`, Appendix C `a3-softmax-stability`. Each costs render time
+   and a little page budget.
+3. **Delta typography.** Both trials are live in chapter 14 — the elided
+   `include` of an imported signature versus the prose-referenced delta cell.
+   Pick one and it becomes book-wide.
+4. **GPU queue.** `docs/backlog.md` §5 lists the runs that need real hardware
+   (full-data architecture scorecard; ImageNet ResNet-18 transfer at 224px;
+   scaled language model). Chapters quote the lecture's numbers meanwhile — per
+   the author's rule, **no placeholder callouts in published chapters**.
+
+Page arithmetic for v1.1 is recorded honestly in `CHANGELOG.md` (502 vs v1.0's
+498: Plan v2 netted about −1 page; the +4 came from the earlier commissioned
+figure round).
