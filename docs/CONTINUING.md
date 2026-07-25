@@ -928,3 +928,19 @@ ch. 4 listing presentation; (3) the GPU queue (docs/backlog.md) is unchanged.
 Page arithmetic is in CHANGELOG.md. Verification habits now standing: bit-diff
 acceptance per refactored chapter; span-safe greps for include checks; captions
 carry measured numbers only.
+
+## Plan → Code panels (author sketch, July 25 2026)
+
+Component shipped: `.plan-code` / `.plan` divs, `dlbook.scss` grid (HTML),
+`filters/plan-code.lua` + `planbox` in `tex/macros.tex` (print stacks them),
+`[n]` comment markers mapping plan steps to kernel lines, `Output` strip under
+the code. Rules and authoring form: style-guide.md, "Plan → Code panels".
+Exemplar: ch. 7 `manual-conv` (the five-step recipe list became the plan column,
+so the panel cost no prose). Verified: HTML two-column layout and colour chips
+by computed style; print panel by LaTeX probe; ch. 7 output bit-identical.
+
+Curated rollout candidates (author's call before applying — each costs render
+time and a little page): ch. 1 `closed-form`, ch. 3 `mlp-class`, ch. 7
+`equivariance`, ch. 8 `pool-invariance`, ch. 10 `char-lm-sample`, ch. 11
+`beam-demo`, ch. 13 `scaled-dot-snapshot` (the strongest — the book's
+destination recipe), Appendix C `a3-softmax-stability`.

@@ -270,6 +270,66 @@ three things to code no human wrote.
   Backend flags and version workarounds live in the repository's living
   compatibility note with a tested-environment statement.
 
+### Plan → Code panels (author request, July 2026)
+
+The author's sketch: one mechanism shown twice, the plan in words beside the
+terse Python that implements it, with the run's own output beneath the code.
+Authoring form:
+
+```
+:::: {.plan-code}
+::: {.plan}
+1. First step, in the reader's language.
+2. Second step.
+:::
+
+```{python}
+#| label: whatever
+#| code-fold: false
+kernel_line_one()                  # [1]
+kernel_line_two()                  # [2]
+```
+::::
+```
+
+Rules:
+
+- **The right column is the executable cell**, never a retyped "essence". The
+  covenant holds: printed code is executed code. `[n]` markers are ordinary
+  comments in the tested source, so a transcluded listing can carry them too.
+- **Kernel only.** If the mechanism does not fit in roughly fifteen printed
+  lines, the cell is not ready for a panel — split the harness out first
+  (the equation/kernel/harness contract above). Panels are for the lines that
+  *are* the idea.
+- **Absorb, do not add.** Prefer snippets whose steps the prose already
+  narrates: the panel's left column replaces that list, so the page cost is
+  zero or negative. A panel that introduces new prose must displace some.
+- **Number first, colour second.** The `[n]` markers carry the mapping on
+  their own; the coloured chips are a redundant channel, so the panel survives
+  greyscale print, colour-blind readers, and copy-paste. Never key a step by
+  colour alone, and never rely on drawn arrows — they do not survive reflow.
+- **One panel per mechanism, not per cell.** A chapter with four panels has
+  four mechanisms; if it does not, some of them are decoration.
+- **Set `code-fold: false`.** In a panel the code *is* the content; folding it
+  leaves the reader with half a comparison.
+- **Fusion is a teaching moment.** When one line implements two plan steps
+  (`# [2][5]`), say so in the prose beneath: the gap between a sequential plan
+  and a vectorised kernel is where tensor bugs live.
+
+- **Six steps is the ceiling.** In print the plan is set in an unbreakable box
+  so its steps can never split across a page; the cost of that guarantee is that
+  an over-long plan would overrun the page instead. If a mechanism needs more
+  than about six steps, it needs two panels or a shorter plan.
+- **Watch the print width.** The code column is full-width in print, so lines
+  must still fit the book's block (about 76 characters); a panel is not a licence
+  to widen code.
+
+Format behaviour: HTML lays the columns side by side (`dlbook.scss`), collapsing
+to one column below 900px with the plan first. Print has a five-inch text block,
+where two columns of Python would wrap into noise, so `filters/plan-code.lua`
+stacks them — the plan becomes a ruled `planbox` panel above the code. The
+markers read identically in both.
+
 ### Estimator discipline
 
 - The general discussion lives beside Ch. 4's batching license and names **three
