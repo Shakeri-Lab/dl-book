@@ -42,15 +42,24 @@ chapter's whole subject is training models it did not just construct — fresh
 heads on frozen trunks, and selectively thawed layers at their own learning
 rates.
 
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Load imports, data, and the shared training recipe.
+2. Define the reusable helpers: `train_existing` and `train_model`.
+3. Define the reusable helpers: `accuracy` and `count`.
+:::
+
 ```{python}
 #| label: setup
 #| code-summary: "Code: imports, data, and the shared training recipe"
+#| code-fold: false
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 from collections.abc import Callable
 
+# [1] run the core mechanism
 torch.manual_seed(6050)
 train = torch.load("../../data/fashion-train.pt")
 test = torch.load("../../data/fashion-test.pt")
@@ -58,6 +67,7 @@ X_tr = train["X"].float().unsqueeze(1) / 255.0    # (1200, 1, 28, 28)
 X_te = test["X"].float().unsqueeze(1) / 255.0     # (600, 1, 28, 28)
 y_tr, y_te, classes = train["y"], test["y"], train["classes"]
 
+# [2] define the reusable mechanism
 def train_existing(
     model: nn.Module, opt: torch.optim.Optimizer, epochs: int,
     batch: int = 128,
@@ -83,6 +93,7 @@ def train_model(model_fn: Callable[[], nn.Module], epochs: int,
     opt = torch.optim.Adam(model.parameters(), lr=lr)
     return train_existing(model, opt, epochs, batch, data)
 
+# [3] define the reusable mechanism
 @torch.no_grad()
 def accuracy(model: nn.Module, X: torch.Tensor, y: torch.Tensor) -> float:
     model.eval()
@@ -91,7 +102,7 @@ def accuracy(model: nn.Module, X: torch.Tensor, y: torch.Tensor) -> float:
 def count(model: nn.Module) -> int:
     return sum(p.numel() for p in model.parameters())
 ```
-
+::::
 One evaluation label needs an honesty note. Chapter 8 already opened the 600-image
 holdout, and this chapter queries it repeatedly while comparing architectures. We
 keep the familiar `X_te` name, but treat it as the book's fixed **benchmark**. These
@@ -121,17 +132,26 @@ once. Same sight, fewer parameters, more nonlinearity. Three $3\times3$s reach a
 $7\times7$ field for $27C^2$ against $49C^2$: the deeper you take the idea, the
 better the deal gets.
 
+:::: {.plan-code}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Implement the parameter bill, C = 32.
+:::
+
 ```{python}
 #| label: kernel-economics
 #| code-summary: "Code: the parameter bill, C = 32"
+#| code-fold: false
+# [1] prepare inputs and conditions
 C = 32
 one_5x5 = nn.Conv2d(C, C, 5, padding=2)
 two_3x3 = nn.Sequential(nn.Conv2d(C, C, 3, padding=1), nn.ReLU(),
                         nn.Conv2d(C, C, 3, padding=1))
+# [2] run the core mechanism
 print(f"one 5x5:  {count(one_5x5):,} parameters, 1 ReLU after")
 print(f"two 3x3s: {count(two_3x3):,} parameters, 2 ReLUs")
 ```
-
+::::
 One honest caveat before you re-derive the field equations of vision from this: the
 $18C^2 < 25C^2$ arithmetic assumes the channel width stays $C$ through the stack.
 When a layer *grows* channels (as LeNet's $6 \rightarrow 16$ did), splitting it into
@@ -146,9 +166,19 @@ Before we stack deeper than ever, we need the tool Chapter 8's live session used
 we deferred. Here is the problem it solves. Watch what happens to the *scale* of
 activations as a signal crosses twelve freshly initialized $3\times3$ conv layers:
 
+:::: {.plan-code}
+::: {.plan}
+1. Define the reusable `stack12` helper.
+2. Prepare the inputs and fixed settings for the example.
+3. Activation scale through 12 conv layers, with and without BN.
+4. Report or visualize the measured result.
+:::
+
 ```{python}
 #| label: bn-drift
 #| code-summary: "Code: activation scale through 12 conv layers, with and without BN"
+#| code-fold: false
+# [1] define the reusable mechanism
 def stack12(with_bn: bool, ch: int = 16) -> nn.Sequential:
     layers = [nn.Conv2d(1, ch, 3, padding=1)]
     for _ in range(11):
@@ -157,15 +187,18 @@ def stack12(with_bn: bool, ch: int = 16) -> nn.Sequential:
         layers += [nn.ReLU(), nn.Conv2d(ch, ch, 3, padding=1)]
     return nn.Sequential(*layers)
 
+# [2] prepare inputs and conditions
 torch.manual_seed(0)
 x = X_tr[:256]
 plain_stack = stack12(False)
 bn_stack = stack12(True)
 plain_convs = [m for m in plain_stack if isinstance(m, nn.Conv2d)]
 bn_convs = [m for m in bn_stack if isinstance(m, nn.Conv2d)]
+# [3] run the core mechanism
 for source, target in zip(plain_convs, bn_convs):
     target.load_state_dict(source.state_dict())       # identical convolution weights
 
+# [4] report the result
 for tag, network in [("without BN", plain_stack), ("with BN   ", bn_stack)]:
     h, stds = x, []
     with torch.no_grad():
@@ -175,7 +208,7 @@ for tag, network in [("without BN", plain_stack), ("with BN   ", bn_stack)]:
                 stds.append(h.std().item())
     print(f"{tag} layer stds: " + "  ".join(f"{s:.3f}" for s in stds[::2]))
 ```
-
+::::
 Without normalization the signal's spread collapses by an order of magnitude within a
 few layers and keeps sagging. Forward activation scales and backward gradients are not
 the same quantity, but both are shaped by the stack's weights and nonlinearities;
@@ -231,9 +264,18 @@ BN, ReLU — once; a block stacks atoms and pools; a network stacks blocks. This
 lecture's point about VGG versus its hand-tuned predecessors: you stop re-designing
 and start repeating.
 
+:::: {.plan-code}
+::: {.plan}
+1. Define the reusable helpers: `atom` and `VGGSmall`.
+2. VGGSmall — two blocks of stacked 3×3 atoms.
+3. Report or visualize the measured result.
+:::
+
 ```{python}
 #| label: vgg-small
 #| code-summary: "Code: VGGSmall — two blocks of stacked 3×3 atoms"
+#| code-fold: false
+# [1] define the reusable mechanism
 def atom(c_in: int, c_out: int) -> list[nn.Module]:
     return [nn.Conv2d(c_in, c_out, 3, padding=1, bias=False),
             nn.BatchNorm2d(c_out), nn.ReLU()]
@@ -251,13 +293,15 @@ class VGGSmall(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.head(self.features(x))
 
+# [2] run the core mechanism
 vgg = train_model(VGGSmall, epochs=60)
 n_head = count(vgg.head)
+# [3] report the result
 print(f"VGGSmall: {count(vgg):,} parameters ({n_head:,} in the head, "
       f"{n_head / count(vgg):.0%})")
 print(f"test accuracy {accuracy(vgg, X_te, y_te):.1%}")
 ```
-
+::::
 Two readings again. The good: this VGG-style recipe reaches 86.7%, four points above
 LeNet in this run. Because depth, width, normalization, kernel sizes, parameter count,
 and training duration all changed together, this comparison does not isolate which
@@ -293,9 +337,18 @@ $1\times1$s (per-pixel channel mixing). And the classifier becomes:
    in, 64 numbers out. No parameters at all.
 3. One small linear layer to the logits.
 
+:::: {.plan-code}
+::: {.plan}
+1. Define the reusable helpers: `nin_block` and `NINSmall`.
+2. Prepare the inputs and fixed settings for the example.
+3. NINSmall — architecture and first 75 epochs.
+:::
+
 ```{python}
 #| label: nin-small-stage1
 #| code-summary: "Code: NINSmall — architecture and first 75 epochs"
+#| code-fold: false
+# [1] define the reusable mechanism
 def nin_block(c_in: int, c_out: int) -> list[nn.Module]:
     return [nn.Conv2d(c_in, c_out, 3, padding=1, bias=False),
             nn.BatchNorm2d(c_out), nn.ReLU(),
@@ -315,21 +368,32 @@ class NINSmall(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.head(self.features(x))
 
+# [2] prepare inputs and conditions
 torch.manual_seed(6050)
 nin = NINSmall()
 nin_opt = torch.optim.Adam(nin.parameters(), lr=1e-3)
+# [3] run the core mechanism
 nin = train_existing(nin, nin_opt, epochs=75)
 ```
+::::
+:::: {.plan-code}
+::: {.plan}
+1. NINSmall — continue the same optimizer through epoch 150.
+2. Report or visualize the measured result.
+:::
 
 ```{python}
 #| label: nin-small-stage2
 #| code-summary: "Code: NINSmall — continue the same optimizer through epoch 150"
+#| code-fold: false
+# [1] run the core mechanism
 nin = train_existing(nin, nin_opt, epochs=75)
+# [2] report the result
 print(f"NINSmall: {count(nin):,} parameters "
       f"(head: {count(nin.head):,})")
 print(f"test accuracy {accuracy(nin, X_te, y_te):.1%}")
 ```
-
+::::
 The parameter story is a rout: 35,034 total, a 650-parameter head, six times smaller
 than VGGSmall. The accuracy is 76.2%, and that dip is worth more attention than the
 win, so let us not rush past it. First, though, collect the promised payoff. Chapter
@@ -337,11 +401,20 @@ win, so let us not rush past it. First, though, collect the promised payoff. Cha
 grid *positionally*. GAP averages over positions, so the head no longer assigns a
 different weight to every location. The rematch of the rematch:
 
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Define the reusable helpers: `LeNet` and `shift_right`.
+2. Shift curves, flatten head vs GAP head.
+3. Report or visualize the measured result.
+:::
+
 ```{python}
 #| label: fig-cliff-gap
 #| fig-cap: "Chapter 8's experiment, third round. LeNet's flatten head still slides below 30% by four pixels of shift. NINSmall with its global-average-pool head barely tilts: per-channel averages change much less when features move. GAP removes position-specific weights from the head, but padding, stride, pooling, and content clipped at the image edge keep the complete network from being exactly shift-invariant."
 #| fig-alt: "Line chart of accuracy against a rightward image shift from zero to four pixels. LeNet begins above NINSmall, crosses below it between one and two pixels, then falls steeply to about 0.26; NINSmall declines gently from about 0.76 to 0.66. A dotted chance line stays at 0.10."
 #| code-summary: "Code: shift curves, flatten head vs GAP head"
+#| code-fold: false
+# [1] define the reusable mechanism
 class LeNet(nn.Module):
     def __init__(self):
         super().__init__()
@@ -358,6 +431,7 @@ class LeNet(nn.Module):
         x = F.relu(self.fc2(x))
         return self.fc3(x)
 
+# [2] run the core mechanism
 lenet = train_model(LeNet, epochs=150)          # Chapter 8's model, same recipe
 
 def shift_right(X: torch.Tensor, px: int) -> torch.Tensor:
@@ -370,6 +444,7 @@ def shift_right(X: torch.Tensor, px: int) -> torch.Tensor:
 shifts = list(range(5))
 acc_lenet = [accuracy(lenet, shift_right(X_te, s), y_te) for s in shifts]
 acc_nin = [accuracy(nin, shift_right(X_te, s), y_te) for s in shifts]
+# [3] report the result
 for s in shifts:
     print(f"shift {s}px:   LeNet {acc_lenet[s]:.1%}   NIN+GAP {acc_nin[s]:.1%}")
 
@@ -381,7 +456,7 @@ plt.xlabel("shift (pixels right)"); plt.ylabel("test accuracy")
 plt.ylim(0, 0.9); plt.xticks(shifts); plt.legend()
 plt.tight_layout(); plt.show()
 ```
-
+::::
 The curve that fell from 82% to 27% across this book's Part II is now a gentle slope
 from 76% to 67%. Position-specific weights are gone from NINSmall's head, and the
 result is consistent with the promised robustness benefit. It is not a matched-head
@@ -438,9 +513,18 @@ Predict before running: two networks, identical parameter counts, twenty
 blocks each — one plain, one residual. Will the plain net merely trail, or fail
 to fit the *training* set at all?
 
+:::: {.plan-code}
+::: {.plan}
+1. Define the reusable helpers: `Block` and `DeepNet`.
+2. Train the plain 20-block network.
+3. Report or visualize the measured result.
+:::
+
 ```{python}
 #| label: deep-nets-plain
 #| code-summary: "Code: train the plain 20-block network"
+#| code-fold: false
+# [1] define the reusable mechanism
 class Block(nn.Module):
     def __init__(self, ch: int, residual: bool):
         super().__init__()
@@ -465,19 +549,30 @@ class DeepNet(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.head(self.blocks(self.pool(F.relu(self.stem(x)))))
 
+# [2] run the core mechanism
 plain = train_model(lambda: DeepNet(20, residual=False), epochs=30)
+# [3] report the result
 print(f"plain-20     train {accuracy(plain, X_tr, y_tr):.1%}   "
       f"test {accuracy(plain, X_te, y_te):.1%}")
 ```
+::::
+:::: {.plan-code}
+::: {.plan}
+1. Train the matched residual 20-block network.
+2. Report or visualize the measured result.
+:::
 
 ```{python}
 #| label: deep-nets-residual
 #| code-summary: "Code: train the matched residual 20-block network"
+#| code-fold: false
+# [1] run the core mechanism
 resid = train_model(lambda: DeepNet(20, residual=True), epochs=30)
+# [2] report the result
 print(f"residual-20  train {accuracy(resid, X_tr, y_tr):.1%}   "
       f"test {accuracy(resid, X_te, y_te):.1%}")
 ```
-
+::::
 Look at the *training* column first, because it carries the whole lesson. The plain
 40-conv-layer network cannot even fit the 1,200 images it sees every epoch: 61% train
 accuracy, while its residual twin memorizes them and generalizes twenty-seven points
@@ -555,11 +650,20 @@ to represent: $F = 0$.
 Here is the highway visible at initialization, extending Chapter 5's depth experiment
 from dense layers to conv stacks:
 
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Define the reusable helpers: `PlainNoBN` and `stem_grad`.
+2. Prepare the inputs and fixed settings for the example.
+3. Gradient at the stem vs. depth, three designs.
+:::
+
 ```{python}
 #| label: fig-gradient-highway
 #| fig-cap: "Gradient magnitude reaching the stem (first layer) at initialization, versus depth, for three designs. In the 48-layer no-BN stack, the true norm is 2.2e-23; a float32 norm calculation reports zero because squaring these nonzero components underflows. BN fixes the vanishing but overshoots: in plain stacks the gradient grows with depth. Residual blocks keep the gradient within one order of magnitude across these depths."
 #| fig-alt: "Log-scale line chart of first-layer gradient norm at 8, 24, and 48 convolutional layers. The plain network without BatchNorm plunges from around 10 to the minus 5 to below 10 to the minus 21; the plain BatchNorm network rises sharply at 48 layers; the residual BatchNorm network remains near order one across all depths."
 #| code-summary: "Code: gradient at the stem vs. depth, three designs"
+#| code-fold: false
+# [1] define the reusable mechanism
 class PlainNoBN(nn.Module):
     def __init__(self, nconvs: int, ch: int = 12):
         super().__init__()
@@ -583,6 +687,7 @@ def stem_grad(
     return (grad.double().norm().item(), grad.abs().max().item(),
             torch.count_nonzero(grad).item(), grad.numel())
 
+# [2] prepare inputs and conditions
 depths = [4, 12, 24]                                  # blocks (2 convs each)
 diagnostics = {
     "plain, no BN": [stem_grad(lambda d=d: PlainNoBN(2 * d)) for d in depths],
@@ -591,6 +696,7 @@ diagnostics = {
 }
 curves = {name: [row[0] for row in rows]
           for name, rows in diagnostics.items()}
+# [3] run the core mechanism
 for name, ys in curves.items():
     print(f"{name:14s}: " + "   ".join(f"{v:.1e}" for v in ys))
 norm64, maxabs, nonzero, total = diagnostics["plain, no BN"][-1]
@@ -605,7 +711,7 @@ for (name, ys), color in zip(curves.items(),
 plt.xlabel("conv layers"); plt.ylabel(r"$\|\partial L / \partial W^{(\mathrm{stem})}\|$")
 plt.legend(); plt.tight_layout(); plt.show()
 ```
-
+::::
 The final no-BN row also exposes a numerical trap: its components remain nonzero, but
 squaring them in float32 can underflow before the norm is summed. The range,
 resolution, and accumulator roles behind that distinction are gathered in
@@ -631,11 +737,19 @@ The lecture closes its architecture tour with a scatter worth reproducing: every
 model of Part II on one canvas, accuracy against parameters, each trained to
 convergence under our shared recipe:
 
+:::: {.plan-code}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Plot accuracy vs. parameters scatter.
+:::
+
 ```{python}
 #| label: fig-scorecard
 #| fig-cap: "Part II's models on one canvas (our 1,200-image subset; each model trained to convergence with the shared Adam recipe). VGG-style depth buys accuracy but hoards parameters in its flatten head; NiN+GAP evicts the head at a visible cost in clean accuracy at this data scale; residual blocks let a 53,050-parameter network go 40 layers deep. The lecture's full-data frontier, where the models exceed 89%, needs data our subset does not have; the shape of the trade-offs is already visible."
 #| fig-alt: "Scatter plot of test accuracy against log-scaled parameter count. NIN plus global pooling is the smallest model near 0.76 accuracy; plain-20 and residual-20 have similar counts but sit far apart near 0.51 and 0.78; LeNet is near 0.83; VGGSmall is both largest and highest near 0.87."
 #| code-summary: "Code: accuracy vs. parameters scatter"
+#| code-fold: false
+# [1] prepare inputs and conditions
 models_ = {
     "LeNet": (lenet, "#B8B8A8"),
     "VGGSmall": (vgg, "#E57200"),
@@ -644,6 +758,7 @@ models_ = {
     "residual-20": (resid, "#5379AA"),
 }
 plt.figure(figsize=(6.2, 3.6))
+# [2] run the core mechanism
 for name, (m, color) in models_.items():
     p, a = count(m), accuracy(m, X_te, y_te)
     plt.scatter(p, a, s=70, color=color, zorder=3)
@@ -654,7 +769,7 @@ plt.xlabel("parameters (log scale)"); plt.ylabel("test accuracy")
 plt.ylim(0.45, 0.95)
 plt.tight_layout(); plt.show()
 ```
-
+::::
 ## Transfer learning: the mechanics, and an honest experiment
 
 Everything so far trains from scratch. The lecture's final move is the one that
@@ -682,11 +797,22 @@ story, so imported features should dominate. Three contenders:
    upsampled to 96×96 and repeated to three channels to fit its expectations. That
    awkwardness is part of the experiment, and part of the lesson.)
 
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Define the reusable helpers: `Trunk` and `squeeze_features`.
+3. Implement the shoe task, our own trunk, and the frozen probes.
+4. Report or visualize the measured result.
+5. Define the reusable helpers: `own_features` and `linear_probe`.
+:::
+
 ```{python}
 #| label: transfer-setup
 #| code-summary: "Code: the shoe task, our own trunk, and the frozen probes"
+#| code-fold: false
 from torchvision.models import squeezenet1_1
 
+# [1] prepare inputs and conditions
 shoe = torch.tensor([5, 7, 9])
 new_label = {5: 0, 7: 1, 9: 2}
 is_shoe_tr = (y_tr[:, None] == shoe).any(1)
@@ -700,6 +826,7 @@ remap = {c: i for i, c in enumerate(src)}
 X_src = X_tr[~is_shoe_tr]
 y_src = torch.tensor([remap[int(c)] for c in y_tr[~is_shoe_tr]])
 
+# [2] define the reusable mechanism
 class Trunk(nn.Module):
     def __init__(self, n_classes: int):
         super().__init__()
@@ -711,9 +838,11 @@ class Trunk(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.head(self.features(x))
 
+# [3] run the core mechanism
 own_trunk = train_model(lambda: Trunk(7), epochs=100, data=(X_src, y_src))
 X_src_te = X_te[~is_shoe_te]
 y_src_te = torch.tensor([remap[int(c)] for c in y_te[~is_shoe_te]])
+# [4] report the result
 print(f"own trunk, source task (7 classes): "
       f"{accuracy(own_trunk, X_src_te, y_src_te):.1%}")
 
@@ -734,6 +863,7 @@ def squeeze_features(X: torch.Tensor) -> torch.Tensor:  # (N,1,28,28) -> (N,512)
     f = sq.features((x - IMNET_MEAN) / IMNET_STD)
     return F.adaptive_avg_pool2d(f, 1).flatten(1)
 
+# [5] define the reusable mechanism
 @torch.no_grad()
 def own_features(X: torch.Tensor) -> torch.Tensor:      # (N,1,28,28) -> (N,64)
     return F.adaptive_avg_pool2d(own_trunk.features(X), 1).flatten(1)
@@ -749,12 +879,22 @@ def linear_probe(Z_tr: torch.Tensor, y_f: torch.Tensor,
         opt.zero_grad(); loss.backward(); opt.step()
     return (head(Z_te).argmax(1) == y_shoe_te).float().mean().item()
 ```
+::::
+:::: {.plan-code}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Scratch vs. own trunk vs. ImageNet trunk, three seeds.
+3. Report or visualize the measured result.
+:::
 
 ```{python}
 #| label: transfer-experiment
 #| code-summary: "Code: scratch vs. own trunk vs. ImageNet trunk, three seeds"
+#| code-fold: false
+# [1] prepare inputs and conditions
 K = 10
 rows = []
+# [2] run the core mechanism
 for seed in [0, 1, 6050]:
     torch.manual_seed(seed)
     idx = torch.cat([(y_tr == c).nonzero().squeeze(1)
@@ -770,13 +910,14 @@ for seed in [0, 1, 6050]:
                  linear_probe(squeeze_features(X_few), y_few,
                               squeeze_features(X_shoe_te), seed)))
 
+# [3] report the result
 print("seed     scratch   own-trunk probe   ImageNet probe")
 for seed, r in zip([0, 1, 6050], rows):
     print(f"{seed:4d}     {r[0]:.1%}       {r[1]:.1%}           {r[2]:.1%}")
 mean = [sum(c) / 3 for c in zip(*rows)]
 print(f"mean     {mean[0]:.1%}       {mean[1]:.1%}           {mean[2]:.1%}")
 ```
-
+::::
 Read that table slowly, because it does *not* say what the textbook story predicts,
 and the discrepancy is the best lesson in this chapter. Training from scratch on
 thirty images fights the mighty ImageNet backbone to a dead heat — the means differ
@@ -819,14 +960,25 @@ The mechanics, for completeness, since you will use them constantly from Part V
 onward — fine-tuning SqueezeNet's last block with the lecture's two-learning-rate
 recipe (fresh head fast, pretrained layers slow):
 
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Define the reusable `prep` helper.
+2. Prepare the inputs and fixed settings for the example.
+3. Fine-tuning — unfreeze the last block, two learning rates.
+4. Report or visualize the measured result.
+:::
+
 ```{python}
 #| label: fine-tune
 #| code-summary: "Code: fine-tuning — unfreeze the last block, two learning rates"
+#| code-fold: false
+# [1] define the reusable mechanism
 def prep(X: torch.Tensor) -> torch.Tensor:
     x = X.repeat(1, 3, 1, 1)
     x = F.interpolate(x, size=96, mode="bilinear", align_corners=False)
     return (x - IMNET_MEAN) / IMNET_STD
 
+# [2] prepare inputs and conditions
 torch.manual_seed(6050)
 idx = torch.cat([(y_tr == c).nonzero().squeeze(1)
                  [torch.randperm(int((y_tr == c).sum()))[:K]] for c in shoe])
@@ -836,6 +988,7 @@ X_few, y_few = prep(X_tr[idx]), torch.tensor([new_label[int(c)]
 ft = squeezenet1_1(weights=None)
 ft.load_state_dict(torch.load("../../data/squeezenet1_1-imagenet.pt"))
 head = nn.Linear(512, 3)
+# [3] run the core mechanism
 for p in ft.parameters():
     p.requires_grad = False
 for p in ft.features[-1].parameters():         # last Fire block only
@@ -852,12 +1005,13 @@ for _ in range(60):
     loss = F.cross_entropy(head(z), y_few)
     opt.zero_grad(); loss.backward(); opt.step()
 ft.eval()
+# [4] report the result
 with torch.no_grad():
     z = F.adaptive_avg_pool2d(ft.features(prep(X_shoe_te)), 1).flatten(1)
     print(f"fine-tuned (last block + head): "
           f"{(head(z).argmax(1) == y_shoe_te).float().mean():.1%}")
 ```
-
+::::
 Fine-tuning edges the frozen probe on this seed and lands in the same tie with
 scratch. This is consistent with the regime analysis above: adaptation helps at the margin,
 but no amount of it makes a small target task need imported features.

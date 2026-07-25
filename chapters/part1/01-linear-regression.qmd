@@ -6,12 +6,11 @@
 
 The core task of everything we will do in this course is to teach a computer to learn a
 function from examples. Before we can appreciate what is *deep* about deep learning, we
-need one complete, honest example of learning — a model, a loss, and a way to improve.
+need one complete, honest example of learning: a model, a loss, and an update rule.
 Linear regression is that example. It is the smallest model that contains the entire
-supervised learning story, and by the end of this chapter we will have built it three
-times: once in closed form, once by gradient descent, and once the way you will build
-everything else in this book — with PyTorch modules. All three will agree, and you will
-know exactly why.
+supervised learning story, and by the end of this chapter we will build it three ways:
+in closed form, by gradient descent from scratch, and with PyTorch modules. All three
+will agree, and you will know exactly why.
 
 ## Learning from examples
 
@@ -22,9 +21,11 @@ $$
 $$
 
 where each $\vect{x}_i \in \R^d$ is an input with $d$ features and $y_i$ is the desired
-output — the *supervision signal*. Stack the inputs as rows and you get the data matrix
+output, aka the *supervision signal*. Stack the inputs as rows and you get the data matrix
 $\matr{X} \in \R^{n \times d}$: $n$ samples down, $d$ features across, with the targets
 collected in a vector $\vect{y}$.
+
+![Stacking examples turns a dataset into two aligned objects: one row of $\matr{X}$ per input and one entry of $\vect{y}$ per desired output. Colour will keep these roles visible in the equations that follow.](../../figures/generated/1_1_data_matrix.svg){#fig-data-matrix width=82% fig-alt="A blue n by d data matrix has examples down its rows and features across its columns. A purple target vector beside it has one matching target for each row."}
 
 Our goal is a flexible function $f$ such that
 
@@ -33,8 +34,27 @@ f(\vect{x}_i) \approx y_i \quad \text{and, crucially, } f \text{ generalizes to 
 $$
 
 That second clause is the whole game. We do not care how well $f$ recites the training
-examples; we care how it behaves on a new $\vect{x}$ it has never seen — one drawn from
+examples; we care how it behaves on a new $\vect{x}$ it has never seen, one drawn from
 the same distribution as the training data.
+
+In statistical notation, training minimizes the **empirical risk**
+
+$$
+\widehat R_{\mathcal D}(\theta)
+= \frac{1}{n}\sum_{i=1}^{n}\ell\bigl(f_\theta(\vect{x}_i),y_i\bigr),
+$$
+
+while the quantity we ultimately care about is the **population risk**
+
+$$
+R_P(\theta)
+= \E_{(X,Y)\sim P}\!\left[\ell\bigl(f_\theta(X),Y\bigr)\right].
+$$
+
+We will assume this distinction is familiar and use it precisely. An independent
+validation set drawn from $P$ estimates performance under $P$; it does not
+automatically estimate performance under a transformed or deployment distribution
+$Q$. Chapter 6 will make that difference visible.
 
 ::: {.callout-note}
 ## Supervised learning, three flavors
@@ -63,35 +83,35 @@ we will pull on for the rest of the book.
   stable, but systematically wrong when the data is not linear (high bias, low variance).
 - A **deep neural network** has a *weak* bias. Its flexibility lets it learn complex
   patterns, but it can memorize the training data instead of the underlying rule
-  (low bias, high variance). Some networks can memorize an entire training set — and
-  then perform poorly the day you deploy them.
+  (low bias, high variance). Some networks can memorize an entire training set and
+  then perform poorly at deployment.
 
 The key to modern deep learning is to use a flexible model and fight overfitting with
 data, regularization, and (the deepest idea of all) inductive biases matched to the
 task. That last idea gets its own chapter (@sec-06-generalization-inductive-bias).
 
 To make any of this concrete, we parameterize a family of functions $f_{\vect{w}}$ by a
-set of tuning parameters $\vect{w}$ — think of each parameter as a knob. *Learning* is
+set of tuning parameters $\vect{w}$. Think of each parameter as a knob. *Learning* is
 finding a good setting $\hat{\vect{w}}$ of the knobs; *inference* is using
 $f_{\hat{\vect{w}}}$ to predict on unseen data. That is the vocabulary we will use all
-course.
+book.
 
 ## The linear model and its geometry
 
 Linear regression assumes a linear relationship:
 
 $$
-y = \vect{w}^\top \vect{x} + b .
+\hat y = \parameterpart{\vect{w}^\top}\featurepart{\vect{x}} + b .
 $$
 
-Geometrically, $\vect{w}$ sets the orientation (the slope) of a hyperplane, and the
-bias $b$ shifts it away from the origin. In two dimensions this is the familiar line
-through a scatter of points; in $d$ dimensions it is a $d$-dimensional plane, but nothing
-about the algebra changes.
+The second term, $b$, is the model's default prediction when the input carries no
+relevant information. The first term, $\vect{w}^\top\vect{x}$, adjusts that baseline
+up or down based on how the input matches the weight vector.
 
-<!-- NOVEL (framing surfaced early from the Module 8 kernel-regression bridge): -->
-There is a second way to read $\vect{w}^\top\vect{x}$, and it may be the most important
-sentence in this chapter: **a dot product is a similarity score.** More precisely,
+![The dot product measures the signed shadow of an input along the weight vector. Aligned inputs raise the prediction above $b$, orthogonal inputs leave it at $b$, and opposing inputs lower it.](../../figures/generated/1_1_linear_response.svg){#fig-linear-response width=88% fig-alt="A two-dimensional weight vector is shown with aligned, orthogonal, and opposing input vectors. Their dot products are positive, zero, and negative, so their predictions lie above, at, and below the bias baseline."}
+
+Now we can name what the figure shows: **a dot product is a similarity score.** More
+precisely,
 
 $$
 \vect{w}^\top\vect{x} = \norm{\vect{w}}_2\norm{\vect{x}}_2\cos\theta .
@@ -101,27 +121,21 @@ For normalized vectors it measures directional similarity directly: positive whe
 $\vect{x}$ points along $\vect{w}$, zero when they are orthogonal, and negative when
 they oppose. Without normalization, the two norms also control the score, so a large
 dot product can mean strong alignment, large magnitude, or both. A linear model is
-therefore a learned *pattern scorer*: $\vect{w}$ is a template, and its direction and
-scale both matter. Keep this reading close at hand. In Part II, an image filter's
-response will be this same dot product slid across an image; in Part IV, *attention*
-will be built out of learned similarity scores between queries and keys. Both are this
-one primitive, asked the question we will ask all book long: *what if the template were
-learnable?*
+therefore a learned *pattern scorer*: $\vect{w}$ is a template whose direction and
+scale both matter. In Part II, an image filter will slide this same dot product across
+an image. In Part IV, attention will build learned similarities between queries and
+keys from the same primitive.
 
-### The augmentation trick
-
-Carrying $b$ separately clutters the algebra, so we will often fold it into the weights:
-append a column of ones to the data matrix, making $\matr{X} \in \R^{n \times (d+1)}$,
-and append $b$ to the weight vector, making $\vect{w} \in \R^{d+1}$. Then
+For compact matrix notation, we will absorb $b$ into the weights.\footnote{Append a
+column of ones to $\matr{X}$ and append $b$ to $\vect{w}$. This is often called
+\emph{bias augmentation} or the use of \emph{homogeneous coordinates}. It is
+bookkeeping, not a
+new learning principle. A formula or software layer without an explicit bias may
+instead be deliberately constraining $b=0$.} Then
 
 $$
-y = \vect{w}^\top \vect{x} \qquad \text{(bias included)}.
+\hat y = \vect{w}^\top \vect{x} \qquad \text{(bias included)}.
 $$
-
-Whenever *we use this augmented notation*, a missing $b$ is living inside
-$\vect{w}$. Do not assume that every bias-free formula or software layer is augmented,
-however: a model can deliberately constrain $b=0$ (for example, PyTorch layers created
-with `bias=False`).
 
 ## The loss: what makes a hyperplane "bad"?
 
@@ -133,53 +147,75 @@ $$
 \;=\; \frac{1}{n}\,\norm{\vect{y} - \matr{X}\vect{w}}_2^2 .
 $$ {#eq-mse}
 
-The loss is the guiding principle of training: it is how we tell the model *you are a
-bad model, and here is by how much*; the model then has to find a way to improve. The
-choice of loss is not arbitrary, and we will justify this one honestly at the end of the
-chapter.
+The loss is the guiding principle of training: it translates model error into a scalar
+score of failure, giving the optimizer a precise measure of how much corrective work
+remains. The choice of loss is not arbitrary, and we will justify this one at the end
+of the chapter.
 
-::: {.callout-tip}
-## The first "make it learnable" seed
-
-Look closely at $y = \vect{w}^\top\vect{x} + b$. A single neuron in a neural network
-computes *exactly this*, followed by a nonlinear squashing function
-$\sigma(\vect{w}^\top\vect{x} + b)$. Linear regression **is** a neuron with the identity
-activation. Everything we learn here — loss, gradients, optimization — transfers
-directly. The rest of this book is, in a precise sense, the story of what happens when
-we take this fixed, simple recipe and progressively let more of it be *learned*.
-:::
+With two parameters, $(w,b)$, this scalar becomes a surface over the parameter plane.
+That surface is the **loss landscape**. Learning means finding a low point on it; the
+next two methods differ in whether they solve for that point directly or approach it
+step by step.
 
 ## Finding the best weights, method 1: solve it exactly
 
-For this one special problem we can find the exact minimizer. Set the gradient of
-@eq-mse to zero and you get the **normal equations**:
+For this one special problem we can characterize the exact minimizer. Set the gradient
+of @eq-mse to zero and you get the **normal equations**:
 
 $$
-\hat{\vect{w}}_{\text{OLS}} = (\matr{X}^\top\matr{X})^{-1}\matr{X}^\top\vect{y} .
+\featurepart{\matr{X}^\top\matr{X}}\,
+\parameterpart{\hat{\vect{w}}}
+=
+\featurepart{\matr{X}^\top}\targetpart{\vect{y}} .
 $$ {#eq-normal}
 
-There is a picture behind this formula worth carrying for the rest of your career. Our
-predictions $\hat{\vect{y}} = \matr{X}\vect{w}$ can only ever live in the **column
-space** of $\matr{X}$ — the span of its feature columns. If the true $\vect{y}$ lies
-outside that space (it almost always does), the best we can do is **project** $\vect{y}$
-onto it. The leftover error $\vect{e} = \vect{y} - \hat{\vect{y}}$ is what our model
-cannot explain, and at the optimum it is *perpendicular* to the column space — no
-adjustment of the knobs can reduce it further.
+Four facts keep this equation honest without detouring into a linear-algebra treatise:
 
-One more observation to file away: substituting @eq-normal back in gives
-$\hat{\vect{y}} = \matr{X}(\matr{X}^\top\matr{X})^{-1}\matr{X}^\top\vect{y}$, so the
-fitted predictions are a *weighted combination of the training targets* $\vect{y}$.
-Linear regression predicts by mixing the answers it has already seen. Hold that thought:
-in Part IV an entire architecture — attention — grows out of choosing such mixing
-weights by *similarity*.
+- **Full column rank.** The minimizer is unique, and only then may we write
+  $\hat{\vect{w}}=(\matr{X}^{\top}\matr{X})^{-1}\matr{X}^{\top}\vect{y}$.
+- **Rank deficiency.** The fitted prediction is still a unique projection, but the
+  parameter vector need not be unique. The minimum-norm choice is
+  $\hat{\vect{w}}_{\min}=\matr{X}^{+}\vect{y}$, where $\matr{X}^{+}$ is the
+  Moore--Penrose pseudoinverse. This matters in deep learning because $d>n$ is common,
+  not exceptional.
+- **Conditioning.** Forming the normal equations squares the spectral condition number:
+  $\kappa_2(\matr{X}^{\top}\matr{X})=\kappa_2(\matr{X})^2$. QR-, SVD-, or
+  library-based least-squares routines are the computational default.
+- **Cost.** For a tall dense matrix, forming $\matr{X}^{\top}\matr{X}$ costs
+  $O(nd^2)$, followed by about $O(d^3)$ for factorization. Either term may dominate.
+
+There is a picture behind these facts worth keeping. Every prediction can be written
+as a weighted combination of the feature columns:
+
+$$
+\predictionpart{\hat{\vect{y}}}
+= \featurepart{\matr{X}}\parameterpart{\hat{\vect{w}}}
+= \sum_{j=1}^{d}\parameterpart{\hat w_j}\featurepart{\matr{X}_{:j}} .
+$$
+
+It must therefore live in the **column space** of $\matr{X}$. If
+$\targetpart{\vect{y}}$ lies outside that space, the best prediction is its projection.
+The residual $\vect{e}=\targetpart{\vect{y}}-\predictionpart{\hat{\vect{y}}}$ is
+perpendicular to the column space, so no adjustment of the weights can reduce it
+further.
+
+The same projection can be read from the other side:
+
+$$
+\predictionpart{\hat y_i}
+= \sum_{j=1}^{n}
+\featurepart{\bigl(\matr{X}\matr{X}^{+}\bigr)_{ij}}\,
+\targetpart{y_j}.
+$$
+
+Each fitted value is a weighted combination of the training targets. Part IV will turn
+this same idea into attention by choosing mixing weights through similarity.
 
 ![The normal equations, geometrically: the optimal prediction $\hat{\vect{y}} = \matr{X}\hat{\vect{w}}$ is the projection of $\vect{y}$ onto the column space of $\matr{X}$; the residual $\vect{e}$ is orthogonal to it.](../../figures/generated/1_1_lin_Recap-fig06.svg){#fig-projection width=62% fig-alt="Geometric projection of y onto the column space of X, with residual e drawn perpendicular to the fitted vector."}
 
-Elegant. So why is this formula almost absent from deep learning? Two reasons. Solving
-it costs $O(d^3)$, which is hopeless when $d$ runs to millions or billions. And it only
-exists because the model is linear; the moment we add a nonlinearity, there is no closed
-form to solve. Our datasets are large and our models are not linear $\rightarrow$ we
-have neither luxury. We need another way.
+The exact characterization is elegant, but deep models have millions or billions of
+parameters and nonlinear compositions. There is no comparable closed form to solve.
+We need another way.
 
 ## Finding the best weights, method 2: walk downhill
 
@@ -195,7 +231,7 @@ $$
 $$ {#eq-gd}
 
 where the *learning rate* $\eta$ sets the step size. For the MSE loss the gradient has a
-clean closed form — with $\matr{X} \in \R^{n\times d}$, $\vect{w} \in \R^{d}$, and
+clean closed form. With $\matr{X} \in \R^{n\times d}$, $\vect{w} \in \R^{d}$, and
 $\vect{y} \in \R^{n}$:
 
 $$
@@ -203,42 +239,67 @@ $$
 \;\in\; \R^{d}.
 $$ {#eq-gd-grad}
 
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Create a two-parameter regression problem and its loss surface.
+2. Follow the gradient from a deliberately poor starting point.
+3. Show the same landscape in perspective and from overhead.
+:::
+
 ```{python}
 #| label: fig-gd-path
-#| fig-alt: "Nested loss contours over weight and bias surround a minimum marked by a star. A connected descent path starts far away, turns toward the minimum, and takes visibly shorter steps near the valley floor."
-#| fig-cap: "The blindfolded walk, made visible: gradient descent on the MSE landscape of a tiny one-feature problem. Each step follows the slope felt at the current point; steps shrink as the valley floor flattens."
-#| code-summary: "Code: draw the descent path"
+#| fig-alt: "Two views show the same bowl-shaped mean-squared-error landscape over weight and bias. A three-dimensional surface makes height visible; a contour view shows a gradient-descent path approaching the minimum with shrinking steps."
+#| fig-cap: "One loss landscape, two views. The surface makes the scalar height of MSE visible; the contour view makes the update path legible. Gradient descent needs only the local slope, not a view of the whole bowl."
+#| code-summary: "Code: draw the 3-D loss landscape and descent path"
+#| code-fold: false
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
 
+# [1] create the problem and evaluate its loss surface
 torch.manual_seed(6050)
 x1 = torch.randn(60)
-y1 = 2.5 * x1 - 1.0 + 0.3 * torch.randn(60)          # truth: w = 2.5, b = -1.0
+y1 = 2.5 * x1 - 1.0 + 0.3 * torch.randn(60)
 
-def mse(w, b):                                        # loss surface over (w, b)
+def mse(w, b):
     return ((y1 - (w * x1 + b)) ** 2).mean()
 
-w, b, path = -0.5, 2.0, []                            # start far from the valley
-for _ in range(20):
-    path.append((w, b))
-    err = (w * x1 + b) - y1                           # feel the slope...
-    w -= 0.25 * float(2 * (err * x1).mean())          # ...step downhill
-    b -= 0.25 * float(2 * err.mean())
-
-W, B = np.meshgrid(np.linspace(-1.5, 5.5, 100), np.linspace(-4, 3, 100))
+W, B = np.meshgrid(
+    np.linspace(-1.5, 5.5, 100),
+    np.linspace(-4.0, 3.0, 100),
+)
 L = np.vectorize(lambda wi, bi: float(mse(wi, bi)))(W, B)
 
-plt.figure(figsize=(5.8, 3.8))
-plt.contour(W, B, L, levels=25, cmap="Blues", alpha=0.8)
+# [2] follow the gradient downhill
+w, b, path = -0.5, 2.0, []
+for _ in range(20):
+    path.append((w, b))
+    err = (w * x1 + b) - y1
+    w -= 0.25 * float(2 * (err * x1).mean())
+    b -= 0.25 * float(2 * err.mean())
+
 pw, pb = zip(*path)
-plt.plot(pw, pb, "o-", color="#E57200", ms=4, lw=1.5, label="descent path")
-plt.plot(2.5, -1.0, "k*", ms=12, label="truth $(w, b)$")
-plt.xlabel("$w$"); plt.ylabel("$b$"); plt.legend()
+path_loss = [float(mse(wi, bi)) for wi, bi in path]
+
+# [3] show perspective and overhead views
+fig = plt.figure(figsize=(9.2, 3.8))
+ax3d = fig.add_subplot(1, 2, 1, projection="3d")
+ax3d.plot_surface(W, B, L, cmap="Blues", alpha=0.78, linewidth=0)
+ax3d.plot(pw, pb, path_loss, "o-", color="#E57200", ms=3, lw=1.5)
+ax3d.set(xlabel="$w$", ylabel="$b$", zlabel="MSE")
+ax3d.view_init(elev=27, azim=-58)
+
+ax2d = fig.add_subplot(1, 2, 2)
+ax2d.contour(W, B, L, levels=25, cmap="Blues", alpha=0.85)
+ax2d.plot(pw, pb, "o-", color="#E57200", ms=4, lw=1.5,
+          label="descent path")
+ax2d.plot(2.5, -1.0, "k*", ms=12, label="data-generating parameters")
+ax2d.set(xlabel="$w$", ylabel="$b$")
+ax2d.legend(fontsize=8)
 plt.tight_layout()
 plt.show()
 ```
-
+::::
 This iterative loop (predict $\rightarrow$ measure the loss $\rightarrow$ feel the
 gradient $\rightarrow$ step) is exactly what modern deep learning frameworks automate,
 at billion-parameter scale. When the dataset itself is huge we will not even use all of
@@ -248,31 +309,46 @@ it per step: a small random *batch* gives a good-enough gradient. That refinemen
 
 ## Build it three times
 
-Enough theory: let us implement linear regression, and let us do it in PyTorch. You
-have already built this in NumPy in earlier courses, so we will use it as an excuse to
-get comfortable with tensors, while still doing everything from scratch.
+Enough theory. Let us implement linear regression in PyTorch, first with the algebra
+exposed and then with the framework abstractions we will reuse.
 
 ::: {.callout-tip}
 ## Coding hygiene
 
-Two habits worth forming from the very first cell: **fix your seeds** so runs are
-reproducible, and **annotate your functions with types** — not critical for Python to
-run, but it makes code readable and debugging far easier.
+Two habits are worth forming from the first cell: **fix seeds** so runs are
+reproducible, and **annotate functions with types** so shapes and interfaces stay
+readable. The cells in this book are terse teaching kernels, not production systems;
+they expose the mechanism and the checks needed for the claim.
+:::
+
+:::: {.plan-code}
+::: {.plan}
+1. Load the chapter dependencies and establish reproducible state.
 :::
 
 ```{python}
 #| label: setup
+#| code-fold: false
 import torch
 import matplotlib.pyplot as plt
 
-torch.manual_seed(6050);  # reproducible runs, always
+# [1] establish reproducible state
+torch.manual_seed(6050)
 ```
-
+::::
 First, synthetic data. We control the ground truth (the true weights and bias), so we
 can check whether each method actually recovers them.
 
+:::: {.plan-code}
+::: {.plan}
+1. Define the reusable `make_synthetic_data` helper.
+2. Generate noisy targets from known weights, then check the batch shapes.
+:::
+
 ```{python}
 #| label: synthetic-data
+#| code-fold: false
+# [1] define the reusable mechanism
 def make_synthetic_data(
     weights: torch.Tensor, bias: float, n_samples: int, noise: float = 0.1
 ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -281,26 +357,41 @@ def make_synthetic_data(
     y = X @ weights + bias + noise * torch.randn(n_samples)
     return X, y
 
+# [2] generate data and check shapes
 true_w, true_b = torch.tensor([2.0, -3.4]), 4.2
 X, y = make_synthetic_data(true_w, true_b, n_samples=200)
 X.shape, y.shape        # always check your shapes
 ```
-
+::::
 ### Take 1: the closed form
 
-The normal equations, @eq-normal, on the *augmented* matrix (the column of ones carries
-the bias):
+On the augmented matrix, with a column of ones carrying the bias, use the
+rank-aware least-squares routine directly:
+
+:::: {.plan-code}
+::: {.plan}
+1. Append a constant feature to represent the bias.
+2. Solve least squares with a rank-aware library routine.
+3. Compare the estimate with the planted parameters.
+:::
 
 ```{python}
 #| label: closed-form
-X_aug = torch.cat([X, torch.ones(X.shape[0], 1)], dim=1)   # (n, d+1)
-w_ols = torch.linalg.solve(X_aug.T @ X_aug, X_aug.T @ y)   # solve, don't invert
+#| code-fold: false
+# [1] append the constant feature
+X_aug = torch.cat([X, torch.ones(X.shape[0], 1)], dim=1)
+
+# [2] solve without forming the normal equations
+w_ols = torch.linalg.lstsq(X_aug, y).solution
+
+# [3] compare with the known truth
 print(f"closed form:      w = {w_ols[:2].numpy().round(3)},  b = {w_ols[2]:.3f}")
 print(f"ground truth:     w = {true_w.numpy()},  b = {true_b}")
 ```
-
-Two lines, and we recover the truth up to the noise floor. Remember what this cost us:
-$O(d^3)$, and the special grace of a linear model. Now the method that scales.
+::::
+Two lines, and we recover the truth up to the noise floor. `lstsq` handles rank and
+conditioning more honestly than explicitly forming $\matr{X}^{\top}\matr{X}$. Now for
+the method that extends to nonlinear models.
 
 ### Take 2: gradient descent, from scratch
 
@@ -308,8 +399,18 @@ We write the model as a small class: a forward pass, manually derived gradients
 (@eq-gd-grad), and an update step. No autograd yet; we want to feel the mechanics once
 with our own hands.
 
+:::: {.plan-code}
+::: {.plan}
+1. Store the parameters and define the linear prediction.
+2. Convert batch residuals into the exact MSE update.
+3. Repeat that update until the loss settles.
+4. Compare the learned parameters with the other solution.
+:::
+
 ```{python}
 #| label: gradient-descent
+#| code-fold: false
+# [1] store parameters and define predictions
 class LinearRegressionScratch:
     """Linear regression trained with manually derived gradients."""
 
@@ -322,28 +423,20 @@ class LinearRegressionScratch:
         return X @ self.w + self.b
 
     def step(self, X: torch.Tensor, y: torch.Tensor) -> float:
+        # [2] convert batch residuals into the MSE update
         err = self.forward(X) - y            # 1. predict, 2. measure   (n,)
         self.w -= self.lr * 2 * X.T @ err / len(y)   # 3. feel the slope,
         self.b -= self.lr * 2 * err.mean()           # 4. step downhill
         return float((err ** 2).mean())
 
+# [3] repeat the update
 model = LinearRegressionScratch(input_size=2)
 losses = [model.step(X, y) for _ in range(100)]
+
+# [4] compare the learned parameters
 print(f"gradient descent: w = {model.w.numpy().round(3)},  b = {model.b.item():.3f}")
 ```
-
-```{python}
-#| label: fig-loss-curve
-#| fig-alt: "A single log-scale loss curve drops steeply over the first training steps and then levels near a low floor."
-#| fig-cap: "The loss falls fast at first — steep slope underfoot — then flattens as we approach the valley floor set by the irreducible noise."
-plt.figure(figsize=(5.5, 3.2))
-plt.plot(losses)
-plt.xlabel("step")
-plt.ylabel("MSE loss")
-plt.yscale("log")
-plt.tight_layout()
-plt.show()
-```
+::::
 
 ### Take 3: the framework way
 
@@ -360,34 +453,96 @@ modules, @sec-04-training-loss-sgd opens the optimizer, and
 implementation above is the chapter's working toolbox.
 :::
 
+:::: {.plan-code}
+::: {.plan}
+1. Pair a linear module with MSE and an SGD optimizer.
+2. Repeat the framework forward, backward, and update sequence.
+3. Detach and report the learned parameters.
+:::
+
 ```{python}
 #| label: nn-linear
+#| code-fold: false
 from torch import nn
 
+# [1] pair the module, objective, and optimizer
 net = nn.Linear(in_features=2, out_features=1)
 optimizer = torch.optim.SGD(net.parameters(), lr=0.1)
 loss_fn = nn.MSELoss()
+nn_losses = []
 
+# [2] repeat forward, backward, and update
 for _ in range(100):
     optimizer.zero_grad()              # clear old gradients: they accumulate!
     loss = loss_fn(net(X).squeeze(-1), y)   # (n, 1) -> (n)
+    nn_losses.append(float(loss.detach()))
     loss.backward()                    # autograd feels the slope for us
     optimizer.step()
 
 w_nn = net.weight.detach().squeeze()
 b_nn = net.bias.item()
+# [3] detach and report
 print(f"nn.Linear:        w = {w_nn.numpy().round(3)},  b = {b_nn:.3f}")
 ```
+::::
+
+The three methods now support the same diagnostic:
+
+:::: {.plan-code}
+::: {.plan}
+1. Put each method's loss record on the same logarithmic scale.
+2. Contrast a direct solve with the two iterative trajectories.
+:::
+
+```{python}
+#| label: fig-three-loss-paths
+#| fig-alt: "Three small panels compare loss against computational step. The closed-form panel jumps from an initial loss to the solution in one solve. The scratch-gradient and PyTorch panels descend rapidly and level at the same low loss."
+#| fig-cap: "Three routes to the same loss floor. The closed form is a before-and-after solve, not an optimization trajectory; both gradient methods expose the sequence of corrective steps."
+#| code-fold: false
+# [1] collect losses on a common scale
+closed_losses = [
+    float((y ** 2).mean()),
+    float(((X_aug @ w_ols - y) ** 2).mean()),
+]
+records = [closed_losses, losses, nn_losses]
+titles = ["closed form", "scratch gradient descent", "PyTorch module"]
+
+# [2] compare the three routes
+fig, axes = plt.subplots(1, 3, figsize=(9.2, 2.8), sharey=True)
+for ax, record, title in zip(axes, records, titles):
+    ax.plot(record, color="#2B6CB0", lw=2)
+    ax.set(title=title, xlabel="step", yscale="log")
+    ax.grid(alpha=0.22)
+axes[0].set_xticks([0, 1], ["start", "solve"])
+axes[0].set_ylabel("MSE loss")
+plt.tight_layout()
+plt.show()
+```
+::::
+
+Loss-versus-step plots will recur throughout the book. They reveal whether an
+optimization process is descending, stalling, or diverging, and they make competing
+update rules comparable. They do not, by themselves, establish generalization.
 
 Three implementations, one answer:
+
+:::: {.plan-code}
+::: {.plan}
+1. Choose a one-dimensional slice through the two-feature data.
+2. Evaluate each learned model along that same slice.
+3. Plot the adjusted observations and all three fits.
+:::
 
 ```{python}
 #| label: fig-three-fits
 #| fig-alt: "A cloud of adjusted observations is crossed by solid, dashed, and dotted fitted lines from the three methods; the lines overlap almost completely across the displayed input range."
 #| fig-cap: "All three methods find the same line on the slice $x_2 = \\bar{x}_2$. Because this is synthetic data, the points can be adjusted to that same slice using the known true coefficient; line and points now show the same question."
+#| code-fold: false
+# [1] choose the slice
 grid = torch.linspace(X[:, 0].min(), X[:, 0].max(), 50)
 x2_mean = X[:, 1].mean()
 
+# [2] evaluate predictions on the slice
 def prediction_slice(weights: torch.Tensor, bias: float) -> torch.Tensor:
     """Predictions along x1 while x2 is held at its sample mean."""
     return weights[0] * grid + weights[1] * x2_mean + bias
@@ -395,6 +550,7 @@ def prediction_slice(weights: torch.Tensor, bias: float) -> torch.Tensor:
 y_on_slice = y - true_w[1] * (X[:, 1] - x2_mean)
 
 plt.figure(figsize=(5.5, 3.6))
+# [3] plot observations and fits
 plt.scatter(X[:, 0], y_on_slice, s=12, alpha=0.4, label="data adjusted to slice")
 plt.plot(grid, prediction_slice(w_ols, float(w_ols[2])), lw=3, label="closed form")
 plt.plot(grid, prediction_slice(model.w, model.b.item()), "--", lw=2,
@@ -404,30 +560,55 @@ plt.xlabel("$x_1$"); plt.ylabel("$y$"); plt.legend()
 plt.tight_layout()
 plt.show()
 ```
-
+::::
 ## Why squared error? The maximum-likelihood view
 
-The MSE is not an arbitrary choice. Assume the data really is generated by a linear
-process plus Gaussian noise:
+Mean squared error is not an arbitrary penalty. Assume targets are generated by a
+linear process with additive Gaussian noise.\footnote{This is more than algebraic
+convenience. A residual often aggregates many small, unobserved effects, such as sensor
+variation, environmental fluctuations, omitted features, and rounding. Under the
+conditions of the central limit theorem, sums of many independent or weakly dependent
+finite-variance effects become approximately Gaussian. There is also an informational
+argument: among continuous distributions with a fixed mean and variance, the Gaussian
+has maximum differential entropy, so it adds no further structure beyond those two
+constraints. Neither argument makes every residual Gaussian; the assumption is a
+useful model to check, not a law of nature.}
 
 $$
 y = \vect{w}^\top\vect{x} + b + \epsilon, \qquad \epsilon \sim \mathcal{N}(0, \sigma^2).
 $$
 
-Then the probability of seeing output $y$ given input $\vect{x}$ is a Gaussian centered
-on the model's prediction. **Maximum likelihood estimation** asks: which parameters make
-the observed data most likely? Take the log of the likelihood over all $n$ samples and
-the Gaussian's exponent comes down:
+The conditional probability of observing $y$ given $\vect{x}$ is therefore a Gaussian
+centered at the deterministic prediction $\hat y=\vect{w}^{\top}\vect{x}+b$:
+
+$$
+p(y\mid \vect{x};\vect{w},b)
+= \frac{1}{\sqrt{2\pi\sigma^2}}
+\exp\!\left(
+  -\frac{\bigl(y-(\vect{w}^{\top}\vect{x}+b)\bigr)^2}{2\sigma^2}
+\right).
+$$
+
+Maximum likelihood asks which $(\vect{w},b)$ make the observed dataset most probable.
+Independence turns the dataset likelihood into a product; the logarithm turns that
+product into a sum and brings the Gaussian exponent down:
 
 $$
 \log \mathcal{L}(\vect{w}, b)
 = C - \frac{1}{2\sigma^2}\sum_{i=1}^{n}\bigl(y_i - (\vect{w}^\top\vect{x}_i + b)\bigr)^2 .
 $$
 
-Maximizing the log-likelihood is *exactly* minimizing the sum of squared errors. The
-loss encodes an assumption about the noise. This is a pattern to remember: when we meet
-cross-entropy in @sec-02-logistic-softmax, it will be the same story with a different
-distribution.
+Maximizing this log-likelihood is exactly minimizing the sum of squared residuals. A
+loss function is a probability model in disguise: it states how targets may vary
+around a prediction, then takes the negative log-likelihood.
+
+![The target type changes the conditional distribution and link function, but the maximum-likelihood recipe stays fixed. Gaussian continuous targets yield MSE; Bernoulli binary targets yield binary cross-entropy.](../../figures/generated/1_1_likelihood_loss.svg){#fig-likelihood-loss width=100% fig-alt="Two parallel pipelines apply the same negative-log-likelihood recipe. A continuous target uses a Gaussian model and produces mean squared error. A binary target uses a Bernoulli model with a sigmoid link and produces binary cross-entropy."}
+
+This is the master pattern that continues in @sec-02-logistic-softmax. Continuous
+targets suggest a Gaussian likelihood and MSE; binary and categorical targets suggest
+Bernoulli and categorical likelihoods and cross-entropy. A Laplace likelihood would
+instead produce absolute error. Choosing a loss is therefore a modeling decision, not
+memorizing a lookup table.
 
 ## A first look at bias and variance
 
@@ -469,9 +650,9 @@ helpful first mental model, and you should have it. But bias and variance are no
 mechanical see-saw. In classical fixed-dimensional, well-specified settings, variance
 often falls roughly like $1/n$ as data grows; that rate is not a universal law for
 modern models. Regularization and inductive biases matched to the task can buy capacity
-without exploding variance. Modern over-parameterized networks live in regimes where
-this cartoon bends in surprising ways; we will look at those pictures properly in
-@sec-06-generalization-inductive-bias.
+without exploding variance. Modern over-parameterized networks can pass an interpolation
+threshold and then improve again as capacity grows, producing **double descent** rather
+than one U. We will study that regime in @sec-06-generalization-inductive-bias.
 :::
 
 ### Regularization, briefly
@@ -499,17 +680,28 @@ unregularized model: 20 features of which only 5 matter, noisy targets, and (the
 part) barely more samples than parameters. This is exactly the regime where variance
 explodes and regularization shines:
 
+:::: {.plan-code}
+::: {.plan}
+1. Create a small-sample problem with many irrelevant features.
+2. Solve the same data with unregularized and ridge estimators.
+3. Compare both estimates with the planted weights.
+:::
+
 ```{python}
 #| label: ridge-experiment
+#| code-fold: false
+# [1] create a high-variance problem
 n, d = 25, 20                            # barely more samples than knobs!
 w_true = torch.zeros(d)
 w_true[:5] = torch.tensor([3.0, -2.0, 1.5, 2.5, -1.0])   # only 5 real features
 Xh, yh = make_synthetic_data(w_true, bias=0.0, n_samples=n, noise=2.0)
 
-w_ols_h = torch.linalg.solve(Xh.T @ Xh, Xh.T @ yh)        # plain OLS
+# [2] solve with and without shrinkage
+w_ols_h = torch.linalg.lstsq(Xh, yh).solution
 lam = 0.4
 w_ridge = torch.linalg.solve(Xh.T @ Xh + n * lam * torch.eye(d), Xh.T @ yh)
 
+# [3] compare with the planted weights
 def report(name: str, w_hat: torch.Tensor) -> None:
     err = ((w_hat - w_true) ** 2).mean()
     print(f"{name:>6}:  weight MSE = {err:.4f}")
@@ -517,9 +709,10 @@ def report(name: str, w_hat: torch.Tensor) -> None:
 report("OLS", w_ols_h)
 report("ridge", w_ridge)
 ```
-
+::::
 OLS, with all its freedom and almost no data to discipline it, assigns large, confident,
-*wrong* weights to the 15 noise features — pure variance. Ridge shrinks everything and
+*wrong* weights to the 15 noise features. That is pure variance. Ridge shrinks
+everything and
 cuts the damage several-fold: a little bias, traded for a lot of variance. (Rerun this
 cell with `n = 100` and watch OLS become more stable, as classical fixed-dimensional
 theory predicts.) Ridge's $L_1$ cousin, **lasso**, can go further and zero out the
@@ -532,13 +725,13 @@ it is weight decay, the $L_2$ idea, that you will meet again and again.
 
 We taught a computer a function from examples, completely:
 
-1. **A model family** — hyperplanes, parameterized by knobs $\vect{w}, b$ (with the
-   augmentation trick to fold $b$ into $\vect{w}$).
-2. **A loss** — MSE, which is maximum likelihood under Gaussian noise; the loss is how
+1. **A model family:** hyperplanes parameterized by knobs $\vect{w}, b$, with the bias
+   absorbed into the weight vector when compact notation helps.
+2. **A loss:** MSE, which is maximum likelihood under Gaussian noise; the loss is how
    we tell the model how bad it is.
-3. **An optimizer** — the exact projection when linearity permits, and gradient descent
+3. **An optimizer:** the exact projection when linearity permits, and gradient descent
    (feel the slope, step downhill) when it does not, which is always from here on.
-4. **The generalization lens** — bias vs. variance, the data splits that referee them,
+4. **The generalization lens:** bias vs. variance, the data splits that referee them,
    and regularization as a first counter-measure to overfitting.
 
 And one reframing that will carry the whole book: linear regression is a single neuron
@@ -551,8 +744,18 @@ $$
 $$
 
 First, in @sec-02-logistic-softmax, that squashing function turns our regressor into a
-classifier. Then, in @sec-03-nonlinearity-mlp, we stack neurons — and discover why the
+classifier. Then, in @sec-03-nonlinearity-mlp, we stack neurons and discover why the
 nonlinearity is not optional.
+
+::: {.callout-tip}
+## The first "make it learnable" step
+
+We first saw the geometry of the linear response in @fig-linear-response. Now we can
+name its neural-network form. A neuron computes the same weighted response and bias,
+then applies $\sigma$. Linear regression is the identity-activation case. Losses,
+gradients, and updates carry over unchanged; the nonlinearity is the first ingredient
+that expands what the model can learn.
+:::
 
 ## Sources and further reading {.unnumbered}
 
@@ -569,8 +772,9 @@ nonlinearity is not optional.
 
 1. **(Pencil.)** Derive the normal equations @eq-normal by expanding
    $\norm{\vect{y}-\matr{X}\vect{w}}_2^2$, taking the gradient with respect to
-   $\vect{w}$, and setting it to zero. Where exactly does the assumption that
-   $\matr{X}^\top\matr{X}$ is invertible enter?
+   $\vect{w}$, and setting it to zero. Notice that this derivation does not require an
+   inverse. Then state what becomes unique when $\matr{X}$ has full column rank and
+   what remains unique when it is rank deficient.
 2. **(Pencil.)** Repeat the derivation with the ridge penalty
    $\lambda\norm{\vect{w}}_2^2$ and show the solution becomes
    $(\matr{X}^\top\matr{X} + n\lambda I)^{-1}\matr{X}^\top\vect{y}$ when the data-fit

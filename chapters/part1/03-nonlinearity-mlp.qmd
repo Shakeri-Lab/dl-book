@@ -53,15 +53,26 @@ Let us confirm the ceiling empirically. We reuse the framework loop previewed in
 @sec-05-backpropagation will explain the optimizer and `backward()` rather than asking
 you to treat them as magic.
 
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Define the reusable `train` helper.
+3. Run xor training.
+4. Report or visualize the measured result.
+:::
+
 ```{python}
 #| label: xor-training
+#| code-fold: false
 import torch
 from torch import nn
 
+# [1] prepare inputs and conditions
 torch.manual_seed(6050)
 X_xor = torch.tensor([[0., 0.], [0., 1.], [1., 0.], [1., 1.]])
 y_xor = torch.tensor([0., 1., 1., 0.])
 
+# [2] define the reusable mechanism
 def train(
     model: nn.Module, X: torch.Tensor, y: torch.Tensor,
     steps: int = 4000, lr: float = 0.5
@@ -74,6 +85,7 @@ def train(
         opt.step()
     return model
 
+# [3] run the core mechanism
 linear = train(nn.Linear(2, 1), X_xor, y_xor)
 mlp = train(nn.Sequential(nn.Linear(2, 4), nn.ReLU(), nn.Linear(4, 1)),
             X_xor, y_xor)
@@ -83,11 +95,12 @@ with torch.no_grad():
     linear_bce = nn.functional.binary_cross_entropy(linear_p, y_xor)
     mlp_acc = ((mlp(X_xor).squeeze(-1) > 0).float() == y_xor).float().mean()
 
+# [4] report the result
 print(f"trained linear: probabilities {linear_p.numpy().round(3)}, "
       f"BCE {linear_bce:.3f}")
 print(f" MLP (4 hidden): accuracy {mlp_acc:.0%}")
 ```
-
+::::
 The cross-entropy optimum for this symmetric XOR dataset assigns probability $0.5$ to
 all four points, with loss $\log 2 \approx 0.693$. Turning those exact ties into hard
 labels with a floating-point threshold can report 25%, 50%, or 75% because of tiny
@@ -95,18 +108,27 @@ rounding differences; that number is not evidence about the classifier. The hone
 geometric statement is that a hard linear boundary can classify at most three of the
 four points (75%), while the little network with a bend is perfect.
 
+:::: {.plan-code}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Decision regions.
+:::
+
 ```{python}
 #| label: fig-xor
 #| fig-alt: "The left panel uses one diagonal split and necessarily leaves one of four XOR points in the wrong region. The right panel bends the regions so each pair of opposite-corner class points is separated correctly."
 #| fig-cap: "Left: a representative best linear boundary gets three of four XOR points right, but one point must remain on the wrong side. Right: the trained 4-hidden-unit MLP carves separate regions for the two positive corners."
 #| code-summary: "Code: decision regions"
+#| code-fold: false
 import numpy as np
 import matplotlib.pyplot as plt
 
+# [1] prepare inputs and conditions
 gx, gy = np.meshgrid(np.linspace(-0.6, 1.6, 220), np.linspace(-0.6, 1.6, 220))
 grid = torch.tensor(np.stack([gx.ravel(), gy.ravel()], 1), dtype=torch.float32)
 
 fig, axes = plt.subplots(1, 2, figsize=(7.4, 3.4), sharey=True)
+# [2] run the core mechanism
 for ax, model, title in [(axes[0], None, "best linear rule (75%)"),
                          (axes[1], mlp, "trained MLP (100%)")]:
     with torch.no_grad():
@@ -125,7 +147,7 @@ for ax, model, title in [(axes[0], None, "best linear rule (75%)"),
 axes[0].set_ylabel("$x_2$"); axes[0].legend(loc="center right")
 plt.tight_layout(); plt.show()
 ```
-
+::::
 ## The neuron: a threshold with a bend
 
 The artificial neuron takes its inspiration from biology: a neuron receives signals,
@@ -165,11 +187,19 @@ the order of $k^d$.
 The simplest compact constructive example lives in 1D. Combine three hinges so the
 slopes cancel again after the third breakpoint:
 
+:::: {.plan-code}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Three hinges into a compact bump.
+:::
+
 ```{python}
 #| label: fig-hinge-bump
 #| fig-alt: "Three zero-then-linear ramps begin at successive breakpoints in the left panel. Their weighted combination in the right panel rises, peaks at the middle breakpoint, falls, and returns to zero as a triangular bump."
 #| fig-cap: "Three hinges make a compact triangular bump: the first starts the rise, the second reverses the slope, and the third cancels it back to zero. Bumps are the brush strokes of function approximation."
 #| code-summary: "Code: three hinges into a compact bump"
+#| code-fold: false
+# [1] prepare inputs and conditions
 xs = torch.linspace(-3, 5, 400)
 h1 = torch.relu(xs + 1.5)
 h2 = torch.relu(xs - 0.5)
@@ -184,10 +214,11 @@ axes[0].set_title("three hidden units"); axes[0].legend(fontsize=7)
 axes[1].plot(xs, bump, color="#E57200", lw=2.5,
              label=r"$y = h_1 - 2h_2 + h_3$")
 axes[1].set_title("their combination: a bump"); axes[1].legend(fontsize=9)
+# [2] run the core mechanism
 for ax in axes: ax.set_xlabel("$x$")
 plt.tight_layout(); plt.show()
 ```
-
+::::
 Follow the pieces: before the first hinge, all units are silent and the output is zero.
 After the first breakpoint, $h_1$ starts the climb. The coefficient $-2$ on $h_2$
 reverses the slope at the peak, and $h_3$ cancels that downward slope at the final
@@ -204,14 +235,24 @@ to any desired accuracy.
 
 Watch the theorem materialize as width grows:
 
+:::: {.plan-code}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Define the reusable `fit` helper.
+3. Implement the width sweep.
+:::
+
 ```{python}
 #| label: fig-uat
 #| fig-alt: "A curved target is compared with three one-hidden-layer fits. Width two misses much of the curvature, width eight follows the broad shape, and width sixty-four nearly overlaps the target."
 #| fig-cap: "One hidden ReLU layer approximating a continuous curved target. Width 2 is too rigid; width 8 catches the shape; width 64 follows it closely. Width buys more hinge locations, but the theorem itself does not tell the optimizer where to place them."
 #| code-summary: "Code: the width sweep"
+#| code-fold: false
+# [1] prepare inputs and conditions
 xs1 = torch.linspace(-3, 3, 200)[:, None]
 target = torch.sin(1.5 * xs1) + 0.08 * xs1 ** 2
 
+# [2] define the reusable mechanism
 def fit(width: int, steps: int = 3000, lr: float = 0.05) -> torch.Tensor:
     torch.manual_seed(6050)
     net = nn.Sequential(nn.Linear(1, width), nn.ReLU(), nn.Linear(width, 1))
@@ -225,11 +266,12 @@ def fit(width: int, steps: int = 3000, lr: float = 0.05) -> torch.Tensor:
 
 plt.figure(figsize=(6.6, 3.6))
 plt.plot(xs1, target, color="#232D4B", lw=2.5, label="target")
+# [3] run the core mechanism
 for width, color in [(2, "#B8B8A8"), (8, "#5379AA"), (64, "#E57200")]:
     plt.plot(xs1, fit(width), color=color, lw=1.6, label=f"width {width}")
 plt.xlabel("$x$"); plt.legend(); plt.tight_layout(); plt.show()
 ```
-
+::::
 Now read the theorem's fine print, because it is where beginners over-promise:
 
 ::: {.callout-warning}
@@ -284,8 +326,15 @@ and everything the optimizer and autograd need. Forget it and PyTorch fails loud
 the one favor a framework can do you.
 :::
 
+:::: {.plan-code}
+::: {.plan}
+1. Register the hidden and output layers, then compose them in `forward`.
+:::
+
 ```{python}
 #| label: mlp-class
+#| code-fold: false
+# [1] register and compose the MLP layers
 class MLP(nn.Module):
     """A multilayer perceptron: linear layers with bends between them."""
 
@@ -297,15 +346,24 @@ class MLP(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.out(torch.relu(self.hidden(x)))
 ```
-
+::::
 And a problem worthy of it: two interleaved moons, the classic shape no line can
 separate well. Same training loop as always — the model is the only thing that changed:
+
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Moons, linear vs. MLP.
+3. Report or visualize the measured result.
+:::
 
 ```{python}
 #| label: fig-moons
 #| fig-alt: "Two interleaved crescent-shaped point clouds are shown twice. A straight decision boundary cuts through their geometry on the left, while a curved MLP boundary passes through the gap on the right."
 #| fig-cap: "Two moons: the linear model does what it can with one line (about 90% here); the MLP bends its boundary through the gap and separates the classes completely."
 #| code-summary: "Code: moons, linear vs. MLP"
+#| code-fold: false
+# [1] prepare inputs and conditions
 torch.manual_seed(6050)
 n = 200
 t = torch.rand(n) * torch.pi
@@ -315,6 +373,7 @@ X_m = torch.cat([moon1, moon2])
 y_m = torch.cat([torch.zeros(n), torch.ones(n)])
 
 torch.manual_seed(6050)
+# [2] run the core mechanism
 lin_m = train(nn.Linear(2, 1), X_m, y_m, steps=3000, lr=0.8)
 torch.manual_seed(6050)
 mlp_m = train(MLP(2, 16, 1), X_m, y_m, steps=3000, lr=0.8)
@@ -322,6 +381,7 @@ mlp_m = train(MLP(2, 16, 1), X_m, y_m, steps=3000, lr=0.8)
 gx3, gy3 = np.meshgrid(np.linspace(-1.6, 2.6, 240), np.linspace(-1.1, 1.6, 240))
 grid3 = torch.tensor(np.stack([gx3.ravel(), gy3.ravel()], 1), dtype=torch.float32)
 
+# [3] report the result
 fig, axes = plt.subplots(1, 2, figsize=(7.6, 3.3), sharey=True)
 for ax, model, title in [(axes[0], lin_m, "linear"), (axes[1], mlp_m, "MLP (16 hidden)")]:
     with torch.no_grad():
@@ -335,7 +395,7 @@ for ax, model, title in [(axes[0], lin_m, "linear"), (axes[1], mlp_m, "MLP (16 h
 axes[0].set_ylabel("$x_2$")
 plt.tight_layout(); plt.show()
 ```
-
+::::
 Where did the curve go? Nowhere — and that is the chapter's deepest point. The MLP
 did not learn a curved boundary; it learned a **space in which the boundary is
 straight**. Its readout is still a linear model, $\vect{w}^\top \phi_\theta(x) + b$:
@@ -344,11 +404,19 @@ $\hat{\vect{w}} = \vect{w}/\lVert\vect{w}\rVert$ and the decision boundary sits 
 the exact coordinate $-b/\lVert\vect{w}\rVert$, a straight line. This is the
 preface's central equation, drawn:
 
+:::: {.plan-code}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Implement the moons in the learned feature space.
+:::
+
 ```{python}
 #| label: fig-feature-space
 #| fig-alt: "Left: the two-moons input plane shaded by the learned scalar feature, with the decision boundary as a dashed piecewise-linear contour weaving between the crescents. Right: the same four hundred points plotted in learned feature coordinates, where the two classes form separated clouds split by an exact vertical line."
 #| fig-cap: "The learned feature space, on the trained moons MLP from the previous figure. Left: the scalar feature $\\hat{w}\\cdot\\phi_\\theta(x)$ over the input plane; the dashed contour is the decision boundary, kinked wherever hidden units switch on or off. Right: the same points with coordinates (readout direction, top orthogonal principal component of $\\phi_\\theta$): the classes separate, and the boundary is the exact vertical line $\\hat{w}\\cdot\\phi = -b/\\lVert w \\rVert$. Learning nonlinear features until a linear readout suffices is the book's central move."
 #| code-summary: "Code: the moons in the learned feature space"
+#| code-fold: false
+# [1] prepare inputs and conditions
 with torch.no_grad():
     phi = torch.relu(mlp_m.hidden(X_m))              # phi_theta(x): (400, 16)
     w = mlp_m.out.weight.squeeze(0)
@@ -361,6 +429,7 @@ with torch.no_grad():
     boundary = -b / w.norm()                         # the line, exactly
     field = (torch.relu(mlp_m.hidden(grid3)) @ w_hat).reshape(gx3.shape)
 
+# [2] run the core mechanism
 fig, axes = plt.subplots(1, 2, figsize=(7.8, 3.4))
 axes[0].contourf(gx3, gy3, field, levels=18, cmap="RdBu_r")
 axes[0].contour(gx3, gy3, field, levels=[boundary], colors="k",
@@ -377,7 +446,7 @@ axes[1].set_xlabel(r"$\hat{w}\cdot\phi_\theta(x)$")
 axes[1].set_ylabel("top orthogonal PC")
 plt.tight_layout(); plt.show()
 ```
-
+::::
 One honest footnote on the XOR network: in principle *two* hidden units suffice, but
 such minimal networks are temperamental; across random seeds they frequently get stuck
 at 50% accuracy with silent units (you will verify this in Exercise 3). A few spare

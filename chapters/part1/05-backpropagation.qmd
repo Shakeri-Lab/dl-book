@@ -123,20 +123,30 @@ Blame flows backward through the same weights the signal flowed forward through,
 the transpose; then the local gate $\sigma'(\vect{z}^{(l)})$ scales it. This recursion
 runs from the last layer to the first.
 
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Compute and draw the blame flow.
+3. Report or visualize the measured result.
+:::
+
 ```{python}
 #| label: fig-blame-flow
 #| fig-alt: "Four network columns run from three inputs through two four-unit hidden layers to one output. Connections carry blame backward, and node size and shading show the blame magnitudes changing across layers."
 #| fig-cap: "Equations 1 and 2 in action on a real network (sizes 3–4–4–1, random weights, one example). Node size and color show each neuron's blame $|\\delta_j|$: it starts at the output, where the error is obvious, and flows backward through $W^\\top$, shrinking wherever a sigmoid gate is nearly closed."
 #| code-summary: "Code: compute and draw the blame flow"
+#| code-fold: false
 import torch
 import matplotlib.pyplot as plt
 
+# [1] prepare inputs and conditions
 torch.manual_seed(6050)
 sizes = [3, 4, 4, 1]
 Ws = [torch.randn(sizes[i + 1], sizes[i]) for i in range(3)]
 
 x = torch.randn(3)                       # forward pass, cached
 zs, a = [], x
+# [2] run the core mechanism
 for W in Ws[:-1]:                        # hidden layers: sigmoid
     zs.append(W @ a)
     a = torch.sigmoid(zs[-1])
@@ -148,6 +158,7 @@ delta[2] = zs[2] - 1.0                               # eq. 1 (identity output, y
 delta[1] = (Ws[2].T @ delta[2]) * sp(zs[1])          # eq. 2
 delta[0] = (Ws[1].T @ delta[1]) * sp(zs[0])          # eq. 2 again
 
+# [3] report the result
 fig, ax = plt.subplots(figsize=(7, 3.2))
 blames = [torch.full((3,), float("nan"))] + delta    # input layer: no blame needed
 vmax = max(d.abs().max() for d in delta)
@@ -172,7 +183,7 @@ ax.set_yticks([]); ax.set_ylim(-1.4, 1.6)
 for s in ax.spines.values(): s.set_visible(False)
 plt.tight_layout(); plt.show()
 ```
-
+::::
 **3. Convert blame into weight gradients:**
 
 $$
@@ -192,15 +203,24 @@ matrix, exactly the shape of $\matr{W}^{(l)}$, and entry $(i,j)$ is the blame of
 $i$ times the activation of neuron $j$ that fed it. The update for a weight is
 *blame out times signal in*:
 
+:::: {.plan-code}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Draw the outer product.
+:::
+
 ```{python}
 #| label: fig-outer-product
 #| fig-alt: "A four-entry blame column and a four-entry activation row sit beside their four-by-four outer-product matrix. Each matrix cell is numerically the product of its corresponding row and column entries."
 #| fig-cap: "Equation 3, pictured with the blame and activations from the network above: a $(4 \\times 1)$ blame column times a $(1 \\times 4)$ activation row yields the full $(4 \\times 4)$ gradient matrix in one stroke — entry $(i,j)$ is blame out $\\times$ signal in."
 #| code-summary: "Code: draw the outer product"
+#| code-fold: false
+# [1] prepare inputs and conditions
 d2 = delta[1]                              # layer-2 blame        (4,)
 a1 = torch.sigmoid(zs[0])                  # layer-1 activations  (4,)
 G = torch.outer(d2, a1)                    # eq. 3
 
+# [2] run the core mechanism
 fig, axes = plt.subplots(1, 3, figsize=(7.6, 2.6),
                          gridspec_kw={"width_ratios": [1, 4, 4.6]})
 panels = [(d2[:, None], r"$\delta^{(2)}$"), (a1[None, :], r"$(a^{(1)})^\top$"),
@@ -213,7 +233,7 @@ for ax, (M, title) in zip(axes, panels):
     ax.set_title(title, fontsize=11); ax.set_xticks([]); ax.set_yticks([])
 plt.tight_layout(); plt.show()
 ```
-
+::::
 No messy summations: the matrix form performs them all at once, and it maps directly
 onto the parallel matrix multiplies GPUs are built for. The same four equations govern
 a toy network and a billion-parameter model; only the matrix sizes change.
@@ -224,15 +244,31 @@ Let us implement the four equations on a two-layer network, with no autograd any
 and then ask `torch.autograd` to differentiate the same network. If our blame algebra is
 right, the two answers must agree to machine precision.
 
+:::: {.plan-code}
+::: {.plan}
+1. Load the chapter dependencies and establish reproducible state.
+:::
+
 ```{python}
 #| label: setup
+#| code-fold: false
 import torch
 
+# [1] run the core mechanism
 _ = torch.manual_seed(6050)
 ```
+::::
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Cache the forward pass, propagate blame backward, and form both gradients.
+3. Report or visualize the measured result.
+:::
 
 ```{python}
 #| label: backprop-by-hand
+#| code-fold: false
+# [1] prepare inputs and conditions
 n, d, h = 32, 5, 8                            # batch, input dim, hidden dim
 X = torch.randn(n, d)
 y = torch.randn(n)
@@ -260,13 +296,15 @@ params = {k: v.clone().requires_grad_(True) for k, v in
           {"W1": W1, "b1": b1, "W2": W2, "b2": b2}.items()}
 A1_ = torch.sigmoid(X @ params["W1"].T + params["b1"])
 L_ = (((A1_ @ params["W2"].T + params["b2"]).squeeze() - y) ** 2).mean()
+# [2] run the hand-derived backward pass
 L_.backward()
 
+# [3] report the result
 for k in grads:
     gap = (grads[k] - params[k].grad).abs().max()
     print(f"{k}: max |ours - autograd| = {gap:.2e}")
 ```
-
+::::
 The largest discrepancy is $3.73\times10^{-9}$, consistent with float32 rounding. The
 blame equations *are* what autograd computes; the framework simply builds the
 computation graph for us as we go and then walks it backward, caching and reusing
@@ -285,9 +323,15 @@ use only the scalar reverse-mode pattern needed for this derivation; the upstrea
 copyright and license notice are preserved in the repository's
 [third-party notices](https://github.com/Shakeri-Lab/dl-book/blob/main/THIRD_PARTY_NOTICES.md).
 
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Implement scalar reverse-mode autodiff with a topological backward traversal.
+:::
+
 ```{python}
 #| label: micro-autograd
-#| code-fold: show
+#| code-fold: false
+# [1] implement scalar reverse-mode autodiff
 class Value:
     """A scalar that remembers its history -- a node in the computation graph."""
 
@@ -336,21 +380,32 @@ class Value:
         for v in reversed(order):
             v._backward_rule()
 ```
+::::
+:::: {.plan-code}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Verify micro autograd.
+3. Report or visualize the measured result.
+:::
 
 ```{python}
 #| label: micro-autograd-check
+#| code-fold: false
+# [1] prepare inputs and conditions
 w, x, b = Value(0.7), Value(2.0), Value(-0.5)
 a = ((w * x) + b).sigmoid()             # one neuron, forward
 loss = (a + (-0.3)) * (a + (-0.3))      # squared error vs target 0.3
+# [2] run the core mechanism
 loss.backward()
 
 # analytic check: dL/dw = 2(a - y) * sigma'(z) * x
 z = 0.7 * 2.0 - 0.5
 s = 1 / (1 + 2.718281828459045 ** (-z))
+# [3] report the result
 print(f"micro-autograd: dL/dw = {w.grad:.6f}")
 print(f"by hand:        dL/dw = {2 * (s - 0.3) * s * (1 - s) * 2.0:.6f}")
 ```
-
+::::
 In a few dozen lines, it is the real thing: PyTorch's autograd is this idea with tensors
 instead of scalars, a compiled graph walker, and thousands of derivative rules.
 
@@ -370,29 +425,60 @@ intermediate blame is used and released. Call `.retain_grad()` on a non-leaf bef
 each step (`optimizer.zero_grad()`), or every update uses the sum of all past
 gradients.
 
+:::: {.plan-code}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Backpropagate twice without clearing the leaf gradient.
+3. Report or visualize the measured result.
+:::
+
 ```{python}
 #| label: autograd-rules-demo
+#| code-fold: false
+# [1] prepare inputs and conditions
 w = torch.randn(3, requires_grad=True)      # leaf: our parameter
 y_hat = (w * 2).sum()                       # non-leaf: result of an operation
 
+# [2] accumulate a second backward pass
 y_hat.backward()
+# [3] report the result
 print(f"leaf grad:      {w.grad.tolist()}")            # populated
 print(f"non-leaf grad:  {y_hat.grad}")                 # None -- rule 1
 
 (w * 2).sum().backward()                    # backward again, WITHOUT zeroing
 print(f"after 2nd pass: {w.grad.tolist()}")            # doubled -- rule 2
 ```
-
+::::
 **Rule 3 — parameter updates happen outside the graph.** For a raw leaf tensor, the
 update `w = w - lr * w.grad` inside autograd's view records the update and rebinds `w`
 to a non-leaf, so its `.grad` will not be retained by default on the next pass.
 Assigning a plain tensor over a registered `nn.Parameter` may instead fail loudly. The
 safe idiom from the live session covers both cases:
 
-```python
-with torch.no_grad():                # temporarily stop recording
-    w -= lr * w.grad                 # update in place; w stays a leaf
+:::: {.plan-code}
+::: {.plan}
+1. Save the leaf parameter and choose a learning rate.
+2. Pause graph recording and update the parameter in place.
+3. Verify that the update changed the value without changing leaf status.
+:::
+
+```{python}
+#| label: leaf-parameter-update
+#| code-summary: "Code: update a leaf parameter without extending the graph"
+#| code-fold: false
+# [1] save the leaf and choose the step size
+before = w.detach().clone()
+lr = 0.1
+
+# [2] update outside the recorded graph
+with torch.no_grad():
+    w -= lr * w.grad
+
+# [3] verify value and leaf status
+assert not torch.equal(w, before)
+assert w.is_leaf
 ```
+::::
 
 **Rule 4 — in-place operations can corrupt the tape.** Methods ending in `_`
 (`add_`, `relu_`) overwrite values that the backward pass may still need from the
@@ -424,15 +510,24 @@ Now examine the sigmoid's gate. From $\sigma'(z) = \sigma(z)(1-\sigma(z))$, its 
 value, at $z = 0$, is exactly $0.25$; away from zero the neuron *saturates* and the gate
 approaches $0$. The sigmoid gate is at best a quarter open, and often nearly closed.
 
+:::: {.plan-code}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Plot the two gates.
+:::
+
 ```{python}
 #| label: fig-gates
 #| fig-alt: "The sigmoid-derivative panel is a bell-shaped curve capped at one quarter and approaching zero in both tails. The ReLU-derivative panel is a step: zero for negative inputs and one for positive inputs."
 #| fig-cap: "Two gates. The sigmoid's derivative never exceeds 0.25 and vanishes under saturation; ReLU's is fully open (exactly 1) for every active neuron."
 #| code-summary: "Code: plot the two gates"
+#| code-fold: false
 import matplotlib.pyplot as plt
 
+# [1] prepare inputs and conditions
 z = torch.linspace(-6, 6, 300)
 sig = torch.sigmoid(z)
+# [2] run the core mechanism
 fig, axes = plt.subplots(1, 2, figsize=(7.4, 2.9), sharey=True)
 axes[0].plot(z, sig * (1 - sig), color="#232D4B")
 axes[0].axhline(0.25, ls="--", color="#E57200", lw=1)
@@ -442,7 +537,7 @@ axes[1].plot(z, (z > 0).float(), color="#232D4B")
 axes[1].set_title(r"ReLU gate"); axes[1].set_xlabel("$z$")
 plt.tight_layout(); plt.show()
 ```
-
+::::
 Here is the consequence, and it is one of deep learning's most important failure modes.
 The chain rule *multiplies* local Jacobians across layers. The activation-derivative
 part of a sigmoid path contributes at most $0.25$ per layer, so that part is bounded by
@@ -466,13 +561,23 @@ record how much gradient reaches each layer. We compute the diagnostic in float6
 the norm itself does not underflow; then we ask the practical float32 question: would a
 learning-rate-$0.1$ update actually change the first layer's stored weights?
 
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Define the reusable `gradient_diagnostic` helper.
+2. Prepare the inputs and fixed settings for the example.
+3. Implement the depth experiment.
+4. Report or visualize the measured result.
+:::
+
 ```{python}
 #| label: fig-vanishing
 #| fig-alt: "On a logarithmic gradient-norm axis across thirty layers, the sigmoid curve is extremely small near the input and grows toward the output, while the ReLU curve remains many orders of magnitude higher at early layers."
 #| fig-cap: "Gradient reaching each layer of two matched 30-layer MLPs (float64 norm, log scale). With the same He-scaled weights and inputs, repeated sigmoid gates leave a nonzero but unusably small first-layer signal; ReLU preserves enough signal for a float32 update to change every first-layer weight."
 #| code-summary: "Code: the depth experiment"
+#| code-fold: false
 from torch import nn
 
+# [1] define the reusable mechanism
 def gradient_diagnostic(
     activation: type[nn.Module], depth: int = 30, width: int = 64
 ) -> dict[str, object]:
@@ -502,14 +607,17 @@ def gradient_diagnostic(
         "first_size": grad32.numel(),
     }
 
+# [2] prepare inputs and conditions
 diagnostics = {}
 plt.figure(figsize=(6.2, 3.4))
+# [3] run the core mechanism
 for act, color in [(nn.Sigmoid, "#232D4B"), (nn.ReLU, "#E57200")]:
     diagnostics[act.__name__] = gradient_diagnostic(act)
     plt.semilogy(diagnostics[act.__name__]["norms"], "o-", ms=3,
                  color=color, label=act.__name__)
 plt.xlabel("layer (0 = closest to input)")
 plt.ylabel(r"$\|\partial L / \partial W^{(l)}\|$")
+# [4] report the result
 plt.legend(); plt.tight_layout(); plt.show()
 
 for name, result in diagnostics.items():
@@ -517,7 +625,7 @@ for name, result in diagnostics.items():
           f"nonzero={result['first_nonzero']}/{result['first_size']}; "
           f"changed={result['first_changed']}/{result['first_size']}")
 ```
-
+::::
 Read the slopes, then read the update audit. The sigmoid first-layer entries are not
 mathematically or representationally zero: all 4,096 survive the float32 cast. They are
 so small, however, that subtracting $0.1g$ changes none of the stored float32 weights.
@@ -553,13 +661,23 @@ $\var(w) = 2/n_{\text{in}}$. PyTorch applies sensible defaults for you; the diff
 between a good and a careless choice is smooth training versus a dead or exploding
 network:
 
+:::: {.plan-code}
+::: {.plan}
+1. Define the reusable `signal_std` helper.
+2. Prepare the inputs and fixed settings for the example.
+3. Signal energy vs depth.
+4. Report or visualize the measured result.
+:::
+
 ```{python}
 #| label: fig-init
 #| fig-alt: "Activation standard deviation is traced across forty ReLU layers. One naive scale collapses toward zero, another grows explosively, and the He-initialized trace stays roughly level."
 #| fig-cap: "Signal energy through 40 ReLU layers. Careless scales lose or amplify the signal exponentially; He initialization holds it steady."
 #| code-summary: "Code: signal energy vs depth"
+#| code-fold: false
 from collections.abc import Callable
 
+# [1] define the reusable mechanism
 def signal_std(
     scale_fn: Callable[[torch.Tensor, int], torch.Tensor],
     depth: int = 40, width: int = 256
@@ -572,6 +690,7 @@ def signal_std(
         stds.append(x.std().item())
     return stds
 
+# [2] prepare inputs and conditions
 torch.manual_seed(6050)
 schemes = {
     "naive  (std = 0.05)": lambda W, n: W * 0.05,
@@ -579,12 +698,14 @@ schemes = {
     "He  (std = sqrt(2/n))": lambda W, n: W * (2 / n) ** 0.5,
 }
 plt.figure(figsize=(6.2, 3.4))
+# [3] run the core mechanism
 for (name, fn), color in zip(schemes.items(), ["#5379AA", "#722F37", "#E57200"]):
     plt.semilogy(signal_std(fn), color=color, label=name)
 plt.xlabel("layer"); plt.ylabel("std of activations")
+# [4] report the result
 plt.legend(); plt.tight_layout(); plt.show()
 ```
-
+::::
 Initialization gives a stable *start*. Keeping the signal stable *during* training, as
 the weights move, is the job of normalization layers; and for very deep networks even
 that is not enough, and gradients get an architectural bypass: skip connections that add

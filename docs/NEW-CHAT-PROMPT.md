@@ -17,8 +17,10 @@ rendering to HTML + PDF, the course text for DS 6050.
 rest of my 6050 material; the virtualenv is deliberately outside it). Remote `https://github.com/Shakeri-Lab/dl-book`, live at
 `https://shakeri-lab.github.io/dl-book/`, PDF at
 `https://shakeri-lab.github.io/dl-book/Deep-Learning--Making-It-Learnable.pdf`.
-Current release **v1.1** — 502 pages, chapters 1–20 plus two interludes, four
-appendices, and an epilogue. Nothing is mid-flight.
+Current stable release **v1.1** is 502 pages. The post-release `main` revision is
+536 pages after the author-requested universal Plan → Code pass and the first
+author revision of Chapter 1; it still contains chapters 1–20 plus two interludes,
+four appendices, and an epilogue. Nothing is mid-flight.
 
 **Read before doing anything, in this order:**
 
@@ -44,8 +46,10 @@ answer.**
   are my own lecture material; `rnn_data_prep.py` is D2L-derived and must not be
   ported.
 - **Printed code is executed code.** Every snippet is either an executed cell or
-  tested source in `code/dlbook/` shown via `include=`. Never retype an "essence"
-  version of real code.
+  tested source in `code/dlbook/` shown via project-root-aware `book-include=`.
+  Never retype an "essence" version of real code. Every learner-visible code
+  surface uses the Plan → Code panel; only `echo: false` execution support is
+  exempt.
 - **Box caution.** The working tree is in Box; GitHub is the source of truth. If git objects ever look corrupt, re-clone rather than repair in place, and never let a render run while Box is mid-sync of the same folder.
 - **Freeze discipline.** Any prose edit invalidates that chapter's freeze cache.
   Re-render the chapter with **no `--to` flag** (both formats), then the project —

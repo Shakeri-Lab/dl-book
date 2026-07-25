@@ -111,14 +111,23 @@ only at the end (classifying the whole sequence); both designs appear below.
 
 Per the book's habit, build the loop by hand, then verify against the framework:
 
+:::: {.plan-code}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Implement the recurrence, written as the loop it is.
+3. Report or visualize the measured result.
+:::
+
 ```{python}
 #| label: setup-and-manual-rnn
 #| code-summary: "Code: the recurrence, written as the loop it is"
+#| code-fold: false
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 
+# [1] prepare inputs and conditions
 torch.manual_seed(6050)
 V, H, T, B = 8, 16, 12, 4                       # vocab, hidden, time, batch
 rnn = nn.RNN(V, H, batch_first=True)
@@ -129,13 +138,15 @@ W_xh, W_hh = rnn.weight_ih_l0, rnn.weight_hh_l0
 b = rnn.bias_ih_l0 + rnn.bias_hh_l0
 h = torch.zeros(B, H)                            # h_0 = 0, the standard start
 outs = []
+# [2] run the core mechanism
 for t in range(T):                               # the loop IS the architecture
     h = torch.tanh(x[:, t] @ W_xh.T + h @ W_hh.T + b)
     outs.append(h)
 manual = torch.stack(outs, 1)
+# [3] report the result
 print(f"manual loop vs. nn.RNN: max |diff| = {(manual - out_ref).abs().max():.1e}")
 ```
-
+::::
 Notice what the shapes say. `nn.RNN` eats `(batch, time, features)` — a third
 axis has joined Chapter 8's NCHW discipline — and the loop runs over that middle
 axis carrying `h` along. Unroll the loop on paper and the RNN is an ordinary
@@ -220,11 +231,20 @@ Depth was measured in layers there; here it is measured in *time*, and a paragra
 of text is a hundred layers deep. Watch the collapse, in the spirit of Chapter 5's
 depth experiment:
 
+:::: {.plan-code}
+::: {.plan}
+1. Define the reusable `grad_at_first_input` helper.
+2. Prepare the inputs and fixed settings for the example.
+3. Gradient reaching the first input vs. lag.
+:::
+
 ```{python}
 #| label: fig-vanishing-time
 #| fig-cap: "How much a freshly initialized vanilla RNN's output can blame its first input, as the lag between them grows. Fifteen orders of magnitude gone by sixty steps: the same exponential decay Chapter 5 measured down a deep network, now measured across time — because an unrolled RNN *is* a deep network with tied weights."
 #| fig-alt: "Log-scale line chart of the norm of the output gradient with respect to the first input versus lag. The vanilla RNN curve falls almost linearly on the log axis, from above one at lag 1 to roughly 10 to the minus 15 at lag 60."
 #| code-summary: "Code: gradient reaching the first input vs. lag"
+#| code-fold: false
+# [1] define the reusable mechanism
 def grad_at_first_input(rec: nn.Module, lags: list[int],
                         vocab: int = 4) -> list[float]:
     norms = []
@@ -236,10 +256,12 @@ def grad_at_first_input(rec: nn.Module, lags: list[int],
         norms.append(x.grad[:, 0].norm().item())    # blame on input #1
     return norms
 
+# [2] prepare inputs and conditions
 lags = [1, 5, 10, 20, 40, 60]
 torch.manual_seed(0)
 vanilla = nn.RNN(4, 32, batch_first=True)
 g_rnn = grad_at_first_input(vanilla, lags)
+# [3] run the core mechanism
 print("lag:      " + "   ".join(f"{l:>7d}" for l in lags))
 print("|grad|:   " + "   ".join(f"{g:.1e}" for g in g_rnn))
 
@@ -249,7 +271,7 @@ plt.xlabel("lag $T$ between output and first input")
 plt.ylabel(r"$\|\partial L / \partial \mathbf{x}_1\|$")
 plt.legend(); plt.tight_layout(); plt.show()
 ```
-
+::::
 By lag 60 the gradient reaching the first input is $10^{-15}$: at initialization,
 whatever happened at the start supplies almost no usable learning signal. That makes
 success fragile rather than mathematically impossible — a later experiment catches
@@ -409,11 +431,19 @@ hidden-hidden bias vectors, then adds them. The code sets their **sum** to $+1$;
 setting both slices to $+1$ would silently create an effective bias of $+2$.
 Watch what that buys, on the same axes as before:
 
+:::: {.plan-code}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Gradient vs. lag, vanilla RNN against LSTM.
+:::
+
 ```{python}
 #| label: fig-highway-time
 #| fig-cap: "The gradient-vs-lag experiment, rerun with an LSTM whose effective forget-gate bias is initialized to +1. The vanilla RNN's blame signal dies exponentially; the LSTM's rides the cell-state conveyor belt and arrives at lag 60 attenuated but alive, about ten orders of magnitude stronger. Chapter 9 built this highway across layers; the LSTM builds it across time, with a learned valve on the on-ramp."
 #| fig-alt: "Log-scale comparison of input-gradient norm versus lag. The vanilla RNN falls from above one to about 10 to the minus 15 by lag 60, while the LSTM with forget bias plus one declines much more slowly and remains near 10 to the minus 5."
 #| code-summary: "Code: gradient vs. lag, vanilla RNN against LSTM"
+#| code-fold: false
+# [1] prepare inputs and conditions
 torch.manual_seed(0)
 lstm = nn.LSTM(4, 32, batch_first=True)
 with torch.no_grad():
@@ -427,9 +457,10 @@ plt.semilogy(lags, g_rnn, "o-", color="#E57200", ms=5, label="vanilla RNN")
 plt.semilogy(lags, g_lstm, "s-", color="#232D4B", ms=5, label="LSTM (forget bias +1)")
 plt.xlabel("lag $T$ between output and first input")
 plt.ylabel(r"$\|\partial L / \partial \mathbf{x}_1\|$")
+# [2] run the core mechanism
 plt.legend(); plt.tight_layout(); plt.show()
 ```
-
+::::
 ### The memory test
 
 Gradients at initialization are promissory notes; training is where they get
@@ -443,9 +474,18 @@ each: the vanilla RNN, the LSTM as PyTorch hands it to you, and the LSTM with th
 lecture's remember-by-default initialization. Predict the three rows before
 running — in particular, does the *architecture* alone earn its keep?
 
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Define the reusable helpers: `make_recall`, `SeqClassifier`, and `train_recall`.
+2. Prepare the inputs and fixed settings for the example.
+3. Recall-the-first-token at lag 80, three configurations.
+:::
+
 ```{python}
 #| label: recall-task
 #| code-summary: "Code: recall-the-first-token at lag 80, three configurations"
+#| code-fold: false
+# [1] define the reusable mechanism
 def make_recall(n: int, T: int, vocab: int = 4,
                 seed: int = 0) -> tuple[torch.Tensor, torch.Tensor]:
     g = torch.Generator().manual_seed(seed)
@@ -485,19 +525,21 @@ def train_recall(cell: str, T: int, seed: int, forget_bias: float | None = None,
     with torch.no_grad():
         return (net(X_te).argmax(1) == y_te).float().mean().item(), net
 
+# [2] prepare inputs and conditions
 T = 80
 configs = [("vanilla RNN", "rnn", None),
            ("LSTM, default init", "lstm", None),
            ("LSTM, forget bias +1", "lstm", 1.0)]
 probe_nets: dict[str, nn.Module] = {}                # kept for the diagnostic below
 print(f"recall accuracy at lag {T} (chance 25%), seeds 0 / 1 / 6050:")
+# [3] run the core mechanism
 for label, cell, fb in configs:
     results = [train_recall(cell, T, s, fb) for s in [0, 1, 6050]]
     accs = [a for a, _ in results]
     probe_nets[label] = results[-1][1]                # seed 6050's model
     print(f"  {label:22s} " + "   ".join(f"{a:.0%}" for a in accs))
 ```
-
+::::
 Three rows, one lesson each. The vanilla RNN is a *lottery*: two seeds sit at
 chance, one cracks the task. @fig-vanishing-time says the teaching gradient is
 astronomically attenuated, not exactly zero — so once in a while optimization
@@ -527,11 +569,20 @@ data, and sits at chance. Prediction, per @eq-lstm-highway: the solver's mean
 forget gate should hold clearly above the half-open point, step after step; the
 failed twin's should sag near $\sigma(0) = \tfrac12$.
 
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Define the reusable `forget_gate_trace` helper.
+2. Prepare the inputs and fixed settings for the example.
+3. Replay the trained LSTMs and read their forget gates.
+:::
+
 ```{python}
 #| label: fig-forget-gate-diagnostic
 #| fig-cap: "The valve, observed. Mean forget-gate activation per timestep on 64 fresh probe sequences, replayed through the two trained seed-6050 LSTMs from the table above. The task-solving model (navy) holds its gates flat around 0.76 for all eighty steps — the conveyor belt stays open, and the first token survives to the readout. The default-initialized model (orange), same architecture and data, hovers near σ(0) ≈ ½ at about 0.56: a half-closed valve compounded eighty times, and chance accuracy. One task, one seed each, means over units and probes — a diagnostic of this experiment, not a general theory of trained LSTMs."
 #| fig-alt: "Two lines over timesteps one to eighty. The navy line for the forget-bias model stays flat near 0.76. The orange line for the default model stays flat near 0.56, just above a dotted half line."
 #| code-summary: "Code: replay the trained LSTMs and read their forget gates"
+#| code-fold: false
+# [1] define the reusable mechanism
 @torch.no_grad()
 def forget_gate_trace(net: SeqClassifier, T: int = 80) -> list[float]:
     X_probe, _ = make_recall(64, T, seed=3)           # fresh probe sequences
@@ -553,7 +604,9 @@ def forget_gate_trace(net: SeqClassifier, T: int = 80) -> list[float]:
     assert torch.allclose(h, out_ref[:, -1], atol=1e-5)
     return means
 
+# [2] prepare inputs and conditions
 plt.figure(figsize=(6.2, 3.2))
+# [3] run the core mechanism
 for label, color in [("LSTM, forget bias +1", "#232D4B"),
                      ("LSTM, default init", "#E57200")]:
     plt.plot(range(1, T + 1), forget_gate_trace(probe_nets[label]),
@@ -565,7 +618,7 @@ plt.ylabel("mean forget gate")
 plt.legend()
 plt.tight_layout(); plt.show()
 ```
-
+::::
 The replay is @eq-lstm executed by hand with the trained weights — the assert
 guarantees it reproduces the module's own output — so the curves are the model's
 actual gates, not a cartoon. Architecture proposed the highway; initialization
@@ -630,14 +683,25 @@ code-stripped text as a benchmark snapshot; later copyedits must not silently ch
 the task. The task is the oldest one in language modeling: read a character, predict
 the next.
 
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Run a character-level LSTM trained on Chapters 1–9.
+3. Report or visualize the measured result.
+4. Define the `CharLSTM` module.
+:::
+
 ```{python}
 #| label: char-lm-train
 #| code-summary: "Code: a character-level LSTM trained on Chapters 1–9"
+#| code-fold: false
 import hashlib
 from pathlib import Path
 
+# [1] prepare inputs and conditions
 corpus_path = Path("../../data/book-corpus-ch1-9.txt")
 text = corpus_path.read_text(encoding="utf-8")
+# [2] run the core mechanism
 assert len(text) == 148_594
 assert hashlib.sha256(text.encode("utf-8")).hexdigest() == (
     "b0fc23a513e37e7bcd78da04a03877345f6ebc850b91dbae260656d9924fb299"
@@ -647,9 +711,11 @@ stoi = {c: i for i, c in enumerate(chars)}
 data = torch.tensor([stoi[c] for c in text])
 split = int(0.9 * len(data))
 train_data, valid_data = data[:split], data[split:]
+# [3] report the result
 print(f"corpus: 9 chapters, {len(text):,} characters, vocab {len(chars)}")
 print(f"deterministic split: {len(train_data):,} train / {len(valid_data):,} held out")
 
+# [4] define the reusable mechanism
 class CharLSTM(nn.Module):
     def __init__(self, vocab: int, hidden: int = 128):
         super().__init__()
@@ -664,7 +730,7 @@ class CharLSTM(nn.Module):
         return self.out(o), state                      # logits at EVERY step
 
 ```
-
+::::
 The training loop below is the book's **canonical next-token trainer** — Listing
 10.1. Chunk sampling *is* truncated backpropagation through time: fresh random
 100-character windows every step, gradients clipped, no state carried across
@@ -675,28 +741,61 @@ executed code cannot drift apart.
 
 **Listing 10.1** — the canonical next-token trainer:
 
-```{.python include="../../code/dlbook/training.py"}
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Declare the shared next-token training interface and its protocol controls.
+2. Configure the optimizer and requested step budget.
+3. Draw or reuse chunk starts, then construct shifted input–target pairs.
+4. Predict every next token and average cross-entropy across batch and time.
+5. Backpropagate, clip the gradient, and take one optimizer step.
+6. Retain a sparse learning curve and return the trained artifact.
+:::
+
+```{.python book-include="code/dlbook/training.py"}
 ```
+::::
 
 **Listing 10.2** — the fixed-window evaluation protocol (state reset at every
 window boundary, so train and held-out numbers stay comparable across chapters):
 
-```{.python include="../../code/dlbook/evaluation.py"}
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Declare inference-only fixed-window evaluation.
+2. Switch to evaluation mode and initialize token-weighted totals.
+3. Traverse consecutive non-overlapping windows.
+4. Predict with recurrent state reset at each window boundary.
+5. Sum loss within windows and count all scored tokens.
+6. Divide once to obtain mean next-token cross-entropy.
+:::
+
+```{.python book-include="code/dlbook/evaluation.py"}
 ```
+::::
+
+:::: {.plan-code}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Run char lm train run.
+3. Report or visualize the measured result.
+:::
 
 ```{python}
 #| label: char-lm-train-run
+#| code-fold: false
 from dlbook.training import fit_next_token   # Listing 10.1, imported
 
+# [1] prepare inputs and conditions
 torch.manual_seed(6050)
 model = CharLSTM(len(chars))
+# [2] run the core mechanism
 model, _ = fit_next_token(model, train_data, vocab=len(chars))
 
 from dlbook.evaluation import fixed_window_loss   # Listing 10.2, imported
 
+# [3] report the result
 print(f"held-out fixed-window loss {fixed_window_loss(model, valid_data, vocab=len(chars)):.2f}")
 ```
-
+::::
 The loss falls from $\ln(V) \approx 4.6$ for the printed vocabulary size (uniform guessing)
 to 1.42 on the last sampled training minibatch. The deterministic held-out
 tail is harder, at 1.89, but both are far below uniform guessing. The model has
@@ -706,9 +805,17 @@ the next character from the softmax (divided by a **temperature** that sharpens 
 flattens it, Chapter 2's dial between hard max and uniform), feed that character
 back in, repeat. The hidden state streams; nothing is recomputed.
 
+:::: {.plan-code}
+::: {.plan}
+1. Define the reusable `sample` helper.
+2. Sample from the model, one character at a time.
+:::
+
 ```{python}
 #| label: char-lm-sample
 #| code-summary: "Code: sampling from the model, one character at a time"
+#| code-fold: false
+# [1] define the reusable mechanism
 @torch.no_grad()
 def sample(prompt: str, n: int = 300, temp: float = 0.8) -> str:
     model.eval()
@@ -722,9 +829,10 @@ def sample(prompt: str, n: int = 300, temp: float = 0.8) -> str:
         logits, state = model(nxt, state)              # consume each sample once
     return out
 
+# [2] run the core mechanism
 print(sample("The gradient ", n=300))
 ```
-
+::::
 Read the output honestly, because both halves of the verdict teach. What it *got*:
 words, spacing, sentence rhythm, markdown furniture (asterisks, pipes, colons),
 and the book's working vocabulary (training, batch, layer, convolution in various

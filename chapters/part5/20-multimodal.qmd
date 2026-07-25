@@ -248,16 +248,45 @@ provide more false negatives.
 
 This distinction is easy to miss because the code is so compact:
 
-```python
-image_embedding = F.normalize(image_encoder(image), dim=-1)  # (B, d)
-text_embedding = F.normalize(text_encoder(text), dim=-1)     # (B, d)
-logits = image_embedding @ text_embedding.T / temperature   # (B, B)
-labels = torch.arange(logits.shape[0])
-loss = 0.5 * (
-    F.cross_entropy(logits, labels)
-    + F.cross_entropy(logits.T, labels)
+:::: {.plan-code}
+::: {.plan}
+1. Encode both modalities and normalize them into one comparison space.
+2. Score every image against every text at the chosen temperature.
+3. Declare the batch diagonal as the supplied pair relation.
+4. Average image-to-text and text-to-image cross-entropy.
+:::
+
+```{python}
+#| label: symmetric-contrastive-loss
+#| code-summary: "Code: the symmetric paired contrastive loss"
+#| code-fold: false
+def symmetric_contrastive_loss(
+    image: Tensor,
+    text: Tensor,
+    image_encoder: nn.Module,
+    text_encoder: nn.Module,
+    temperature: float,
+) -> Tensor:
+    # [1] encode and normalize both views
+    image_embedding = F.normalize(image_encoder(image), dim=-1)
+    text_embedding = F.normalize(text_encoder(text), dim=-1)
+    # [2] score all cross-modal pairs
+    logits = image_embedding @ text_embedding.T / temperature
+    # [3] identify the declared mates on the diagonal
+    labels = torch.arange(logits.shape[0], device=logits.device)
+    # [4] average both retrieval directions
+    return 0.5 * (
+        F.cross_entropy(logits, labels)
+        + F.cross_entropy(logits.T, labels)
+    )
+
+identity_batch = torch.eye(3)
+loss_check = symmetric_contrastive_loss(
+    identity_batch, identity_batch, nn.Identity(), nn.Identity(), 0.1
 )
+assert torch.isfinite(loss_check)
 ```
+::::
 
 Every line has a contract. The two encoders end at the same width; normalization makes
 the dot product angular; the transpose reverses retrieval direction; and the target
@@ -299,10 +328,21 @@ $5/300=0.0167$.
 
 <!-- NOVEL: needs sign-off -->
 
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Define the reusable helpers: `PairedSplit`, `make_paired_data`, `TwoTower`, `symmetric_loss`, and `pair_loss`.
+2. Define the reusable helpers: `retrieval_metrics`, `derangement`, `train_tower`, `report`, and `report_paired_contrast`.
+3. Prepare the inputs and fixed settings for the example.
+4. Run the five-seed paired-versus-shuffled retrieval study.
+5. Report or visualize the measured result.
+:::
+
 ```{python}
 #| label: ch20-paired-study
 #| code-summary: "Run the five-seed paired-versus-shuffled retrieval study"
+#| code-fold: false
 
+# [1] define the reusable mechanism
 @dataclass(frozen=True)
 class PairedSplit:
     image: Tensor
@@ -367,6 +407,7 @@ def pair_loss(model: TwoTower, split: PairedSplit) -> float:
     return float(symmetric_loss(image_embedding, text_embedding))
 
 
+# [2] define the reusable mechanism
 @torch.no_grad()
 def retrieval_metrics(model: TwoTower, split: PairedSplit) -> dict[str, float]:
     model.eval()
@@ -439,10 +480,12 @@ def train_tower(
     return model
 
 
+# [3] prepare inputs and conditions
 fit_split, validation_split, held_out_split = make_paired_data()
 models: dict[tuple[int, str], TwoTower] = {}
 records: list[dict[str, object]] = []
 
+# [4] run the core mechanism
 for seed in range(6050, 6055):
     for condition, shuffled_pairs in (("paired", False), ("shuffled", True)):
         model = train_tower(seed, fit_split, validation_split, shuffled_pairs)
@@ -492,6 +535,7 @@ def report_paired_contrast(field: str) -> None:
 
 
 parameter_count = sum(parameter.numel() for parameter in models[(6050, "paired")].parameters())
+# [5] report the result
 print(f"split sizes: fit={len(fit_split.image)}, validation={len(validation_split.image)}, held-out={len(held_out_split.image)}")
 print(f"parameters: {parameter_count:,}; model seeds: 6050–6054")
 report("validation", "validation")
@@ -500,7 +544,7 @@ report_paired_contrast("I→T R@1")
 report_paired_contrast("T→I R@1")
 print(f"held-out random-ranking expectations: R@1={1 / 300:.4f}; R@5={5 / 300:.4f}")
 ```
-
+::::
 Across the five seeds, the paired condition reaches validation Recall@1 of 0.9911
 image-to-text and 0.9900 text-to-image. The shuffled control reaches only 0.0044 and
 0.0078. That validation separation is the predeclared mechanism check—the towers can
@@ -529,6 +573,12 @@ or any natural-data model will achieve.
 
 <!-- NOVEL: needs sign-off -->
 
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Define the reusable helpers: `held_values` and `score_window`.
+2. Held-out retrieval and representative score matrices.
+:::
+
 ```{python}
 #| label: fig-paired-retrieval-audit
 #| fig-cap: "The held-out audit separates aggregate retrieval from one score-matrix view. Bars report the mean and sample SD across five model seeds on all 300 held-out pairs; the dashed line is random Recall@1. The matrices show the first 40 held-out pairs for seed 6052. Correct training concentrates high scores near the declared-pair diagonal, while shuffled fit pairs do not."
@@ -536,7 +586,9 @@ or any natural-data model will achieve.
 #| fig-width: 11
 #| fig-height: 4.2
 #| code-summary: "Figure code: held-out retrieval and representative score matrices"
+#| code-fold: false
 
+# [1] define the reusable mechanism
 def held_values(condition: str, field: str) -> list[float]:
     return [
         float(record["held_out"][field])
@@ -552,6 +604,7 @@ def score_window(model: TwoTower, split: PairedSplit, size: int = 40) -> Tensor:
     return image_embedding @ text_embedding.T
 
 
+# [2] run the core mechanism
 fig, axes = plt.subplots(1, 3, figsize=(11, 4.2), gridspec_kw={"width_ratios": [1.15, 1, 1]})
 
 conditions = ["paired", "shuffled"]
@@ -591,7 +644,7 @@ fig.suptitle("The pair relation, not matching width alone, creates alignment", c
              fontsize=12, weight="bold")
 plt.show()
 ```
-
+::::
 The control is stronger than showing a falling training loss—with shuffled pairs, the
 model can spend capacity fitting accidental associations in the fit table. The correct
 validation relation refuses to reward that memorization. This is exactly why the
@@ -603,10 +656,19 @@ There is also a picture of what training *did* to the geometry. Project the two
 towers' embeddings of the same held-out rows into two dimensions, before and after
 training:
 
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Define the reusable `two_dim_view` helper.
+2. Prepare the inputs and fixed settings for the example.
+3. PCA view of both towers, untrained vs. trained.
+:::
+
 ```{python}
 #| label: fig-shared-space
 #| fig-cap: "What the contrastive loss does to the shared space. Twenty held-out events, embedded by freshly initialized towers (left) and by the trained paired model (right); each gray segment connects an image embedding to its declared text mate, and each panel is a 2-D principal-component view of the 16-dimensional embeddings. Before training the two views occupy unrelated coordinates and the mate segments sprawl; after training, mates land next to each other — which is precisely why the diagonal of the score matrix lights up. A projection understates 16-D distances, so read the segments qualitatively."
 #| code-summary: "Code: PCA view of both towers, untrained vs. trained"
+#| code-fold: false
+# [1] define the reusable mechanism
 def two_dim_view(model: TwoTower, count: int = 20) -> tuple[Tensor, Tensor]:
     model.eval()
     with torch.no_grad():
@@ -619,12 +681,14 @@ def two_dim_view(model: TwoTower, count: int = 20) -> tuple[Tensor, Tensor]:
     projected = centered @ right[:2].T
     return projected[:count], projected[count:]
 
+# [2] prepare inputs and conditions
 torch.manual_seed(6050)
 untrained = TwoTower(held_out_split.image.shape[1], held_out_split.text.shape[1])
 views = [(untrained, "before training:\nsame width, unrelated coordinates"),
          (models[(6050, "paired")], "after paired training:\nmates land together")]
 
 fig, axes = plt.subplots(1, 2, figsize=(8.6, 3.6))
+# [3] run the core mechanism
 for axis, (model, title) in zip(axes, views):
     image_2d, text_2d = two_dim_view(model)
     for i in range(len(image_2d)):
@@ -640,7 +704,7 @@ for axis, (model, title) in zip(axes, views):
 axes[0].legend(frameon=False, fontsize=8, loc="upper left")
 plt.tight_layout(); plt.show()
 ```
-
+::::
 ## Retrieval is not generation
 
 What has the two-tower model learned to do? Given an image query and a finite text

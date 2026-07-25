@@ -12,13 +12,33 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 
 > ## Current state — 2026-07-25 (read this first)
 >
-> The manuscript is **complete and released**: tag **v1.1** with a GitHub release
-> carrying the PDF, 502 pages, chapters 1–20 + two interludes + four appendices +
-> epilogue, live in HTML and PDF. **Nothing is mid-flight.** Plan v2 (the
-> readable-code and estimator-discipline overhaul) finished all seven phases on
-> July 20; the Plan → Code panel component shipped July 25. Every open item is a
-> decision waiting on the author — see **§9**, which supersedes any older status
-> text below it.
+> The manuscript is **complete and released**: tag **v1.1** carries the stable
+> 502-page PDF. The post-release `main` revision is 536 pages after the
+> author-requested universal Plan → Code pass and the first Chapter 1 author
+> revision; it remains chapters 1–20 + two interludes + four appendices +
+> epilogue, live in HTML and PDF after deployment. **Nothing is mid-flight.**
+> Plan v2 (the readable-code and estimator-discipline overhaul) finished all
+> seven phases on July 20; the Plan → Code component became universal July 25.
+> Every open item is a decision waiting on the author — see **§9**, which
+> supersedes any older status text below it.
+>
+> The universal code pass covers all 201 learner-visible Python surfaces; 28
+> `echo: false` execution-support cells are intentionally exempt. Every plan has
+> at most six steps and every step maps to a numbered marker in executed or
+> tested source. Project-root-aware `book-include=` keeps the four canonical
+> transclusions stable in chapter and whole-book renders. The audit lives at
+> `scripts/audit_plan_code.py`.
+>
+> Chapter 1 now follows the author's momentum-first revision: sparse em dashes,
+> show-then-name geometry, three new TikZ figures, colour-linked equations,
+> rank-aware `torch.linalg.lstsq`, a 3-D loss landscape, a three-method loss
+> diagnostic, concise empirical/population risk, and a Gaussian
+> likelihood/CLT/maximum-entropy bridge. Chapter 6 names shifted risk
+> $R_{T_\#P}$ and the augmentation population objective $R_{\mathcal A}$.
+> The July 25 verification parsed 229 executable cells/modules, executed the
+> affected Chapters 1, 4, 5, 6, 7, 10, 14, and 20 in both formats, completed a
+> frozen full render, and visually checked the affected HTML/PDF. The rendered
+> book contains no stale code-include or MathJax macro errors.
 >
 > Fresh session? Read `CLAUDE.md`, then §9 and §2 of this file, then
 > `docs/style-guide.md` and `docs/arc-seeds.md`. A paste-ready bootstrap prompt

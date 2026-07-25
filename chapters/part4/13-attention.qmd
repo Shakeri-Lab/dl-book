@@ -195,9 +195,15 @@ arithmetic. With identity projections and an all-ones selector, three source sta
 receive scores $(1.015,1.562,1.124)$ and therefore weights
 $(0.260,0.450,0.290)$:
 
+:::: {.plan-code}
+::: {.plan}
+1. Compute the three-key additive scores and softmax weights.
+:::
+
 ```{python}
 #| label: additive-scorer-snapshot
 #| code-summary: "Code: compute the three-key additive scores and softmax weights"
+#| code-fold: false
 from __future__ import annotations
 
 import math
@@ -210,6 +216,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+# [1] run the core mechanism
 torch.manual_seed(6050)
 
 query_snapshot = np.array([0.5, 0.5, 0.2, -0.1])
@@ -222,7 +229,7 @@ snapshot_scores = np.tanh(query_snapshot + key_snapshot).sum(axis=1)
 snapshot_weights = np.exp(snapshot_scores - snapshot_scores.max())
 snapshot_weights /= snapshot_weights.sum()
 ```
-
+::::
 ```{python}
 #| label: fig-additive-scorer
 #| echo: false
@@ -301,9 +308,17 @@ The lecture first walks one four-dimensional query past three keys. Its raw dot
 products are $(1.10,-0.60,0.15)$. Since $\sqrt{4}=2$, scaling gives
 $(0.55,-0.30,0.075)$, and softmax gives $(0.488,0.209,0.303)$:
 
+:::: {.plan-code}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Run one query through dot product, scaling, and softmax.
+:::
+
 ```{python}
 #| label: scaled-dot-snapshot
 #| code-summary: "Code: one query through dot product, scaling, and softmax"
+#| code-fold: false
+# [1] prepare inputs and conditions
 query_walk = torch.tensor([0.9, -0.3, 0.2, 0.6])
 key_walk = torch.tensor([
     [0.8, -0.2, 0.1, 0.5],
@@ -313,11 +328,12 @@ key_walk = torch.tensor([
 raw_walk = key_walk @ query_walk
 scaled_walk = raw_walk / math.sqrt(query_walk.numel())
 weight_walk = torch.softmax(scaled_walk, dim=0)
+# [2] run the core mechanism
 print("raw scores:", raw_walk.numpy())
 print("scaled scores:", scaled_walk.numpy())
 print("weights:", weight_walk.numpy(), "sum:", weight_walk.sum().item())
 ```
-
+::::
 Now let raw decoder features
 $\matr{D}\in\mathbb{R}^{B\times m\times d_d}$ and encoder memory
 $\matr{H}\in\mathbb{R}^{B\times n\times d_e}$ enter learned projections:
@@ -395,13 +411,23 @@ promise that trained projections remain independent or unit variance.
 Let us test both the variance and what softmax sees. For each width, draw 20,000
 queries and 16 independent keys per query:
 
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Audit score variance and softmax concentration versus width.
+3. Report or visualize the measured result.
+:::
+
 ```{python}
 #| label: fig-sqrt-d-audit
 #| fig-alt: "As projected width grows, raw score variance and the largest softmax weight both rise sharply. Their scaled counterparts remain nearly horizontal, around variance one and largest weight one quarter."
 #| fig-cap: "The scaling argument under its stated random-feature assumptions. Left: raw dot-product variance grows with width, while division by the square root of the width keeps it near one. Right: without scaling, a 16-key softmax becomes nearly one-hot as width grows; scaling keeps its mean largest weight near one quarter (0.24 in this draw). These are seeded synthetic draws about concentration, not a claim about every trained layer's gradients."
 #| code-summary: "Code: audit score variance and softmax concentration versus width"
+#| code-fold: false
+# [1] prepare inputs and conditions
 scaling_gen = torch.Generator().manual_seed(6050132)
 scaling_rows = []
+# [2] run the core mechanism
 for width in (8, 32, 128, 512):
     raw_parts, raw_max_parts, scaled_max_parts = [], [], []
     for _ in range(20_000 // 500):
@@ -422,6 +448,7 @@ for width in (8, 32, 128, 512):
         torch.cat(scaled_max_parts).mean().item(),
     ))
 
+# [3] report the result
 print("d_k   raw var   scaled var   raw max-w   scaled max-w")
 for row in scaling_rows:
     print(f"{row[0]:3d}   {row[1]:8.3f}   {row[2]:10.3f}   "
@@ -445,7 +472,7 @@ axes[1].set(xscale="log", ylim=(0, 1), xlabel=r"projected width $d_k$",
 axes[1].legend(frameon=False, fontsize=8)
 plt.show()
 ```
-
+::::
 Raw variance rises from $8.02$ to $510.35$ as $d_k$ grows from 8 to 512. Scaled
 variance stays between $0.997$ and $1.004$. Over the same range, the average
 largest unscaled softmax weight climbs from $0.564$ to $0.944$; the scaled value
@@ -468,11 +495,20 @@ Here is an independently written scaled-dot operator. It accepts already project
 queries, keys, and values, then audits a batch whose second example has two padded
 keys:
 
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Define the reusable `scaled_dot_attention` helper.
+2. Prepare the inputs and fixed settings for the example.
+3. Scaled dot-product attention with a source-padding mask.
+:::
+
 ```{python}
 #| label: fig-padding-mask
 #| fig-alt: "A two-row by four-column attention heatmap contains numeric weights in the first two key columns. The final two columns are labeled PAD in both rows and have zero weight."
 #| fig-cap: "A source-padding mask acts before softmax. The second example has only two real keys; its last two score cells are excluded and receive exactly zero weight. Cross-attention may read every real source position, so no causal triangle belongs here."
 #| code-summary: "Code: scaled dot-product attention with a source-padding mask"
+#| code-fold: false
+# [1] define the reusable mechanism
 def scaled_dot_attention(
     queries: torch.Tensor,
     keys: torch.Tensor,
@@ -494,6 +530,7 @@ def scaled_dot_attention(
     weights = torch.softmax(scores, dim=-1)
     return weights @ values, weights
 
+# [2] prepare inputs and conditions
 mask_gen = torch.Generator().manual_seed(6050133)
 Q_demo = torch.randn(2, 2, 4, generator=mask_gen)
 K_demo = torch.randn(2, 4, 4, generator=mask_gen)
@@ -518,6 +555,7 @@ print("maximum padded weight:",
 fig, ax = plt.subplots(figsize=(5.8, 2.5), constrained_layout=True)
 shown = mask_weights[1].detach().numpy()
 image = ax.imshow(shown, vmin=0, vmax=shown.max(), cmap="magma", aspect="auto")
+# [3] run the core mechanism
 for row in range(shown.shape[0]):
     for col in range(shown.shape[1]):
         label = "PAD" if col >= 2 else f"{shown[row, col]:.2f}"
@@ -529,7 +567,7 @@ ax.set(xticks=range(4), xticklabels=["key 1", "key 2", "pad", "pad"],
 fig.colorbar(image, ax=ax, label="attention weight", fraction=0.05, pad=0.04)
 plt.show()
 ```
-
+::::
 ::: {.callout-warning}
 ## Trap: three masks are not one mask
 
@@ -564,18 +602,29 @@ keep the experimental contract fixed:
 The generator and split below are deliberately byte-for-byte copies of Chapter 11.
 Changing them would end the running benchmark:
 
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Define the reusable `make_date` helper.
+3. Reconstruct Chapter 11's sealed date benchmark.
+4. Report or visualize the measured result.
+:::
+
 ```{python}
 #| label: date-data-rematch
 #| code-summary: "Code: reconstruct Chapter 11's sealed date benchmark"
+#| code-fold: false
 import random, torch
 import torch.nn as nn
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 
+# [1] prepare inputs and conditions
 MONTHS = ["january", "february", "march", "april", "may", "june", "july",
           "august", "september", "october", "november", "december"]
 DAYS = dict(zip(MONTHS, [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]))
 
+# [2] define the reusable mechanism
 def make_date(rng: random.Random) -> tuple[str, str]:
     mo = rng.randrange(12)
     d = rng.randrange(1, DAYS[MONTHS[mo]] + 1)
@@ -594,6 +643,7 @@ def make_date(rng: random.Random) -> tuple[str, str]:
 
 rng = random.Random(6050)
 pairs, seen_sources = [], set()
+# [3] run the core mechanism
 while len(pairs) < 9000:
     pair = make_date(rng)
     if pair[0] not in seen_sources:
@@ -602,6 +652,7 @@ while len(pairs) < 9000:
 train_pairs = pairs[:8000]
 valid_pairs = pairs[8000:8500]
 test_pairs = pairs[8500:]
+# [4] report the result
 print(*pairs[:4], sep="\n")
 train_sources = {s for s, _ in train_pairs}
 valid_sources = {s for s, _ in valid_pairs}
@@ -620,7 +671,7 @@ tgt_itos = {i: c for c, i in tgt_stoi.items()}
 V_src, V_tgt = len(SRC) + 3, len(TGT) + 3
 print(f"source vocab {V_src}, target vocab {V_tgt}")
 ```
-
+::::
 Numeric dates can be ambiguous, so we retain the same unambiguous subsets as Chapter
 11. Design decisions and the heatmap use validation only. The test set remains a
 single number at the end.
@@ -656,9 +707,19 @@ For this date model, the shape ledger is concrete:
 
 <!-- NOVEL: needs sign-off - independently written attentive date model and rematch. -->
 
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Define the reusable helpers: `batchify`, `unambiguous`, and `LearnedAlignment`.
+2. Prepare the inputs and fixed settings for the example.
+3. Run a masked additive-attention LSTM decoder.
+4. Define the reusable helpers: `AttentiveSeq2Seq`, `greedy_batch`, and `exact_match`.
+:::
+
 ```{python}
 #| label: attentive-seq2seq
 #| code-summary: "Code: a masked additive-attention LSTM decoder"
+#| code-fold: false
+# [1] define the reusable mechanism
 def batchify(prs: list[tuple[str, str]], idx: list[int]) -> tuple[
     torch.Tensor, torch.Tensor, torch.Tensor
 ]:
@@ -674,9 +735,11 @@ def unambiguous(prs: list[tuple[str, str]]) -> list[tuple[str, str]]:
     return [(s, t) for s, t in prs
             if "/" not in s or int(s[:2]) > 12 or int(s[3:5]) > 12]
 
+# [2] prepare inputs and conditions
 valid_unamb = unambiguous(valid_pairs)
 test_unamb = unambiguous(test_pairs)
 valid_fixed = valid_unamb[:400]
+# [3] run the core mechanism
 print(f"fixed validation {len(valid_fixed)}; final test {len(test_unamb)}")
 
 class LearnedAlignment(nn.Module):
@@ -701,6 +764,7 @@ class LearnedAlignment(nn.Module):
         context = torch.bmm(weights.unsqueeze(1), memory).squeeze(1)
         return context, weights
 
+# [4] define the reusable mechanism
 class AttentiveSeq2Seq(nn.Module):
     def __init__(self, v_src: int, v_tgt: int, embed: int = 32,
                  hidden: int = 128, alignment: int = 128):
@@ -796,7 +860,7 @@ def exact_match(
         for (_, truth), (_, guess, _) in zip(prs, generated)
     ) / len(prs)
 ```
-
+::::
 Notice what changed relative to Chapter 11. The embeddings and encoder width are
 untouched. Values are the contextual encoder states themselves; learned projections
 create match features for keys and queries. The decoder must now advance one target
@@ -813,9 +877,18 @@ test endpoint is not globally sealed here because that chapter has already repor
 it; for this rematch it remains decision-inert, and we request one final scalar only
 after the attention choices are fixed:
 
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Matched-schedule date rematch and reused-endpoint audit.
+3. Report or visualize the measured result.
+:::
+
 ```{python}
 #| label: attention-date-training
 #| code-summary: "Code: matched-schedule date rematch and reused-endpoint audit"
+#| code-fold: false
+# [1] prepare inputs and conditions
 checkpoints = (2, 4, 6, 8, 12, 16, 20, 25)
 baseline_curve = {
     2: 0.0025, 4: 0.1475, 6: 0.5375, 8: 0.7575,
@@ -827,6 +900,7 @@ attention_model = AttentiveSeq2Seq(V_src, V_tgt)
 optimizer = torch.optim.Adam(attention_model.parameters(), lr=1e-3)
 attention_curve = {}
 
+# [2] run the core mechanism
 for epoch in range(1, 26):
     attention_model.train()
     permutation = torch.randperm(len(train_pairs))
@@ -847,6 +921,7 @@ for epoch in range(1, 26):
         attention_curve[epoch] = exact_match(
             attention_model, valid_fixed)
 
+# [3] report the result
 print("epoch   fixed-state   attention")
 for epoch in checkpoints:
     print(f"{epoch:2d}       {baseline_curve[epoch]:6.2%}       "
@@ -879,14 +954,21 @@ test_exact = exact_match(attention_model, test_unamb)     # one final test audit
 print(f"one final test audit ({len(test_unamb)} sources): "
       f"baseline 93.1%; attention {test_exact:.1%}")
 ```
+::::
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Convergence rematch and learned date alignment.
+:::
 
 ```{python}
 #| label: fig-attention-rematch
 #| fig-alt: "The left learning curves show the attention model reaching high exact-match accuracy much earlier than the fixed-state baseline. The right character-by-character heatmap concentrates the first four output rows inside a box around the source year positions."
 #| fig-cap: "Left: exact-sequence accuracy on Chapter 11's fixed 400-source validation subset. Both models use the same data, embedding and recurrent hidden widths, optimizer, top-level seed, and epoch schedule; attention adds parameters and a stepwise decoder, so this is not a parameter- or compute-matched ablation. Right: the predeclared first validation example. Rows are emitted ISO characters, columns are contextual encoder states indexed by source character, and the orange box marks the source year. The first four rows concentrate there."
 #| code-summary: "Figure: convergence rematch and learned date alignment"
+#| code-fold: false
 from matplotlib.patches import Rectangle
 
+# [1] run the core mechanism
 fig, axes = plt.subplots(
     1, 2, figsize=(9.8, 3.45),
     gridspec_kw={"width_ratios": [1.0, 1.35]},
@@ -928,7 +1010,7 @@ fig.colorbar(
 )
 plt.show()
 ```
-
+::::
 At epoch 6, the fixed-state baseline is at $53.8\%$ and the attentive model is at
 $93.25\%$, a 39.5-point lead. At epoch 12 the comparison is $95.0\%$ versus
 $99.75\%$. The one final test audit is $93.1\%$ versus $100.0\%$ on 437

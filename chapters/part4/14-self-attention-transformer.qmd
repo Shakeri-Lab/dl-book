@@ -138,17 +138,26 @@ position back in.
 
 <!-- NOVEL: needs sign-off - seeded permutation/position audits and figures. -->
 
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Define the reusable helpers: `numpy_attention` and `numpy_positions`.
+2. Prepare the inputs and fixed settings for the example.
+3. Build the permutation debt figure.
+:::
+
 ```{python}
 #| label: fig-permutation-debt
 #| fig-cap: "The same content is permuted across slots (left). The audit (right) shows bare self-attention rematches after the same output permutation, while fixed positional signals break that rematch."
 #| fig-alt: "Two-panel permutation audit. The left panel moves five colored word tiles from the sequence 'bank by the river' into a new slot order. The right log-scale bars show a rematched bare-attention difference near machine precision and an order-one difference after fixed position vectors are added."
 #| fig-width: 10
 #| fig-height: 3.4
+#| code-fold: false
 
 import math
 import numpy as np
 import matplotlib.pyplot as plt
 
+# [1] define the reusable mechanism
 def numpy_attention(x: np.ndarray) -> np.ndarray:
     scores = x @ x.T / math.sqrt(x.shape[-1])
     scores = scores - scores.max(axis=-1, keepdims=True)
@@ -166,6 +175,7 @@ def numpy_positions(length: int, width: int) -> np.ndarray:
     pe[:, 1::2] = np.cos(position * frequency)
     return pe
 
+# [2] prepare inputs and conditions
 rng = np.random.default_rng(6050)
 x = rng.normal(size=(5, 8))
 permutation = np.array([2, 4, 0, 1, 3])
@@ -186,6 +196,7 @@ axes[0].imshow(
     np.stack([token_ids, token_ids[permutation]]),
     cmap="tab10", aspect="auto", vmin=0, vmax=9,
 )
+# [3] run the core mechanism
 for row, order in enumerate([token_ids, token_ids[permutation]]):
     for column, token_id in enumerate(order):
         axes[0].text(column, row, tokens[token_id], ha="center", va="center")
@@ -207,7 +218,7 @@ plt.show()
 print(f"bare permutation-equivariance error: {bare_error:.2e}")
 print(f"fixed-slot difference after adding position: {fixed_slot_change:.3f}")
 ```
-
+::::
 The first error is numerical roundoff, about $2.2\times10^{-16}$. Adding a fixed
 signal to each slot changes the rematched outputs by about 1.581 in this example.
 Position has not been inferred from content; it has been supplied.
@@ -267,13 +278,21 @@ linear maps a convenient raw material for representing relative shifts. It is a
 property of the positional pair itself—not a guarantee that arbitrary learned
 $W_Q$ and $W_K$ will preserve or use it.
 
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Build the position build figure.
+:::
+
 ```{python}
 #| label: fig-position-build
 #| fig-cap: "Sinusoidal position is a bank of clocks. Fast coordinates track local offsets; slow coordinates vary across longer ranges. Each sine/cosine pair acts like a clock, and a fixed offset rotates that pair by a start-independent angle."
 #| fig-alt: "Four-panel view of sinusoidal position. Fast sine and cosine coordinates oscillate repeatedly across 100 positions; slow coordinates change only slightly. A heatmap stacks 32 coordinates from fast bands at top to nearly constant slow bands at bottom. A unit-circle diagram shows positions 13 and 20 separated by the same rotation associated with offset seven."
 #| fig-width: 10
 #| fig-height: 5
+#| code-fold: false
 
+# [1] prepare inputs and conditions
 pe = numpy_positions(100, 32)
 
 delta = 7
@@ -288,6 +307,7 @@ pair_shifted = pe[13 + delta, 2 * j : 2 * j + 2]
 rotation_error = np.abs(rotation @ pair_i - pair_shifted).max()
 norm_error = np.abs(np.linalg.norm(pe, axis=1) - 4.0).max()
 
+# [2] run the core mechanism
 fig, axes = plt.subplots(
     2, 2, figsize=(10, 5), gridspec_kw={"height_ratios": [1, 2]}
 )
@@ -333,7 +353,7 @@ plt.show()
 print(f"rotation identity maximum error: {rotation_error:.2e}")
 print(f"constant position-vector norm maximum error: {norm_error:.2e}")
 ```
-
+::::
 For $d=32$, each position vector has norm $\sqrt{d/2}=4$ because every
 $\sin^2+\cos^2$ pair contributes one. Adding this vector does *not* preserve the
 norm of the combined token representation—the embedding and position vector can
@@ -415,13 +435,22 @@ next one.
 
 <!-- NOVEL: needs sign-off - independent causal multi-head implementation and mask audit. -->
 
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Define the `CausalMultiHeadAttention` module.
+2. Prepare the inputs and fixed settings for the example.
+3. Implement causal multi-head attention and audit its mask.
+:::
+
 ```{python}
 #| label: causal-multihead-implementation
 #| code-summary: "Code: implement causal multi-head attention and audit its mask"
+#| code-fold: false
 
 import torch
 from torch import nn
 
+# [1] define the reusable mechanism
 class CausalMultiHeadAttention(nn.Module):
     def __init__(self, width: int, heads: int) -> None:
         super().__init__()
@@ -455,12 +484,14 @@ class CausalMultiHeadAttention(nn.Module):
             return output, weights
         return output
 
+# [2] prepare inputs and conditions
 torch.manual_seed(6050)
 demo_attention = CausalMultiHeadAttention(width=32, heads=4)
 demo_x = torch.randn(1, 12, 32)
 _, demo_weights = demo_attention(demo_x, return_weights=True)
 
 future = torch.triu(torch.ones(12, 12, dtype=torch.bool), diagonal=1)
+# [3] run the core mechanism
 assert demo_weights[0, :, future].max().item() == 0.0
 assert torch.allclose(
     demo_weights.sum(dim=-1),
@@ -468,7 +499,7 @@ assert torch.allclose(
     atol=1e-6,
 )
 ```
-
+::::
 ```{python}
 #| label: fig-causal-multihead
 #| echo: false
@@ -521,16 +552,23 @@ fig.colorbar(image, ax=axes, fraction=0.025)
 plt.show()
 ```
 
+:::: {.plan-code}
+::: {.plan}
+1. Report the causal-mask and normalization audit.
+:::
+
 ```{python}
 #| label: causal-multihead-audit-output
 #| code-summary: "Code: report the causal-mask and normalization audit"
+#| code-fold: false
+# [1] run the core mechanism
 print("maximum forbidden attention:", demo_weights[0, :, future].max().item())
 print(
     "maximum row-sum error:",
     (demo_weights.sum(dim=-1) - 1).abs().max().item(),
 )
 ```
-
+::::
 The assertions are part of the derivation. A visually plausible triangle can still
 be transposed, shifted by one, or applied after softmax. Executable shape and
 normalization checks catch those errors—before training can disguise them.
@@ -588,10 +626,18 @@ evaluation time. Before the learned $\gamma$ and $\beta$, the vector is
 approximately zero mean and unit variance. After applying them, that claim need
 not remain true.
 
+:::: {.plan-code}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Verify LayerNorm centers and scales each token independently.
+:::
+
 ```{python}
 #| label: layernorm-axis-audit
 #| code-summary: "Code: verify LayerNorm centers and scales each token independently"
+#| code-fold: false
 
+# [1] prepare inputs and conditions
 audit = torch.tensor([
     [[1.0, 3.0, 5.0, 7.0], [40.0, 50.0, 60.0, 70.0]],
     [[-3.0, 1.0, 5.0, 9.0], [2.0, 2.5, 3.0, 3.5]],
@@ -599,10 +645,11 @@ audit = torch.tensor([
 normalized = nn.functional.layer_norm(audit, (4,))
 token_means = normalized.mean(dim=-1)
 token_vars = normalized.var(dim=-1, unbiased=False)
+# [2] run the core mechanism
 assert token_means.abs().max().item() < 1e-6
 assert (token_vars - 1).abs().max().item() < 1e-4
 ```
-
+::::
 ```{python}
 #| label: fig-transformer-block
 #| echo: false
@@ -671,13 +718,20 @@ plt.tight_layout()
 plt.show()
 ```
 
+:::: {.plan-code}
+::: {.plan}
+1. Report the per-token LayerNorm audit.
+:::
+
 ```{python}
 #| label: layernorm-axis-audit-output
 #| code-summary: "Code: report the per-token LayerNorm audit"
+#| code-fold: false
+# [1] run the core mechanism
 print("maximum absolute token mean:", token_means.abs().max().item())
 print("maximum token variance error:", (token_vars - 1).abs().max().item())
 ```
-
+::::
 The original Transformer normalized *after* each residual addition:
 
 $$
@@ -829,9 +883,16 @@ def state_digest(state: dict[str, torch.Tensor]) -> str:
     return digest.hexdigest()
 ```
 
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Implement the tiny Transformer — positions, block, model.
+:::
+
 ```{python}
 #| label: transformer-kernel
 #| code-summary: "Code: the tiny Transformer — positions, block, model"
+#| code-fold: false
+# [1] implement the mechanism
 def sinusoidal_positions(length: int, width: int) -> torch.Tensor:
     position = torch.arange(length, dtype=torch.float32).unsqueeze(1)
     frequency = torch.exp(
@@ -900,14 +961,22 @@ class TinyTransformerLM(nn.Module):
         return (logits, maps) if return_weights else logits
 
 ```
-
+::::
 The paired protocol is worth printing in full — it *is* the experimental design:
+
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Implement the paired protocol — shared schedule, identical initial tensors.
+:::
 
 ```{python}
 #| label: transformer-protocol
 #| code-summary: "Code: the paired protocol — shared schedule, identical initial tensors"
+#| code-fold: false
 # Reconstruct the random-number state immediately after Chapter 10 created
 # its LSTM, then draw that chapter's complete minibatch-start schedule.
+# [1] prepare inputs and conditions
 torch.manual_seed(SEED)
 _ = HistoricalCharLSTM(len(chars))
 schedule_generator = torch.Generator()
@@ -928,6 +997,7 @@ initial_state = {
 initial_hash = state_digest(initial_state)
 schedule_hash = hashlib.sha256(starts.numpy().tobytes()).hexdigest()
 
+# [2] run the core mechanism
 print(f"corpus: 9 chapters, {len(text):,} characters, vocab {len(chars)}")
 print(
     f"deterministic split: {len(train_data):,} train / "
@@ -941,7 +1011,7 @@ print(f"first eight window starts: {starts[0, :8].tolist()}")
 print(f"initial tensors: {initial_hash[:12]}…")
 print(f"window schedule: {schedule_hash[:12]}…")
 ```
-
+::::
 The model has 132,488 trainable parameters—736 fewer than Chapter 10's 133,224.
 That difference is only 0.55%—close enough to remove model size as an easy
 explanation. The model width is 84, split into four 21-dimensional heads; each of
@@ -968,18 +1038,31 @@ artifacts.
 Training and evaluation are Chapter 10's canonical listings, imported. The
 signature of the imported trainer, for reference:
 
-```{.python include="../../code/dlbook/training.py" start-line=11 end-line=24}
+:::: {.plan-code}
+::: {.plan}
+1. Reuse the shared trainer through its explicit model, data, schedule, and optimization interface.
+:::
+
+```{.python book-include="code/dlbook/training.py" start-line=11 end-line=25}
 ```
+::::
 
 *… body exactly as Listing 10.1 — this chapter prints only what it changes.*
+
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Chapter 10's trainer, imported — only the deltas printed.
+:::
 
 ```{python}
 #| label: transformer-training-function
 #| code-summary: "Code: Chapter 10's trainer, imported — only the deltas printed"
+#| code-fold: false
 
 from dlbook.training import fit_next_token      # Listing 10.1, Ch. 10
 from dlbook.evaluation import fixed_window_loss  # Listing 10.2, Ch. 10
 
+# [1] implement the mechanism
 def train_transformer(
     positions: bool,
 ) -> tuple[nn.Module, list[tuple[int, float]]]:
@@ -1013,31 +1096,55 @@ def transformer_sample(
         tokens.append(next_token)
     return "".join(chars[index] for index in tokens)
 ```
-
+::::
 The training function is defined once, then called in separate cells so each
 substantial run stays within the chapter's execution budget.
+
+:::: {.plan-code}
+::: {.plan}
+1. Train the positional Transformer.
+2. Report or visualize the measured result.
+:::
 
 ```{python}
 #| label: train-transformer-positions
 #| code-summary: "Code: train the positional Transformer"
+#| code-fold: false
 
+# [1] run the core mechanism
 position_model, position_curve = train_transformer(positions=True)
 position_train_loss = fixed_window_loss(position_model, train_data, vocab=len(chars))
 position_valid_loss = fixed_window_loss(position_model, valid_data, vocab=len(chars))
+# [2] report the result
 print(f"fixed-window train loss: {position_train_loss:.4f}")
 print(f"fixed-window held-out loss: {position_valid_loss:.4f}")
 ```
+::::
+:::: {.plan-code}
+::: {.plan}
+1. Repeat with position removed and everything else fixed.
+2. Report or visualize the measured result.
+:::
 
 ```{python}
 #| label: train-transformer-no-positions
 #| code-summary: "Code: repeat with position removed and everything else fixed"
+#| code-fold: false
 
+# [1] run the core mechanism
 no_position_model, no_position_curve = train_transformer(positions=False)
 no_position_train_loss = fixed_window_loss(no_position_model, train_data, vocab=len(chars))
 no_position_valid_loss = fixed_window_loss(no_position_model, valid_data, vocab=len(chars))
+# [2] report the result
 print(f"fixed-window train loss: {no_position_train_loss:.4f}")
 print(f"fixed-window held-out loss: {no_position_valid_loss:.4f}")
 ```
+::::
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Build the book corpus rematch figure.
+:::
 
 ```{python}
 #| label: fig-book-corpus-rematch
@@ -1045,10 +1152,13 @@ print(f"fixed-window held-out loss: {no_position_valid_loss:.4f}")
 #| fig-alt: "Two-panel matched comparison. Training losses start together near 4.7, then the positional Transformer falls steadily to about 1.1 while the no-position model ends near 1.85. Held-out bars rank the Chapter 10 LSTM lowest at 1.8881, the positional Transformer at 1.9190, and the no-position Transformer highest at 2.3405."
 #| fig-width: 10
 #| fig-height: 4
+#| code-fold: false
 
+# [1] prepare inputs and conditions
 lstm_valid_loss = 1.888110429
 
 fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+# [2] run the core mechanism
 for curve, label, color in [
     (position_curve, "Transformer + position", "#3566a8"),
     (no_position_curve, "Transformer, no position", "#d37b29"),
@@ -1079,7 +1189,7 @@ print(
 )
 print(f"positional Transformer minus LSTM: {lstm_gap:.4f} loss")
 ```
-
+::::
 The positional model finishes at 1.1132 on a deterministic pass over the training
 text and 1.9190 on the held-out tail. Removing position raises those values to
 1.8672 and 2.3405. Position lowers
@@ -1111,13 +1221,21 @@ mask and reveal the kinds of patterns a trained model happened to use. The next
 cell sends the prompt *The gradient* through the positional model and plots the
 second block's four heads.
 
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Build the learned attention figure.
+:::
+
 ```{python}
 #| label: fig-learned-attention
 #| fig-cap: "Learned attention weights in the second block for the prompt “The gradient ”. The maps are real routing distributions, not explanations or named head roles."
 #| fig-alt: "Four lower-triangular heatmaps for the second block's four heads on the character prompt 'The gradient' with spaces shown as dots. Each query row attends only to itself and earlier characters, but the heads distribute their bright high-weight cells differently: some follow local diagonals while others concentrate on a few earlier columns."
 #| fig-width: 10
 #| fig-height: 6
+#| code-fold: false
 
+# [1] prepare inputs and conditions
 prompt = "The gradient "
 prompt_tokens = torch.tensor([[stoi[char] for char in prompt]])
 position_model.eval()
@@ -1137,6 +1255,7 @@ assert torch.allclose(
 
 display_tokens = ["·" if char == " " else char for char in prompt]
 fig, axes = plt.subplots(2, 2, figsize=(10, 6), layout="constrained")
+# [2] run the core mechanism
 for head, axis in enumerate(axes.flat):
     image = axis.imshow(
         learned[head].numpy(), cmap="viridis", vmin=0, vmax=1
@@ -1155,7 +1274,7 @@ print(
     (learned.sum(dim=-1) - 1).abs().max().item(),
 )
 ```
-
+::::
 The maps obey the contract exactly: no future key receives weight and every row
 sums to one. The heads also differ from one another, but naming one “the previous
 character head” or another “the word head” from this single prompt would outrun
@@ -1193,16 +1312,23 @@ it only under the same tokenization, data, and averaging contract.
 :::
 <!-- /NOVEL -->
 
+:::: {.plan-code}
+::: {.plan}
+1. Deterministic samples from both Transformer variants.
+:::
+
 ```{python}
 #| label: transformer-samples
 #| code-summary: "Code: deterministic samples from both Transformer variants"
+#| code-fold: false
 
 print("WITH POSITION\n")
+# [1] run the core mechanism
 print(transformer_sample(position_model, "The gradient "))
 print("\n\nWITHOUT POSITION\n")
 print(transformer_sample(no_position_model, "The gradient "))
 ```
-
+::::
 The positional sample has the book's punctuation, fragments of mathematical
 vocabulary, and stretches that resemble prose. It still loses its argument. The
 no-position sample is visibly rougher. Neither qualitative judgment replaces the
@@ -1344,9 +1470,18 @@ into a stronger claim.
 Here is the numerical stationarity audit. Subtracting the largest score rescales every
 $\kappa_\tau$ by the same positive constant and leaves the minimizer unchanged.
 
+:::: {.plan-code}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Verify softmax attention's local-constant optimum.
+3. Report or visualize the measured result.
+:::
+
 ```{python}
 #| label: local-constant-attention-check
 #| code-summary: "Code: verify softmax attention's local-constant optimum"
+#| code-fold: false
+# [1] prepare inputs and conditions
 ms_rng = np.random.default_rng(6050)
 ms_d, ms_T = 8, 12
 ms_K = ms_rng.standard_normal((ms_T, ms_d))
@@ -1357,10 +1492,12 @@ ms_kappa = np.exp(ms_scores - ms_scores.max())
 ms_c = (ms_kappa[:, None] * ms_V).sum(0) / ms_kappa.sum()
 ms_attention = (ms_kappa / ms_kappa.sum()) @ ms_V
 ms_gradient = (ms_kappa[:, None] * (ms_c - ms_V)).sum(0)
+# [2] run the core mechanism
 assert np.allclose(ms_c, ms_attention)
+# [3] report the result
 print(f"max |stationarity gradient|: {np.abs(ms_gradient).max():.3e}")
 ```
-
+::::
 This solver retains the key--value rows because a future query may weight every row
 differently. That is why dense causal attention carries a growing dataset forward.
 
@@ -1400,25 +1537,40 @@ the numerator needs accumulated value-weighted features and the denominator need
 normalizer. Each new pair updates that fixed-size state once. Any later query reads the
 same answer as a full traversal of all pairs, for this factorized kernel.
 
+:::: {.plan-code}
+::: {.plan}
+1. Define the reusable `ms_phi` helper.
+2. Prepare the inputs and fixed settings for the example.
+3. Compare a factorized-kernel traversal with its running state.
+4. Check the claimed identities, shapes, or invariants.
+5. Report or visualize the measured result.
+:::
+
 ```{python}
 #| label: linear-attention-sufficient-state-check
 #| code-summary: "Code: compare a factorized-kernel traversal with its running state"
+#| code-fold: false
+# [1] define the reusable mechanism
 def ms_phi(x):
     return np.where(x > 0, x + 1, np.exp(x))
 
+# [2] prepare inputs and conditions
 ms_S = np.zeros((ms_d, ms_V.shape[1]))
 ms_z = np.zeros(ms_d)
+# [3] run the core mechanism
 for ms_key, ms_value in zip(ms_K, ms_V, strict=True):
     ms_S += np.outer(ms_phi(ms_key), ms_value)
     ms_z += ms_phi(ms_key)
 ms_streaming = (ms_S.T @ ms_phi(ms_q)) / (ms_z @ ms_phi(ms_q))
 ms_weights = ms_phi(ms_K) @ ms_phi(ms_q)
 ms_traversal = (ms_weights[:, None] * ms_V).sum(0) / ms_weights.sum()
+# [4] verify the contract
 assert np.allclose(ms_streaming, ms_traversal)
+# [5] report the result
 print("streaming equals traversal:", np.allclose(ms_streaming, ms_traversal))
 print(f"max |difference|: {np.abs(ms_streaming-ms_traversal).max():.3e}")
 ```
-
+::::
 The equality is exact up to floating-point order: the full dataset traversal has
 collapsed into two running sums. With $r$ and $d_v$ fixed, storage no longer grows
 with the prefix. This is the honest content behind “Transformers are RNNs” for
@@ -1458,9 +1610,18 @@ $$
 \end{aligned}
 $$ {#eq-delta-recurrence}
 
+:::: {.plan-code}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Verify that one SGD step is the delta recurrence.
+3. Report or visualize the measured result.
+:::
+
 ```{python}
 #| label: delta-sgd-check
 #| code-summary: "Code: verify that one SGD step is the delta recurrence"
+#| code-fold: false
+# [1] prepare inputs and conditions
 ms_eta = 0.3
 ms_h = ms_rng.standard_normal(ms_d)
 ms_k = ms_rng.standard_normal(ms_d)
@@ -1468,11 +1629,13 @@ ms_v = ms_rng.standard_normal()
 ms_sgd = ms_h - ms_eta * ms_k * (ms_k @ ms_h - ms_v)
 ms_delta = ((np.eye(ms_d) - ms_eta * np.outer(ms_k, ms_k)) @ ms_h
             + ms_eta * ms_v * ms_k)
+# [2] run the core mechanism
 assert np.allclose(ms_sgd, ms_delta)
+# [3] report the result
 print("SGD equals Delta recurrence:", np.allclose(ms_sgd, ms_delta))
 print(f"max |difference|: {np.abs(ms_sgd-ms_delta).max():.3e}")
 ```
-
+::::
 For vector values, store
 $\matr{H}_t\in\mathbb{R}^{d_v\times d_k}$ and replace the update by
 
@@ -1548,18 +1711,30 @@ for 30 endpoint repetitions. All methods in a trial receive the same keys, value
 order, queries, and decoder. The endpoint code below is the frozen protocol; it runs
 on CPU in under a second on the reference machine.
 
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Define the reusable helpers: `ms_unit` and `ms_decode`.
+3. Define the reusable helpers: `ms_trial` and `ms_panel`.
+4. Run the sealed synthetic recall-under-capacity study.
+:::
+
 ```{python}
 #| label: memory-capacity-study
 #| code-summary: "Code: run the sealed synthetic recall-under-capacity study"
+#| code-fold: false
+# [1] prepare inputs and conditions
 MS_SEED, MS_ETA, MS_GATE = 6050, 0.20, 0.10
 MS_DIMS, MS_LOADS, MS_REPEATS = (8, 16, 32), (0.5, 1, 2, 4, 8), 30
 
+# [2] define the reusable mechanism
 def ms_unit(x):
     return x / np.linalg.norm(x, axis=1, keepdims=True)
 
 def ms_decode(prediction, values):
     return np.argmax(prediction @ values.T, axis=1)
 
+# [3] define the reusable mechanism
 def ms_trial(rng, repeat, d, load):
     n = max(4, round(load * d))
     keys = ms_unit(rng.standard_normal((n, d)))
@@ -1611,6 +1786,7 @@ print("endpoint_trials=30 x 3 dimensions; d=(8, 16, 32); "
       "N/d=(0.5, 1, 2, 4, 8)")
 print("fixed: eta=0.20; priority_fraction=0.25; ordinary_write_gate=0.10")
 print("load  attention  Delta  gated-all  gated-priority  gated-ordinary")
+# [4] run the core mechanism
 for load in MS_LOADS:
     block = ms_endpoint[ms_endpoint[:, 3] == load]
     means = block[:, [4, 6, 9, 10, 11]].mean(0)
@@ -1627,12 +1803,19 @@ print(f"attention top-1 failures=0/{int(ms_endpoint[:, 2].sum())}")
 print(f"mean value MSE={ms_endpoint[:, 5].mean():.2e}; "
       f"max trial MSE={ms_endpoint[:, 5].max():.2e}")
 ```
+::::
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Compare full-table and fixed-state recall as load grows.
+:::
 
 ```{python}
 #| label: fig-memory-capacity-spectrum
 #| fig-cap: "A sealed synthetic mechanism test, not a language-model or state-space benchmark. Left: the uncompressed softmax table has perfect top-1 identification in this constructed, sharp-softmax regime, while the fixed delta state loses associations as N/d grows; this is not exact numeric interpolation. Right: the selective arm receives an unmatched priority bit and trades ordinary recall for priority recall. Keys, values, order, queries, decoder, and state width are matched within each trial; inference arithmetic, stored data, and side information are not matched, and no wall-clock claim is made. Left-panel lines average 30 endpoint seeds per dimension; right-panel lines pool the three dimensions, for 90 dimension-by-seed trials per load."
 #| fig-alt: "Two line charts. In the left chart softmax top-1 recall stays at one while Delta recall falls with load for dimensions 8, 16, and 32. In the right chart a gated Delta update preserves priority items better than ordinary items, especially at high load, while the ungated update does not make that trade as strongly."
 #| code-summary: "Figure: compare full-table and fixed-state recall as load grows"
+#| code-fold: false
+# [1] run the core mechanism
 fig, axes = plt.subplots(1, 2, figsize=(8.4, 3.35), constrained_layout=True)
 colors = {8: "#E57200", 16: "#2E7D32", 32: "#722F37"}
 for d in MS_DIMS:
@@ -1664,7 +1847,7 @@ axes[1].minorticks_off()
 axes[1].legend(fontsize=7.3)
 plt.show()
 ```
-
+::::
 At $N/d=8$, the gate raises priority recall over the plain delta state by 0.387 on
 average and lowers ordinary recall by 0.124. That is selective forgetting made
 visible, not a claim that the gated arm is globally better. Overall gated recall is

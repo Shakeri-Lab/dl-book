@@ -210,6 +210,31 @@ retrieve from memory: title the mistaken inference, then state the repair.
 4. **Code folded by default** (`code-fold: true` project-wide): visible code is one
    click away in HTML and prints in the PDF. Give visible figure cells a descriptive
    `#| code-summary`; use `echo: false` only for pure concept-diagram drawing cells.
+5. **Show, then name.** Let the reader first see the behavior, geometry, or failure
+   that creates a need for a concept. Name the concept after the reader has something
+   concrete to attach the name to. Avoid announcing terminology before its job is
+   visible.
+6. **Momentum outranks encyclopedic completeness.** Keep the main path sufficient,
+   honest, and moving. Put a subtle qualification in a short footnote when it prevents
+   a false claim; defer a proof or broader treatment to a later section only when that
+   later treatment is genuinely useful. Do not invite the reader into an appendix in
+   the middle of a mechanism unless the chapter cannot proceed without it.
+7. **Use colour as a redundant explanatory channel.** Colour-code corresponding
+   parts of an equation and figure when it makes a mapping visible, such as feature
+   columns to the column space or targets to their fitted weighted combination.
+   Labels, order, and notation must still carry the meaning in greyscale.
+8. **Write for a reader, not a presumed career stage.** Do not assume the reader is
+   currently a student or is pursuing a particular career. Prefer durable language
+   such as “worth keeping” or “we will reuse this” over “for the rest of your career.”
+9. **Teaching kernels are intentionally terse.** Printed code exposes the concept,
+   estimator, shapes, and checks needed for the claim. It is not presented as
+   production software. Production concerns belong in a compact coding-practice
+   reference, not as interruptions inside every conceptual example.
+10. **Statistical distinctions appear where they change the claim.** Introduce
+    empirical risk, population risk, and distribution shift with the minimum notation
+    needed to say what an experiment estimates. Do not repeat a statistical-learning
+    course, but never let clean-distribution validation stand in for robustness under
+    a different deployment distribution.
 
 ## The Editorial Contract (Plan v2, July 2026)
 
@@ -224,6 +249,9 @@ three things to code no human wrote.
   table, or listing), verified by one check the reader can perform.
 - **Replace, do not append.** Any PR adding a figure, section, or experiment names
   what it displaces. Page count is a budget: v1.1 must not exceed v1.0.
+  The July 25 universal Plan → Code rollout is an explicit author-requested exception,
+  not a precedent; later chapter revisions should recover space by removing duplicated
+  narration and obsolete figures wherever the plan already carries the sequence.
 - **The five-question chapter contract.** Every "Okay, so —" recap must answer:
   what was *Inherited*, what *Changed*, what was *Built in*, what was *Earned*
   (evidence), and what *Remaining debt* is carried forward. The questions govern
@@ -294,41 +322,52 @@ kernel_line_two()                  # [2]
 
 Rules:
 
-- **The right column is the executable cell**, never a retyped "essence". The
+- **Every learner-visible code surface uses this structure.** That includes
+  executable cells, static examples converted into executable cells, and
+  `book-include=` listings. The project-root-aware `book-include` attribute is
+  expanded by `filters/plan-code.lua`, so the same path works in chapter HTML
+  and whole-book PDF renders. The only exemption is execution-only support code
+  with `echo: false` (for example, a pure concept-diagram drawing cell), because
+  no code surface is shown to the learner.
+- **The code region is the executable cell**, never a retyped "essence". The
   covenant holds: printed code is executed code. `[n]` markers are ordinary
   comments in the tested source, so a transcluded listing can carry them too.
-- **Kernel only.** If the mechanism does not fit in roughly fifteen printed
-  lines, the cell is not ready for a panel — split the harness out first
-  (the equation/kernel/harness contract above). Panels are for the lines that
-  *are* the idea.
-- **Absorb, do not add.** Prefer snippets whose steps the prose already
-  narrates: the panel's left column replaces that list, so the page cost is
-  zero or negative. A panel that introduces new prose must displace some.
+- **Plan at the right altitude.** A short kernel may map nearly line by line. A
+  long model, trainer, or experiment maps its major phases: construct the data,
+  define the mechanism, run the protocol, verify the claim, report the result.
+  Do not turn syntax into fake pseudocode.
+- **Map every step.** Each plan index must appear in the code as `[n]`; each
+  marker must name a plan step. A marker at the start of a function or region
+  covers that implementation until the next marker at the same or shallower
+  indentation. Fused markers such as `[2][5]` are allowed when vectorization
+  combines conceptual steps.
+- **Absorb repetition.** When adjacent prose already enumerates the algorithm,
+  let the plan replace or compress that enumeration. The universal panel is not
+  a reason to narrate the same sequence three times.
 - **Number first, colour second.** The `[n]` markers carry the mapping on
   their own; the coloured chips are a redundant channel, so the panel survives
   greyscale print, colour-blind readers, and copy-paste. Never key a step by
   colour alone, and never rely on drawn arrows — they do not survive reflow.
-- **One panel per mechanism, not per cell.** A chapter with four panels has
-  four mechanisms; if it does not, some of them are decoration.
 - **Set `code-fold: false`.** In a panel the code *is* the content; folding it
   leaves the reader with half a comparison.
 - **Fusion is a teaching moment.** When one line implements two plan steps
   (`# [2][5]`), say so in the prose beneath: the gap between a sequential plan
   and a vectorised kernel is where tensor bugs live.
 
-- **Six steps is the ceiling.** In print the plan is set in an unbreakable box
-  so its steps can never split across a page; the cost of that guarantee is that
-  an over-long plan would overrun the page instead. If a mechanism needs more
-  than about six steps, it needs two panels or a shorter plan.
+- **Six steps is the ceiling.** If a cell seems to need more, group operations
+  into semantic phases or split the cell at a real teaching boundary.
+- **Use `.plan-code-wide` for long code.** As a working threshold, a source
+  block over about 35 lines stacks the plan above a full-width implementation
+  in HTML. Shorter panels remain side by side. Both forms stack in print.
 - **Watch the print width.** The code column is full-width in print, so lines
   must still fit the book's block (about 76 characters); a panel is not a licence
   to widen code.
 
-Format behaviour: HTML lays the columns side by side (`dlbook.scss`), collapsing
-to one column below 900px with the plan first. Print has a five-inch text block,
-where two columns of Python would wrap into noise, so `filters/plan-code.lua`
-stacks them — the plan becomes a ruled `planbox` panel above the code. The
-markers read identically in both.
+Format behaviour: HTML lays compact panels side by side (`dlbook.scss`).
+`.plan-code-wide` panels and all panels below 900px stack with the plan first.
+Print has a five-inch text block, where two columns of Python would wrap into
+noise, so `filters/plan-code.lua` always stacks them — the plan becomes a ruled,
+breakable `planbox` above the code. The markers read identically in both.
 
 ### Estimator discipline
 

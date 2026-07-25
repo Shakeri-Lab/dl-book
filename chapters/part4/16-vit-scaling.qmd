@@ -75,9 +75,16 @@ We can see this on the fixed Fashion-MNIST subset first opened in
 @sec-06-generalization-inductive-bias. The $28\times28$ grayscale images divide
 into $7\times7=49$ patches when $P=4$.
 
+:::: {.plan-code}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Load imports, the fixed Chapter 6 split, and image shapes.
+:::
+
 ```{python}
 #| label: vit-setup
 #| code-summary: "Code: imports, the fixed Chapter 6 split, and image shapes"
+#| code-fold: false
 
 import hashlib
 import math
@@ -89,6 +96,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
+# [1] prepare inputs and conditions
 torch.set_num_threads(6)
 torch.manual_seed(6050)
 
@@ -104,9 +112,10 @@ fit_idx, val_idx = split[:1000], split[1000:]
 X_fit, y_fit = X_dev[fit_idx], y_dev[fit_idx]           # (1000, 1, 28, 28)
 X_val, y_val = X_dev[val_idx], y_dev[val_idx]           # (200, 1, 28, 28)
 
+# [2] run the core mechanism
 print("fit / validation / benchmark:", len(X_fit), len(X_val), len(X_test))
 ```
-
+::::
 A learned matrix
 
 $$
@@ -118,6 +127,12 @@ identity. Unfold the image, multiply each flattened patch by $\matr{E}$, and add
 bias—or reshape the columns of $\matr{E}$ into $d$ convolutional kernels with
 kernel size $P$ and stride $P$. The two computations are the same linear map.
 
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Patchify and verify unfold-plus-linear equals one strided convolution.
+:::
+
 ```{python}
 #| label: fig-patchify
 #| fig-alt: "A garment image is overlaid with a seven-by-seven patch grid and one patch is outlined. That four-by-four patch is enlarged with its sixteen pixel values, then a heatmap shows the resulting sequence of forty-nine projected patch rows plus a separate first CLS row."
@@ -125,7 +140,9 @@ kernel size $P$ and stride $P$. The two computations are the same linear map.
 #| fig-width: 10
 #| fig-height: 3.4
 #| code-summary: "Figure code: patchify and verify unfold-plus-linear equals one strided convolution"
+#| code-fold: false
 
+# [1] prepare inputs and conditions
 P, d = 4, 32
 sample = X_fit[:1]
 generator = torch.Generator().manual_seed(6050)
@@ -143,6 +160,7 @@ max_error = (tokens_linear - tokens_conv).abs().max().item()
 assert raw_patches.shape == (1, 49, 16)
 assert tokens_linear.shape == (1, 49, 32)
 assert max_error < 2e-6
+# [2] run the core mechanism
 print("raw patches:", tuple(raw_patches.shape))
 print("projected tokens:", tuple(tokens_linear.shape))
 print(f"max |linear - convolution|: {max_error:.2e}")
@@ -179,7 +197,7 @@ axes[2].set_title("50 tokens × width 32")
 plt.tight_layout()
 plt.show()
 ```
-
+::::
 This identity is more than a coding shortcut. The patch projection is a learned,
 shared local operator—a thin residue of image structure at ViT's front door. What
 changes is what happens next: instead of stacking local feature maps, we hand the
@@ -306,10 +324,19 @@ minibatch order.
 The implementations below are derived independently from the chapter equations.
 There is no imported ViT package hiding extra training machinery.
 
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Define the reusable helpers: `MultiHeadSelfAttention`, `EncoderBlock`, and `TinyViT`.
+2. Define the reusable helpers: `TinyCNN`, `_xavier_init`, and `count_parameters`.
+3. Independently define the tiny ViT and parameter-matched CNN.
+:::
+
 ```{python}
 #| label: fashion-models
 #| code-summary: "Code: independently define the tiny ViT and parameter-matched CNN"
+#| code-fold: false
 
+# [1] define the reusable mechanism
 class MultiHeadSelfAttention(nn.Module):
     def __init__(self, width: int, heads: int) -> None:
         super().__init__()
@@ -371,6 +398,7 @@ class TinyViT(nn.Module):
         return self.head(self.norm(encoded[:, 0]))
 
 
+# [2] define the reusable mechanism
 class TinyCNN(nn.Module):
     def __init__(self) -> None:
         super().__init__()
@@ -400,10 +428,11 @@ def count_parameters(model: nn.Module) -> int:
     return sum(parameter.numel() for parameter in model.parameters())
 
 
+# [3] run the core mechanism
 print("CNN parameters:", f"{count_parameters(TinyCNN()):,}")
 print("ViT parameters:", f"{count_parameters(TinyViT()):,}")
 ```
-
+::::
 For one $28\times28$ image, a simple multiply–accumulate ledger gives about
 1.19 million for the CNN and 1.16 million for the ViT, a 1.8% difference. That
 ledger counts convolution, linear, and attention matrix products; it omits
@@ -418,14 +447,25 @@ both architectures. Resetting the seed before each model makes initialization
 reproducible; sharing the permutation list makes minibatch order exactly equal.
 The schedule hash makes that equality inspectable rather than aspirational.
 
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Define the reusable helpers: `minibatch_schedule`, `schedule_hash`, and `train_with_schedule`.
+3. Define the reusable helpers: `accuracy`, `shift_right`, and `run_paired_seed`.
+4. Define the explicit paired schedule, training loop, and shift audit.
+:::
+
 ```{python}
 #| label: fashion-protocol
 #| code-summary: "Code: define the explicit paired schedule, training loop, and shift audit"
+#| code-fold: false
 
+# [1] prepare inputs and conditions
 EPOCHS = 120
 SEEDS = list(range(6050, 6055))
 
 
+# [2] define the reusable mechanism
 def minibatch_schedule(seed: int) -> list[torch.Tensor]:
     generator = torch.Generator().manual_seed(seed + 10_000)
     return [torch.randperm(len(X_fit), generator=generator) for _ in range(EPOCHS)]
@@ -457,6 +497,7 @@ def train_with_schedule(
     return model
 
 
+# [3] define the reusable mechanism
 @torch.no_grad()
 def accuracy(model: nn.Module, x: torch.Tensor, y: torch.Tensor) -> float:
     model.eval()
@@ -510,48 +551,90 @@ cnn_macs = (
     + 7 * 7 * 48 * 32 * 3 * 3
     + 48 * 10
 )
+# [4] run the core mechanism
 print(f"dot-product/MAC proxy — CNN: {cnn_macs:,}; ViT: {vit_macs:,}")
 ```
-
+::::
 The five paired runs use one cell per seed so that each training cell stays within
 the chapter's execution budget. The split is only operational—all five rows enter
 one analysis.
 
+:::: {.plan-code}
+::: {.plan}
+1. Paired Fashion run for seed 6050.
+:::
+
 ```{python}
 #| label: train-fashion-6050
 #| code-summary: "Training code: paired Fashion run for seed 6050"
+#| code-fold: false
 
+# [1] run the core mechanism
 fashion_results = []
 fashion_results.extend(run_paired_seed(6050))
 ```
+::::
+:::: {.plan-code}
+::: {.plan}
+1. Paired Fashion run for seed 6051.
+:::
 
 ```{python}
 #| label: train-fashion-6051
 #| code-summary: "Training code: paired Fashion run for seed 6051"
+#| code-fold: false
 
+# [1] run the core mechanism
 fashion_results.extend(run_paired_seed(6051))
 ```
+::::
+:::: {.plan-code}
+::: {.plan}
+1. Paired Fashion run for seed 6052.
+:::
 
 ```{python}
 #| label: train-fashion-6052
 #| code-summary: "Training code: paired Fashion run for seed 6052"
+#| code-fold: false
 
+# [1] run the core mechanism
 fashion_results.extend(run_paired_seed(6052))
 ```
+::::
+:::: {.plan-code}
+::: {.plan}
+1. Paired Fashion run for seed 6053.
+:::
 
 ```{python}
 #| label: train-fashion-6053
 #| code-summary: "Training code: paired Fashion run for seed 6053"
+#| code-fold: false
 
+# [1] run the core mechanism
 fashion_results.extend(run_paired_seed(6053))
 ```
+::::
+:::: {.plan-code}
+::: {.plan}
+1. Paired Fashion run for seed 6054.
+:::
 
 ```{python}
 #| label: train-fashion-6054
 #| code-summary: "Training code: paired Fashion run for seed 6054"
+#| code-fold: false
 
+# [1] run the core mechanism
 fashion_results.extend(run_paired_seed(6054))
 ```
+::::
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Show every paired clean result and every shift curve.
+:::
 
 ```{python}
 #| label: fig-fashion-rematch
@@ -560,7 +643,9 @@ fashion_results.extend(run_paired_seed(6054))
 #| fig-width: 10
 #| fig-height: 3.7
 #| code-summary: "Figure code: show every paired clean result and every shift curve"
+#| code-fold: false
 
+# [1] prepare inputs and conditions
 by_model = {
     name: [row for row in fashion_results if row["model"] == name]
     for name in ("CNN", "ViT")
@@ -570,6 +655,7 @@ for name in by_model:
     assert [row["seed"] for row in by_model[name]] == SEEDS
 
 colors = {"CNN": "#232D4B", "ViT": "#E57200"}
+# [2] run the core mechanism
 fig, axes = plt.subplots(1, 2, figsize=(10, 3.7),
                          gridspec_kw={"width_ratios": [0.8, 1.35]})
 
@@ -613,7 +699,7 @@ for name in ("CNN", "ViT"):
         f"benchmark {mean_test:.1%}; validation at 4px {mean_shift4:.1%}"
     )
 ```
-
+::::
 The result is sharper than a one-number leaderboard—it separates fitting from
 generalization. The ViT interpolates the
 fitting set in every run—100.0% mean training accuracy—but averages 70.1% on clean
@@ -723,6 +809,12 @@ EfficientNet's grid search on its baseline found approximately
 $\alpha=1.2$, $\beta=1.1$, and $\gamma=1.15$. Their product is 1.92027—not
 exactly two, but close enough to serve as the intended budget step.
 
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Audit the EfficientNet compound-scaling constraint.
+:::
+
 ```{python}
 #| label: fig-compound-scaling
 #| fig-alt: "Depth, width, and resolution multipliers all rise modestly with the compound coefficient in the left panel. Their combined operation proxy rises much faster in the right panel, nearly doubling at each step."
@@ -730,7 +822,9 @@ exactly two, but close enough to serve as the intended budget step.
 #| fig-width: 8.5
 #| fig-height: 3.8
 #| code-summary: "Figure code: audit the EfficientNet compound-scaling constraint"
+#| code-fold: false
 
+# [1] prepare inputs and conditions
 alpha, beta, gamma = 1.2, 1.1, 1.15
 phis = np.arange(5)
 depth_multiplier = alpha ** phis
@@ -738,6 +832,7 @@ width_multiplier = beta ** phis
 resolution_multiplier = gamma ** phis
 compute_multiplier = (alpha * beta**2 * gamma**2) ** phis
 
+# [2] run the core mechanism
 print(f"alpha * beta^2 * gamma^2 = {alpha * beta**2 * gamma**2:.5f}")
 
 fig, axes = plt.subplots(1, 2, figsize=(8.5, 3.8))
@@ -765,7 +860,7 @@ axes[1].set_title("the budget grows with them")
 plt.tight_layout()
 plt.show()
 ```
-
+::::
 The constants are an empirical design choice from a particular search and model
 family, not a law that every network must obey. The durable lesson is the budget
 discipline—when several resources jointly limit performance, scaling one while
@@ -811,6 +906,12 @@ That makes extrapolation visually tempting: fit a line—extend it—and read a
 future loss. But a straight line on transformed axes does not repeal the
 conditions that produced it.
 
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Turn the published Kaplan exponents into auditable multipliers.
+:::
+
 ```{python}
 #| label: fig-kaplan-scaling
 #| fig-alt: "Three shallow straight lines descend on log-log axes as parameters, tokens, or optimally allocated compute increase. Even at a thousand-fold resource multiplier, each fitted loss component remains a substantial fraction of its starting value."
@@ -818,7 +919,9 @@ conditions that produced it.
 #| fig-width: 8.5
 #| fig-height: 4
 #| code-summary: "Figure code: turn the published Kaplan exponents into auditable multipliers"
+#| code-fold: false
 
+# [1] prepare inputs and conditions
 scales = np.logspace(0, 3, 200)
 kaplan_exponents = {
     "parameters, $\\alpha=0.076$": (0.076, "#232D4B"),
@@ -826,6 +929,7 @@ kaplan_exponents = {
     "optimal compute, $\\alpha=0.050$": (0.050, "#2E7D32"),
 }
 
+# [2] run the core mechanism
 fig, ax = plt.subplots(figsize=(8.5, 4))
 for label, (exponent, color) in kaplan_exponents.items():
     normalized = scales ** (-exponent)
@@ -846,7 +950,7 @@ ax.grid(True, which="both", alpha=0.18)
 plt.tight_layout()
 plt.show()
 ```
-
+::::
 The doubling arithmetic is now pinned. Twice as many parameters multiplies the
 fitted parameter-limited loss by $2^{-0.076}=0.949$, a 5.1% reduction. Doubling
 nonredundant data gives $2^{-0.095}=0.936$, a 6.4% reduction. Doubling optimally
@@ -946,6 +1050,13 @@ model farther right, in roughly the 40–70 billion range. The paper chose 70
 billion parameters and 1.4 trillion tokens for Chinchilla, at the upper end of
 that range, partly for data and computational efficiency.
 
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Define the reusable `fitted_chinchilla_loss` helper.
+3. Separate the joint-fit optimum from the 20-token heuristic.
+:::
+
 ```{python}
 #| label: fig-chinchilla-allocation
 #| fig-alt: "A U-shaped fitted loss curve plots model size along an iso-compute budget. The joint-fit point sits at the minimum near thirty-two billion parameters, the twenty-token point lies farther right near sixty-nine billion, and the Gopher-sized point lies far right on the rising branch."
@@ -953,7 +1064,9 @@ that range, partly for data and computational efficiency.
 #| fig-width: 9
 #| fig-height: 4.3
 #| code-summary: "Figure code: separate the joint-fit optimum from the 20-token heuristic"
+#| code-fold: false
 
+# [1] prepare inputs and conditions
 E_inf, A_fit, B_fit = 1.69, 406.4, 410.7
 alpha_fit, beta_fit = 0.34, 0.28
 C_budget = 5.76e23
@@ -975,6 +1088,7 @@ loss_grid = (
     E_inf + A_fit / N_grid**alpha_fit + B_fit / D_grid**beta_fit
 )
 
+# [2] define the reusable mechanism
 def fitted_chinchilla_loss(parameters: float, tokens: float) -> float:
     return (
         E_inf
@@ -988,6 +1102,7 @@ points = [
     (280e9, C_budget / (6 * 280e9), "Gopher-sized model", "#722F37"),
 ]
 
+# [3] run the core mechanism
 fig, ax = plt.subplots(figsize=(9, 4.3))
 ax.semilogx(N_grid / 1e9, loss_grid, color="#232D4B", lw=2.6)
 for parameters, tokens, label, color in points:
@@ -1014,7 +1129,7 @@ print(
     f"D={D_twenty / 1e12:.3f}T, C={6 * N_twenty * D_twenty:.2e}"
 )
 ```
-
+::::
 This distinction matters. The memorable **20 tokens per parameter** comes from the
 near-balanced frontier estimated by the first approaches: their table gives about
 20.2 billion tokens for 1 billion parameters, 205.1 billion for 10 billion, and

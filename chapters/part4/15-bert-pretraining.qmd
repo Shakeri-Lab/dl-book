@@ -62,6 +62,12 @@ There are four distinct decisions in play.
 4. **The padding mask** prevents real tokens from routing information from
    placeholder slots used only to make batch shapes rectangular.
 
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Separate attention visibility from MLM selection.
+:::
+
 ```{python}
 #| label: fig-visibility-corruption
 #| fig-cap: "Visibility and supervision are separate controls. A causal decoder sees a lower triangle (left); BERT-style attention sees every nonpadding key (center). The MLM selector marks one selected target position (right)."
@@ -69,6 +75,7 @@ There are four distinct decisions in play.
 #| fig-width: 10
 #| fig-height: 3.2
 #| code-summary: "Figure code: separate attention visibility from MLM selection"
+#| code-fold: false
 
 import copy
 import itertools
@@ -79,6 +86,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
+# [1] prepare inputs and conditions
 tokens = ["[CLS]", "the", "bank", "rose", "[SEP]", "[PAD]"]
 nonpadding = np.array([1, 1, 1, 1, 1, 0], dtype=bool)
 causal = np.tril(np.ones((6, 6), dtype=int)) * nonpadding[None, :]
@@ -86,6 +94,7 @@ full = np.ones((6, 6), dtype=int) * nonpadding[None, :]
 selector = np.zeros((1, 6), dtype=int)
 selector[0, 2] = 1
 
+# [2] run the core mechanism
 fig, axes = plt.subplots(
     1, 3, figsize=(10, 3.2), gridspec_kw={"width_ratios": [1, 1, 0.45]}
 )
@@ -106,7 +115,7 @@ axes[2].set_title("MLM selector")
 plt.tight_layout()
 plt.show()
 ```
-
+::::
 The center matrix contains no future-blocking triangle. Every nonpadding query can
 route from every nonpadding key—including itself. That is what *bidirectional*
 means here: a token's representation can jointly use left and right context in
@@ -237,6 +246,12 @@ does not. An unchanged selected token exposes its answer on purpose; only about
 1.5% of all eligible positions follow that branch, and the encoder is not told
 which normal-looking tokens were selected.
 
+:::: {.plan-code}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Trace the two-stage MLM selection policy.
+:::
+
 ```{python}
 #| label: fig-mlm-policy
 #| fig-cap: "BERT's 80/10/10 policy is conditional on the selected 15%. All three branches retain the original token as the prediction target."
@@ -244,13 +259,16 @@ which normal-looking tokens were selected.
 #| fig-width: 9
 #| fig-height: 3.2
 #| code-summary: "Figure code: trace the two-stage MLM selection policy"
+#| code-fold: false
 
+# [1] prepare inputs and conditions
 eligible_count = 1_000
 selected_count = round(0.15 * eligible_count)
 branch_counts = np.array([120, 15, 15])
 branch_labels = ["[MASK]", "random", "unchanged"]
 branch_colors = ["#3566a8", "#d37b29", "#6b7280"]
 
+# [2] run the core mechanism
 fig, axes = plt.subplots(1, 2, figsize=(9, 3.2))
 axes[0].bar(
     ["not selected", "selected"],
@@ -270,7 +288,7 @@ plt.show()
 print(f"direct loss targets: {branch_counts.sum()}")
 print(f"[MASK] share of all eligible positions: {branch_counts[0] / 1000:.1%}")
 ```
-
+::::
 Original BERT pre-generated several masked versions of its training examples;
 RoBERTa later redrew masks as examples were presented. Our controlled lab uses the
 latter *dynamic corruption* choice—the same sentence can ask different questions
@@ -314,11 +332,21 @@ Corpus frequencies weight the pair counts; lexicographic order breaks exact ties
 the result is reproducible.
 :::
 
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Define the reusable `merge_pair` helper.
+2. Prepare the inputs and fixed settings for the example.
+3. Learn five subword merges from weighted word counts.
+4. Report or visualize the measured result.
+:::
+
 ```{python}
 #| label: bpe-mechanism
 #| code-summary: "Code: learn five subword merges from weighted word counts"
+#| code-fold: false
 from collections import Counter
 
+# [1] define the reusable mechanism
 def merge_pair(
     symbols: tuple[str, ...], pair: tuple[str, str]
 ) -> tuple[str, ...]:
@@ -333,9 +361,11 @@ def merge_pair(
             index += 1
     return tuple(merged)
 
+# [2] prepare inputs and conditions
 corpus = {"low": 5, "lower": 2, "newest": 6, "widest": 3}
 words = {tuple(word) + ("</w>",): count for word, count in corpus.items()}
 merges: list[tuple[tuple[str, str], int]] = []
+# [3] run the core mechanism
 for _ in range(5):
     counts: Counter[tuple[str, str]] = Counter()
     for symbols, frequency in words.items():
@@ -346,10 +376,11 @@ for _ in range(5):
     merges.append((best, maximum))
     words = {merge_pair(symbols, best): count for symbols, count in words.items()}
 
+# [4] report the result
 print("merges:", [("+".join(pair), count) for pair, count in merges])
 print("lower:", " | ".join(next(word for word in words if "r" in word)))
 ```
-
+::::
 ::: {.callout-note}
 ## Reading the learned pieces (non-examinable)
 
@@ -546,10 +577,21 @@ the same neutral sentence. Source and target use the same atomic token granulari
 and similarly short sequences, making “matched scale” explicit rather than
 assuming it from a shared domain.
 
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Define the reusable helpers: `source_sentences` and `encode`.
+3. Construct the controlled source and target distributions.
+4. Check the claimed identities, shapes, or invariants.
+5. Report or visualize the measured result.
+:::
+
 ```{python}
 #| label: bert-lab-data
 #| code-summary: "Code: construct the controlled source and target distributions"
+#| code-fold: false
 
+# [1] prepare inputs and conditions
 SEED = 6050
 WIDTH = 48
 HEADS = 4
@@ -587,6 +629,7 @@ context_pairs = [
     ("sunlight", "current"),
 ]
 
+# [2] define the reusable mechanism
 def source_sentences(word: str, family: int) -> list[list[str]]:
     cue = [pair[family] for pair in context_pairs]
     other = [pair[1 - family] for pair in context_pairs]
@@ -602,6 +645,7 @@ def source_sentences(word: str, family: int) -> list[list[str]]:
     ]
 
 sentences: list[list[str]] = []
+# [3] run the core mechanism
 for family, words in enumerate(covered_words):
     for word in words:
         sentences.extend(source_sentences(word, family))
@@ -628,13 +672,15 @@ random_pool = source_token_ids[
     ~torch.isin(source_token_ids, torch.tensor([PAD, CLS, SEP]))
 ]
 
+# [4] verify the contract
 assert len(sentences) == 320
 assert len(vocabulary) == 115
 assert not torch.isin(source_ids, uncovered_ids).any()
+# [5] report the result
 print(f"source: {len(sentences)} sentences; vocabulary: {len(vocabulary)} tokens")
 print(f"covered/uncovered token strings: 40 / {len(uncovered_ids)}")
 ```
-
+::::
 This is an atomic word-level vocabulary, not WordPiece. That simplification is
 intentional—splitting the generated strings into subwords could let spelling leak family
 identity. The source generator—not natural language—defines the latent regularity,
@@ -651,10 +697,20 @@ segment embeddings, NSP, and dropout. Its 43,920 encoder parameters make the stu
 fast enough to repeat end to end, while preserving the relevant path from
 bidirectional attention to MLM to fine-tuning.
 
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Define the reusable helpers: `FullAttention`, `EncoderBlock`, and `TinyBertEncoder`.
+2. Define the reusable helpers: `MaskedLanguageModel` and `corrupt`.
+3. Prepare the inputs and fixed settings for the example.
+4. Define full attention, the encoder, and the MLM head.
+:::
+
 ```{python}
 #| label: bert-lab-model
 #| code-summary: "Code: define full attention, the encoder, and the MLM head"
+#| code-fold: false
 
+# [1] define the reusable mechanism
 class FullAttention(nn.Module):
     def __init__(self) -> None:
         super().__init__()
@@ -724,6 +780,7 @@ class TinyBertEncoder(nn.Module):
             hidden = block(hidden, visible)
         return hidden
 
+# [2] define the reusable mechanism
 class MaskedLanguageModel(nn.Module):
     def __init__(self, encoder: TinyBertEncoder) -> None:
         super().__init__()
@@ -775,12 +832,14 @@ def corrupt(
     assert not torch.isin(corrupted, uncovered_ids).any()
     return corrupted, selected, counts
 
+# [3] prepare inputs and conditions
 encoder_parameters = sum(
     parameter.numel() for parameter in TinyBertEncoder().parameters()
 )
+# [4] run the core mechanism
 print(f"encoder parameters: {encoder_parameters:,}")
 ```
-
+::::
 The MLM decoder is deliberately *untied* from the input embedding table. The
 original released BERT code explicitly tied those weights, but tying would update an uncovered input row
 through the vocabulary softmax even when that token never appeared. The custom
@@ -799,12 +858,24 @@ updates, and the same learning rates. All encoder weights move in both arms. Eac
 seed therefore repeats initialization, corruption, MLM, label selection, and
 fine-tuning—not merely the last classifier fit.
 
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Define the reusable helpers: `pretrain`, `neutral_sentence`, and `WordClassifier`.
+3. Define the reusable helpers: `fit_classifier` and `classifier_accuracy`.
+4. Pretrain five paired encoders and fine-tune all weights.
+5. Report or visualize the measured result.
+:::
+
 ```{python}
 #| label: bert-lab-training
 #| code-summary: "Code: pretrain five paired encoders and fine-tune all weights"
+#| code-fold: false
 
+# [1] prepare inputs and conditions
 TensorState = dict[str, torch.Tensor]
 
+# [2] define the reusable mechanism
 def pretrain(
     seed: int,
 ) -> tuple[TensorState, TensorState, torch.Tensor, int]:
@@ -864,6 +935,7 @@ class WordClassifier(nn.Module):
         # [CLS] we found the WORD today [SEP] -> WORD is position 4.
         return self.head(self.encoder(ids)[:, 4])
 
+# [3] define the reusable mechanism
 def fit_classifier(
     encoder_state: TensorState,
     head_state: TensorState,
@@ -922,6 +994,7 @@ all_branches = torch.zeros(3, dtype=torch.long)
 all_eligible = 0
 first_states: tuple[TensorState, TensorState] | None = None
 
+# [4] run the core mechanism
 for replicate_seed in REPLICATE_SEEDS:
     initial_state, pretrained_state, counts, eligible_count = pretrain(
         replicate_seed
@@ -976,6 +1049,7 @@ for replicate_seed in REPLICATE_SEEDS:
         )
 
 branch_shares = all_branches / all_branches.sum()
+# [5] report the result
 print(
     "selected targets across five runs: "
     f"{all_branches.sum().item():,}"
@@ -1001,7 +1075,7 @@ for count in LABEL_COUNTS:
         f"{train_pairs[:, 1].mean():.3f}"
     )
 ```
-
+::::
 Across 1,032,096 eligible positions, the five runs select 155,019—15.020%. The
 realized branches are 80.04% mask, 9.98% random, and 9.99% unchanged. (Estimator
 reading, per @sec-04-estimator-cases: the MLM loss is Case 1 over exactly the
@@ -1017,6 +1091,12 @@ Remember the question: did pretraining organize covered representations in a way
 that scarce labels could reuse—or did the classifier merely learn the tiny label
 set? The task, control, and geometry answer different parts.
 
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Define the reusable `representation_geometry` helper.
+2. Audit paired transfer, source coverage, and representation geometry.
+:::
+
 ```{python}
 #| label: fig-pretraining-pays
 #| fig-cap: "Five paired end-to-end seeds in the synthetic transfer lab. MLM initialization separates covered latent families and improves every covered-type comparison (left and center); both arms stay near chance on input-vocabulary controls withheld from MLM inputs, replacements, and targets (left). Centered cosine similarity is a representation diagnostic, not a task metric (right)."
@@ -1024,7 +1104,9 @@ set? The task, control, and geometry answer different parts.
 #| fig-width: 11
 #| fig-height: 3.7
 #| code-summary: "Figure code: audit paired transfer, source coverage, and representation geometry"
+#| code-fold: false
 
+# [1] define the reusable mechanism
 @torch.no_grad()
 def representation_geometry(
     encoder_state: TensorState,
@@ -1070,6 +1152,7 @@ pretrained_uncovered_means = np.array([
     for count in LABEL_COUNTS
 ])
 
+# [2] run the core mechanism
 fig, axes = plt.subplots(1, 3, figsize=(11, 3.7))
 for values, label, color, marker in [
     (scratch_means, "scratch, covered", "#6b7280", "o"),
@@ -1132,7 +1215,7 @@ plt.show()
 print(f"initial within/between: {initial_geometry}")
 print(f"after MLM within/between: {pretrained_geometry}")
 ```
-
+::::
 | Labels / family | Scratch, covered | MLM, covered | Gain | Scratch, unexposed | MLM, unexposed |
 |---:|---:|---:|---:|---:|---:|
 | 1 | 0.468 | 0.995 | +0.526 | 0.475 | 0.425 |

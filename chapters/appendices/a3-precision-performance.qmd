@@ -104,9 +104,16 @@ from 1 to the next larger representable value. It is not the smallest positive v
 `tiny` is the smallest positive **normal** value.
 
 <!-- NOVEL: needs sign-off -->
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Inspect range and spacing for four floating-point dtypes.
+:::
+
 ```{python}
 #| label: a3-finfo
 #| code-summary: "Code: inspect range and spacing for four floating-point dtypes"
+#| code-fold: false
 
 import math
 
@@ -115,6 +122,7 @@ from matplotlib.patches import FancyArrowPatch, Rectangle
 import torch
 from torch import nn
 
+# [1] prepare inputs and conditions
 torch.manual_seed(6050)
 torch.set_default_dtype(torch.float64)
 torch.set_num_threads(1)
@@ -126,6 +134,7 @@ dtype_names = {
     torch.float64: "FP64",
 }
 
+# [2] run the core mechanism
 for dtype in (torch.float16, torch.bfloat16, torch.float32, torch.float64):
     info = torch.finfo(dtype)
     print(
@@ -145,7 +154,7 @@ print("70,000 stored as FP16 / BF16:",
 print("2^-26 stored as FP16 / BF16:",
       small.to(torch.float16).item(), small.to(torch.bfloat16).item())
 ```
-
+::::
 The printed spacings are $9.765625\times10^{-4}$ for FP16,
 $7.8125\times10^{-3}$ for BF16, and about $1.19\times10^{-7}$ for FP32. The
 range-resolution trade is visible in the last two lines. FP16 sends 70,000 to
@@ -206,10 +215,17 @@ The depth experiment in @sec-05-backpropagation and the norm diagnostic in
 directions.
 
 <!-- NOVEL: needs sign-off -->
+:::: {.plan-code}
+::: {.plan}
+1. Separate rounded-away updates, accumulation loss, and cancellation.
+:::
+
 ```{python}
 #| label: a3-rounding-failures
 #| code-summary: "Code: separate rounded-away updates, accumulation loss, and cancellation"
+#| code-fold: false
 
+# [1] run the core mechanism
 for dtype, update in (
     (torch.float16, 1e-4),
     (torch.bfloat16, 1e-3),
@@ -236,7 +252,7 @@ print("10,000 serial additions in FP16 / FP32:",
       sum16.item(), sum32.item())
 print("cancellation orders:", cancel_first.item(), small_first.item())
 ```
-
+::::
 All three stored weights remain 1. The deliberately serial FP16 accumulator stops at
 256, while the FP32 accumulator reaches the exact sum 1,250. This loop isolates the
 accumulator's role—production reductions may use trees, fused instructions, or wider
@@ -264,10 +280,17 @@ This is the log-sum-exp trick from @sec-02-logistic-softmax. Let us separate wha
 can repair from information already lost at storage time.
 
 <!-- NOVEL: needs sign-off -->
+:::: {.plan-code}
+::: {.plan}
+1. Contrast stable softmax with overflow and prior rounding.
+:::
+
 ```{python}
 #| label: a3-softmax-stability
 #| code-summary: "Code: contrast stable softmax with overflow and prior rounding"
+#| code-fold: false
 
+# [1] run the core mechanism
 for dtype in (torch.float16, torch.bfloat16, torch.float32):
     logits = torch.tensor([1000.0, 1001.0, 1002.0], dtype=dtype)
     exponentials = torch.exp(logits)
@@ -277,7 +300,7 @@ for dtype in (torch.float16, torch.bfloat16, torch.float32):
     print("  naive finite:", bool(torch.isfinite(naive).all()),
           "stable:", [round(x, 4) for x in stable.float().tolist()])
 ```
-
+::::
 The naïve calculation is nonfinite in all three dtypes. Stable softmax prints
 `[0.0900, 0.2448, 0.6650]` in FP16 and `[0.0900, 0.2447, 0.6652]` in FP32—the
 latter is the expected vector to four decimals. BF16 returns an approximately uniform
@@ -340,10 +363,18 @@ The next check uses no accelerator timing—it isolates the arithmetic, then ask
 autocast which dtypes it chose for one linear layer in this environment.
 
 <!-- NOVEL: needs sign-off -->
+:::: {.plan-code}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Expose loss scaling and operation-specific CPU autocast dtypes.
+:::
+
 ```{python}
 #| label: a3-mixed-policy
 #| code-summary: "Code: expose loss scaling and operation-specific CPU autocast dtypes"
+#| code-fold: false
 
+# [1] prepare inputs and conditions
 tiny_gradient = torch.tensor(2.0**-26, dtype=torch.float32)
 scale = 2.0**12
 direct = tiny_gradient.to(torch.float16).to(torch.float32)
@@ -359,12 +390,13 @@ layer = nn.Linear(4, 2, dtype=torch.float32)
 inputs = torch.randn(3, 4, dtype=torch.float32)
 with torch.autocast("cpu", dtype=torch.bfloat16):
     outputs = layer(inputs)
+# [2] run the core mechanism
 outputs.float().square().mean().backward()
 
 print("input, parameter, output, parameter-gradient dtypes:")
 print(inputs.dtype, layer.weight.dtype, outputs.dtype, layer.weight.grad.dtype)
 ```
-
+::::
 Direct FP16 storage turns $2^{-26}$ into zero; scaling by $2^{12}$, rounding to FP16,
 and unscaling recovers $2^{-26}$ in this controlled case. In the autocast check, the
 input and parameter remain FP32, the linear output is BF16, and the parameter gradient
@@ -424,6 +456,12 @@ The following figure uses an invented machine with a 100-TFLOP/s compute roof an
 computer or a claim about any product.
 
 <!-- NOVEL: needs sign-off -->
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Build and interrogate a synthetic Roofline.
+:::
+
 ```{python}
 #| label: fig-a3-roofline
 #| fig-cap: "A synthetic Roofline with a 100-TFLOP/s compute roof and a 2-TB/s bandwidth roof. Their intersection is 50 FLOP/byte. The three labeled points illustrate a low-intensity elementwise-style kernel, a kernel still limited by the bandwidth roof, and a kernel at the compute roof; they are teaching coordinates, not measurements."
@@ -431,7 +469,9 @@ computer or a claim about any product.
 #| fig-width: 7.6
 #| fig-height: 4.6
 #| code-summary: "Figure code: build and interrogate a synthetic Roofline"
+#| code-fold: false
 
+# [1] prepare inputs and conditions
 peak_tflops = 100.0
 bandwidth_tbps = 2.0
 ridge = peak_tflops / bandwidth_tbps
@@ -447,6 +487,7 @@ examples = {
     "reuse growing": 8.0,
     "compute roof": 80.0,
 }
+# [2] run the core mechanism
 for name, intensity in examples.items():
     bound = min(peak_tflops, bandwidth_tbps * intensity)
     print(f"{name:>17}: I={intensity:g}, bound={bound:g} TFLOP/s")
@@ -480,7 +521,7 @@ ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.01),
 plt.tight_layout()
 plt.show()
 ```
-
+::::
 ### Matrix multiplication earns reuse
 
 Consider $\matr{C}=\matr{A}\matr{B}$ with shapes $m\times k$, $k\times n$, and
@@ -629,10 +670,20 @@ FlashAttention kernel. It verifies the online identity on CPU; the following fig
 then diagrams the I/O change independently.
 
 <!-- NOVEL: needs sign-off -->
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Verify materialized attention against online blockwise attention.
+3. Check the claimed identities, shapes, or invariants.
+4. Report or visualize the measured result.
+:::
+
 ```{python}
 #| label: a3-online-attention
 #| code-summary: "Code: verify materialized attention against online blockwise attention"
+#| code-fold: false
 
+# [1] prepare inputs and conditions
 generator = torch.Generator().manual_seed(6050)
 N, D_HEAD, D_VALUE, BLOCK = 7, 4, 3, 3
 queries = torch.randn(N, D_HEAD, generator=generator)
@@ -643,6 +694,7 @@ scores = queries @ keys.T / math.sqrt(D_HEAD)
 dense_output = torch.softmax(scores, dim=-1) @ values
 
 streamed_rows = []
+# [2] run the core mechanism
 for query in queries:
     running_max = torch.tensor(float("-inf"))
     running_sum = torch.tensor(0.0)
@@ -662,11 +714,13 @@ for query in queries:
 
 streamed_output = torch.stack(streamed_rows)
 gap = (dense_output - streamed_output).abs().max().item()
+# [3] verify the contract
 assert torch.allclose(dense_output, streamed_output, rtol=0, atol=1e-12)
+# [4] report the result
 print(f"dense/online maximum gap: {gap:.3e}")
 print(f"full score grid: {N*N} entries; one-row block: at most {BLOCK}")
 ```
-
+::::
 <!-- NOVEL: needs sign-off -->
 ```{python}
 #| label: fig-a3-flash-recap

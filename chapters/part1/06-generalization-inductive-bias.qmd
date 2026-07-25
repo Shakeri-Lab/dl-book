@@ -23,11 +23,21 @@ The data is a subset of Fashion-MNIST, the classic benchmark from our live sessi
 surprises: an MLP from @sec-03-nonlinearity-mlp, trained exactly as in
 @sec-04-training-loss-sgd:
 
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Define the reusable helpers: `train_mlp` and `accuracy`.
+3. Fit the Chapter 4 recipe on the fixed Fashion-MNIST development split.
+4. Report or visualize the measured result.
+:::
+
 ```{python}
 #| label: victory
+#| code-fold: false
 import torch
 from torch import nn
 
+# [1] prepare inputs and conditions
 torch.manual_seed(6050)
 development = torch.load("../../data/fashion-train.pt")
 holdout = torch.load("../../data/fashion-test.pt")
@@ -43,6 +53,7 @@ X_val, y_val = X_dev[val_idx], y_dev[val_idx]               # (200, 784), (200,)
 
 from dlbook.supervised import fit_supervised   # Listing 4.1
 
+# [2] define the reusable mechanism
 def train_mlp(
     X: torch.Tensor, y: torch.Tensor, hidden: int = 256,
     epochs: int = 40, seed: int = 6050
@@ -60,11 +71,13 @@ def accuracy(net: nn.Module, X: torch.Tensor, y: torch.Tensor) -> float:
     with torch.no_grad():
         return (net(X).argmax(1) == y).float().mean().item()
 
+# [3] fit the baseline MLP
 net = train_mlp(X_tr, y_tr)
+# [4] report the result
 print(f"train accuracy: {accuracy(net, X_tr, y_tr):.1%}")
 print(f"validation accuracy: {accuracy(net, X_val, y_val):.1%}")
 ```
-
+::::
 <!-- NOVEL: needs sign-off -->
 The present MLP has no mode-dependent layer, but keep the `net.eval()` line: it disables
 training-only behavior such as the dropout mechanism from
@@ -87,8 +100,16 @@ call the original and shifted batches equivalent for classification. Before you
 run the cell, commit to a number: the model scores 76% in place — what do you
 expect at two pixels?
 
+:::: {.plan-code}
+::: {.plan}
+1. Define the reusable `shift_right` helper.
+2. Shift validation images while keeping the trained MLP fixed.
+:::
+
 ```{python}
 #| label: shift-experiment
+#| code-fold: false
+# [1] define the reusable mechanism
 def shift_right(X: torch.Tensor, px: int) -> torch.Tensor:
     img = X.reshape(-1, 28, 28)
     out = torch.zeros_like(img)
@@ -98,24 +119,51 @@ def shift_right(X: torch.Tensor, px: int) -> torch.Tensor:
         out = img.clone()
     return out.reshape(-1, 784)
 
+# [2] score shifted images
 for px in [0, 2]:
     print(f"shift {px}px: validation accuracy "
           f"{accuracy(net, shift_right(X_val, px), y_val):.1%}")
 ```
-
+::::
 Two pixels, and the accuracy is nearly cut in half. Push further and the collapse
 completes:
+
+This is the distributional distinction prepared in Chapter 1. If
+$T$ shifts an image while preserving its label, then
+
+$$
+R_{T_\#P}(\theta)
+=
+\E_{(X,Y)\sim P}
+\left[\ell\bigl(f_\theta(T(X)),Y\bigr)\right],
+$$ {#eq-shifted-risk}
+
+where $T_\#P$ is the distribution obtained by transforming inputs drawn from $P$.
+The MLP generalized moderately from its fitting sample to fresh clean examples from
+$P$, but it failed the desired robustness contract under $T_\#P$. There is no
+contradiction. Clean validation and shift robustness answer different questions. The
+model did not violate its literal empirical objective; that objective was insufficient
+for the semantic and deployment contract we later imposed.
+
+:::: {.plan-code}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Plot accuracy vs. shift.
+:::
 
 ```{python}
 #| label: fig-shift-cliff
 #| fig-alt: "Validation accuracy falls sharply with each additional pixel of right shift, moving from a strong clean score toward the dotted ten-class chance line by four pixels."
 #| fig-cap: "The validation cliff. Each pixel of horizontal shift destroys accuracy although the garments themselves never changed. By four pixels the model is approaching guesswork."
 #| code-summary: "Code: accuracy vs. shift"
+#| code-fold: false
 import matplotlib.pyplot as plt
 
+# [1] prepare inputs and conditions
 shifts = list(range(5))
 accs = [accuracy(net, shift_right(X_val, s), y_val) for s in shifts]
 plt.figure(figsize=(5.6, 3.3))
+# [2] run the core mechanism
 plt.plot(shifts, accs, "o-", color="#E57200", lw=2, ms=7)
 plt.axhline(0.1, ls=":", color="#B8B8A8")
 plt.text(0.1, 0.115, "chance (10 classes)", color="#8A8A7A", fontsize=9)
@@ -123,7 +171,7 @@ plt.xlabel("shift (pixels right)"); plt.ylabel("validation accuracy")
 plt.ylim(0, 0.9); plt.xticks(shifts)
 plt.tight_layout(); plt.show()
 ```
-
+::::
 ### Experiment 2: destroy the images entirely
 
 Now the stranger experiment, from the lecture's "fatal flaw" argument. Choose one fixed
@@ -133,17 +181,28 @@ ordinary grid adjacency has been destroyed. Retrain the same MLP on this scrambl
 world — and predict first: does the destroyed geometry cost this model five
 points, twenty, or nothing?
 
+:::: {.plan-code}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Retrain on one fixed permutation of the pixel coordinates.
+3. Report or visualize the measured result.
+:::
+
 ```{python}
 #| label: shuffle-experiment
+#| code-fold: false
+# [1] prepare inputs and conditions
 torch.manual_seed(0)
 pixel_perm = torch.randperm(784)          # one fixed scrambling for all images
 
+# [2] retrain on permuted coordinates
 net_shuffled = train_mlp(X_tr[:, pixel_perm], y_tr)
+# [3] report the result
 print(f"original images:  validation accuracy {accuracy(net, X_val, y_val):.1%}")
 print(f"shuffled pixels:  validation accuracy "
       f"{accuracy(net_shuffled, X_val[:, pixel_perm], y_val):.1%}")
 ```
-
+::::
 The two validation accuracies are close in this one deterministic run. That is not an
 uncertainty estimate, but it is enough for the structural point: after retraining, an
 invertible relabeling of pixel coordinates costs this MLP no visible accuracy.
@@ -165,16 +224,25 @@ lectures; the autopsy below is that tradition, applied to our own model.] And we
 @sec-01-linear-regression what such a row *is*: a **template**, scored against the
 input by dot product.
 
+:::: {.plan-code}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. First-layer weights as images.
+:::
+
 ```{python}
 #| label: fig-templates
 #| fig-alt: "Sixteen full-frame weight maps fill a two-by-eight grid. Dark red cells mark positive weights, dark blue cells mark negative weights, and pale cells are near zero; broad diffuse patterns span most of each frame."
 #| fig-cap: "Sixteen first-layer templates, reshaped into images. The labeled scale runs from negative weights at the blue end through pale zero to positive weights at the red end; magnitude grows darker away from zero. Each template is a global, full-frame pattern, and many are diffuse rather than recognizable garment detectors. A template that spans the whole frame changes its score when the input pattern moves."
 #| code-summary: "Code: first-layer weights as images"
+#| code-fold: false
+# [1] prepare inputs and conditions
 W1 = net[0].weight.detach()               # (256, 784)
 order = W1.norm(dim=1).argsort(descending=True)[:16]
 
 fig, axes = plt.subplots(2, 8, figsize=(7.6, 2.2))
 scale = float(W1[order].abs().max())
+# [2] run the core mechanism
 for ax, i in zip(axes.ravel(), order):
     image = ax.imshow(W1[i].reshape(28, 28), cmap="RdBu_r",
                       vmin=-scale, vmax=scale)
@@ -187,7 +255,7 @@ colorbar.set_ticks([-scale, 0, scale], labels=["negative", "zero", "positive"])
 colorbar.ax.tick_params(labelsize=7)
 plt.show()
 ```
-
+::::
 There is the whole story in one figure. Every template is **global** — a pattern
 stretched across the entire frame, tuned to where garments sat in the training images.
 Shift the input two pixels and every pixel of every template now scores against the
@@ -213,22 +281,33 @@ grows, validation error should fall and then *rise* as the model overfits. We no
 everything needed to test the cartoon on real data: a width sweep at two dataset
 sizes:
 
+:::: {.plan-code}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Implement the width sweep.
+3. Report or visualize the measured result.
+:::
+
 ```{python}
 #| label: fig-ucurve
 #| fig-alt: "Both validation-error curves fall steeply as hidden width increases and then flatten. The smaller fitting set turns slightly upward at the widest models, while the larger fitting set does not."
 #| fig-cap: "Hunting the U-curve: validation error vs. hidden width at two fitting-set sizes. Error falls steeply as capacity grows, then flattens. In this one seeded sweep, n=300 shows a small late upturn while n=1000 does not. The result describes this regime; it does not estimate a scaling law."
 #| code-summary: "Code: the width sweep"
+#| code-fold: false
+# [1] prepare inputs and conditions
 widths = [2, 4, 8, 16, 64, 256]
 plt.figure(figsize=(6, 3.5))
+# [2] run the core mechanism
 for n, color in [(300, "#5379AA"), (1000, "#232D4B")]:
     errs = [1 - accuracy(train_mlp(X_tr[:n], y_tr[:n], hidden=h, epochs=60),
                          X_val, y_val)
             for h in widths]
     plt.semilogx(widths, errs, "o-", color=color, label=f"n = {n}", base=2)
 plt.xlabel("hidden width (capacity)"); plt.ylabel("validation error")
+# [3] report the result
 plt.legend(); plt.tight_layout(); plt.show()
 ```
-
+::::
 Read it honestly. The left side of the cartoon is emphatically real: too little
 capacity underfits badly. But the dreaded right side barely materializes, with a
 whisper of an upturn at the small dataset and nothing at the larger one. This is exactly
@@ -253,14 +332,24 @@ enough atoms in the universe, at any exchange rate.
 
 High dimensionality also breaks the very idea of "similar examples":
 
+:::: {.plan-code}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Nearest/farthest ratio vs. dimension.
+3. Report or visualize the measured result.
+:::
+
 ```{python}
 #| label: fig-curse
 #| fig-alt: "The average nearest-to-farthest distance ratio rises toward one as dimension increases on a logarithmic horizontal axis. A vertical guide at dimension 784 meets the curve near 0.89."
 #| fig-cap: "Distance concentration for 300 points sampled uniformly from a unit cube: the average ratio of nearest-neighbor to farthest-neighbor distance, by ambient dimension. At d=784 the ratio reaches 0.89. This is a controlled geometry example, not a claim that natural images fill the 784-dimensional cube uniformly."
 #| code-summary: "Code: nearest/farthest ratio vs. dimension"
+#| code-fold: false
+# [1] prepare inputs and conditions
 torch.manual_seed(6050)
 dims = [2, 10, 100, 784, 5000]
 ratios = []
+# [2] run the core mechanism
 for d in dims:
     P = torch.rand(300, d)
     D = torch.cdist(P, P)
@@ -271,9 +360,10 @@ plt.semilogx(dims, ratios, "o-", color="#722F37", lw=2)
 plt.axvline(784, ls=":", color="#B8B8A8")
 plt.text(830, 0.25, "Fashion-MNIST\n(d = 784)", fontsize=9, color="#8A8A7A")
 plt.xlabel("dimension $d$"); plt.ylabel("nearest / farthest distance")
+# [3] report the result
 plt.ylim(0, 1); plt.tight_layout(); plt.show()
 ```
-
+::::
 In the uniform cube, brute-force interpolation loses genuinely near neighbors as the
 ambient dimension grows. Natural images are highly structured and may concentrate near
 a much lower-dimensional set, so this experiment is not their empirical distance
@@ -303,24 +393,25 @@ Say them out loud — the two principles from the lecture:
 
 The shift cliff suggests another route. If moving a garment a little should not change
 its class, let $T$ be a random label-preserving transformation drawn from a declared
-distribution $\mathcal{A}$. Instead of training only on each observed pair
-$(\vect{x}_i,y_i)$, train on transformed versions:
+distribution $\mathcal{A}$. The population objective becomes
 
 $$
-\min_{\vect{w}}\;
-\frac{1}{n}\sum_{i=1}^{n}
+R_{\mathcal A}(\theta)
+=
+\E_{(X,Y)\sim P}
 \E_{T\sim\mathcal{A}}
-\left[\ell\!\left(f_{\vect{w}}(T(\vect{x}_i)),y_i\right)\right].
+\left[\ell\bigl(f_\theta(T(X)),Y\bigr)\right].
 $$ {#eq-data-augmentation}
 
 This is **data augmentation**, and its role is larger than making the dataset look
 bigger. It is a **data-side inductive bias**: the transformation distribution states
 which changes we believe should preserve the target. Sampling shifts from $-3$ to $+3$
-pixels says that location within that window is a nuisance. In practice, drawing one
-fresh $T$ when an example enters a batch gives a Monte Carlo estimate of the
-expectation in @eq-data-augmentation. Exercise 2 asks you to put that belief into the
-training batches and then measure both what it buys on the shift curve and what it
-costs on clean images.
+pixels says that location within that window is a nuisance. The empirical augmented
+objective used in training replaces the outer expectation with the sample average.
+Drawing one fresh $T$ when an example enters a batch then gives a Monte Carlo estimate
+of the inner expectation. Exercise 2 asks you to put that belief into the training
+batches and measure both what it buys on the shift curve and what it costs on clean
+images.
 
 We can now place three familiar levers side by side:
 
@@ -382,15 +473,24 @@ The architecture, optimizer, shift size, and reported metrics are now fixed. Onl
 do we fit the same MLP on all 1,200 development examples and open the 600-example test
 set once:
 
+:::: {.plan-code}
+::: {.plan}
+1. Run one final test-set check.
+2. Report or visualize the measured result.
+:::
+
 ```{python}
 #| label: final-holdout
 #| code-summary: "Code: one final test-set check"
+#| code-fold: false
+# [1] run the core mechanism
 net_final = train_mlp(X_dev, y_dev)
+# [2] report the result
 print(f"clean test accuracy:   {accuracy(net_final, X_test, y_test):.1%}")
 print(f"shift-2 test accuracy: "
       f"{accuracy(net_final, shift_right(X_test, 2), y_test):.1%}")
 ```
-
+::::
 The sealed check confirms the diagnostic rather than creating it: 80.8% on clean test
 images becomes 42.0% after the predeclared two-pixel shift.
 

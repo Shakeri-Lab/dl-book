@@ -229,9 +229,16 @@ The next cell loads only the development data and defines one typed training fun
 The tensor shapes are explicit because experimental rigor does not excuse coding
 ambiguity.
 
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Implement the paired Fashion-MNIST experiment.
+2. Define the reusable helpers: `TinyMLP`, `accuracy`, and `run_once`.
+:::
+
 ```{python}
 #| label: experiment-setup
 #| code-summary: "Code: the paired Fashion-MNIST experiment"
+#| code-fold: false
 from __future__ import annotations
 
 import itertools
@@ -242,6 +249,7 @@ import torch
 from torch import Tensor, nn
 import torch.nn.functional as F
 
+# [1] run the core mechanism
 torch.set_num_threads(4)
 
 development = torch.load("../../data/fashion-train.pt")
@@ -256,6 +264,7 @@ X_fit, y_fit = X_dev[fit_idx], y_dev[fit_idx]
 X_val, y_val = X_dev[val_idx], y_dev[val_idx]
 
 
+# [2] define the reusable mechanism
 class TinyMLP(nn.Module):
     def __init__(self, use_batchnorm: bool) -> None:
         super().__init__()
@@ -314,7 +323,7 @@ def run_once(
     )
     return best_validation, endpoint_score
 ```
-
+::::
 There are two easy-to-miss hygiene details. Evaluation switches the model to
 `eval()` so BatchNorm stops updating its running statistics. More subtly, each run
 restores the checkpoint that actually won on validation. Reporting the last epoch
@@ -325,13 +334,23 @@ Now we run the complete validation search. Five seeds — no magic threshold —
 small panel that makes run-to-run variation visible while keeping this example
 comfortably on a CPU.
 
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Search four learning rates with paired seeds.
+3. Report or visualize the measured result.
+:::
+
 ```{python}
 #| label: experiment-search
 #| code-summary: "Code: search four learning rates with paired seeds"
+#| code-fold: false
+# [1] prepare inputs and conditions
 learning_rates = (0.003, 0.01, 0.03, 0.1)
 search_seeds = tuple(range(6050, 6055))
 search_rows: list[dict[str, float | bool | Tensor]] = []
 
+# [2] run the core mechanism
 for use_batchnorm, learning_rate in itertools.product(
     (False, True), learning_rates
 ):
@@ -347,6 +366,7 @@ for use_batchnorm, learning_rate in itertools.product(
         "sd": scores.std(unbiased=True).item(),
     })
 
+# [3] report the result
 for row in search_rows:
     label = "with BN" if row["batchnorm"] else "no BN  "
     print(
@@ -362,7 +382,7 @@ best_row = {
     for use_batchnorm in (False, True)
 }
 ```
-
+::::
 Holding the recipe fixed does not produce one universal BatchNorm effect; it produces
 one estimate at each of the four predeclared learning rates. The paired
 BatchNorm-minus-no-BatchNorm validation differences are $+22.800$ points at 0.003
@@ -381,15 +401,24 @@ Only after those configurations are selected do we evaluate the shared test file
 endpoint check uses the predeclared fresh seed panel and makes no further design or
 hyperparameter choices; the checkpoint rule remains the one declared above.
 
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Evaluate the locked configurations on the shared endpoint.
+:::
+
 ```{python}
 #| label: experiment-locked-endpoint
 #| code-summary: "Code: evaluate the locked configurations on the shared endpoint"
+#| code-fold: false
+# [1] prepare inputs and conditions
 holdout = torch.load("../../data/fashion-test.pt")
 X_test = holdout["X"].float().unsqueeze(1) / 255.0   # (600, 1, 28, 28)
 y_test = holdout["y"]                                # (600,)
 audit_seeds = tuple(range(6060, 6065))
 audit: dict[bool, dict[str, float | Tensor]] = {}
 
+# [2] run the core mechanism
 for use_batchnorm in (False, True):
     learning_rate = float(best_row[use_batchnorm]["learning_rate"])
     test_scores = torch.tensor([
@@ -435,7 +464,7 @@ for label, contrasts in paired_contrasts.items():
         f"SD={100 * contrasts.std(unbiased=True):.3f} pp"
     )
 ```
-
+::::
 The endpoint means are 78.1% without BatchNorm and 76.9% with it. The ordering—not only
 the gap—reversed. That reversal does not prove that removing BatchNorm is better. It
 tells us the honest thing: a 0.3-point validation separation in this small search was
@@ -449,14 +478,21 @@ points. After each design is tuned separately it is $+0.300$ points (paired samp
 $1.095$), and at the locked endpoint it is $-1.267$ (SD $1.146$). Marginal arm
 spreads answer a different question; the code preserves both.
 
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Run all shared-rate, tuned, and locked-endpoint contrasts.
+:::
+
 ```{python}
 #| label: fig-experiment-estimands
 #| fig-cap: "One experiment, several estimands. Left: mean validation accuracy across all four predeclared learning rates; bars show one sample standard deviation over five paired search seeds. Right: paired BatchNorm-minus-no-BatchNorm contrasts at every shared rate, after separate validation tuning, and on the locked shared endpoint. These error bars are sample standard deviations across seeds, not confidence intervals."
 #| fig-alt: "The left panel plots validation accuracy against learning rate for MLPs with and without BatchNorm; their curves cross and peak at different rates. The right panel shows paired BatchNorm-minus-no-BatchNorm differences falling from strongly positive at the lowest shared rate to slightly negative at the highest, nearly zero after separate tuning, and negative on the reused held-out endpoint."
 #| code-summary: "Code: all shared-rate, tuned, and locked-endpoint contrasts"
+#| code-fold: false
 fig, axes = plt.subplots(1, 2, figsize=(8.2, 3.4))
 colors = {False: "#232D4B", True: "#E57200"}
 
+# [1] run the core mechanism
 for use_batchnorm in (False, True):
     rows = [row for row in search_rows if row["batchnorm"] == use_batchnorm]
     axes[0].errorbar(
@@ -504,7 +540,7 @@ axes[1].set_title("the paired answer changes")
 plt.tight_layout()
 plt.show()
 ```
-
+::::
 <!-- /NOVEL -->
 
 ## Ablation is an argument about cause

@@ -179,18 +179,28 @@ operator in NumPy. The shapes come before the multiplication:
 queries are $(m,d)$, keys are $(n,d)$, values are $(n,p)$, and the returned mixture is
 $(m,p)$.
 
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Define the reusable helpers: `row_softmax` and `gaussian_attention`.
+3. Fixed Gaussian attention, from scores to mixtures.
+:::
+
 ```{python}
 #| label: fixed-gaussian-attention
 #| code-summary: "Code: fixed Gaussian attention, from scores to mixtures"
+#| code-fold: false
 from __future__ import annotations
 
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
+# [1] prepare inputs and conditions
 torch.manual_seed(6050)
 np.set_printoptions(precision=4, suppress=True)
 
+# [2] define the reusable mechanism
 def row_softmax(scores: np.ndarray) -> np.ndarray:
     """Normalize each row after a stability-preserving shift."""
     shifted = scores - scores.max(axis=1, keepdims=True)
@@ -220,15 +230,23 @@ keys3 = np.array([[1.0], [3.0], [5.0]])
 values3 = np.array([[1.5], [2.8], [1.8]])
 query3 = np.array([[3.5]])
 pred3, weights3 = gaussian_attention(query3, keys3, values3, bandwidth=0.6)
+# [3] run the core mechanism
 print("weights:", weights3[0])
 print(f"prediction: {pred3.item():.4f}")
 ```
+::::
+:::: {.plan-code}
+::: {.plan}
+1. Implement the three-point lookup.
+:::
 
 ```{python}
 #| label: fig-kernel-lookup
 #| fig-alt: "A query star connects to three observed points with line widths proportional to their influence. In the adjacent bar chart, the nearby middle key receives most of the normalized weight."
 #| fig-cap: "A fixed Gaussian lookup. The bars give the normalized weights, and the connecting lines show which observations feed the query. The query lands close to the second location, so its response dominates the mixture; no similarity function was learned."
 #| code-summary: "Figure: the three-point lookup"
+#| code-fold: false
+# [1] run the core mechanism
 fig, axes = plt.subplots(1, 2, figsize=(7.2, 3.0), constrained_layout=True)
 axes[0].scatter(keys3[:, 0], values3[:, 0], s=55, color="#232D4B", zorder=3)
 axes[0].axvline(query3.item(), color="#E57200", ls="--", lw=1.4)
@@ -251,28 +269,39 @@ axes[1].set(ylabel="normalized weight", ylim=(0, 1.05),
             title="Similarity decides the mix")
 plt.show()
 ```
-
+::::
 The same code makes the OLS distinction concrete:
+
+:::: {.plan-code}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Signed OLS weights versus convex kernel weights.
+3. Report or visualize the measured result.
+:::
 
 ```{python}
 #| label: ols-versus-kernel-weights
 #| code-summary: "Code: signed OLS weights versus convex kernel weights"
+#| code-fold: false
+# [1] prepare inputs and conditions
 ols_keys = np.array([-2.0, -1.0, 0.0, 1.0, 2.0])
 ols_query = 1.5
 design = np.column_stack([np.ones_like(ols_keys), ols_keys])
 query_design = np.array([1.0, ols_query])
+# [2] run the core mechanism
 ols_weights = query_design @ np.linalg.solve(design.T @ design, design.T)
 
 witness_values = np.array([[1.0], [0.0], [0.0], [0.0], [0.0]])
 nw_pred, nw_weights = gaussian_attention(
     np.array([[ols_query]]), ols_keys[:, None], witness_values, bandwidth=1.0
 )
+# [3] report the result
 print("OLS weights:", ols_weights, "sum:", ols_weights.sum())
 print("NW  weights:", nw_weights[0], "sum:", nw_weights.sum())
 print(f"witness predictions: OLS {ols_weights @ witness_values[:, 0]:.4f}, "
       f"NW {nw_pred.item():.4f}; target range [0, 1]")
 ```
-
+::::
 ::: {.callout-note}
 ## Which kernels make a convex average?
 
@@ -353,12 +382,23 @@ a fresh noisy response would add the irreducible variance $0.25^2$ to every row.
 our finite 1,000-world ensemble, the analogous empirical decomposition closes to
 floating-point roundoff.
 
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Define the reusable `truth` helper.
+2. Prepare the inputs and fixed settings for the example.
+3. Fixed-design bias/variance sweep over 1,000 noisy worlds.
+4. Report or visualize the measured result.
+:::
+
 ```{python}
 #| label: bandwidth-sweep
 #| code-summary: "Code: fixed-design bias/variance sweep over 1,000 noisy worlds"
+#| code-fold: false
+# [1] define the reusable mechanism
 def truth(x: np.ndarray) -> np.ndarray:
     return np.sin(1.5 * x) + 0.3 * np.cos(4.0 * x)
 
+# [2] prepare inputs and conditions
 data_rng = np.random.default_rng(605012)
 keys = np.sort(data_rng.uniform(-3.0, 3.0, size=60))
 observed_rng = np.random.default_rng(605013)
@@ -372,6 +412,7 @@ responses = truth(keys)[None, :] + mc_rng.normal(
 bandwidths = np.array([0.05, 0.08, 0.12, 0.18, 0.28, 0.42, 0.65, 1.00])
 
 rows = []
+# [3] run the core mechanism
 for bandwidth in bandwidths:
     _, weights = gaussian_attention(
         queries[:, None], keys[:, None], observed_values[:, None], bandwidth
@@ -383,6 +424,7 @@ for bandwidth in bandwidths:
     mse = np.mean((predictions - truth(queries)[None, :]) ** 2)
     rows.append((bandwidth, 2 * bandwidth**2, squared_bias, variance, mse))
 
+# [4] report the result
 print(" h     2h^2    bias^2  variance     MSE")
 for row in rows:
     print(f"{row[0]:.2f}   {row[1]:.4f}   {row[2]:.4f}   "
@@ -390,7 +432,7 @@ for row in rows:
 best = rows[int(np.argmin([row[-1] for row in rows]))]
 print(f"grid minimum: h={best[0]:.2f}, MSE={best[-1]:.4f}")
 ```
-
+::::
 The variance falls at every step, from $0.0343$ at $h=0.05$ to $0.0022$ at
 $h=1.00$. Bias squared is not perfectly monotone at the sharp end of this sparse,
 random design; it bottoms at $0.0090$ for $h=0.12$, then rises to $0.3142$ at
@@ -399,11 +441,18 @@ $h=0.18$ has the smallest MSE, $0.0236$.
 
 One noisy world shows what those numbers mean:
 
+:::: {.plan-code}
+::: {.plan}
+1. Bandwidth as the smoothness dial.
+:::
+
 ```{python}
 #| label: fig-bandwidth-fits
 #| fig-alt: "Noisy observations surround a smooth black truth curve. The narrow-bandwidth fit wiggles around local noise, the middle fit follows the truth most closely, and the broad fit smooths away smaller oscillations."
 #| fig-cap: "One fixed noisy sample under three bandwidths. The narrow rule follows local noise, the middle rule tracks the signal, and the broad rule erases the function's smaller-scale structure. The blue bandwidth is the grid minimum in the 1,000-world audit, not a hand-picked attractive curve."
 #| code-summary: "Figure: bandwidth as the smoothness dial"
+#| code-fold: false
+# [1] run the core mechanism
 fig, ax = plt.subplots(figsize=(7.2, 4.1), constrained_layout=True)
 dense = np.linspace(-3.0, 3.0, 601)
 ax.plot(dense, truth(dense), color="black", lw=2.0, label="truth")
@@ -422,7 +471,7 @@ ax.set(xlabel="query $q$", ylabel="prediction",
 ax.legend(ncol=2, frameon=False, fontsize=9)
 plt.show()
 ```
-
+::::
 ::: {.callout-tip}
 ## Selecting $h$ when the truth is hidden
 
@@ -464,11 +513,18 @@ $$ {#eq-fixed-attention}
 This is the book's first **attention-weight matrix**. It is not a learned alignment.
 It is the allocation imposed by Euclidean distance and the chosen bandwidth.
 
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Measured trade-off and the first attention map.
+:::
+
 ```{python}
 #| label: fig-fixed-attention-map
 #| fig-alt: "The left panel shows variance falling as bandwidth grows, bias eventually rising, and their summed error reaching an interior minimum. The right heatmap has a narrow bright diagonal band where each query assigns weight to nearby sorted keys."
 #| fig-cap: "Left: the fixed-design bias--variance audit. Right: the same Gaussian rule written as a 31-query by 60-key attention matrix at $h=0.18$. Bright cells receive more of a row's unit mass; the white trace marks the $k=q$ locus in sorted-key coordinates. The map is local and interpretable, but it was specified rather than learned."
 #| code-summary: "Figure: measured trade-off and the first attention map"
+#| code-fold: false
+# [1] run the core mechanism
 fig, axes = plt.subplots(1, 2, figsize=(7.4, 3.25), constrained_layout=True)
 row_array = np.asarray(rows)
 axes[0].plot(row_array[:, 0], row_array[:, 2], "o-", label=r"bias$^2$")
@@ -503,7 +559,7 @@ print(f"Q {map_queries[:, None].shape}, K {keys[:, None].shape}, "
 print("maximum row-sum error:",
       f"{np.max(np.abs(attention_map.sum(axis=1) - 1)):.2e}")
 ```
-
+::::
 Read the bright band as a moving magnifying glass. Each query row reallocates one unit
 of weight across the stored keys. Where keys are dense, that unit is divided among
 several neighbors. Where keys are sparse, one or two slots carry most of it. Changing
@@ -516,9 +572,17 @@ underflow to zero. Normalizing those zeros produces `0/0`. The log-score version
 has a largest entry, so the shifted softmax remains finite. This is one of the stable-
 algorithm case studies reunited in @sec-a3-precision-performance:
 
+:::: {.plan-code}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Verify the log-kernel identity and survive underflow.
+:::
+
 ```{python}
 #| label: log-kernel-stability
 #| code-summary: "Code: verify the log-kernel identity and survive underflow"
+#| code-fold: false
+# [1] prepare inputs and conditions
 identity_query, identity_h = 0.37, 0.28
 log_kernel = -0.5 * ((identity_query - keys) / identity_h) ** 2
 direct_kernel = np.exp(log_kernel)
@@ -531,6 +595,7 @@ with np.errstate(divide="ignore", invalid="ignore"):
     naive_far_weights = far_kernel / far_kernel.sum()
 stable_far_weights = row_softmax(far_log_kernel[None, :])[0]
 
+# [2] run the core mechanism
 print("max |normalize(K)-softmax(log K)|:",
       f"{np.max(np.abs(direct_weights - softmax_weights)):.2e}")
 print(f"far query: naive denominator={far_kernel.sum():.1f}, "
@@ -538,7 +603,7 @@ print(f"far query: naive denominator={far_kernel.sum():.1f}, "
 print(f"stable: sum={stable_far_weights.sum():.1f}, "
       f"nearest key={keys[np.argmax(stable_far_weights)]:.4f}")
 ```
-
+::::
 ::: {.callout-warning}
 ## Trap: similarity weights are not uncertainty probabilities
 

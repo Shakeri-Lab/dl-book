@@ -8,6 +8,7 @@ import torch.nn.functional as F
 from torch import nn
 
 
+# [1] declare the shared next-token training interface
 def fit_next_token(
     model: nn.Module,
     data: torch.Tensor,
@@ -29,9 +30,11 @@ def fit_next_token(
     A precomputed `schedule` of start tensors makes the minibatch order an
     explicit, shareable part of the protocol (Chapter 14's paired comparison).
     """
+    # [2] configure optimization and the requested step budget
     opt = torch.optim.Adam(model.parameters(), lr=lr)
     curve: list[tuple[int, float]] = []
     n_steps = len(schedule) if schedule is not None else steps
+    # [3] draw or reuse chunk starts, then construct shifted token pairs
     for step in range(n_steps):
         starts = (
             schedule[step]
@@ -40,14 +43,17 @@ def fit_next_token(
         )
         xb = torch.stack([data[j : j + context] for j in starts])
         yb = torch.stack([data[j + 1 : j + context + 1] for j in starts])
+        # [4] predict every next token and average over batch and time
         logits = model(xb)
         if isinstance(logits, tuple):          # recurrent models return state
             logits = logits[0]
         loss = F.cross_entropy(logits.reshape(-1, vocab), yb.reshape(-1))
+        # [5] backpropagate, clip the gradient, and update once
         opt.zero_grad()
         loss.backward()
         nn.utils.clip_grad_norm_(model.parameters(), clip)
         opt.step()
+        # [6] retain the sparse learning curve and return the trained artifact
         if step % log_every == 0:
             curve.append((step, loss.item()))
             print(f"step {step:4d}   loss {loss.item():.{log_decimals}f}")

@@ -75,6 +75,15 @@ chapter stub's draft-sources; revisit during the planned outline session with th
 - Consider a one-page protocol card after the experimentation interlude: claim type,
   predeclared contract, seed panel, endpoint rule, and ledger fields. Link it from later
   designed studies if adopted.
+- Consider a compact statistical-learning reference that collects empirical versus
+  population risk, transformed distributions, likelihood assumptions, and the
+  CLT/maximum-entropy rationale for Gaussian residuals. Chapter 1 and Chapter 6 now
+  carry the minimum notation needed in the main path; any appendix must support those
+  passages without asking the reader to leave the mechanism midstream.
+- Consider a compact coding-practice reference for reproducibility, shape contracts,
+  testing, device placement, and the boundary between teaching kernels and production
+  systems. Keep production scaffolding out of the conceptual cells unless it changes
+  the chapter's claim.
 - Consider reusing the epilogue's five closing questions as the final project or exam
   report frame. The v1.0 HTML revision notes now provide the page-reference migration
   guide for returning students.

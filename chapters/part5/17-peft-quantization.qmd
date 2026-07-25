@@ -220,15 +220,26 @@ teaching block; the wrapper does not hide the causal or padding masks, embedding
 or classifier. Token IDs have shape $[B,11]$, hidden states $[B,11,48]$, and the
 query logits $[B,4]$.
 
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Define the reusable helpers: `sample_episode_bank`, `render_episodes`, and `ContextLearner`.
+3. Define the reusable helpers: `evaluate_context` and `run_context_seed`.
+4. Meta-train a tiny causal Transformer, then audit frozen-weight in-context adaptation over five seeds.
+:::
+
 ```{python}
 #| label: icl-mechanism
 #| code-summary: "Code: meta-train a tiny causal Transformer, then audit frozen-weight in-context adaptation over five seeds"
+#| code-fold: false
 
+# [1] prepare inputs and conditions
 PAD, BOS, QUERY = 0, 1, 2
 GROUP0, LABEL0 = 3, 7
 VOCAB, SEQUENCE_LENGTH, N_CLASSES = 11, 11, 4
 
 
+# [2] define the reusable mechanism
 def sample_episode_bank(
     batch_size: int, generator: torch.Generator
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -291,6 +302,7 @@ class ContextLearner(nn.Module):
         return self.head(hidden[:, -1])
 
 
+# [3] define the reusable mechanism
 @torch.no_grad()
 def evaluate_context(
     model: nn.Module, seed: int, n: int = 8192
@@ -353,6 +365,7 @@ context_ceiling = np.array([0.25, 0.50, 0.75, 1.00, 1.00])
 
 print("model parameters:", f'{context_runs[0]["parameters"]:,}')
 print("k  mean accuracy  seed sd  information ceiling")
+# [4] run the core mechanism
 for k in range(5):
     print(
         f"{k}      {context_accuracy[:, k].mean():.3f}       "
@@ -362,6 +375,11 @@ for k in range(5):
 print("all evaluation passes left weights unchanged:",
       all(run["unchanged"] for run in context_runs))
 ```
+::::
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Compare frozen-context accuracy with the analytic ceiling and the seen-versus-unseen decomposition.
+:::
 
 ```{python}
 #| label: fig-icl-coverage
@@ -370,7 +388,9 @@ print("all evaluation passes left weights unchanged:",
 #| fig-width: 9
 #| fig-height: 3.8
 #| code-summary: "Figure code: compare frozen-context accuracy with the analytic ceiling and the seen-versus-unseen decomposition"
+#| code-fold: false
 
+# [1] run the core mechanism
 fig, axes = plt.subplots(1, 2, figsize=(9, 3.8))
 ks = np.arange(5)
 for seed_row in context_accuracy:
@@ -407,7 +427,7 @@ for ax in axes:
 plt.tight_layout()
 plt.show()
 ```
-
+::::
 The 39,268-parameter network lands at mean accuracies
 $0.252,0.500,0.749,1.000,1.000$ for $k=0,1,2,3,4$, respectively. The analytic
 ceilings are $0.25,0.50,0.75,1,1$. More revealingly, unseen-query accuracy rises
@@ -695,15 +715,28 @@ $$ {#eq-lora-diagonal-floor}
 and zero for $r\ge6$. The plotted “capacity floor” is this calculation—not a result
 estimated from the optimizer.
 
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Define the reusable helpers: `make_rank_problem`, `FullUpdate`, and `LoRAUpdate`.
+3. Define the reusable helpers: `train_linear_update` and `relative_update_error`.
+4. Compare frozen, full, and low-rank updates against a planted rank-six correction.
+5. Check the claimed identities, shapes, or invariants.
+6. Report or visualize the measured result.
+:::
+
 ```{python}
 #| label: lora-capacity
 #| code-summary: "Code: compare frozen, full, and low-rank updates against a planted rank-six correction"
+#| code-fold: false
 
+# [1] prepare inputs and conditions
 D_IN = D_OUT = 32
 TARGET_RANK = 6
 DIRECTION_MAGNITUDES = torch.tensor([1.20, 0.90, 0.65, 0.40, 0.22, 0.10])
 
 
+# [2] define the reusable mechanism
 def make_rank_problem(
     seed: int = 1700,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor,
@@ -752,6 +785,7 @@ class LoRAUpdate(nn.Module):
         return self.weight0 + self.scaling * (self.B @ self.A)
 
 
+# [3] define the reusable mechanism
 def train_linear_update(
     model: nn.Module, x: torch.Tensor, y: torch.Tensor, steps: int = 1200
 ) -> None:
@@ -777,6 +811,7 @@ base, target_delta, x_train, y_train, x_val, y_val = make_rank_problem()
 target_energy = torch.sum(DIRECTION_MAGNITUDES ** 2)
 
 full_model = FullUpdate(base)
+# [4] run the core mechanism
 train_linear_update(full_model, x_train, y_train)
 with torch.no_grad():
     full_mse = F.mse_loss(full_model(x_val), y_val).item()
@@ -787,6 +822,7 @@ with torch.no_grad():
 
 LORA_RANKS = [1, 2, 4, 6, 8]
 lora_runs = []
+# [5] verify the contract
 for seed in range(6050, 6055):
     for rank in LORA_RANKS:
         model = LoRAUpdate(
@@ -811,6 +847,7 @@ for seed in range(6050, 6055):
                 "merge_error": merge_error,
             })
 
+# [6] report the result
 print(f"frozen validation MSE: {frozen_mse:.6f}")
 print(
     f"full update: MSE={full_mse:.2e}, relative delta error="
@@ -827,6 +864,12 @@ for rank in LORA_RANKS:
 print("largest merged/unmerged difference:",
       f"{max(row['merge_error'] for row in lora_runs):.2e}")
 ```
+::::
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Compare learned rank-sweep errors with the planted capacity floors.
+:::
 
 ```{python}
 #| label: fig-lora-rank-capacity
@@ -835,7 +878,9 @@ print("largest merged/unmerged difference:",
 #| fig-width: 9
 #| fig-height: 3.8
 #| code-summary: "Figure code: compare learned rank-sweep errors with the planted capacity floors"
+#| code-fold: false
 
+# [1] prepare inputs and conditions
 rank_error = np.array([
     [next(row["relative_error"] for row in lora_runs
           if row["seed"] == seed and row["rank"] == rank)
@@ -854,6 +899,7 @@ floors = np.array([
     for rank in LORA_RANKS
 ])
 
+# [2] run the core mechanism
 fig, axes = plt.subplots(1, 2, figsize=(9, 3.8))
 for seed_row in rank_error:
     axes[0].plot(LORA_RANKS, np.maximum(seed_row, 1e-8), color="#A7ABB4", lw=1)
@@ -887,7 +933,7 @@ for ax in axes:
 plt.tight_layout()
 plt.show()
 ```
-
+::::
 The failure is orderly. Rank 1 leaves relative correction error $0.710$; rank 2
 leaves $0.472$; rank 4 leaves $0.142$. Their mean validation MSEs are
 $0.04535,0.02022,$ and $0.001888$. Rank 6 and rank 8 recover the target to below
@@ -994,13 +1040,23 @@ relative layer-output error, the distribution of row errors, and ideal packed
 payload plus FP32 scale metadata. It reports no runtime—the simple Python arithmetic
 is not a quantized production kernel.
 
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Prepare the inputs and fixed settings for the example.
+2. Define the reusable helpers: `make_quantization_problem`, `symmetric_quantize`, and `run_quantization_audit`.
+3. Compare per-tensor and per-row symmetric quantization, including output error and metadata.
+:::
+
 ```{python}
 #| label: quantization-audit
 #| code-summary: "Code: compare per-tensor and per-row symmetric quantization, including output error and metadata"
+#| code-fold: false
 
+# [1] prepare inputs and conditions
 QUANT_D_IN, QUANT_D_OUT = 256, 64
 
 
+# [2] define the reusable mechanism
 def make_quantization_problem(
     seed: int = 1701,
 ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -1065,6 +1121,7 @@ def run_quantization_audit() -> list[dict]:
 
 quant_rows = run_quantization_audit()
 print("bits  scheme       w err   out err  med row  max row  payload  meta  total")
+# [3] run the core mechanism
 for row in quant_rows:
     print(
         f"{row['bits']:>4}  {row['granularity']:<10}  "
@@ -1074,6 +1131,11 @@ for row in quant_rows:
         f"{row['total_bytes']:>5,}"
     )
 ```
+::::
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Show the quantization grid, output-error trade, and small-row erasure.
+:::
 
 ```{python}
 #| label: fig-quantization-granularity
@@ -1082,7 +1144,9 @@ for row in quant_rows:
 #| fig-width: 11
 #| fig-height: 3.7
 #| code-summary: "Figure code: show the quantization grid, output-error trade, and small-row erasure"
+#| code-fold: false
 
+# [1] run the core mechanism
 fig, axes = plt.subplots(1, 3, figsize=(11, 3.7),
                          gridspec_kw={"width_ratios": [1.25, 0.92, 1.15]})
 
@@ -1137,7 +1201,7 @@ axes[2].grid(alpha=0.18, which="both")
 plt.tight_layout()
 plt.show()
 ```
-
+::::
 The global 8-bit grid has only $2.13\%$ relative output error overall, which sounds
 reassuring until we inspect rows—the median relative row error is $22.13\%$, and the
 quietest rows are reconstructed as all zeros. Per-row scales lower overall output
