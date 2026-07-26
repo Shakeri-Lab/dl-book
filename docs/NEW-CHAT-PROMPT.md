@@ -19,7 +19,8 @@ rest of my 6050 material; the virtualenv is deliberately outside it). Remote `ht
 `https://shakeri-lab.github.io/dl-book/Deep-Learning--Making-It-Learnable.pdf`.
 Current stable release **v1.1** is 502 pages. The post-release `main` revision is
 560 pages after the author-requested universal Plan → Code pass, two author
-revision passes on Chapter 1, and the pacing/visual/full-scale experiment pass;
+revision passes on Chapter 1, the pacing/visual/full-scale experiment pass, and
+the July 26 Chapter 1/SGD responsive-visual pass;
 it still contains chapters 1–20 plus two interludes, four appendices, and an
 epilogue. Nothing is mid-flight.
 

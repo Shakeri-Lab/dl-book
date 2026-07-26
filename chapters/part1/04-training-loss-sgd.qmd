@@ -3,7 +3,8 @@
 <!-- lecture-source: m01_lecture-1-from-linear-regression-to-neural-netwo_-bdoWPWjyTc.txt (SGD half),
      [coding]_m03_lecture-3-optimization-foundations-ablation-meth_V0l6b5R6Vkw.txt
      spine: ~/dl-course-code/ds6050_01_foundations/MODULE_NOTES.md (§14–23)
-     seeds: sources/1_3_sgd_lecture_notes.tex, sources/1LS-2_loss_SGD.tex, sources/misc_1-SGD.tex -->
+     seeds: sources/1_3_sgd_lecture_notes.tex, sources/1LS-2_loss_SGD.tex, sources/misc_1-SGD.tex
+     additional reference: ../Resources/Gil Strang/SGD.pdf, §VI.5, especially pp. 361–365 -->
 
 We now have models worth training: linear regressors (@sec-01-linear-regression),
 classifiers (@sec-02-logistic-softmax), and multilayer perceptrons
@@ -98,24 +99,38 @@ random-reshuffling theory handles that dependence; the one-line proof in
 
 ## The two zones of SGD
 
-The noise gives SGD a characteristic two-phase behavior, and it is worth seeing rather
-than just hearing about. Far from the optimum, almost any batch tells you roughly the
-same thing $\rightarrow$ rapid, consistent progress. Close to the optimum, different
-batches start to disagree ("go left" — "no, go right"), and the iterate bounces around
-in what we will call the **region of confusion**:
+Strang's treatment of SGD describes **semi-convergence**: rapid progress early, then
+oscillation near the solution. His convergence discussion also isolates the assumption
+behind @eq-unbiased: the stochastic gradient must be unbiased at the parameter vector
+where it is evaluated. Put those ideas together on our convex least-squares bowl. Write
+the batch gradient as
+
+$$
+\nabla\loss_{\mathcal B}(\vect{w})
+= \nabla\loss(\vect{w}) + \vect{\xi}_{\mathcal B},
+\qquad
+\E[\vect{\xi}_{\mathcal B}]=\vect{0}.
+$$
+
+Far from the optimum, the full gradient is large relative to the batch noise, so most
+batch directions make useful progress and their mean is the full descent direction.
+Near the optimum, the full gradient shrinks while batches can still disagree ("go
+left" — "go right"). A finite learning rate then makes the iterate bounce in what we
+will call the **region of confusion**:
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Define the reusable `descend` helper.
-3. GD vs. SGD paths.
+1. Generate one least-squares problem and solve for its empirical optimum.
+2. Partition the examples into equal batches and define their gradients.
+3. Compare batch descent directions far from and at the optimum.
+4. Verify that their fixed-point mean equals the full descent direction, then plot both zones.
 :::
 
 ```{python}
 #| label: fig-sgd-zones
-#| fig-alt: "On the same nested loss contours, the full-batch path approaches the optimum smoothly while the mini-batch path jitters and loops around the optimum after making similar early progress."
-#| fig-cap: "Full-batch descent (blue) against mini-batch SGD (orange, $B = 4$) on the same landscape. Far out, the noisy steps agree with the true direction; near the optimum they scatter — the region of confusion."
-#| code-summary: "Code: GD vs. SGD paths"
+#| fig-alt: "Two panels show batch descent arrows on the same convex loss contours. Far from the optimum, orange batch arrows cluster around a blue full-gradient arrow. At the optimum, the blue mean is nearly zero while orange batch arrows point in conflicting directions inside a shaded region."
+#| fig-cap: "The two zones at fixed parameter vectors. Left: equal-size batch directions vary, but their mean overlaps the full descent direction and points down the convex bowl. Right: at the empirical optimum the full gradient is essentially zero while individual batches still disagree, so finite steps create a region of confusion."
+#| code-summary: "Code: expectation and the region of confusion"
 #| code-fold: false
 import torch
 import numpy as np
@@ -125,34 +140,73 @@ import matplotlib.pyplot as plt
 torch.manual_seed(6050)
 x1 = torch.randn(80)
 y1 = 2.5 * x1 - 1.0 + 0.4 * torch.randn(80)
+A = torch.stack([x1, torch.ones_like(x1)], dim=1)
+optimum = torch.linalg.lstsq(A, y1).solution
 
 # [2]
-def descend(
-    batch: int | None, lr: float = 0.12, steps: int = 60
-) -> np.ndarray:
-    w, b, path = torch.tensor(-0.5), torch.tensor(2.0), []
-    for _ in range(steps):
-        idx = torch.randperm(80)[:batch] if batch else slice(None)
-        err = (w * x1[idx] + b) - y1[idx]
-        path.append((float(w), float(b)))
-        w = w - lr * 2 * (err * x1[idx]).mean()
-        b = b - lr * 2 * err.mean()
-    return np.array(path)
+batch_size = 4
+batches = torch.randperm(len(x1)).reshape(-1, batch_size)
 
-W, B = np.meshgrid(np.linspace(-1.5, 5.5, 90), np.linspace(-4, 3, 90))
+def gradient_at(theta: torch.Tensor, idx=slice(None)) -> torch.Tensor:
+    residual = A[idx] @ theta - y1[idx]
+    return 2 * A[idx].T @ residual / len(residual)
+
+def batch_descent_directions(theta: torch.Tensor) -> torch.Tensor:
+    return torch.stack([-gradient_at(theta, idx) for idx in batches])
+
+# [3]
+points = [torch.tensor([-0.5, 2.0]), optimum]
+titles = ["far away: agreement in expectation",
+          "at the optimum: batches disagree"]
+arrow_lengths = [0.72, 0.46]
+
+W, B = np.meshgrid(np.linspace(-1.5, 5.5, 100),
+                   np.linspace(-4.0, 3.0, 100))
 L = ((y1.numpy()[None, None, :] -
       (W[..., None] * x1.numpy() + B[..., None])) ** 2).mean(-1)
 
-plt.figure(figsize=(6.2, 4))
-plt.contour(W, B, L, levels=25, cmap="Blues", alpha=0.7)
-# [3]
-for batch, color, label in [(None, "#232D4B", "full batch"),
-                            (4, "#E57200", "SGD, B = 4")]:
-    p = descend(batch)
-    plt.plot(p[:, 0], p[:, 1], "o-", ms=2.5, lw=1.2, color=color, label=label)
-plt.plot(2.5, -1.0, "k*", ms=13, label="truth")
-plt.xlabel("$w$"); plt.ylabel("$b$"); plt.legend(loc="upper right")
-plt.tight_layout(); plt.show()
+# [4]
+fig, axes = plt.subplots(1, 2, figsize=(9.2, 3.7), sharex=True, sharey=True)
+for ax, theta, title, length in zip(axes, points, titles, arrow_lengths):
+    directions = batch_descent_directions(theta)
+    full_direction = -gradient_at(theta)
+    assert torch.allclose(directions.mean(0), full_direction, atol=2e-6)
+
+    unit = directions / directions.norm(dim=1, keepdim=True).clamp_min(1e-12)
+    origin = theta.repeat(len(unit), 1)
+    ax.contour(W, B, L, levels=24, cmap="Blues", alpha=0.55)
+    ax.quiver(origin[:, 0], origin[:, 1], unit[:, 0], unit[:, 1],
+              color="#E57200", alpha=0.32, angles="xy",
+              scale_units="xy", scale=1 / length, width=0.008)
+
+    if full_direction.norm() > 1e-5:
+        mean_unit = full_direction / full_direction.norm()
+        end = theta + 1.15 * mean_unit
+        ax.annotate("", xy=end, xytext=theta,
+                    arrowprops={"arrowstyle": "->", "lw": 3, "color": "#232D4B"})
+    else:
+        ax.text(float(theta[0]), float(theta[1]) + 0.72,
+                "mean direction $\\approx 0$", ha="center", color="#232D4B")
+
+    ax.plot(*optimum, marker="*", ms=13, color="#2F855A")
+    ax.plot(*theta, marker="o", ms=5, color="#232D4B")
+    ax.set(title=title, xlabel="$w$", xlim=(-1.5, 5.5), ylim=(-4, 3))
+    ax.grid(alpha=0.12)
+
+axes[0].set_ylabel("$b$")
+axes[0].plot([], [], color="#E57200", lw=3, alpha=0.45,
+             label="batch directions")
+axes[0].plot([], [], color="#232D4B", lw=3,
+             label="mean = full direction")
+axes[0].plot([], [], marker="*", ms=10, color="#2F855A", lw=0,
+             label="empirical optimum")
+axes[0].legend(loc="upper right", fontsize=8)
+axes[1].add_patch(plt.Circle(optimum.numpy(), 0.82, color="#722F37",
+                             alpha=0.09, zorder=0))
+axes[1].text(float(optimum[0]), float(optimum[1]) - 1.05,
+             "region of confusion", ha="center", color="#722F37")
+plt.tight_layout()
+plt.show()
 ```
 ::::
 Here is the surprise: the bouncing is not merely tolerable; in some regimes it is a
@@ -520,6 +574,10 @@ subject of @sec-05-backpropagation.
 
 ## Sources and further reading {.unnumbered}
 
+- Gilbert Strang, *Linear Algebra and Learning from Data*, §VI.5, especially
+  pp. 361–365, develops SGD's fast start, later oscillation, unbiased-gradient
+  assumption, and convergence-in-expectation view. The assigned excerpt is
+  `Resources/Gil Strang/SGD.pdf`.
 - [Robbins and Monro, “A Stochastic Approximation Method”
   (1951)](https://doi.org/10.1214/aoms/1177729586) is the classical starting point for
   replacing exact quantities with noisy observations in an iterative procedure.

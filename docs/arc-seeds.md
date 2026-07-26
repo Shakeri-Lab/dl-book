@@ -15,6 +15,7 @@ test-time memory/control, and show-then-name pacing passes.*
 
 | Seed (phrase as planted) | Planted | Harvest | Status |
 |---|---|---|---|
+| Linear computation circuit: scale each input, add the signals and bias, then emit one score; the next chapter adds one operation after the score | ch. 1 | ch. 2 ✓ (the classifier preserves the circuit and attaches the output map), ch. 3 ✓ (the bend turns the circuit into a neuron) | done |
 | Dot product = similarity score against a template | ch. 1 | ch. 7 (sliding template), ch. 12 (kernel similarity), ch. 13 (QK scores), ch. 20 (normalized cross-modal similarity) | done |
 | Prediction = weighted combination of training targets | ch. 1 | ch. 12 (Nadaraya–Watson IS this, made explicit) | done |
 | Softmax = the scores→positive-weights machine; later match one request to stored candidates and blend their contents (later name deliberately withheld) | ch. 2 | ch. 12 (kernel weights), ch. 13 (name the content-dependent weighted read), ch. 20 (row/column contrastive candidates) | done |

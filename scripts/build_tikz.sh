@@ -25,7 +25,7 @@ PY
   cat > "$TMP/$name.tex" <<WRAP
 \\documentclass[tikz,border=4pt]{standalone}
 \\input{$(pwd)/tex/macros.tex}
-\\usetikzlibrary{arrows.meta, chains, positioning, shapes.symbols, shapes.geometric, shadows, calc, backgrounds, fit, decorations.pathreplacing}
+\\usetikzlibrary{arrows.meta, chains, positioning, matrix, shapes.symbols, shapes.geometric, shadows, calc, backgrounds, fit, decorations.pathreplacing}
 \\begin{document}
 \\input{$TMP/$name-body.tex}
 \\end{document}

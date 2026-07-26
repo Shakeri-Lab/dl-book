@@ -10,7 +10,7 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 
 ---
 
-> ## Current state — 2026-07-25 (read this first)
+> ## Current state — 2026-07-26 (read this first)
 >
 > The manuscript is **complete and released**: tag **v1.1** carries the stable
 > 502-page PDF. The post-release `main` revision is 560 pages after the
@@ -44,6 +44,19 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > names shifted risk $R_{T_\#P}$ and the augmentation population objective
 > $R_{\mathcal A}$.
 >
+> The July 26 Chapter 1/SGD visual pass replaces Figure 1.1's ambiguous
+> frame-pointing arrows with a highlighted first row, highlighted $y_1$, an
+> explicit same-example connector, and collision-free $n\times d$ dimensions.
+> Figure 1.5 labels only its iterative panels as gradient steps. Equation 1.5
+> uses authored line breaks plus a no-clipping MathJax fallback. A semantic-colour
+> linear computation circuit now closes Chapter 1's three implementations;
+> Chapter 2 preserves it as the score path, and Chapter 3 adds the bend. Chapter
+> 4's two-zone SGD figure verifies the fixed-point equality between the mean
+> equal-batch direction and the full direction, then shows batch disagreement at
+> the empirical optimum; its explanation and reading list are grounded in
+> Strang §VI.5. Narrow HTML viewports contain long math and code locally instead
+> of creating page-level horizontal panning.
+>
 > The next pass applies **show, then name** across chapter boundaries: Chapter 2
 > plants weighted selection without revealing attention, Chapter 13 names it
 > only after the behavior is built, and the autoencoder interlude now teaches
@@ -65,6 +78,12 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > book contains no premature Chapter 2 attention/KL/blame reveals, broken
 > revised figures, descriptive Plan → Code markers, stale includes, or MathJax
 > macro errors.
+>
+> The July 26 verification re-executed Chapters 1–4 in both formats, kept every
+> touched stdout block bit-identical to the prior commit and across HTML/TeX,
+> passed the Plan → Code audit at 204/28, and rebuilt the complete 560-page PDF.
+> PDF inspection covered Figures 1.1, 1.5, 1.7, Equation 1.5, and Figure 4.1;
+> browser inspection at 390 px confirmed zero page-level horizontal overflow.
 >
 > Fresh session? Read `CLAUDE.md`, then §9 and §2 of this file, then
 > `docs/style-guide.md` and `docs/arc-seeds.md`. A paste-ready bootstrap prompt
