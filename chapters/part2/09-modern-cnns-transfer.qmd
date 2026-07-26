@@ -36,6 +36,12 @@ and the block habit itself), and each answer is a constraint-shaped idea we can 
 on our own data. At the end, the practical superpower the lecture builds to,
 reusing a pretrained backbone, gets the most honest experiment in this book.
 
+![The chapter's construction grammar. Individual operators become reusable blocks; architectures repeat those blocks and attach a head. VGG repeats small-kernel atoms, NiN adds per-pixel channel mixing and global averaging, and ResNet adds an identity route around each learned correction.](../../figures/generated/9_1_cnn_building_blocks.svg){#fig-cnn-building-blocks width=98% fig-alt="A three-column diagram moves from CNN components to reusable blocks to full architectures. Components include 3-by-3 and 1-by-1 convolutions, batch normalization, ReLU, pooling, and global average pooling. VGG, Network-in-Network, and residual blocks occupy the middle column. The final column repeats each block and attaches either a flatten-dense or global-average-pooling head."}
+
+Read the figure from left to right whenever a named architecture becomes noisy. First
+identify the operators, then the block contract, then the repetition schedule and
+head. The rest of the chapter changes one of those three levels at a time.
+
 Both trainers below are Listing 4.1 with one factoring: the inner loop
 (`train_existing`) accepts a model and optimizer that already exist, because this
 chapter's whole subject is training models it did not just construct — fresh
@@ -733,43 +739,68 @@ both parts of that skeleton.
 
 ## The scorecard: what a decade of design bought
 
-The lecture closes its architecture tour with a scatter worth reproducing: every
-model of Part II on one canvas, accuracy against parameters, each trained to
-convergence under our shared recipe:
+The chapter's small-data studies isolated mechanisms. The architecture comparison
+deserves the full task: all 60,000 Fashion-MNIST training images, split once into
+50,000 for fitting and 10,000 for validation, with the official 10,000-image test set
+opened only after validation selected the checkpoint. We ran LeNet, NiN, VGG, and a
+nine-block residual network for three end-to-end seeds on Rivanna:
 
-:::: {.plan-code}
+:::: {.plan-code .plan-code-wide}
 ::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Plot accuracy vs. parameters scatter.
+1. Load the 12 pinned full-data Rivanna records.
+2. Summarize test accuracy and parameter count by architecture.
+3. Plot seed means with one-standard-deviation error bars.
 :::
 
 ```{python}
 #| label: fig-scorecard
-#| fig-cap: "Part II's models on one canvas (our 1,200-image subset; each model trained to convergence with the shared Adam recipe). VGG-style depth buys accuracy but hoards parameters in its flatten head; NiN+GAP evicts the head at a visible cost in clean accuracy at this data scale; residual blocks let a 53,050-parameter network go 40 layers deep. The lecture's full-data frontier, where the models exceed 89%, needs data our subset does not have; the shape of the trade-offs is already visible."
-#| fig-alt: "Scatter plot of test accuracy against log-scaled parameter count. NIN plus global pooling is the smallest model near 0.76 accuracy; plain-20 and residual-20 have similar counts but sit far apart near 0.51 and 0.78; LeNet is near 0.83; VGGSmall is both largest and highest near 0.87."
-#| code-summary: "Code: accuracy vs. parameters scatter"
+#| fig-cap: "The full-data Part II scorecard on Rivanna. Points show mean official-test accuracy and bars one sample standard deviation across seeds 6050–6052. LeNet reaches 92.52%, NiN 92.78%, VGG 93.73%, and the residual network 94.20%. NiN is the most parameter-efficient point; VGG buys more accuracy with depth; residual blocks reach the strongest endpoint in this declared training regime. Parameter count is not training compute, and these four points are not a universal architecture ranking."
+#| fig-alt: "Scatter plot of full Fashion-MNIST test accuracy against log-scaled parameter count. NiN is the smallest point at about 92.8 percent, LeNet is near 92.5 percent, VGG is near 93.7 percent, and the residual network is highest near 94.2 percent. Small vertical error bars show variation over three seeds."
+#| code-summary: "Code: full-data accuracy vs. parameters"
 #| code-fold: false
 # [1]
-models_ = {
-    "LeNet": (lenet, "#B8B8A8"),
-    "VGGSmall": (vgg, "#E57200"),
-    "NIN+GAP": (nin, "#232D4B"),
-    "plain-20": (plain, "#DDA0DD"),
-    "residual-20": (resid, "#5379AA"),
-}
-plt.figure(figsize=(6.2, 3.6))
+import json
+from pathlib import Path
+
+scorecard_root = Path("../../experiments/rivanna/results/scorecard")
+scorecard_records = [
+    json.loads(path.read_text()) for path in sorted(scorecard_root.glob("*.json"))
+]
+scorecard_order = ["lenet", "nin", "vgg", "resnet"]
+scorecard_colors = ["#B8B8A8", "#232D4B", "#E57200", "#5379AA"]
+
 # [2]
-for name, (m, color) in models_.items():
-    p, a = count(m), accuracy(m, X_te, y_te)
-    plt.scatter(p, a, s=70, color=color, zorder=3)
-    plt.annotate(name, (p, a), textcoords="offset points",
+scorecard = {}
+for model_name in scorecard_order:
+    rows = [row for row in scorecard_records if row["model"] == model_name]
+    accuracies = torch.tensor([row["test_accuracy"] for row in rows])
+    scorecard[model_name] = {
+        "parameters": rows[0]["parameter_count"],
+        "mean": accuracies.mean().item(),
+        "sd": accuracies.std(unbiased=True).item(),
+    }
+
+# [3]
+plt.figure(figsize=(6.2, 3.6))
+for model_name, color in zip(scorecard_order, scorecard_colors):
+    result = scorecard[model_name]
+    plt.errorbar(result["parameters"], result["mean"], yerr=result["sd"],
+                 fmt="o", ms=8, capsize=4, color=color, zorder=3)
+    plt.annotate(model_name, (result["parameters"], result["mean"]),
+                 textcoords="offset points",
                  xytext=(8, -3), fontsize=9)
 plt.xscale("log")
 plt.xlabel("parameters (log scale)"); plt.ylabel("test accuracy")
-plt.ylim(0.45, 0.95)
+plt.ylim(0.915, 0.95)
 plt.tight_layout(); plt.show()
 ```
 ::::
+The scale changes the verdict from the 1,200-image mechanism studies. NiN's global
+head no longer pays a large clean-accuracy penalty, and all four architectures clear
+92%. The residual network leads this declared recipe, but the plot still has one
+horizontal axis too few: parameters measure storage, not optimizer steps, activation
+memory, or total training work.
+
 ## Transfer learning: the mechanics, and an honest experiment
 
 Everything so far trains from scratch. The lecture's final move is the one that
@@ -938,10 +969,72 @@ reasons, each a general principle:
 3. **Transfer wins when the target is big relative to your labels — not small.**
    This is the quiet one. Three shoe silhouettes at $28 \times 28$ is a *small*
    problem: thirty images genuinely suffice, so the scratch baseline is strong and
-   there is little room for imported knowledge to pay rent. The lecture's numbers
-   show the other regime: linear-probing an ImageNet ResNet-18 on the *full*
-   FashionMNIST task reaches about 93%, and fine-tuning about 94% — at 224 pixels,
-   with a task rich enough that features matter more than labels.
+   there is little room for imported knowledge to pay rent. The full ten-class task
+   below is different: 50,000 fitting labels, 224-pixel inputs, and a ResNet-18-sized
+   feature extractor.
+
+### The full-data rematch
+
+The full task lets us separate three questions cleanly: what ImageNet features can do
+without changing, what the last residual stage can learn when allowed to adapt, and
+what the architecture can learn from scratch with all target labels available.
+
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Load the nine pinned ResNet-18 transfer records.
+2. Summarize official-test accuracy by training regime.
+3. Plot means, seed-level runs, and one-standard-deviation error bars.
+:::
+
+```{python}
+#| label: fig-transfer-full
+#| fig-cap: "ImageNet transfer on full Fashion-MNIST at 224 pixels. Across seeds 6050–6052, the frozen linear probe reaches 88.79% ± 0.08% official-test accuracy, last-block fine-tuning 93.92% ± 0.12%, and scratch 94.14% ± 0.08%. Fine-tuning repairs most of the domain mismatch, but 50,000 target labels are enough for scratch to match it in this regime. Bars are means, dots are seeds, and error bars are one sample standard deviation."
+#| fig-alt: "Three bars compare full Fashion-MNIST ResNet-18 regimes. The frozen ImageNet probe is lowest near 88.8 percent. Fine-tuning and scratch are both near 94 percent, with scratch slightly higher. Three dots on each bar show the individual seeds."
+#| code-summary: "Code: full-data ResNet-18 transfer rematch"
+#| code-fold: false
+# [1]
+transfer_root = Path("../../experiments/rivanna/results/transfer")
+transfer_records = [
+    json.loads(path.read_text()) for path in sorted(transfer_root.glob("*.json"))
+]
+transfer_order = ["probe", "finetune", "scratch"]
+
+# [2]
+transfer_summary = {}
+for regime in transfer_order:
+    values = torch.tensor([
+        row["test_accuracy"] for row in transfer_records if row["regime"] == regime
+    ])
+    transfer_summary[regime] = {
+        "values": values,
+        "mean": values.mean().item(),
+        "sd": values.std(unbiased=True).item(),
+    }
+
+# [3]
+fig, ax = plt.subplots(figsize=(6.2, 3.5))
+x_positions = torch.arange(len(transfer_order))
+means = [transfer_summary[name]["mean"] for name in transfer_order]
+errors = [transfer_summary[name]["sd"] for name in transfer_order]
+ax.bar(x_positions, means, yerr=errors, capsize=5,
+       color=["#B8B8A8", "#5379AA", "#E57200"], alpha=0.82)
+for x_position, regime in enumerate(transfer_order):
+    values = transfer_summary[regime]["values"]
+    offsets = torch.linspace(-0.08, 0.08, len(values))
+    ax.scatter(x_position + offsets, values, color="#232D4B", s=24, zorder=3)
+ax.set_xticks(x_positions, ["frozen probe", "last-block fine-tune", "scratch"])
+ax.set_ylabel("official-test accuracy"); ax.set_ylim(0.87, 0.955)
+plt.tight_layout(); plt.show()
+```
+::::
+
+The frozen probe's 88.79% is the distribution gap made visible: features learned from
+natural photographs do not linearly separate all ten grayscale garment classes at this
+resolution. Updating only the last residual stage recovers more than five points.
+Scratch ends 0.22 points above fine-tuning, smaller than the run-to-run variation one
+would need to resolve as a family-level claim. With 50,000 target labels, scratch is no
+longer feature-starved. Transfer changed the starting point and permitted updates; it
+did not guarantee the best final endpoint.
 
 ::: {.callout-tip}
 ## When to reach for a pretrained backbone
@@ -1046,7 +1139,8 @@ vision trick but *the* recipe for language too. The BERT moment
    found scratch and the ImageNet probe in a near tie across three seeds at 28-pixel
    scale. Pretraining is curriculum, gaps are taxed, and small targets may leave
    little room for imports. The lecture's full-scale runs
-   (93–94% via ImageNet ResNet-18) illustrate a richer regime where transfer pays. Diagnosing
+   (88.79% frozen, 93.92% fine-tuned, and 94.14% scratch via ResNet-18) illustrate a
+   richer regime where adaptation repairs most of the feature mismatch. Diagnosing
    the regime is the skill.
 
 ## Sources and further reading {.unnumbered}

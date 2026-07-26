@@ -13,16 +13,17 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > ## Current state — 2026-07-25 (read this first)
 >
 > The manuscript is **complete and released**: tag **v1.1** carries the stable
-> 502-page PDF. The post-release `main` revision is 536 pages after the
-> author-requested universal Plan → Code pass and two Chapter 1 author
-> revisions; it remains chapters 1–20 + two interludes + four appendices +
-> epilogue, live in HTML and PDF after deployment. **Nothing is mid-flight.**
+> 502-page PDF. The post-release `main` revision is 560 pages after the
+> author-requested universal Plan → Code pass, two Chapter 1 author revisions,
+> and the July 25 pacing/visual/full-scale experiment pass; it remains chapters
+> 1–20 + two interludes + four appendices + epilogue, live in HTML and PDF after
+> deployment. **Nothing is mid-flight.**
 > Plan v2 (the readable-code and estimator-discipline overhaul) finished all
 > seven phases on July 20; the Plan → Code component became universal July 25.
 > Every open item is a decision waiting on the author — see **§9**, which
 > supersedes any older status text below it.
 >
-> The universal code pass covers all 201 learner-visible Python surfaces; 28
+> The universal code pass covers all 204 learner-visible Python surfaces; 28
 > `echo: false` execution-support cells are intentionally exempt. Every plan has
 > at most six steps and every step maps to a bracket-only numbered marker
 > (`# [1]`, or fused `# [2][5]`) in executed or tested source. Descriptive text
@@ -42,14 +43,28 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > ridge-only exercise plus a careful angular-responsiveness footnote. Chapter 6
 > names shifted risk $R_{T_\#P}$ and the augmentation population objective
 > $R_{\mathcal A}$.
-> The final July 25 verification parsed all 229 executable cells/modules and
-> exercised all 26 changed executable units in both formats without a runtime
-> failure. Nine stochastic units changed numerical samples under the current
-> environment, so their accepted bit-identical output evidence was retained;
-> Chapter 1 was freshly executed in both formats. The final frozen full render
-> preserves all 266 stdout blocks exactly, remains 536 pages, and passed
-> HTML/PDF visual checks. The rendered book contains no descriptive Plan → Code
-> markers, Lasso/Figure 1.9 remnants, stale includes, or MathJax macro errors.
+>
+> The next pass applies **show, then name** across chapter boundaries: Chapter 2
+> plants weighted selection without revealing attention, Chapter 13 names it
+> only after the behavior is built, and the autoencoder interlude now teaches
+> its own contract before PCA and recurrence. It also adds the neuron
+> threshold/bend plot, replaces the two Chapter 8 sandal views with one coat,
+> adds Chapter 9's component → block → architecture grammar, and rebuilds
+> Figures 4.4 and 14.4. Three completed Rivanna studies replace their backlog
+> promises with 30 pinned per-seed records: the Chapter 9 full-data
+> Fashion-MNIST scorecard, the ResNet-18 transfer rematch, and the Chapter 10
+> WikiText-2 word-LSTM scale study.
+>
+> The final July 25 verification parsed all 228 Python cells plus the included
+> module/script trees and exercised all nine affected executable units in both
+> formats without a runtime failure. Their pre-existing stdout remains
+> bit-identical in HTML and TeX. The Plan → Code audit passes at 204/28; all 30
+> Rivanna records agree on source digest, device, base commit, seed contract,
+> and task provenance. The final frozen full render preserves all 266 stdout
+> blocks exactly, is 560 pages, and passed HTML/PDF visual checks. The rendered
+> book contains no premature Chapter 2 attention/KL/blame reveals, broken
+> revised figures, descriptive Plan → Code markers, stale includes, or MathJax
+> macro errors.
 >
 > Fresh session? Read `CLAUDE.md`, then §9 and §2 of this file, then
 > `docs/style-guide.md` and `docs/arc-seeds.md`. A paste-ready bootstrap prompt
@@ -336,9 +351,9 @@ solvers in §14.8 change the statistical contract instead.
   get back to deeper dive later"). The explicitly requested epilogue Riccati box is a
   one-off frontier treatment; it does not settle that global verdict or authorize
   retrofits in chs. 1/5.
-- GPU experiments remain backlog-only until access is available. Do not publish
-  placeholder callouts in chapters; run the queued experiments on Rivanna/Colab and
-  fold real results back into the relevant chapters later.
+- The first Rivanna publication pass is complete for Chapters 9–10. The remaining
+  research-scale jobs stay backlog-only until each comparison has a predeclared
+  contract and real results. Do not publish placeholder callouts.
 
 ## 2. The working protocol (refined over chapters 7–20 and Appendices A–D)
 
@@ -433,17 +448,18 @@ C. **Code**: lean, type hints on teaching functions, shape comments, one idea pe
 D. **Callout mapping**: `note` = definitions/context; `tip` = make-it-learnable
    pivots + practical hygiene; `warning` = pitfalls. Do not use callouts as
    project-management reminders; those belong in `docs/backlog.md`.
-E. **Pedagogical efficiency** (drafting-template): the destination is
-   attention/transformers; every concept names its payoff chapter; no payoff →
-   exercise or cut.
+E. **Pedagogical efficiency** (drafting-template): identify every concept's payoff
+   privately in `docs/arc-seeds.md`; no payoff → exercise or cut. In learner-facing
+   prose, plant the behavior before the later construction's name.
 F. **Honesty gate**: printed numbers must support the prose exactly; overclaims
    get toned down, not numbers massaged. When an experiment refuses to show the
    textbook result honestly, the null result with a diagnosis is usually the
    better chapter (precedents in §5).
-G. **GPU queue** (revised July 15): experiments needing full-dataset/GPU scale get an
-   entry in `docs/backlog.md` §5, not an in-chapter placeholder. Never fake a
-   scaled-down win; publish the honest CPU result and add the scaled result only after
-   it has actually run.
+G. **GPU queue** (revised July 25): experiments needing full-dataset/GPU scale get an
+   entry in `docs/backlog.md` §5, not an in-chapter placeholder. The first Rivanna
+   pass completed the Chapter 9 scorecard/transfer and Chapter 10 language-model
+   studies; their scripts and 30 records live in `experiments/rivanna/`. Never fake a
+   scaled-down win; publish a scaled result only after it has actually run.
 H. **Licensing**: no d2l.ai text/code ever (his `rnn_data_prep.py` is D2L-derived
    — reference conventions only, never port). Committed third-party assets note
    their license (e.g., `data/squeezenet1_1-imagenet.pt`, torchvision BSD-3).
@@ -999,7 +1015,7 @@ in the reader's language beside the terse kernel, output beneath the code.
 | Rules, authoring form, six-step ceiling | `docs/style-guide.md` |
 | Audit | `scripts/audit_plan_code.py` |
 
-All 201 learner-visible Python surfaces now use the panel; 28 `echo: false`
+All 204 learner-visible Python surfaces now use the panel; 28 `echo: false`
 execution-only cells are exempt. Markers in executed/tested source are
 bracket-only (`# [1]`, or fused `# [2][5]`) and never repeat the plan text.
 Comments remain only when they explain shapes, numerical choices, or non-obvious
@@ -1039,10 +1055,13 @@ colour alone. Selective use is preferred over colouring every variable.
 2. **Delta typography.** Both trials are live in chapter 14 — the elided
    `include` of an imported signature versus the prose-referenced delta cell.
    Pick one and it becomes book-wide.
-3. **GPU queue.** `docs/backlog.md` §5 lists the runs that need real hardware
-   (full-data architecture scorecard; ImageNet ResNet-18 transfer at 224px;
-   scaled language model). Chapters quote the lecture's numbers meanwhile — per
-   the author's rule, **no placeholder callouts in published chapters**.
+3. **Remaining research-scale queue.** The first Rivanna pass completed the
+   Chapter 9 full-data scorecard/transfer and Chapter 10 WikiText-2 study.
+   `docs/backlog.md` §5 retains the larger translation, long-context memory,
+   pretrained-language, vision-regime, adaptation/alignment, generative,
+   multimodal, device-profiling, and test-time-control rematches. Run only
+   predeclared comparisons and keep **all placeholders out of published
+   chapters**.
 
 Page arithmetic for v1.1 is recorded honestly in `CHANGELOG.md` (502 vs v1.0's
 498: Plan v2 netted about −1 page; the +4 came from the earlier commissioned

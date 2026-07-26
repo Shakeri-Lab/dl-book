@@ -213,7 +213,10 @@ retrieve from memory: title the mistaken inference, then state the repair.
 5. **Show, then name.** Let the reader first see the behavior, geometry, or failure
    that creates a need for a concept. Name the concept after the reader has something
    concrete to attach the name to. Avoid announcing terminology before its job is
-   visible.
+   visible. This also governs forward references: an early chapter may plant a
+   mechanism in plain language, but it should not reveal the later chapter's name,
+   slogan, or full interpretation before the reader has built it. The seed ledger may
+   record the destination privately; the learner-facing prose preserves the discovery.
 6. **Momentum outranks encyclopedic completeness.** Keep the main path sufficient,
    honest, and moving. Put a subtle qualification in a short footnote when it prevents
    a false claim; defer a proof or broader treatment to a later section only when that

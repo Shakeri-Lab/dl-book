@@ -37,6 +37,11 @@ The fixed subsets in `data/fashion-train.pt` and `data/fashion-test.pt` come fro
 also warns that pretrained weights may carry separate terms inherited from their
 training datasets; users are responsible for checking those terms.
 
+The full-scale Chapter 9 Rivanna experiment also evaluated
+`ResNet18_Weights.IMAGENET1K_V1`. That checkpoint is not redistributed here; only
+aggregate metrics and learning histories are retained in
+`experiments/rivanna/results/`.
+
 > BSD 3-Clause License
 >
 > Copyright (c) Soumith Chintala 2016, All rights reserved.
@@ -63,6 +68,16 @@ training datasets; users are responsible for checking those terms.
 > CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
 > ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
 > DAMAGE.
+
+## WikiText-2
+
+The full-scale Chapter 10 experiment used WikiText-2, downloaded at run time from the
+copy used by the official PyTorch examples. The corpus itself is not redistributed in
+this repository; only aggregate metrics, learning histories, and short model-generated
+samples are retained. WikiText-2 is made available under the Creative Commons
+Attribution-ShareAlike License and the GNU Free Documentation License; see the
+[Salesforce WikiText dataset card](https://huggingface.co/datasets/Salesforce/wikitext)
+for the dataset description and licensing statement.
 
 ## micrograd
 

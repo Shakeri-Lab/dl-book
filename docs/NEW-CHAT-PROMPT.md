@@ -18,9 +18,10 @@ rest of my 6050 material; the virtualenv is deliberately outside it). Remote `ht
 `https://shakeri-lab.github.io/dl-book/`, PDF at
 `https://shakeri-lab.github.io/dl-book/Deep-Learning--Making-It-Learnable.pdf`.
 Current stable release **v1.1** is 502 pages. The post-release `main` revision is
-536 pages after the author-requested universal Plan → Code pass and two author
-revision passes on Chapter 1; it still contains chapters 1–20 plus two
-interludes, four appendices, and an epilogue. Nothing is mid-flight.
+560 pages after the author-requested universal Plan → Code pass, two author
+revision passes on Chapter 1, and the pacing/visual/full-scale experiment pass;
+it still contains chapters 1–20 plus two interludes, four appendices, and an
+epilogue. Nothing is mid-flight.
 
 **Read before doing anything, in this order:**
 
@@ -55,6 +56,10 @@ answer.**
   learnable parameters, purple is observed targets, green is predictions, and
   wine is residuals/errors. Carry a colour into nearby prose when it clarifies
   the same mapping, but never make meaning depend on colour alone.
+- **Show, then name—including across chapters.** Plant a future mechanism in
+  ordinary language, but do not reveal the later construction's name or finished
+  interpretation before the reader has built enough behavior to earn it. Keep the
+  destination in `docs/arc-seeds.md`, not in premature learner-facing slogans.
 - **Box caution.** The working tree is in Box; GitHub is the source of truth. If git objects ever look corrupt, re-clone rather than repair in place, and never let a render run while Box is mid-sync of the same folder.
 - **Freeze discipline.** Any prose edit invalidates that chapter's freeze cache.
   Re-render the chapter with **no `--to` flag** (both formats), then the project —

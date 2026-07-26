@@ -8,8 +8,8 @@ new rows here. The pedagogical-efficiency rule (drafting-template) depends on
 this file: a concept with no payoff chapter listed here should be an exercise or
 a cut.*
 
-*Updated: 2026-07-15, after the course-alignment, structural-review, and test-time
-memory/control passes.*
+*Updated: 2026-07-25, after the course-alignment, structural-review,
+test-time memory/control, and show-then-name pacing passes.*
 
 ## 1. Seeds planted and their harvest contracts
 
@@ -17,8 +17,8 @@ memory/control passes.*
 |---|---|---|---|
 | Dot product = similarity score against a template | ch. 1 | ch. 7 (sliding template), ch. 12 (kernel similarity), ch. 13 (QK scores), ch. 20 (normalized cross-modal similarity) | done |
 | Prediction = weighted combination of training targets | ch. 1 | ch. 12 (Nadaraya–Watson IS this, made explicit) | done |
-| Softmax = the scores→weights machine | ch. 2 | ch. 12 (kernel weights), ch. 13 (attention weights), ch. 20 (row/column contrastive candidates) | done |
-| "Softening the hard" / differentiable lookup ("A differentiable lookup, it turns out, is precisely attention") | ch. 2 | ch. 13 — harvest by name | done |
+| Softmax = the scores→positive-weights machine; later match one request to stored candidates and blend their contents (later name deliberately withheld) | ch. 2 | ch. 12 (kernel weights), ch. 13 (name the content-dependent weighted read), ch. 20 (row/column contrastive candidates) | done |
+| "Softening the hard": replace one winning memory address with a weighted read, without naming the finished construction early | ch. 2 | ch. 13 — build the behavior, then harvest by name | done |
 | Temperature dial between hard max and uniform | ch. 2 | ch. 10 ✓ (sampling); ch. 13 (√d as temperature) | done |
 | Compositional hierarchy: features of features | ch. 3 | ch. 8 ✓ (receptive fields make it architectural) | done |
 | Gradient superhighway (ReLU's open gate) | ch. 5 | ch. 9 ✓ (residual = the highway as infrastructure), ch. 10 ✓ (cell state = highway through time) | done |

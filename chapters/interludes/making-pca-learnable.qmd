@@ -1,4 +1,4 @@
-# Interlude: Making PCA Learnable {#sec-interlude-autoencoders .unnumbered}
+# Interlude: Autoencoders—Making PCA Learnable {#sec-interlude-autoencoders .unnumbered}
 
 <!-- lecture-source:
      Module 6 spine via ~/dl-course-code/ds6050_06_autoencoders/MODULE_NOTES.md
@@ -24,11 +24,11 @@ we add a loop, the course takes a revealing detour—one that begins with a fixe
 object. Could an encoder compress an
 object into a fixed-size code and a decoder recover what mattered?
 
-That question makes three ideas line up. Principal component analysis (PCA) is a
-closed-form linear encoder–decoder. Gradient descent can make the same map learnable.
-Nonlinearity then lets the map bend around curved data. The result is an
-**autoencoder**—and its success will expose why a one-shot encoder is not yet a
-variable-length process.
+That compression-and-reconstruction machine is an **autoencoder**. We will first learn
+its contract, then discover that principal component analysis (PCA) was already its
+closed-form linear case. Gradient descent makes the same map learnable; nonlinearity
+lets it bend around curved data. Its success will expose why a one-shot encoder is not
+yet a variable-length process.
 
 *Numbering note.* In this unnumbered interlude, HTML numbers figures and equations
 locally, while the PDF continues Chapter 9's counters.
@@ -38,11 +38,11 @@ locally, while the PDF continues Chapter 9's counters.
 ```{python}
 #| label: fig-fixed-code-bridge
 #| echo: false
-#| fig-cap: "The encoder–decoder detour solves one problem and reveals the next. A fixed-size object can be compressed into a code and reconstructed. Variable-length sequences can also be forced through one code, but the code's width does not grow when the evidence does. Chapter 10 replaces that one-shot handoff with a state updated step by step."
+#| fig-cap: "The encoder–decoder detour solves one problem and reveals the next. A fixed-size object can be compressed into a code and reconstructed. Variable-length sequences can also be forced through one code, but the code's width does not grow when the evidence does. The unmet need is a memory that can update as each new piece arrives."
 #| fig-alt: "A fixed image passes through an encoder to a small code and then a decoder. Below it, short and long sequences are both squeezed into the same-width code; the long path is marked as a fixed-code bottleneck and points toward step-by-step recurrence."
 #| fig-width: 10
 #| fig-height: 4.2
-#| code-summary: "Figure code: connect fixed-size models, autoencoders, and recurrence"
+#| code-summary: "Figure code: connect fixed-size codes to step-by-step memory"
 
 from copy import deepcopy
 import math
@@ -58,7 +58,8 @@ torch.set_default_dtype(torch.float64)
 torch.set_num_threads(6)
 torch.manual_seed(6050)
 
-navy, orange, green, wine = "#232D4B", "#E57200", "#2E7D32", "#722F37"
+navy, orange, green = "#232D4B", "#E57200", "#2E7D32"
+wine, neutral = "#722F37", "#666666"
 
 fig, ax = plt.subplots(figsize=(10, 4.2))
 ax.set_xlim(0, 11)
@@ -91,9 +92,9 @@ def bridge_arrow(
 
 bridge_box(ax, 0.15, 3.15, 2.0, 1.0, "FIXED OBJECT", r"$x\in\mathbb{R}^{28\times28}$", navy)
 bridge_box(ax, 2.70, 3.15, 1.7, 1.0, "ENCODER", r"$z=f_\phi(x)$", orange)
-bridge_box(ax, 4.95, 3.15, 1.1, 1.0, "CODE", r"$z\in\mathbb{R}^k$", wine)
+bridge_box(ax, 4.95, 3.15, 1.1, 1.0, "CODE", r"$z\in\mathbb{R}^k$", neutral)
 bridge_box(ax, 6.60, 3.15, 1.7, 1.0, "DECODER", r"$\hat{x}=g_\theta(z)$", green)
-bridge_box(ax, 8.85, 3.15, 2.0, 1.0, "RECONSTRUCTION", r"$\hat{x}\approx x$", navy)
+bridge_box(ax, 8.85, 3.15, 2.0, 1.0, "RECONSTRUCTION", r"$\hat{x}\approx x$", green)
 for left, right in [(2.15, 2.70), (4.40, 4.95), (6.05, 6.60), (8.30, 8.85)]:
     bridge_arrow(ax, (left, 3.65), (right, 3.65))
 
@@ -106,13 +107,13 @@ for row_y, count, label in [(1.75, 4, "short"), (0.55, 9, "long")]:
         ))
     ax.text(0.22, row_y - 0.18, f"{label} sequence", color="#555555", fontsize=7.6)
     bridge_arrow(ax, (2.65, row_y + 0.21), (4.45, row_y + 0.21), orange)
-    bridge_box(ax, 4.45, row_y - 0.05, 1.20, 0.52, "SAME $z$", "fixed width", wine)
+    bridge_box(ax, 4.45, row_y - 0.05, 1.20, 0.52, "SAME $z$", "fixed width", neutral)
     bridge_arrow(ax, (5.65, row_y + 0.21), (7.45, row_y + 0.21), green)
     ax.text(7.55, row_y + 0.21, "reconstruct", va="center",
             color=green, fontsize=8.3, weight="bold")
 
 ax.text(9.65, 1.88, "more evidence", ha="center", color=navy, fontsize=8.2)
-ax.text(9.65, 1.48, "yet no more memory", ha="center", color=wine,
+ax.text(9.65, 1.48, "yet no more memory", ha="center", color=neutral,
         fontsize=9.2, weight="bold")
 ax.text(9.65, 0.78, "update memory\nstep by step", ha="center", va="center",
         color=green, fontsize=9.0, weight="bold")
@@ -232,9 +233,9 @@ The experiment uses `torch.linalg.svd` only to compute PCA's closed-form referen
 after the projection has been derived above; Appendix A opens that decomposition and
 its shape/centering contract. It also uses $\tanh$, the smooth pointwise map
 $\tanh(u)\in(-1,1)$, as the nonlinear activation inside the curved autoencoder.
-Chapter 3 already supplied the activation-layer idea; Chapter 10 returns to $\tanh$
-and its derivative when recurrence needs a bounded state. Neither preview grants a
-new unexplained black box to the intervening chapters.
+Chapter 3 already supplied the activation-layer idea. Here $\tanh$ is simply a
+nonlinear map; its bounded range and derivative will matter only when repeated state
+updates make them a design constraint.
 :::
 
 ## What if the map could bend?
@@ -756,9 +757,8 @@ print("transposed-convolution adjoint relative gap", f"{adjoint_relative_gap:.2e
 The denoising arm wins only the question it was trained to answer. It restores this
 specified corruption better, while the clean-trained arm reconstructs clean inputs
 better. Calling either model “the better autoencoder” would erase the experimental
-contract. Chapter 19 will return to denoising at many calibrated noise levels; that is
-where repeated, level-conditioned corruption reversal becomes one learned component of
-diffusion's generative path.
+contract. The important lesson here is narrow: changing the corruption and target
+changes the function the same architecture is rewarded for learning.
 
 ## Why a one-shot encoder cannot be the whole sequence model
 
@@ -787,13 +787,12 @@ turns a fixed-input network into a variable-length process. The autoencoder did 
 fail us. It made the missing operation visible.
 
 ::: {.callout-note}
-## Two different limitations, two different next chapters
+## Two different limitations
 
-“A one-shot encoder is not a variable-length process” motivates recurrence in Chapter
-10.
-“A code is not yet a probability distribution” motivates the generative models in
-Chapter 19. Do not collapse them: one is about how evidence arrives; the other is
-about how new samples begin.
+“A one-shot encoder is not a variable-length process” asks how memory should update as
+evidence arrives. “A code is not yet a probability distribution” asks how a genuinely
+new sample could begin. Do not collapse them: they are different contracts and require
+different machinery.
 :::
 
 ## Okay, so — PCA became a network, then the code became a bottleneck
@@ -810,8 +809,9 @@ about how new samples begin.
    shape-changing operator used by the decoder, not an inverse of the encoder.
 5. **Same architecture, different contracts, different behavior.** Clean reconstruction,
    denoising, and translation pair inputs and targets in distinct ways.
-6. **A one-shot handoff plants two questions.** Variable-length evidence leads next to
-   recurrence. Unsupported latent sampling waits for Chapter 19.
+6. **A one-shot handoff plants two questions.** Variable-length evidence asks for a
+   step-by-step update. Unsupported latent sampling waits until the book has earned a
+   probabilistic starting rule.
 
 ## Sources and further reading {.unnumbered}
 

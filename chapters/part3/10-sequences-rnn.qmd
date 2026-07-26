@@ -667,9 +667,9 @@ vector for *bank* did not change between a river and a loan.
 
 The recurrent state in this chapter changes that contract. Its $h_t$ depends on the
 visible prefix, so the representation at a position is contextual even when its input
-token embedding began as a lookup. Self-attention later makes that contextual mixing
-direct in @sec-14-self-attention-transformer, and @sec-15-bert-pretraining turns it
-into a large-scale pretraining regime.
+token embedding began as a lookup. Later we will build a different mechanism that lets
+each position mix information from other visible positions directly. First, the
+recurrent route deserves to be understood on its own terms.
 :::
 <!-- /NOVEL -->
 
@@ -846,6 +846,76 @@ the LSTM's two 128-dimensional states, $(\vect{h}, \vect{c})$: 256 scalars in al
 Both diagnoses point down the road this part of the book is
 traveling.
 
+## A full-scale rematch: words, layers, and corpus size
+
+The character model answered the chapter's mechanism question on a CPU-sized snapshot.
+It did not answer what happens when tokens become words, the corpus grows past two
+million training tokens, and recurrent depth increases. We ran that rematch on
+WikiText-2 with a 33,279-word training vocabulary. Three tied-embedding LSTMs share the
+same optimizer and 12-epoch budget; validation selects one checkpoint before the test
+split is opened.
+
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Load the nine pinned WikiText-2 Rivanna records.
+2. Summarize parameter count and held-out perplexity by model size.
+3. Plot seed means, individual runs, and one-standard-deviation error bars.
+:::
+
+```{python}
+#| label: fig-wikitext-scale
+#| fig-cap: "Word-level LSTM scale on WikiText-2. Across seeds 6050–6052, the 9.61M-parameter model reaches test perplexity 146.59 ± 1.38, the 21.27M model 140.05 ± 0.98, and the 39.77M model 141.94 ± 13.49. The medium model improves reliably; the largest has two strong runs and one poor run, so more parameters did not buy a stable improvement under the shared 12-epoch recipe. Points are seed-level tests; bars are means ± one sample standard deviation."
+#| fig-alt: "Test perplexity is plotted against log-scaled parameter count for small, medium, and large word-level LSTMs. Small is near 147, medium near 140 with little variation, and large near 142 with a much larger error bar caused by one weak seed."
+#| code-summary: "Code: WikiText-2 word-LSTM scale rematch"
+#| code-fold: false
+# [1]
+import json
+from pathlib import Path
+
+wikitext_root = Path("../../experiments/rivanna/results/wikitext")
+wikitext_records = [
+    json.loads(path.read_text()) for path in sorted(wikitext_root.glob("*.json"))
+]
+wikitext_order = ["small", "medium", "large"]
+
+# [2]
+wikitext_summary = {}
+for size in wikitext_order:
+    rows = [row for row in wikitext_records if row["size"] == size]
+    perplexities = torch.tensor([row["test_perplexity"] for row in rows])
+    wikitext_summary[size] = {
+        "parameters": rows[0]["parameter_count"],
+        "values": perplexities,
+        "mean": perplexities.mean().item(),
+        "sd": perplexities.std(unbiased=True).item(),
+    }
+
+# [3]
+fig, ax = plt.subplots(figsize=(6.4, 3.5))
+colors = ["#B8B8A8", "#5379AA", "#E57200"]
+for size, color in zip(wikitext_order, colors):
+    result = wikitext_summary[size]
+    ax.errorbar(result["parameters"], result["mean"], yerr=result["sd"],
+                fmt="o", ms=8, capsize=5, color=color, zorder=3)
+    ax.scatter(torch.full((3,), result["parameters"]), result["values"],
+               color="#232D4B", s=20, zorder=4)
+    ax.annotate(size, (result["parameters"], result["mean"]),
+                textcoords="offset points", xytext=(7, 4), fontsize=9)
+ax.set_xscale("log")
+ax.set_xlabel("parameters (log scale)"); ax.set_ylabel("test perplexity (lower is better)")
+ax.set_ylim(125, 165)
+plt.tight_layout(); plt.show()
+```
+::::
+
+The change in tokenization is audible: generated samples now contain full words and
+longer grammatical fragments, though their facts and discourse still drift. The
+numbers make the scale lesson more precise. Moving from 9.61M to 21.27M parameters
+improves every seed. Moving again to 39.77M does not improve the mean reliably: two
+runs are strongest, while seed 6050 ends at perplexity 157.44. Capacity, optimization,
+and data must scale together. “Bigger” is not a result until the training contract
+makes it one.
+
 ## What a fixed-size state cannot hold
 
 The lecture closes with the bridge this part of the book now crosses. If a
@@ -858,14 +928,14 @@ matter how long the sentence runs. The char-LM's trailing clauses were this
 bottleneck in miniature. The honest fix is not a bigger vector; it is admitting
 that the decoder should be allowed to *look back at all of the encoder's states*,
 not just the last. Choosing where to look, on the fly, is a similarity
-computation you have been prepared for since Chapter 1's dot products. That is
-attention (@sec-12-kernel-regression, @sec-13-attention), and it is two chapters
-away.
+computation you have been prepared for since Chapter 1's dot products. The next
+chapter will first make the fixed-code failure visible in translation. Part IV will
+then build an alternative from that need.
 
-The fixed-size state is about to lose that rematch in Part IV: attention will keep
-the evidence available instead of squeezing all of it through one vector. Then the
-state returns in @sec-14-memory-spectrum—not as a defeated design, but as a chosen
-point on a regression tradeoff whose price we can finally name.
+The fixed-size state is about to face that rematch: the alternative will keep the
+evidence available instead of squeezing all of it through one vector. Much later the
+state will return—not as a defeated design, but as a deliberate point on a memory
+tradeoff whose price we can finally name.
 
 ## Okay, so — weight sharing moved into time
 
@@ -893,7 +963,7 @@ point on a regression tradeoff whose price we can finally name.
 6. **A one-layer character LSTM learns this book's accent** (words, rhythm,
    LaTeX tics) but not its meaning: part scale, part the finite-state
    bottleneck. Cramming a whole sequence into 256 recurrent-state scalars is the debt Part III
-   carries forward, and attention is how the book repays it.
+   carries forward. The next chapters will earn the mechanism that repays it.
 
 ## Sources and further reading {.unnumbered}
 

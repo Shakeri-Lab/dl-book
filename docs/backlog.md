@@ -94,6 +94,12 @@ Do not place project-management placeholders in the published chapters. Keep the
 experiments here until GPU access is available; then run them on Rivanna/Colab, pin the
 numbers, and fold only completed results back into the relevant chapter.
 
+The July 25, 2026 Rivanna pass completed and published the Chapter 9 full-data
+Fashion-MNIST scorecard, the Chapter 9 ImageNet ResNet-18 probe/fine-tune/scratch
+rematch, and the Chapter 10 WikiText-2 word-LSTM scale study. Their 30 per-seed JSON
+records, SLURM job identifiers, device/software metadata, and source digest live in
+`experiments/rivanna/results/`; they are no longer backlog items.
+
 The experimentation/HPO interlude's paired BatchNorm study is CPU-complete. The
 autoencoder interlude's curve/projector, decoder-ambiguity, convolutional
 reconstruction, and denoising studies are CPU-complete as well. Across Chapters 12–20,
@@ -134,14 +140,6 @@ here.
   Fold results into the appendix only after the numbers are pinned; until then keep
   this reminder here rather than adding a published callout.
 
-- **Ch. 9 scorecard, full scale**: LeNet / VGG / NiN / deep ResNet on all 60k
-  Fashion-MNIST images — reproduce the lecture frontier (≈89% / >90% / ≈90% @ 30k
-  params / higher).
-- **Ch. 9 transfer, full scale**: ImageNet ResNet-18 on full FashionMNIST at 224px —
-  linear probe (≈93%) vs last-block fine-tune (≈94%) vs scratch baseline.
-- **Ch. 10 language model, full scale**: word-level tokens, stacked LSTM layers, a
-  larger licensed corpus, and a held-out loss comparison across model sizes; inspect
-  when samples move beyond book-flavored character babble.
 - **Ch. 11 translation, full scale**: English→French with an independently written,
   packed encoder–decoder pipeline, bucketing, BLEU, and greedy-versus-beam decoding.
   Do not use the course's D2L-derived `rnn_data_prep.py`.
