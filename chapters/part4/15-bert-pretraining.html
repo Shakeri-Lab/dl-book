@@ -787,7 +787,7 @@ z_i=e_{\text{token}(i)}+e_{\text{position}(i)}+e_{\text{segment}(i)}.
 </div>
 </div>
 <div class="callout-body-container callout-body">
-<p>Chapter 10 fixed its vocabulary at individual characters (<a href="../part3/10-sequences-rnn.html" class="quarto-xref"><span>Chapter 10</span></a>). A full-word vocabulary shortens sequences but gives every rare spelling its own entry. Subword tokenization chooses a middle contract. <strong>Byte Pair Encoding (BPE)</strong> begins with small symbols, counts adjacent pairs in the training corpus, merges the most frequent pair, and repeats until it reaches a chosen vocabulary budget.</p>
+<p>Chapter 10 fixed its vocabulary at individual characters. A full-word vocabulary shortens sequences but gives every rare spelling its own entry. Subword tokenization chooses a middle contract. <strong>Byte Pair Encoding (BPE)</strong> begins with small symbols, counts adjacent pairs in the training corpus, merges the most frequent pair, and repeats until it reaches a chosen vocabulary budget.</p>
 <p>This original toy implementation starts from characters plus an end-of-word marker. Corpus frequencies weight the pair counts; lexicographic order breaks exact ties so the result is reproducible.</p>
 </div>
 </div>
@@ -942,6 +942,21 @@ Figure&nbsp;15.3: One pretrained encoder supports several task interfaces. In st
 <h3 class="anchored" data-anchor-id="build-a-latent-regularity">Build a latent regularity</h3>
 <p>Eighty randomly generated four-letter token strings are divided into two latent families. Family assignment is independent of spelling. Forty <em>covered</em> strings—20 per family—each appear eight times in an unlabeled MLM corpus. Forty more—20 per family—live in the input vocabulary but are withheld from MLM input sequences, random replacements, and prediction targets.</p>
 <p>Each covered word receives eight source sentences. Six contain cues from its own family; two deliberately contain cues from the other family. One family appears near words such as <em>rain</em>, <em>soil</em>, <em>roots</em>, and <em>garden</em>; the other appears near <em>power</em>, <em>metal</em>, <em>gears</em>, and <em>workshop</em>. The 25% cue noise gives every covered string a mixture of supporting and opposing contexts—the aggregate family signal is statistical rather than pure.</p>
+<div id="cell-fig-bert-lab-design" class="cell" data-fig-height="5.4" data-fig-width="10" data-execution_count="7">
+<div class="cell-output cell-output-display">
+<div id="fig-bert-lab-design" class="quarto-float quarto-figure quarto-figure-center anchored" alt="A two-lane flow diagram. In the source-construction lane, 80 random strings split into two families of 40, and each family splits into 20 covered and 20 uncovered types. Covered types feed an MLM corpus with eight sentences per type, six own-family cues and two cross-family cues, while uncovered types are marked never seen in inputs, replacements, or targets. In the downstream-audit lane, one neutral sentence template feeds labeled covered types, remaining covered test types, and all uncovered controls.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-bert-lab-design-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="15-bert-pretraining_files/figure-html/fig-bert-lab-design-output-1.png" alt="A two-lane flow diagram. In the source-construction lane, 80 random strings split into two families of 40, and each family splits into 20 covered and 20 uncovered types. Covered types feed an MLM corpus with eight sentences per type, six own-family cues and two cross-family cues, while uncovered types are marked never seen in inputs, replacements, or targets. In the downstream-audit lane, one neutral sentence template feeds labeled covered types, remaining covered test types, and all uncovered controls." width="950" height="509" class="figure-img">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-bert-lab-design-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;15.4: The controlled transfer lab makes source exposure and downstream evaluation separate, auditable choices. Family is independent of spelling. Only the 40 covered types enter MLM inputs, random replacements, or targets; each contributes eight source sentences with six own-family and two cross-family cues. The neutral downstream template then separates labeled covered types, held-out covered test types, and all 40 source-invisible controls.
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<p>Read <a href="#fig-bert-lab-design" class="quarto-xref">Figure&nbsp;<span>15.4</span></a> from top to bottom. Source exposure is decided before the neutral downstream sentence is formed, so the covered test pool measures transfer to unseen <em>types</em> and the uncovered pool audits what vocabulary membership alone can buy.</p>
 <p>The downstream input is always the neutral, previously unseen template</p>
 <p><span class="math display">\[
 \text{“we found the PSEUDOWORD today.”}
@@ -957,7 +972,7 @@ Figure&nbsp;15.3: One pretrained encoder supports several task interfaces. In st
 <li>Report or visualize the measured result.</li>
 </ol>
 </div>
-<div id="bert-lab-data" class="cell" data-execution_count="7">
+<div id="bert-lab-data" class="cell" data-execution_count="8">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="co"># [1]</span></span>
 <span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>SEED <span class="op">=</span> <span class="dv">6050</span></span>
 <span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>WIDTH <span class="op">=</span> <span class="dv">48</span></span>
@@ -1066,7 +1081,7 @@ covered/uncovered token strings: 40 / 40</code></pre>
 <li>Define full attention, the encoder, and the MLM head.</li>
 </ol>
 </div>
-<div id="bert-lab-model" class="cell" data-execution_count="8">
+<div id="bert-lab-model" class="cell" data-execution_count="9">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="co"># [1]</span></span>
 <span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> FullAttention(nn.Module):</span>
 <span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>) <span class="op">-&gt;</span> <span class="va">None</span>:</span>
@@ -1215,7 +1230,7 @@ covered/uncovered token strings: 40 / 40</code></pre>
 <li>Report or visualize the measured result.</li>
 </ol>
 </div>
-<div id="bert-lab-training" class="cell" data-execution_count="9">
+<div id="bert-lab-training" class="cell" data-execution_count="10">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="co"># [1]</span></span>
 <span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>TensorState <span class="op">=</span> <span class="bu">dict</span>[<span class="bu">str</span>, torch.Tensor]</span>
 <span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -1441,7 +1456,7 @@ realized mask/random/unchanged shares: [0.8003599643707275, 0.09977486729621887,
 <li>Audit paired transfer, source coverage, and representation geometry.</li>
 </ol>
 </div>
-<div id="pretraining-transfer-audit" class="cell" data-execution_count="10">
+<div id="pretraining-transfer-audit" class="cell" data-execution_count="11">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="co"># [1]</span></span>
 <span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="at">@torch.no_grad</span>()</span>
 <span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> representation_geometry(</span>
@@ -1497,7 +1512,7 @@ after MLM within/between: (0.5322557687759399, -0.5517237186431885)</code></pre>
 </div>
 </div>
 </div>
-<div id="cell-fig-pretraining-pays" class="cell" data-fig-height="3.7" data-fig-width="11" data-execution_count="11">
+<div id="cell-fig-pretraining-pays" class="cell" data-fig-height="3.7" data-fig-width="11" data-execution_count="12">
 <div class="cell-output cell-output-display">
 <div id="fig-pretraining-pays" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Three-panel transfer audit. Covered-token accuracy after MLM stays near one for one, two, and four labeled words per family, while scratch and both unexposed controls remain around chance. All 15 paired MLM-minus-scratch gains are positive, roughly 0.37 to 0.62. For seed 6050, centered cosine similarity changes from near zero for both pair types to positive within-family and negative between-family values after MLM.">
 <figure class="quarto-float quarto-float-fig figure">
@@ -1505,7 +1520,7 @@ after MLM within/between: (0.5322557687759399, -0.5517237186431885)</code></pre>
 <img src="15-bert-pretraining_files/figure-html/fig-pretraining-pays-output-1.png" alt="Three-panel transfer audit. Covered-token accuracy after MLM stays near one for one, two, and four labeled words per family, while scratch and both unexposed controls remain around chance. All 15 paired MLM-minus-scratch gains are positive, roughly 0.37 to 0.62. For seed 6050, centered cosine similarity changes from near zero for both pair types to positive within-family and negative between-family values after MLM." width="1048" height="345" class="figure-img">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-pretraining-pays-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;15.4: Five paired end-to-end seeds in the synthetic transfer lab. MLM initialization separates covered latent families and improves every covered-type comparison (left and center); both arms stay near chance on input-vocabulary controls withheld from MLM inputs, replacements, and targets (left). Centered cosine similarity is a representation diagnostic, not a task metric (right).
+Figure&nbsp;15.5: Five paired end-to-end seeds in the synthetic transfer lab. MLM initialization separates covered latent families and improves every covered-type comparison (left and center); both arms stay near chance on input-vocabulary controls withheld from MLM inputs, replacements, and targets (left). Centered cosine similarity is a representation diagnostic, not a task metric (right).
 </figcaption>
 </figure>
 </div>
@@ -1617,6 +1632,21 @@ Table&nbsp;15.1: Three pretraining families separate visibility, objective, and 
 </table>
 </div>
 </figure>
+</div>
+<p>The visibility column becomes concrete in <a href="#fig-pretraining-visibility" class="quarto-xref">Figure&nbsp;<span>15.6</span></a>. Each matrix uses queries as rows and keys as columns, exactly as in <a href="#fig-visibility-corruption" class="quarto-xref">Figure&nbsp;<span>15.1</span></a>.</p>
+<div id="cell-fig-pretraining-visibility" class="cell" data-fig-height="3.9" data-fig-width="10" data-execution_count="13">
+<div class="cell-output cell-output-display">
+<div id="fig-pretraining-visibility" class="quarto-float quarto-figure quarto-figure-center anchored" alt="A three-panel visibility triptych. The BERT panel is a full square attention matrix. The GPT panel is a lower-triangular causal matrix. The T5 panel is a block matrix: a full encoder self-attention square at upper left, a blank encoder-to-decoder block at upper right, a full decoder-to-encoder cross-attention band at lower left, and a causal decoder self-attention triangle at lower right.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-pretraining-visibility-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="15-bert-pretraining_files/figure-html/fig-pretraining-visibility-output-1.png" alt="A three-panel visibility triptych. The BERT panel is a full square attention matrix. The GPT panel is a lower-triangular causal matrix. The T5 panel is a block matrix: a full encoder self-attention square at upper left, a blank encoder-to-decoder block at upper right, a full decoder-to-encoder cross-attention band at lower left, and a causal decoder self-attention triangle at lower right." width="926" height="385" class="figure-img">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-pretraining-visibility-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;15.6: Three pretraining families differ first in what each position may retrieve. A BERT-style encoder has full nonpadding self-attention; a GPT-style decoder has causal self-attention. T5 uses three routes in two stacks: full encoder self-attention, causal decoder self-attention, and decoder-to-encoder cross-attention. The combined T5 block is a visibility ledger for those separate sublayers, not one mask applied by the implementation.
+</figcaption>
+</figure>
+</div>
+</div>
 </div>
 <p>The separation in <a href="#tbl-pretraining-families" class="quarto-xref">Table&nbsp;<span>15.1</span></a> matters during execution too. A GPT-style decoder can train all next-token positions in parallel under teacher forcing because the causal mask exposes only each prefix. Generation is still sequential: the model must emit a token before that token can join the next prefix. Training and inference share a factorization and visibility rule, not an execution schedule.</p>
 <p>Once those next-token logits exist, Chapter 11’s greedy and beam-search machinery can rank continuations—the architecture changes, but decoding remains a separate decision layer. Chapter 17 will return to how prompts alter the context supplied to that decoder.</p>

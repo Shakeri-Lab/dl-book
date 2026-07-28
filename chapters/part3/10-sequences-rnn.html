@@ -683,7 +683,7 @@ Figure&nbsp;10.2: How much a freshly initialized vanilla RNN’s output can blam
 </div>
 </div>
 <div class="callout-body-container callout-body">
-<p>Practice handles explosion with <strong>gradient clipping</strong>: if the gradient’s norm exceeds a threshold, rescale it down to the threshold before stepping (<code>nn.utils.clip_grad_norm_</code> — it appears in every training loop below). The This tames the spikes so training survives, at the cost of damping legitimately large steps — and it does <em>nothing</em> for vanishing. You cannot clip your way to a longer memory.</p>
+<p>Practice handles explosion with <strong>gradient clipping</strong>: if the gradient’s norm exceeds a threshold, rescale it down to the threshold before stepping (<code>nn.utils.clip_grad_norm_</code> — it appears in every training loop below). This tames the spikes so training survives, at the cost of damping legitimately large steps — and it does <em>nothing</em> for vanishing. You cannot clip your way to a longer memory.</p>
 </div>
 </div>
 <section id="training-with-a-finite-horizon" class="level3">
@@ -694,7 +694,7 @@ Figure&nbsp;10.2: How much a freshly initialized vanilla RNN’s output can blam
 </section>
 <section id="engineering-a-memory-the-lstm" class="level2" data-number="10.4">
 <h2 data-number="10.4" class="anchored" data-anchor-id="engineering-a-memory-the-lstm"><span class="header-section-number">10.4</span> Engineering a memory: the LSTM</h2>
-<p>So the vanilla RNN’s memory dies of repeated multiplication. The seed notes stage the fix as a design-by-constraints exercise, and it is worth walking, because you already own its key move. We want a memory pathway that is:</p>
+<p>So the vanilla RNN’s memory dies of repeated multiplication. A useful way to stage the fix is as a design-by-constraints exercise, and it is worth walking because you already own the key move. We want a memory pathway that is:</p>
 <ol type="1">
 <li><strong>Preserved by default.</strong> Repeated <em>multiplication</em> killed the signal <span class="math inline">\(\rightarrow\)</span> make the carried state <strong>additive</strong>: <span class="math inline">\(\vect{c}_t = \vect{c}_{t-1} + \Delta_t\)</span>. A conveyor belt: information rides along untouched unless something deliberately intervenes. You met this exact maneuver one chapter ago — <a href="../part2/09-modern-cnns-transfer.html" class="quarto-xref"><span>Chapter 9</span></a>’s residual connection, <span class="math inline">\(H(x) = F(x) + x\)</span>, whose Jacobian’s identity term let gradients cross forty layers. Same trick, laid across time.</li>
 <li><strong>Forgettable on command.</strong> Memory is finite; some of it should expire. Install a valve: <span class="math inline">\(\vect{f}_t \in (0,1)\)</span> multiplying <span class="math inline">\(\vect{c}_{t-1}\)</span>.</li>
@@ -731,14 +731,14 @@ Figure&nbsp;10.3: The LSTM cell as a conveyor belt with valves. The forget gate 
 </div>
 </div>
 </div>
-<p>Two states now travel: the cell state <span class="math inline">\(\vect{c}_t\)</span> (long-term memory, the conveyor belt) and the hidden state <span class="math inline">\(\vect{h}_t\)</span> (working memory, playing the vanilla RNN’s old role). The line that changes everything is the <span class="math inline">\(\vect{c}_t\)</span> update — read its gradient the way the seed’s notes do:</p>
+<p>Two states now travel: the cell state <span class="math inline">\(\vect{c}_t\)</span> (long-term memory, the conveyor belt) and the hidden state <span class="math inline">\(\vect{h}_t\)</span> (working memory, playing the vanilla RNN’s old role). The line that changes everything is the <span class="math inline">\(\vect{c}_t\)</span> update. Read its gradient along the cell chain:</p>
 <p><span id="eq-lstm-highway"><span class="math display">\[
 \frac{\partial \vect{c}_t}{\partial \vect{c}_{t-1}} \approx \vect{f}_t
 \qquad\Longrightarrow\qquad
 \frac{\partial L}{\partial \vect{c}_{t-k}} \approx
 \left(\prod_{j=t-k+1}^{t} \vect{f}_j\right) \odot \frac{\partial L}{\partial \vect{c}_t}.
 \tag{10.5}\]</span></span></p>
-<p>Still a product — but of <em>learned, data-dependent gates</em>, not a fixed weight matrix. Where Chapter 9’s residual highway kept an unconditional identity lane open, the LSTM’s lane has a valve the network controls: hold <span class="math inline">\(\vect{f}_j\)</span> near 1 and gradients ride the conveyor belt across dozens of steps; drop it toward 0 and the memory (deliberately) expires. The practical corollary, straight from the practice: <em>initialize the forget-gate bias positive</em> (say <span class="math inline">\(+1\)</span>), so the cell starts life remembering by default. PyTorch stores separate input-hidden and hidden-hidden bias vectors, then adds them. The code sets their <strong>sum</strong> to <span class="math inline">\(+1\)</span>; setting both slices to <span class="math inline">\(+1\)</span> would silently create an effective bias of <span class="math inline">\(+2\)</span>. Watch what that buys, on the same axes as before:</p>
+<p>Still a product — but of <em>learned, data-dependent gates</em>, not a fixed weight matrix. Where Chapter 9’s residual highway kept an unconditional identity lane open, the LSTM’s lane has a valve the network controls: hold <span class="math inline">\(\vect{f}_j\)</span> near 1 and gradients ride the conveyor belt across dozens of steps; drop it toward 0 and the memory (deliberately) expires. The practical corollary: <em>initialize the forget-gate bias positive</em> (say <span class="math inline">\(+1\)</span>), so the cell starts life remembering by default. PyTorch stores separate input-hidden and hidden-hidden bias vectors, then adds them. The code sets their <strong>sum</strong> to <span class="math inline">\(+1\)</span>; setting both slices to <span class="math inline">\(+1\)</span> would silently create an effective bias of <span class="math inline">\(+2\)</span>. Watch what that buys, on the same axes as before:</p>
 <div class="plan-code">
 <div class="plan">
 <ol type="1">
@@ -774,7 +774,7 @@ Figure&nbsp;10.4: The gradient-vs-lag experiment, rerun with an LSTM whose effec
 </div>
 <section id="the-memory-test" class="level3">
 <h3 class="anchored" data-anchor-id="the-memory-test">The memory test</h3>
-<p>Gradients at initialization are promissory notes; training is where they get cashed. The seed notes pose the decisive task as a two-company story: Company A’s prices open at 0, Company B’s at 1, then both trade identically for days — and the correct day-5 prediction is whatever day 1 said. Everything hinges on carrying one early bit across a long stretch of identical noise. Here is that story as an executable task: sequences of 80 random tokens, where the label to predict at the end is simply <em>the first token</em>. Chance is 25%. Three contenders, three seeds each: the vanilla RNN, the LSTM as PyTorch hands it to you, and the LSTM with the remember-by-default initialization. Predict the three rows before running — in particular, does the <em>architecture</em> alone earn its keep?</p>
+<p>Gradients at initialization are promissory notes; training is where they get cashed. The decisive task is a two-company story: Company A’s prices open at 0, Company B’s at 1, then both trade identically for days — and the correct day-5 prediction is whatever day 1 said. Everything hinges on carrying one early bit across a long stretch of identical noise. Here is that story as an executable task: sequences of 80 random tokens, where the label to predict at the end is simply <em>the first token</em>. Chance is 25%. Three contenders, three seeds each: the vanilla RNN, the LSTM as PyTorch hands it to you, and the LSTM with the remember-by-default initialization. Predict the three rows before running — in particular, does the <em>architecture</em> alone earn its keep?</p>
 <div class="plan-code plan-code-wide">
 <div class="plan">
 <ol type="1">
@@ -922,7 +922,8 @@ Figure&nbsp;10.5: The valve, observed. Mean forget-gate activation per timestep 
 \vect{h}_t = \vect{z}_t \odot \vect{h}_{t-1} + (1 - \vect{z}_t) \odot \tilde{\vect{h}}_t .
 \end{aligned}
 \tag{10.6}\]</span></span></p>
-<p>Two gates instead of three, one state instead of two, comparable performance in most settings. We skip the derivation suit. With the equations on record and Exercise 3 waiting, you can build one yourself and let it compete on the memory test.</p>
+<p>This follows Cho et al.’s original convention: <span class="math inline">\(\vect{z}_t\)</span> weights the old state, so it reads as <strong>keep</strong>. Some later references reverse the symbol and let <span class="math inline">\(\vect{z}_t\)</span> weight the candidate instead; compare the interpolation equation, not the gate’s name alone.</p>
+<p>Two gates instead of three, one state instead of two, comparable performance in most settings. We skip the derivation; with the equations on record and Exercise 3 waiting, you can build one yourself and let it compete on the memory test.</p>
 <p>One convention matters before you compare code. <a href="#eq-gru" class="quarto-xref">Equation&nbsp;<span>10.6</span></a> applies the reset gate to <span class="math inline">\(\vect{h}_{t-1}\)</span> <strong>before</strong> the candidate’s hidden-state linear map. PyTorch’s <code>nn.GRU</code> uses a reset-after form, <span class="math inline">\(\tanh(W_{in}x+b_{in}+r\odot(W_{hn}h+b_{hn}))\)</span>, for implementation efficiency. The gates serve the same purpose, but the two cells are not algebraically identical for the same weights. An exact manual-loop verification must implement PyTorch’s ordering rather than <a href="#eq-gru" class="quarto-xref">Equation&nbsp;<span>10.6</span></a>’s.</p>
 <!-- NOVEL: needs sign-off - concise historical bridge requested in the course review. -->
 <div class="callout callout-style-default callout-note callout-titled">
