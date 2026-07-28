@@ -59,6 +59,11 @@ answer.**
 - **Book voice is self-contained.** Arguments, omissions, analogies, and evidence do
   not defer to an off-page narrator. Keep exact source paths in hidden provenance,
   not learner-facing Sources entries.
+- **HTML is the source of truth.** Review and approve the canonical HTML edition
+  first. The PDF is its derived print/offline conversion and may differ only where
+  pagination, line breaking, float placement, or print-safe sizing requires it.
+  Repair disagreements in the shared source or conversion layer; never create a
+  substantively different PDF edition.
 - **Interlude numbering is independent.** Experiment, autoencoder, and test-time-
   regression figures use `EX.`, `AE.`, and `TTR.` namespaces in both formats;
   interlude display equations remain unnumbered.

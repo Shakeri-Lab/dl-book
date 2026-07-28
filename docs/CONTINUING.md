@@ -96,8 +96,14 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 
 ## 1. Where the project stands
 
-**Live:** https://shakeri-lab.github.io/dl-book/ (HTML + PDF, auto-deployed from
-`main` via GitHub Actions → `gh-pages`).
+**Live:** https://shakeri-lab.github.io/dl-book/ (canonical HTML edition plus its
+derived PDF conversion, auto-deployed from `main` via GitHub Actions → `gh-pages`).
+
+**Format authority:** HTML is the source of truth for the book's content, order,
+semantics, and interactive/responsive presentation. PDF is the print/offline
+conversion of that edition. PDF-specific work may adjust pagination, line breaks,
+float placement, and print-safe sizing, but must not introduce a separate substantive
+edition. Resolve disagreements in the shared Quarto source or conversion layer.
 
 | Part | Chapters | Status |
 |---|---|---|
@@ -407,6 +413,8 @@ failed their first design (see §5 case law). The loop that works:
 5. **Render the chapter — BOTH formats**: `quarto render chapters/…/XX.qmd`
    (NO `--to html` flag! An HTML-only render leaves the PDF freeze (`tex.json`)
    stale and the book PDF ships without your chapter — this bit us in ch. 8).
+   Review HTML first because it is canonical; then verify that the derived PDF
+   preserves it subject only to print-format constraints.
 6. **Verify**: extract every printed output from
    `_freeze/…/execute-results/html.json` and check each against the prose; `Read`
    every generated figure PNG and check it against its caption (mis-captioned

@@ -8,7 +8,8 @@ Written in the open; every figure and result is produced by code in the source.
 Experiments show their code, while concept diagrams keep their drawing source in the
 repository. The examples are written directly in Python and PyTorch and are CPU-friendly.
 
-**Read it:** <https://shakeri-lab.github.io/dl-book/> (HTML) · PDF built from the same sources
+**Read it:** <https://shakeri-lab.github.io/dl-book/> (canonical HTML edition) ·
+PDF derived from that edition for print and offline reading
 
 **Stable release:** [v1.1 (July 24, 2026)](https://github.com/Shakeri-Lab/dl-book/releases/tag/v1.1).
 The live site is a rolling post-v1.1 build.

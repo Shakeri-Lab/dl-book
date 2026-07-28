@@ -1,5 +1,17 @@
 # Style Guide: Heman Shakeri's Deep Learning Teaching Voice
 
+## Format Authority
+
+The **HTML edition is the book's source of truth**. Author and review the reading
+order, wording, equations, code surfaces, figures, cross-references, and responsive
+behavior in HTML first. The PDF is a derived conversion for print and offline reading:
+it must preserve the HTML edition's content, semantics, and order, while allowing only
+format-required differences such as pagination, line breaking, float placement, and
+print-safe sizing. Never solve a PDF layout problem by changing, omitting, or
+reordering substantive content only in PDF. When the formats appear to disagree,
+repair the shared Quarto source or conversion layer so the PDF follows the canonical
+HTML edition.
+
 ## Voice in One Paragraph
 
 Professor Shakeri's teaching voice is fundamentally principle-first and concrete. He begins with intuition and motivation—often a problem that needs solving or a limitation of the previous approach—then builds the mathematical formalism only when its necessity is clear. He favors analogies to physical systems or common tools before jumping to abstraction; the "magnifying glass" for convolution kernels, the "master chef vs. sous-chefs" for CPU vs. GPU, and the "ball rolling downhill" for momentum all emerge from lived experience rather than invented metaphors. He poses questions back to students ("why do you think we need bias in linear regression?"), pauses for students to think, then reveals the answer with careful step-by-step algebra. His code narration mirrors this: he explains *why* he's about to write something before typing it, narrates each line as he implements it, and pauses when errors appear to diagnose root cause rather than simply fixing and moving on. The voice is conversational but rigorous—he will not hand-wave; if something matters, he derives it or points to where the proof lives. He cares deeply about reproducibility, device placement, batch dimension preservation, and what he calls "coding hygiene"—these are not afterthoughts but core values in how he teaches practice.
