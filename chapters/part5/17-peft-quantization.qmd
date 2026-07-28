@@ -160,6 +160,10 @@ not establish universal parameter thresholds, nor does it settle the mechanism b
 which a Transformer uses demonstrations. Attention makes earlier examples visible
 and routable; saying it literally “performs analogy” would outrun the evidence.
 Prompt order, label words, formatting, and example choice can all matter.
+Controlled ablations have found that demonstration inputs, the label space and its
+mapping, formatting, and ordering can contribute differently across tasks. Those
+results constrain simple stories about copying examples, but they do not settle one
+universal causal mechanism for ICL.
 
 Instructions that ask for intermediate steps can improve some multi-step tasks.
 Those visible steps are generated tokens, however—not a guaranteed faithful window
@@ -376,21 +380,14 @@ print("all evaluation passes left weights unchanged:",
       all(run["unchanged"] for run in context_runs))
 ```
 ::::
-:::: {.plan-code .plan-code-wide}
-::: {.plan}
-1. Compare frozen-context accuracy with the analytic ceiling and the seen-versus-unseen decomposition.
-:::
-
 ```{python}
+#| echo: false
 #| label: fig-icl-coverage
 #| fig-cap: "A frozen model changes behavior as demonstrations reveal an episode's hidden label mapping. Across five independently trained seeds, overall accuracy (left) closely tracks the analytical information ceiling. Conditional accuracy (right) is perfect when the query group appeared; for unseen groups it follows the shrinking set of unused labels and reaches 1 at three demonstrations by elimination. Evaluation uses one nested episode bank per seed, and every parameter is bitwise unchanged across all five context lengths."
 #| fig-alt: "Two line plots. Mean accuracy rises from one quarter with no examples to one with three examples and tracks the analytic ceiling. Seen queries are always correct; unseen-query accuracy rises from one quarter to one by elimination."
 #| fig-width: 9
 #| fig-height: 3.8
-#| code-summary: "Figure code: compare frozen-context accuracy with the analytic ceiling and the seen-versus-unseen decomposition"
-#| code-fold: false
 
-# [1]
 fig, axes = plt.subplots(1, 2, figsize=(9, 3.8))
 ks = np.arange(5)
 for seed_row in context_accuracy:
@@ -427,7 +424,6 @@ for ax in axes:
 plt.tight_layout()
 plt.show()
 ```
-::::
 The 39,268-parameter network lands at mean accuracies
 $0.252,0.500,0.749,1.000,1.000$ for $k=0,1,2,3,4$, respectively. The analytic
 ceilings are $0.25,0.50,0.75,1,1$. More revealingly, unseen-query accuracy rises
@@ -865,22 +861,14 @@ print("largest merged/unmerged difference:",
       f"{max(row['merge_error'] for row in lora_runs):.2e}")
 ```
 ::::
-:::: {.plan-code .plan-code-wide}
-::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Compare learned rank-sweep errors with the planted capacity floors.
-:::
-
 ```{python}
+#| echo: false
 #| label: fig-lora-rank-capacity
 #| fig-cap: "LoRA's rank is a real capacity constraint in a problem constructed to expose it. Five factor initializations converge to the same rank-limited relative update errors (left), closely tracking the analytic best floors from the planted diagonal magnitudes. Validation error (right) falls sharply but remains nonzero below the planted rank six; rank six, rank eight, and the unrestricted full update reach numerical zero. Counts label trainable adapter values in this deliberately small layer."
 #| fig-alt: "Two logarithmic line plots. Relative correction error follows a calculated floor at ranks one, two, and four, then drops near zero at the planted rank six. Validation MSE shows the same boundary."
 #| fig-width: 9
 #| fig-height: 3.8
-#| code-summary: "Figure code: compare learned rank-sweep errors with the planted capacity floors"
-#| code-fold: false
 
-# [1]
 rank_error = np.array([
     [next(row["relative_error"] for row in lora_runs
           if row["seed"] == seed and row["rank"] == rank)
@@ -899,7 +887,6 @@ floors = np.array([
     for rank in LORA_RANKS
 ])
 
-# [2]
 fig, axes = plt.subplots(1, 2, figsize=(9, 3.8))
 for seed_row in rank_error:
     axes[0].plot(LORA_RANKS, np.maximum(seed_row, 1e-8), color="#A7ABB4", lw=1)
@@ -933,7 +920,6 @@ for ax in axes:
 plt.tight_layout()
 plt.show()
 ```
-::::
 The failure is orderly. Rank 1 leaves relative correction error $0.710$; rank 2
 leaves $0.472$; rank 4 leaves $0.142$. Their mean validation MSEs are
 $0.04535,0.02022,$ and $0.001888$. Rank 6 and rank 8 recover the target to below
@@ -1132,21 +1118,14 @@ for row in quant_rows:
     )
 ```
 ::::
-:::: {.plan-code .plan-code-wide}
-::: {.plan}
-1. Show the quantization grid, output-error trade, and small-row erasure.
-:::
-
 ```{python}
+#| echo: false
 #| label: fig-quantization-granularity
 #| fig-cap: "Quantization is a grid plus a granularity decision. A 3-bit symmetric example (left) rounds real values to seven levels. In the unequal-row audit, per-row scales reduce relative layer-output error at both bit widths (center). At 8 bits, the global scale entirely erases the smallest rows—relative error 1—while per-row error stays near 0.7% across ranges (right). The improvement costs 256 rather than 4 bytes of FP32 scale metadata."
 #| fig-alt: "A number line shows real values rounding to seven grid points. Hatched bars show lower output error with per-row scales at eight and four bits. A log-log plot shows a global scale erasing small rows while per-row errors stay low."
 #| fig-width: 11
 #| fig-height: 3.7
-#| code-summary: "Figure code: show the quantization grid, output-error trade, and small-row erasure"
-#| code-fold: false
 
-# [1]
 fig, axes = plt.subplots(1, 3, figsize=(11, 3.7),
                          gridspec_kw={"width_ratios": [1.25, 0.92, 1.15]})
 
@@ -1201,7 +1180,6 @@ axes[2].grid(alpha=0.18, which="both")
 plt.tight_layout()
 plt.show()
 ```
-::::
 The global 8-bit grid has only $2.13\%$ relative output error overall, which sounds
 reassuring until we inspect rows—the median relative row error is $22.13\%$, and the
 quietest rows are reconstructed as all zeros. Per-row scales lower overall output
@@ -1424,6 +1402,16 @@ harmless, honest, or preferred.
 preference learning, and alignment methods are claims about supervision and
 objectives—not automatic consequences of choosing LoRA or a full checkpoint.
 
+::: {.callout-note}
+## Check yourself
+
+Close the book for one minute and separate the adaptation bills.
+
+- Where can task-specific state live when the backbone is frozen?
+- What does LoRA's rank constrain, and what does quantization change instead?
+- Why can a method reduce stored bits without reducing every inference cost?
+:::
+
 ## Okay, so — adaptation has three separate bills
 
 1. **Adaptation has three bills.** Backbone storage, incremental task state, and transient
@@ -1451,6 +1439,7 @@ objectives—not automatic consequences of choosing LoRA or a full checkpoint.
 ## Sources and further reading {.unnumbered}
 
 - [Brown et al., *Language Models are Few-Shot Learners*](https://proceedings.neurips.cc/paper/2020/hash/1457c0d6bfcb4967418bfb8ac142f64a-Abstract.html): GPT-3's zero-, one-, and few-shot evaluation and its model-scale dependence.
+- [Min et al., *Rethinking the Role of Demonstrations: What Makes In-Context Learning Work?*](https://aclanthology.org/2022.emnlp-main.759/): controlled ablations of demonstration inputs, labels, and formatting that qualify simple imitation accounts.
 - [Lewis et al., *Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks*](https://arxiv.org/abs/2005.11401): learned retrieval combined with a pretrained generator.
 - [Houlsby et al., *Parameter-Efficient Transfer Learning for NLP*](https://proceedings.mlr.press/v97/houlsby19a.html): bottleneck adapters inserted into a frozen Transformer.
 - [Li and Liang, *Prefix-Tuning: Optimizing Continuous Prompts for Generation*](https://aclanthology.org/2021.acl-long.353/): trainable per-layer prefixes for generation.
@@ -1472,22 +1461,23 @@ objectives—not automatic consequences of choosing LoRA or a full checkpoint.
    each with rank 16. Compute full and adapter value counts, the adapter fraction,
    and FP16 adapter bytes. Then compute the ideal 4-bit base payload. Add one FP32
    scale per block of 64 weights and explain which deployment costs remain absent.
-2. **(Code and interpretation.)** Reproduce the frozen-context experiment, then
+2. **(Code.)** Reproduce the frozen-context experiment, then
    randomize demonstration order, repeat one group with the same label, and finally
    insert a contradictory label for a repeated group. Predeclare which interventions
    preserve @eq-icl-ceiling and which make it inapplicable. Report all seeds and
    verify bitwise parameter identity before interpreting a difference.
-3. **(Proof and code.)** Prove
-   $\operatorname{rank}(\matr{B}\matr{A})\le r$. Extend the rank-capacity audit with
+3. **(Pencil.)** (a) Prove
+   $\operatorname{rank}(\matr{B}\matr{A})\le r$.
+   **(Code.)** (b) Extend the rank-capacity audit with
    a planted rank-10 correction and ranks $2,6,10,14$. Audit gradients after the
    first backward pass for (a) random $\matr{A}$ and zero $\matr{B}$, and (b) both
    factors zero. Verify merged–unmerged equality.
-4. **(Pencil and code.)** Quantize
+4. **(Pencil.)** (a) Quantize
    $[-1.2,-0.3,0.0,0.5,1.7]$ onto a signed 4-bit symmetric grid, showing $Q,s,q,$
    and $\widehat w$. Then construct an affine 8-bit grid for a nonnegative interval.
-   On the chapter's unequal-row matrix, compare calibration and held-out output error
-   after inserting one new outlier row.
-5. **(Decision audit.)** For each of three cases—fresh facts with citations, a stable
+   **(Code.)** (b) On the chapter's unequal-row matrix, compare calibration and
+   held-out output error after inserting one new outlier row.
+5. **(Audit.)** For each of three cases—fresh facts with citations, a stable
    output format, and a target domain absent from the source data—choose a first
    experiment among prompting/RAG, PEFT, full tuning, and quantization. State where
    task state lives, which bill it reduces, what it cannot repair, and one retained

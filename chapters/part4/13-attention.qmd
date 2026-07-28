@@ -192,7 +192,7 @@ $(B,n)$ scores, softmax runs over the $n$ source positions, and the weighted rea
 returns a $(B,d_e)$ context. That last axis choice is not bookkeeping: softmax over
 the wrong dimension answers the wrong question.
 
-The lecture's scene freezes one simple parameter snapshot so we can watch the
+We freeze one simple parameter snapshot so we can watch the
 arithmetic. With identity projections and an all-ones selector, three source states
 receive scores $(1.015,1.562,1.124)$ and therefore weights
 $(0.260,0.450,0.290)$:
@@ -306,7 +306,7 @@ simpler computational path. Chapter 1 introduced the dot product as a similarity
 score against a template. Here the key is the template, and training learns the
 space in which that comparison is useful.
 
-The lecture first walks one four-dimensional query past three keys. Its raw dot
+First walk one four-dimensional query past three keys. Its raw dot
 products are $(1.10,-0.60,0.15)$. Since $\sqrt{4}=2$, scaling gives
 $(0.55,-0.30,0.075)$, and softmax gives $(0.488,0.209,0.303)$:
 
@@ -421,9 +421,7 @@ queries and 16 independent keys per query:
 :::
 
 ```{python}
-#| label: fig-sqrt-d-audit
-#| fig-alt: "As projected width grows, raw score variance and the largest softmax weight both rise sharply. Their scaled counterparts remain nearly horizontal, around variance one and largest weight one quarter."
-#| fig-cap: "The scaling argument under its stated random-feature assumptions. Left: raw dot-product variance grows with width, while division by the square root of the width keeps it near one. Right: without scaling, a 16-key softmax becomes nearly one-hot as width grows; scaling keeps its mean largest weight near one quarter (0.24 in this draw). These are seeded synthetic draws about concentration, not a claim about every trained layer's gradients."
+#| label: sqrt-d-audit
 #| code-summary: "Code: audit score variance and softmax concentration versus width"
 #| code-fold: false
 # [1]
@@ -455,7 +453,14 @@ print("d_k   raw var   scaled var   raw max-w   scaled max-w")
 for row in scaling_rows:
     print(f"{row[0]:3d}   {row[1]:8.3f}   {row[2]:10.3f}   "
           f"{row[3]:9.3f}   {row[4]:12.3f}")
+```
+::::
 
+```{python}
+#| echo: false
+#| label: fig-sqrt-d-audit
+#| fig-alt: "As projected width grows, raw score variance and the largest softmax weight both rise sharply. Their scaled counterparts remain nearly horizontal, around variance one and largest weight one quarter."
+#| fig-cap: "The scaling argument under its stated random-feature assumptions. Left: raw dot-product variance grows with width, while division by the square root of the width keeps it near one. Right: without scaling, a 16-key softmax becomes nearly one-hot as width grows; scaling keeps its mean largest weight near one quarter (0.24 in this draw). These are seeded synthetic draws about concentration, not a claim about every trained layer's gradients."
 scaling_array = np.asarray(scaling_rows)
 fig, axes = plt.subplots(1, 2, figsize=(7.3, 3.0), constrained_layout=True)
 axes[0].plot(scaling_array[:, 0], scaling_array[:, 1], "o-",
@@ -474,7 +479,6 @@ axes[1].set(xscale="log", ylim=(0, 1), xlabel=r"projected width $d_k$",
 axes[1].legend(frameon=False, fontsize=8)
 plt.show()
 ```
-::::
 Raw variance rises from $8.02$ to $510.35$ as $d_k$ grows from 8 to 512. Scaled
 variance stays between $0.997$ and $1.004$. Over the same range, the average
 largest unscaled softmax weight climbs from $0.564$ to $0.944$; the scaled value
@@ -500,14 +504,11 @@ keys:
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
 1. Define the reusable `scaled_dot_attention` helper.
-2. Prepare the inputs and fixed settings for the example.
-3. Scaled dot-product attention with a source-padding mask.
+2. Run and audit scaled dot-product attention with a source-padding mask.
 :::
 
 ```{python}
-#| label: fig-padding-mask
-#| fig-alt: "A two-row by four-column attention heatmap contains numeric weights in the first two key columns. The final two columns are labeled PAD in both rows and have zero weight."
-#| fig-cap: "A source-padding mask acts before softmax. The second example has only two real keys; its last two score cells are excluded and receive exactly zero weight. Cross-attention may read every real source position, so no causal triangle belongs here."
+#| label: padding-mask-audit
 #| code-summary: "Code: scaled dot-product attention with a source-padding mask"
 #| code-fold: false
 # [1]
@@ -553,11 +554,17 @@ print("maximum row-sum error:",
       f"{(mask_weights.sum(-1) - 1).abs().max().item():.2e}")
 print("maximum padded weight:",
       f"{mask_weights[1, :, 2:].max().item():.1f}")
+```
+::::
 
+```{python}
+#| echo: false
+#| label: fig-padding-mask
+#| fig-alt: "A two-row by four-column attention heatmap contains numeric weights in the first two key columns. The final two columns are labeled PAD in both rows and have zero weight."
+#| fig-cap: "A source-padding mask acts before softmax. The second example has only two real keys; its last two score cells are excluded and receive exactly zero weight. Cross-attention may read every real source position, so no causal triangle belongs here."
 fig, ax = plt.subplots(figsize=(5.8, 2.5), constrained_layout=True)
 shown = mask_weights[1].detach().numpy()
 image = ax.imshow(shown, vmin=0, vmax=shown.max(), cmap="magma", aspect="auto")
-# [3]
 for row in range(shown.shape[0]):
     for col in range(shown.shape[1]):
         label = "PAD" if col >= 2 else f"{shown[row, col]:.2f}"
@@ -569,7 +576,6 @@ ax.set(xticks=range(4), xticklabels=["key 1", "key 2", "pad", "pad"],
 fig.colorbar(image, ax=ax, label="attention weight", fraction=0.05, pad=0.04)
 plt.show()
 ```
-::::
 ::: {.callout-warning}
 ## Trap: three masks are not one mask
 
@@ -957,20 +963,13 @@ print(f"one final test audit ({len(test_unamb)} sources): "
       f"baseline 93.1%; attention {test_exact:.1%}")
 ```
 ::::
-:::: {.plan-code .plan-code-wide}
-::: {.plan}
-1. Convergence rematch and learned date alignment.
-:::
-
 ```{python}
+#| echo: false
 #| label: fig-attention-rematch
 #| fig-alt: "The left learning curves show the attention model reaching high exact-match accuracy much earlier than the fixed-state baseline. The right character-by-character heatmap concentrates the first four output rows inside a box around the source year positions."
 #| fig-cap: "Left: exact-sequence accuracy on Chapter 11's fixed 400-source validation subset. Both models use the same data, embedding and recurrent hidden widths, optimizer, top-level seed, and epoch schedule; attention adds parameters and a stepwise decoder, so this is not a parameter- or compute-matched ablation. Right: the predeclared first validation example. Rows are emitted ISO characters, columns are contextual encoder states indexed by source character, and the orange box marks the source year. The first four rows concentrate there."
-#| code-summary: "Figure: convergence rematch and learned date alignment"
-#| code-fold: false
 from matplotlib.patches import Rectangle
 
-# [1]
 fig, axes = plt.subplots(
     1, 2, figsize=(9.8, 3.45),
     gridspec_kw={"width_ratios": [1.0, 1.35]},
@@ -1012,7 +1011,6 @@ fig.colorbar(
 )
 plt.show()
 ```
-::::
 At epoch 6, the fixed-state baseline is at $53.8\%$ and the attentive model is at
 $93.25\%$, a 39.5-point lead. At epoch 12 the comparison is $95.0\%$ versus
 $99.75\%$. The one final test audit is $93.1\%$ versus $100.0\%$ on 437
@@ -1074,6 +1072,16 @@ throwing away *where* incurs a debt; Chapter 14 pays it back with positional
 information. Chapter 11's masking warning also returns there: a causal mask will
 decide which future positions an autoregressive model may not see.
 
+::: {.callout-note}
+## Check yourself
+
+Close the book for one minute and reconstruct the soft lookup.
+
+- What distinct jobs do queries, keys, and values perform?
+- Why does masking belong inside score normalization?
+- What did making the compatibility function learnable buy over the fixed kernel?
+:::
+
 ## Okay, so — attention softens the address
 
 1. **Attention softens the address.** Chapter 11 learned embedding content while
@@ -1109,9 +1117,10 @@ decide which future positions an autoregressive model may not see.
    Confirm the guard catches it. Remove the guard and inspect the result of softmax
    over all $-\infty$. Then replace the mask with zero scores and explain why padding
    receives weight.
-3. **(Pencil + code.)** Generalize the scaling derivation to independent coordinates
-   with variances $\sigma_q^2$ and $\sigma_k^2$. Modify the seeded audit and check
-   which divisor returns score variance near one.
+3. **(Pencil.)** (a) Generalize the scaling derivation to independent coordinates
+   with variances $\sigma_q^2$ and $\sigma_k^2$.
+   **(Code.)** (b) Modify the seeded audit and check which divisor returns score
+   variance near one.
 4. **(Code.)** Replace the date model's additive scorer with learned projected
    scaled-dot attention. Keep the split, schedule, and validation subset fixed. Select
    any design choices on validation, report the reused test endpoint once, and compare
@@ -1122,7 +1131,7 @@ decide which future positions an autoregressive model may not see.
    useful month or day information. Then state one conclusion the heatmap supports
    and one conclusion it cannot support.
 
-6. **(Code + Audit.)** The date model's `nn.Embedding` learned a vector for each
+6. **(Audit.)** The date model's `nn.Embedding` learned a vector for each
    of the characters `0`–`9`. Predict their geometry before looking: a clean
    number line ordered by numeric value is the *named wrong answer* — tempting,
    and not what the training pressure rewards. Extract the ten rows, project them

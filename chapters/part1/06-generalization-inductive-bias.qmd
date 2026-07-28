@@ -174,7 +174,7 @@ plt.tight_layout(); plt.show()
 ::::
 ### Experiment 2: destroy the images entirely
 
-Now the stranger experiment, from the lecture's "fatal flaw" argument. Choose one fixed
+Now the stranger experiment, which exposes a fatal flaw. Choose one fixed
 random permutation of the 784 pixel positions and apply it to *every* image, fit and
 validation alike. The displayed arrays are not recognizable pictures anymore — the
 ordinary grid adjacency has been destroyed. Retrain the same MLP on this scrambled
@@ -219,30 +219,33 @@ Hold the two results side by side and the diagnosis writes itself:
 Why exactly does shifting hurt a model that shuffling cannot? Look at what the model
 actually learned. Each row of the first layer's weight matrix is a 784-vector — which
 means we can reshape it into a 28×28 image and look at it.^[Looking at
-first-layer weights as images is a habit the field learned from Hinton's
-lectures; the autopsy below is that tradition, applied to our own model.] And we know from
+first-layer weights as images is a long-standing diagnostic; the autopsy below
+applies it to our own model.] And we know from
 @sec-01-linear-regression what such a row *is*: a **template**, scored against the
 input by dot product.
 
 :::: {.plan-code}
 ::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. First-layer weights as images.
+1. Select the largest-norm first-layer templates.
 :::
 
 ```{python}
-#| label: fig-templates
-#| fig-alt: "Sixteen full-frame weight maps fill a two-by-eight grid. Dark red cells mark positive weights, dark blue cells mark negative weights, and pale cells are near zero; broad diffuse patterns span most of each frame."
-#| fig-cap: "Sixteen first-layer templates, reshaped into images. The labeled scale runs from negative weights at the blue end through pale zero to positive weights at the red end; magnitude grows darker away from zero. Each template is a global, full-frame pattern, and many are diffuse rather than recognizable garment detectors. A template that spans the whole frame changes its score when the input pattern moves."
-#| code-summary: "Code: first-layer weights as images"
+#| label: first-layer-template-selection
+#| code-summary: "Code: select first-layer templates"
 #| code-fold: false
 # [1]
 W1 = net[0].weight.detach()               # (256, 784)
 order = W1.norm(dim=1).argsort(descending=True)[:16]
-
-fig, axes = plt.subplots(2, 8, figsize=(7.6, 2.2))
 scale = float(W1[order].abs().max())
-# [2]
+```
+::::
+
+```{python}
+#| echo: false
+#| label: fig-templates
+#| fig-alt: "Sixteen full-frame weight maps fill a two-by-eight grid. Dark red cells mark positive weights, dark blue cells mark negative weights, and pale cells are near zero; broad diffuse patterns span most of each frame."
+#| fig-cap: "Sixteen first-layer templates, reshaped into images. The labeled scale runs from negative weights at the blue end through pale zero to positive weights at the red end; magnitude grows darker away from zero. Each template is a global, full-frame pattern, and many are diffuse rather than recognizable garment detectors. A template that spans the whole frame changes its score when the input pattern moves."
+fig, axes = plt.subplots(2, 8, figsize=(7.6, 2.2))
 for ax, i in zip(axes.ravel(), order):
     image = ax.imshow(W1[i].reshape(28, 28), cmap="RdBu_r",
                       vmin=-scale, vmax=scale)
@@ -255,7 +258,6 @@ colorbar.set_ticks([-scale, 0, scale], labels=["negative", "zero", "positive"])
 colorbar.ax.tick_params(labelsize=7)
 plt.show()
 ```
-::::
 There is the whole story in one figure. Every template is **global** — a pattern
 stretched across the entire frame, tuned to where garments sat in the training images.
 Shift the input two pixels and every pixel of every template now scores against the
@@ -284,30 +286,38 @@ sizes:
 :::: {.plan-code}
 ::: {.plan}
 1. Prepare the inputs and fixed settings for the example.
-2. Implement the width sweep.
-3. Report or visualize the measured result.
+2. Measure validation error across widths and fitting-set sizes.
 :::
 
 ```{python}
-#| label: fig-ucurve
-#| fig-alt: "Both validation-error curves fall steeply as hidden width increases and then flatten. The smaller fitting set turns slightly upward at the widest models, while the larger fitting set does not."
-#| fig-cap: "Hunting the U-curve: validation error vs. hidden width at two fitting-set sizes. Error falls steeply as capacity grows, then flattens. In this one seeded sweep, n=300 shows a small late upturn while n=1000 does not. The result describes this regime; it does not estimate a scaling law."
-#| code-summary: "Code: the width sweep"
+#| label: width-sweep
+#| code-summary: "Code: measure the width sweep"
 #| code-fold: false
 # [1]
 widths = [2, 4, 8, 16, 64, 256]
-plt.figure(figsize=(6, 3.5))
 # [2]
-for n, color in [(300, "#5379AA"), (1000, "#232D4B")]:
-    errs = [1 - accuracy(train_mlp(X_tr[:n], y_tr[:n], hidden=h, epochs=60),
-                         X_val, y_val)
-            for h in widths]
-    plt.semilogx(widths, errs, "o-", color=color, label=f"n = {n}", base=2)
-plt.xlabel("hidden width (capacity)"); plt.ylabel("validation error")
-# [3]
-plt.legend(); plt.tight_layout(); plt.show()
+width_errors = {
+    n: [1 - accuracy(train_mlp(X_tr[:n], y_tr[:n], hidden=h, epochs=60),
+                       X_val, y_val)
+        for h in widths]
+    for n in (300, 1000)
+}
 ```
 ::::
+
+```{python}
+#| echo: false
+#| label: fig-ucurve
+#| fig-alt: "Both validation-error curves fall steeply as hidden width increases and then flatten. The smaller fitting set turns slightly upward at the widest models, while the larger fitting set does not."
+#| fig-cap: "Hunting the U-curve: validation error vs. hidden width at two fitting-set sizes. Error falls steeply as capacity grows, then flattens. In this one seeded sweep, n=300 shows a small late upturn while n=1000 does not. The result describes this regime; it does not estimate a scaling law."
+plt.figure(figsize=(6, 3.5))
+for n, color in [(300, "#5379AA"), (1000, "#232D4B")]:
+    plt.semilogx(
+        widths, width_errors[n], "o-", color=color, label=f"n = {n}", base=2
+    )
+plt.xlabel("hidden width (capacity)"); plt.ylabel("validation error")
+plt.legend(); plt.tight_layout(); plt.show()
+```
 Read it honestly. The left side of the cartoon is emphatically real: too little
 capacity underfits badly. But the dreaded right side barely materializes, with a
 whisper of an upturn at the small dataset and nothing at the larger one. This is exactly
@@ -335,15 +345,12 @@ High dimensionality also breaks the very idea of "similar examples":
 :::: {.plan-code}
 ::: {.plan}
 1. Prepare the inputs and fixed settings for the example.
-2. Nearest/farthest ratio vs. dimension.
-3. Report or visualize the measured result.
+2. Measure the nearest-to-farthest distance ratio by dimension.
 :::
 
 ```{python}
-#| label: fig-curse
-#| fig-alt: "The average nearest-to-farthest distance ratio rises toward one as dimension increases on a logarithmic horizontal axis. A vertical guide at dimension 784 meets the curve near 0.89."
-#| fig-cap: "Distance concentration for 300 points sampled uniformly from a unit cube: the average ratio of nearest-neighbor to farthest-neighbor distance, by ambient dimension. At d=784 the ratio reaches 0.89. This is a controlled geometry example, not a claim that natural images fill the 784-dimensional cube uniformly."
-#| code-summary: "Code: nearest/farthest ratio vs. dimension"
+#| label: distance-concentration-audit
+#| code-summary: "Code: nearest/farthest ratio versus dimension"
 #| code-fold: false
 # [1]
 torch.manual_seed(6050)
@@ -354,16 +361,21 @@ for d in dims:
     P = torch.rand(300, d)
     D = torch.cdist(P, P)
     ratios.append(((D + torch.eye(300) * 1e9).min(1).values / D.max(1).values).mean())
+```
+::::
 
+```{python}
+#| echo: false
+#| label: fig-curse
+#| fig-alt: "The average nearest-to-farthest distance ratio rises toward one as dimension increases on a logarithmic horizontal axis. A vertical guide at dimension 784 meets the curve near 0.89."
+#| fig-cap: "Distance concentration for 300 points sampled uniformly from a unit cube: the average ratio of nearest-neighbor to farthest-neighbor distance, by ambient dimension. At d=784 the ratio reaches 0.89. This is a controlled geometry example, not a claim that natural images fill the 784-dimensional cube uniformly."
 plt.figure(figsize=(5.6, 3.2))
 plt.semilogx(dims, ratios, "o-", color="#722F37", lw=2)
 plt.axvline(784, ls=":", color="#B8B8A8")
 plt.text(830, 0.25, "Fashion-MNIST\n(d = 784)", fontsize=9, color="#8A8A7A")
 plt.xlabel("dimension $d$"); plt.ylabel("nearest / farthest distance")
-# [3]
 plt.ylim(0, 1); plt.tight_layout(); plt.show()
 ```
-::::
 In the uniform cube, brute-force interpolation loses genuinely near neighbors as the
 ambient dimension grows. Natural images are highly structured and may concentrate near
 a much lower-dimensional set, so this experiment is not their empirical distance
@@ -378,7 +390,7 @@ toward the functions we want, among the infinitely many that fit. Our MLP's fail
 not a capacity problem or (fixably) a data problem. It is a *knowledge* problem: we
 knew things about images that we never told the model.
 
-Say them out loud — the two principles from the lecture:
+Say the two principles out loud:
 
 1. **Locality.** Nearby pixels are related; a pixel and its neighbor jointly form
    edges, textures, parts. Distant pixels, far less so. (The shuffle experiment proved
@@ -552,6 +564,17 @@ underfit regime; the overparameterized regime plays by subtler rules.
   the visual companion to this chapter's pacing, including the demonstration that a
   trained MLP can classify pure noise confidently.
 :::
+
+## Sources and further reading {.unnumbered}
+
+- [Geirhos et al., *Shortcut Learning in Deep Neural Networks*](https://www.nature.com/articles/s42256-020-00257-z):
+  a framework for recognizing decision rules that succeed on the benchmark but fail
+  the intended semantic contract.
+- [Koh et al., *WILDS: A Benchmark of in-the-Wild Distribution Shifts*](https://proceedings.mlr.press/v139/koh21a.html):
+  datasets and evaluation protocols that name the deployment distribution rather than
+  treating clean validation as a robustness test.
+- [Shorten and Khoshgoftaar, *A Survey on Image Data Augmentation for Deep Learning*](https://link.springer.com/article/10.1186/s40537-019-0197-0):
+  a broad survey of data-side transformations and the invariances they encourage.
 
 ## Exercises {.unnumbered}
 

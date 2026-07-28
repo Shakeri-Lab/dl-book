@@ -1,5 +1,25 @@
 
-# Post-v1.1 main — Chapter 1 and universal code-surface revision (July 2026)
+# Post-v1.1 main — book-wide audit and revision (July 2026)
+
+Editorial and structure: repaired text-mode mathematical glyphs, established one
+closing retrieval check per numbered chapter, removed off-page lecture narration,
+standardized the three exercise modes, and promoted attention-as-test-time-regression
+to its own interlude. The Transformer, BERT, generative-model, and performance
+chapters gained compact mechanism-first bridges and diagrams without adding a GPU
+experiment.
+
+Production: interludes use independent figure namespaces in HTML and PDF; the build
+checks the PDF text layer and LaTeX log for missing glyphs; callout icons carry empty
+accessible replacement text; and release metadata now identifies v1.1 as the stable
+502-page edition while `main` remains a rolling post-release build.
+
+Acceptance: 194 learner-visible Plan → Code surfaces and 92 execution-only
+harnesses pass the strengthened audit; 282 executable cells, four transclusions,
+and eleven included modules/scripts parse; all 133 pre-existing stdout blocks remain
+byte-identical across the structural move and between HTML and TeX; and the complete
+post-v1.1 book renders in 544 pages, below the prior 560-page ceiling.
+
+## Earlier post-v1.1 work — Chapter 1 and universal code-surface revision
 
 Editorial: Chapter 1 now carries one semantic colour contract across equations,
 nearby prose, and conceptual diagrams; Figure 1.1's first-row annotation is
@@ -19,8 +39,8 @@ stdout blocks remain byte-identical, and the complete HTML/PDF render remains
 ## v1.1 — the readable-code and estimator-discipline release (July 2026)
 
 Pedagogy: the learned-feature-space figure (ch. 3); the forget-gate diagnostic
-(ch. 10); seven predict-before-run prompts; two provenance footnotes (RMSProp's
-Lecture-6e lineage, weights-as-images); digit-embedding (Audit.) exercise
+(ch. 10); seven predict-before-run prompts; two provenance notes on RMSProp and
+weights-as-images; digit-embedding (Audit.) exercise
 (ch. 13); mixture-of-experts in the epilogue's roads-not-taken.
 
 Code: the equation/kernel/harness contract with the five-part visibility test

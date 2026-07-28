@@ -25,7 +25,7 @@ encoder consumes however many source tokens arrive; the decoder produces however
 target tokens are needed. What survives is the handoff: every source detail still has
 to cross through one fixed-size context.
 
-The lecture frames the stakes well. Before recurrence, every model lived on a
+Before recurrence, every model lived on a
 **fixed-size contract**: 784 pixels in, 10 logits out; $28 \times 28$ garments in, one
 verdict out. The interesting world breaks that contract on both ends at once:
 translation maps a sentence of *any* length to a sentence of *some other* length, in a
@@ -374,13 +374,12 @@ into the padding:
 :::: {.plan-code}
 ::: {.plan}
 1. Prepare the inputs and fixed settings for the example.
-2. Encoder-state drift through the padding tail.
+2. Measure encoder-state drift through the padding tail.
 :::
 
 ```{python}
-#| label: fig-padding-drift
-#| fig-cap: "Why naive right-padding hurts: the encoder state does not stop when the sentence does. One short validation source is encoded by the naive model; at its last real character (green) the state is exactly what the decoder should receive. A *single* <pad> step already throws the state most of the way to its final drift, and each further step compounds it (navy) — the decoder is handed the endpoint of the shaded excursion, a state the unpadded inference-time encoder never produces. Packing simply stops the clock at the green dot."
-#| code-summary: "Code: encoder-state drift through the padding tail"
+#| label: padding-drift-audit
+#| code-summary: "Code: measure encoder-state drift through the padding tail"
 #| code-fold: false
 # [1]
 short_src = min((s for s, _ in valid_pairs), key=len)
@@ -391,11 +390,17 @@ with torch.no_grad():
     states, _ = naive.encoder(naive.src_emb(padded_ids[None]))
 states = states.squeeze(0)                        # (len + n_pads, hidden)
 T = len(ids)
+# [2]
 drift = (states[T - 1:] - states[T - 1]).norm(dim=1)
+```
+::::
 
+```{python}
+#| echo: false
+#| label: fig-padding-drift
+#| fig-cap: "Why naive right-padding hurts: the encoder state does not stop when the sentence does. One short validation source is encoded by the naive model; at its last real character (green) the state is exactly what the decoder should receive. A *single* <pad> step already throws the state most of the way to its final drift, and each further step compounds it (navy) — the decoder is handed the endpoint of the shaded excursion, a state the unpadded inference-time encoder never produces. Packing simply stops the clock at the green dot."
 plt.figure(figsize=(6.4, 2.9))
 steps = range(T, T + n_pads + 1)
-# [2]
 plt.plot(steps, drift, "o-", color="#232D4B", lw=2, ms=4)
 plt.axvspan(T + 0.5, T + n_pads + 0.4, color="#E57200", alpha=0.12)
 plt.plot([T], [0.0], "o", color="#2E7D32", ms=8)
@@ -409,7 +414,6 @@ plt.xlabel(f"encoder timestep (source {short_src!r}, length {T})")
 plt.ylabel(r"$\|\mathbf{h}_t - \mathbf{h}_T\|$")
 plt.tight_layout(); plt.show()
 ```
-::::
 ::: {.callout-warning}
 ## Trap: the model will happily read your padding
 
@@ -445,15 +449,13 @@ context from epoch one. Watch both effects:
 :::: {.plan-code}
 ::: {.plan}
 1. Prepare the inputs and fixed settings for the example.
-2. Teacher forcing vs. free-running, learning curves.
-3. Report or visualize the measured result.
+2. Train the free-running comparison.
+3. Audit all three models once on the final test split.
 :::
 
 ```{python}
-#| label: fig-tf-vs-fr
-#| fig-alt: "Exact-match accuracy rises with epoch for both training modes. Teacher forcing leads strongly in early and middle epochs, then the free-running curve catches it near the top by epoch twenty."
-#| fig-cap: "Learning curves on a fixed subset of 400 unambiguous validation source strings, disjoint from both training and test. Teacher forcing leads through the early and middle epochs (53.8% vs. 23.8% at epoch 6; 95.0% vs. 81.2% at epoch 12) and uses one fused decoder call per batch where free-running needs a Python token loop. By epoch 20 the validation curves meet; the single final test audit favors free-running."
-#| code-summary: "Code: teacher forcing vs. free-running, learning curves"
+#| label: teacher-forcing-free-running-audit
+#| code-summary: "Code: teacher forcing versus free-running"
 #| code-fold: false
 # [1]
 tf_model, tf_curve = packed, packed_curve
@@ -465,7 +467,14 @@ for label, candidate in [("naive padding", naive),
                          ("packed / teacher forced", tf_model),
                          ("packed / free-running", fr_model)]:
     print(f"  {label:25s} {exact_match(candidate, test_unamb):.1%}")
+```
+::::
 
+```{python}
+#| echo: false
+#| label: fig-tf-vs-fr
+#| fig-alt: "Exact-match accuracy rises with epoch for both training modes. Teacher forcing leads strongly in early and middle epochs, then the free-running curve catches it near the top by epoch twenty."
+#| fig-cap: "Learning curves on a fixed subset of 400 unambiguous validation source strings, disjoint from both training and test. Teacher forcing leads through the early and middle epochs (53.8% vs. 23.8% at epoch 6; 95.0% vs. 81.2% at epoch 12) and uses one fused decoder call per batch where free-running needs a Python token loop. By epoch 20 the validation curves meet; the single final test audit favors free-running."
 plt.figure(figsize=(6, 3.2))
 plt.plot(cps, [tf_curve[c] for c in cps], "o-", color="#232D4B", lw=2,
          label="teacher forcing")
@@ -474,7 +483,6 @@ plt.plot(cps, [fr_curve[c] for c in cps], "s-", color="#E57200", lw=2,
 plt.xlabel("epoch"); plt.ylabel("exact match")
 plt.legend(); plt.tight_layout(); plt.show()
 ```
-::::
 So teacher forcing is the pragmatic default: fused, stable, and fast out of the
 gate. What it costs has a name. A teacher-forced decoder has *only ever seen
 perfect histories*. At inference it must condition on its own imperfect

@@ -50,7 +50,7 @@ another occurrence—now near *loan* and *interest*—should route different inf
 Chapter 13 built exactly this kind of content-dependent routing. Self-attention
 changes only the source of the three inputs.
 
-The lecture's three questions still fit: a query asks “what am I looking for?”, a
+The three questions still fit: a query asks “what am I looking for?”, a
 key advertises “what do I offer?”, and a value carries “what information do I
 contain?”
 
@@ -142,15 +142,12 @@ position back in.
 ::: {.plan}
 1. Define the reusable helpers: `numpy_attention` and `numpy_positions`.
 2. Prepare the inputs and fixed settings for the example.
-3. Build the permutation debt figure.
+3. Report the permutation-equivariance and fixed-slot differences.
 :::
 
 ```{python}
-#| label: fig-permutation-debt
-#| fig-cap: "The same content is permuted across slots (left). The audit (right) shows bare self-attention rematches after the same output permutation, while fixed positional signals break that rematch."
-#| fig-alt: "Two-panel permutation audit. The left panel moves five colored word tiles from the sequence 'bank by the river' into a new slot order. The right log-scale bars show a rematched bare-attention difference near machine precision and an order-one difference after fixed position vectors are added."
-#| fig-width: 10
-#| fig-height: 3.4
+#| label: permutation-debt-audit
+#| code-summary: "Code: audit permutation equivariance and positional debt"
 #| code-fold: false
 
 import math
@@ -189,6 +186,19 @@ fixed_slot_change = np.abs(
     numpy_attention(x[permutation] + pe) - with_position[permutation]
 ).max()
 
+# [3]
+print(f"bare permutation-equivariance error: {bare_error:.2e}")
+print(f"fixed-slot difference after adding position: {fixed_slot_change:.3f}")
+```
+::::
+
+```{python}
+#| echo: false
+#| label: fig-permutation-debt
+#| fig-cap: "The same content is permuted across slots (left). The audit (right) shows bare self-attention rematches after the same output permutation, while fixed positional signals break that rematch."
+#| fig-alt: "Two-panel permutation audit. The left panel moves five colored word tiles from the sequence 'bank by the river' into a new slot order. The right log-scale bars show a rematched bare-attention difference near machine precision and an order-one difference after fixed position vectors are added."
+#| fig-width: 10
+#| fig-height: 3.4
 fig, axes = plt.subplots(1, 2)
 token_ids = np.arange(5)
 tokens = np.array(["bank", "by", "the", "river", "."])
@@ -196,7 +206,6 @@ axes[0].imshow(
     np.stack([token_ids, token_ids[permutation]]),
     cmap="tab10", aspect="auto", vmin=0, vmax=9,
 )
-# [3]
 for row, order in enumerate([token_ids, token_ids[permutation]]):
     for column, token_id in enumerate(order):
         axes[0].text(column, row, tokens[token_id], ha="center", va="center")
@@ -214,11 +223,7 @@ axes[1].set_ylabel("maximum rematched difference")
 axes[1].set_title("position breaks the rematch")
 plt.tight_layout()
 plt.show()
-
-print(f"bare permutation-equivariance error: {bare_error:.2e}")
-print(f"fixed-slot difference after adding position: {fixed_slot_change:.3f}")
 ```
-::::
 The first error is numerical roundoff, about $2.2\times10^{-16}$. Adding a fixed
 signal to each slot changes the rematched outputs by about 1.581 in this example.
 Position has not been inferred from content; it has been supplied.
@@ -278,18 +283,34 @@ linear maps a convenient raw material for representing relative shifts. It is a
 property of the positional pair itself—not a guarantee that arbitrary learned
 $W_Q$ and $W_K$ will preserve or use it.
 
+::: {.callout-note}
+## Show the rotation, then name it
+
+Instead of adding the clock coordinates to the token, rotate each query and key
+directly. If $R_i$ is the block-diagonal rotation for position $i$, use
+$\widetilde{\vect{q}}_i=R_i\vect{q}_i$ and
+$\widetilde{\vect{k}}_j=R_j\vect{k}_j$. Their score becomes
+
+$$
+\widetilde{\vect{q}}_i^\top\widetilde{\vect{k}}_j
+=\vect{q}_i^\top R_i^\top R_j\vect{k}_j
+=\vect{q}_i^\top R_{j-i}\vect{k}_j.
+$$
+
+The positional factor now depends on the relative offset $j-i$. This construction is
+called **rotary positional embedding (RoPE)**. Content still matters through
+$\vect{q}_i$ and $\vect{k}_j$; RoPE changes how position enters their comparison.
+:::
+
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
 1. Prepare the inputs and fixed settings for the example.
-2. Build the position build figure.
+2. Verify the rotation identity and constant-norm invariant.
 :::
 
 ```{python}
-#| label: fig-position-build
-#| fig-cap: "Sinusoidal position is a bank of clocks. Fast coordinates track local offsets; slow coordinates vary across longer ranges. Each sine/cosine pair acts like a clock, and a fixed offset rotates that pair by a start-independent angle."
-#| fig-alt: "Four-panel view of sinusoidal position. Fast sine and cosine coordinates oscillate repeatedly across 100 positions; slow coordinates change only slightly. A heatmap stacks 32 coordinates from fast bands at top to nearly constant slow bands at bottom. A unit-circle diagram shows positions 13 and 20 separated by the same rotation associated with offset seven."
-#| fig-width: 10
-#| fig-height: 5
+#| label: position-build-audit
+#| code-summary: "Code: audit sinusoidal position as a bank of clocks"
 #| code-fold: false
 
 # [1]
@@ -308,6 +329,18 @@ rotation_error = np.abs(rotation @ pair_i - pair_shifted).max()
 norm_error = np.abs(np.linalg.norm(pe, axis=1) - 4.0).max()
 
 # [2]
+print(f"rotation identity maximum error: {rotation_error:.2e}")
+print(f"constant position-vector norm maximum error: {norm_error:.2e}")
+```
+::::
+
+```{python}
+#| echo: false
+#| label: fig-position-build
+#| fig-cap: "Sinusoidal position is a bank of clocks. Fast coordinates track local offsets; slow coordinates vary across longer ranges. Each sine/cosine pair acts like a clock, and a fixed offset rotates that pair by a start-independent angle."
+#| fig-alt: "Four-panel view of sinusoidal position. Fast sine and cosine coordinates oscillate repeatedly across 100 positions; slow coordinates change only slightly. A heatmap stacks 32 coordinates from fast bands at top to nearly constant slow bands at bottom. A unit-circle diagram shows positions 13 and 20 separated by the same rotation associated with offset seven."
+#| fig-width: 10
+#| fig-height: 5
 fig, axes = plt.subplots(
     2, 2, figsize=(10, 5), gridspec_kw={"height_ratios": [1, 2]}
 )
@@ -349,11 +382,7 @@ axes[1, 1].set_title(f"offset {delta} is a rotation")
 axes[1, 1].legend(frameon=False)
 plt.tight_layout()
 plt.show()
-
-print(f"rotation identity maximum error: {rotation_error:.2e}")
-print(f"constant position-vector norm maximum error: {norm_error:.2e}")
 ```
-::::
 For $d=32$, each position vector has norm $\sqrt{d/2}=4$ because every
 $\sin^2+\cos^2$ pair contributes one. Adding this vector does *not* preserve the
 norm of the combined token representation—the embedding and position vector can
@@ -774,6 +803,20 @@ often improves optimization at initialization. This is an implementation choice,
 not a universal theorem that post-LayerNorm fails or that pre-LayerNorm eliminates
 every need for careful optimization.
 
+**RMSNorm** keeps the scale control but omits mean subtraction:
+
+$$
+\operatorname{RMSNorm}(\vect{x})
+=\vect{g}\odot
+\frac{\vect{x}}
+{\sqrt{\frac{1}{d}\sum_{j=1}^{d}x_j^2+\epsilon}}.
+$$
+
+It normalizes each token by its root-mean-square magnitude and retains a learned
+per-feature scale $\vect{g}$. This removes one statistic from the computation; it
+does not imply universal superiority over LayerNorm. Architecture, optimizer, dtype,
+and scale still determine the observed trade-off.
+
 ### The position-wise feed-forward network
 
 After tokens communicate through attention, the same two-layer network processes
@@ -1164,22 +1207,37 @@ print(f"fixed-window held-out loss: {no_position_valid_loss:.4f}")
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
 1. Prepare the inputs and fixed settings for the example.
-2. Build the book corpus rematch figure.
+2. Report the positional improvement and LSTM gap.
 :::
 
 ```{python}
-#| label: fig-book-corpus-rematch
-#| fig-cap: "Matched training curves (left) and fixed-window held-out loss (right). Position helps in this seed, while the Chapter 10 LSTM remains the strongest small model."
-#| fig-alt: "Two-panel matched comparison. Training losses start together near 4.7, then the positional Transformer falls steadily to about 1.1 while the no-position model ends near 1.85. Held-out bars rank the Chapter 10 LSTM lowest at 1.8881, the positional Transformer at 1.9190, and the no-position Transformer highest at 2.3405."
-#| fig-width: 10
-#| fig-height: 4
+#| label: book-corpus-rematch-audit
+#| code-summary: "Code: audit the matched book-corpus rematch"
 #| code-fold: false
 
 # [1]
 lstm_valid_loss = 1.888110429
 
-fig, axes = plt.subplots(1, 2, figsize=(10, 4))
 # [2]
+improvement = no_position_valid_loss - position_valid_loss
+relative = improvement / no_position_valid_loss
+lstm_gap = position_valid_loss - lstm_valid_loss
+print(
+    f"position improvement: {improvement:.4f} loss "
+    f"({relative:.1%} relative)"
+)
+print(f"positional Transformer minus LSTM: {lstm_gap:.4f} loss")
+```
+::::
+
+```{python}
+#| echo: false
+#| label: fig-book-corpus-rematch
+#| fig-cap: "Matched training curves (left) and fixed-window held-out loss (right). Position helps in this seed, while the Chapter 10 LSTM remains the strongest small model."
+#| fig-alt: "Two-panel matched comparison. Training losses start together near 4.7, then the positional Transformer falls steadily to about 1.1 while the no-position model ends near 1.85. Held-out bars rank the Chapter 10 LSTM lowest at 1.8881, the positional Transformer at 1.9190, and the no-position Transformer highest at 2.3405."
+#| fig-width: 10
+#| fig-height: 4
+fig, axes = plt.subplots(1, 2, figsize=(10, 4))
 for curve, label, color in [
     (position_curve, "Transformer + position", "#3566a8"),
     (no_position_curve, "Transformer, no position", "#d37b29"),
@@ -1200,17 +1258,7 @@ axes[1].set_title("fixed-window rematch")
 axes[1].bar_label(bars, fmt="%.4f", padding=3)
 plt.tight_layout()
 plt.show()
-
-improvement = no_position_valid_loss - position_valid_loss
-relative = improvement / no_position_valid_loss
-lstm_gap = position_valid_loss - lstm_valid_loss
-print(
-    f"position improvement: {improvement:.4f} loss "
-    f"({relative:.1%} relative)"
-)
-print(f"positional Transformer minus LSTM: {lstm_gap:.4f} loss")
 ```
-::::
 The positional model finishes at 1.1132 on a deterministic pass over the training
 text and 1.9190 on the held-out tail. Removing position raises those values to
 1.8672 and 2.3405. Position lowers
@@ -1245,15 +1293,12 @@ second block's four heads.
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
 1. Prepare the inputs and fixed settings for the example.
-2. Build the learned attention figure.
+2. Audit causal masking and row normalization.
 :::
 
 ```{python}
-#| label: fig-learned-attention
-#| fig-cap: "Learned attention weights in the second block for the prompt “The gradient ”. The maps are real routing distributions, not explanations or named head roles."
-#| fig-alt: "Four lower-triangular heatmaps for the second block's four heads on the character prompt 'The gradient' with spaces shown as dots. Each query row attends only to itself and earlier characters, but the heads distribute their bright high-weight cells differently: some follow local diagonals while others concentrate on a few earlier columns."
-#| fig-width: 10
-#| fig-height: 6
+#| label: learned-attention-audit
+#| code-summary: "Code: audit learned causal attention maps"
 #| code-fold: false
 
 # [1]
@@ -1274,9 +1319,24 @@ assert torch.allclose(
     atol=1e-6,
 )
 
+# [2]
+print("maximum future attention:", learned[:, future].max().item())
+print(
+    "maximum row-sum error:",
+    (learned.sum(dim=-1) - 1).abs().max().item(),
+)
+```
+::::
+
+```{python}
+#| echo: false
+#| label: fig-learned-attention
+#| fig-cap: "Learned attention weights in the second block for the prompt “The gradient ”. The maps are real routing distributions, not explanations or named head roles."
+#| fig-alt: "Four lower-triangular heatmaps for the second block's four heads on the character prompt 'The gradient' with spaces shown as dots. Each query row attends only to itself and earlier characters, but the heads distribute their bright high-weight cells differently: some follow local diagonals while others concentrate on a few earlier columns."
+#| fig-width: 10
+#| fig-height: 6
 display_tokens = ["·" if char == " " else char for char in prompt]
 fig, axes = plt.subplots(2, 2, figsize=(10, 6), layout="constrained")
-# [2]
 for head, axis in enumerate(axes.flat):
     image = axis.imshow(
         learned[head].numpy(), cmap="viridis", vmin=0, vmax=1
@@ -1288,14 +1348,7 @@ for head, axis in enumerate(axes.flat):
     axis.set_ylabel("query")
 fig.colorbar(image, ax=axes, fraction=0.025, shrink=0.8, pad=0.02)
 plt.show()
-
-print("maximum future attention:", learned[:, future].max().item())
-print(
-    "maximum row-sum error:",
-    (learned.sum(dim=-1) - 1).abs().max().item(),
-)
 ```
-::::
 The maps obey the contract exactly: no future key receives weight and every row
 sums to one. The heads also differ from one another, but naming one “the previous
 character head” or another “the word head” from this single prompt would outrun
@@ -1394,494 +1447,20 @@ do not have to be rebuilt. The toy sampler in @sec-14-self-attention-transformer
 wasteful precisely because it rebuilds that dataset at every step; Appendix C
 separates caching from FlashAttention's I/O schedule.
 
-<!-- NOVEL: needs sign-off - test-time regression and memory-spectrum extension. -->
-## The memory spectrum: one regression, three solvers {#sec-14-memory-spectrum}
+The next interlude holds this regression problem fixed and changes its solver. That is
+where the growing table, finite sufficient state, and delta update can be compared
+without interrupting the Transformer construction.
 
-The Transformer resolved Chapter 10's bottleneck by keeping the visible evidence
-available. Its quadratic routing bill was the price. There is another resolution:
-keep the *problem* Chapter 12 posed, but change how the forward pass solves it.
 
-That move has become a live architecture program under names such as test-time
-regression, fast weights, linear attention, DeltaNet, and state-space sequence models.
-The useful unit is not the model name. It is one objective and the statistical bargain
-made by its solver.
+::: {.callout-note}
+## Check yourself
 
-### One objective, four dials
+Close the book for one minute and rebuild the Transformer block.
 
-At time $t$, let learned projections turn token representation $\vect{x}_\tau$ into
-two views,
-
-$$
-\vect{k}_\tau=\matr{W}_K\vect{x}_\tau,
-\qquad
-\vect{v}_\tau=\matr{W}_V\vect{x}_\tau.
-$$
-
-A memory layer can be described as building an online predictor
-$M_t:\mathbb{R}^{d_k}\rightarrow\mathbb{R}^{d_v}$:
-
-$$
-M_t
-=\arg\min_{M\in\mathcal{M}}
-\frac{1}{2}\sum_{\tau\le t}w_{t,\tau}
-\norm{M(\vect{k}_\tau)-\vect{v}_\tau}^{2}
-+\Omega(M),
-\qquad
-\vect{y}_t=M_t(\vect{q}_t),
-\quad \vect{q}_t=\matr{W}_Q\vect{x}_t.
-$$ {#eq-test-time-regression}
-
-This is Wang, Shi, and Fox's test-time-regression frame, written for vector values.
-It exposes four dials the book already knows.
-
-**The views.** $W_Q,W_K,W_V$ are Chapter 13's learned comparison and payload spaces.
-The token is not assigned one permanent meaning; it learns what to ask, advertise,
-and carry.
-
-**The history weights.** $w_{t,\tau}$ decide how much an older residual matters to
-the fitting problem. Chapter 10's forget gates prepared the idea that retention can
-depend on time and content. A geometric schedule can privilege recent errors; an
-input-dependent schedule can decide that one token deserves a longer trace.
-
-**The model and regularizer.** The class $\mathcal{M}$ decides whether the predictor
-is a local constant, a linear map, or something richer. $\Omega$ brings back ridge
-penalties from Chapter 1 and weight decay from Chapter 4. Regularization controls the
-fitted map; it is not, by itself, the same operation as forgetting old observations.
-
-**The solver.** A closed-form local fit, a running sufficient statistic, and one
-gradient step do different work and preserve different information. This is the new
-rung: *what if the solver itself were a design choice, or even learned?*
-
-@eq-test-time-regression is an umbrella, not an equivalence theorem. Its
-methods can restrict different function classes, use different weights, and stop at
-different approximations. Those differences are the lesson.
-
-### Solver 1: keep the data and fit at the query
-
-Chapter 12 was more precise than saying “attention minimizes
-@eq-test-time-regression.” For a query $\vect{q}$, softmax attention solves the
-local-constant problem
-
-$$
-\vect{c}^{*}(\vect{q})
-=\arg\min_{\vect{c}}
-\frac{1}{2}\sum_{\tau\le t}
-\kappa(\vect{q},\vect{k}_\tau)
-\norm{\vect{c}-\vect{v}_\tau}^{2}.
-$$ {#eq-14-local-constant}
-
-Write $\kappa_\tau=\kappa(\vect{q},\vect{k}_\tau)$. Differentiation gives
-
-$$
-\nabla_{\vect{c}}=
-\sum_{\tau\le t}\kappa_\tau(\vect{c}-\vect{v}_\tau)=\vect{0}
-\quad\Longrightarrow\quad
-\vect{c}^{*}=
-\frac{\sum_\tau\kappa_\tau\vect{v}_\tau}{\sum_\tau\kappa_\tau}.
-$$
-
-Choose
-$\kappa(\vect{q},\vect{k})=\exp(\vect{q}^{\top}\vect{k}/\sqrt{d_k})$ and the
-normalized coefficients are exactly a row of scaled dot-product softmax. The kernel
-supplies the weights; the constant fit supplies the average. An unrestricted $M$ with
-unit observation weights and no regularizer would instead interpolate compatible
-training pairs and be undetermined away from them. We will not smuggle the average
-into a stronger claim.
-
-Here is the numerical stationarity audit. Subtracting the largest score rescales every
-$\kappa_\tau$ by the same positive constant and leaves the minimizer unchanged.
-
-:::: {.plan-code}
-::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Verify softmax attention's local-constant optimum.
-3. Report or visualize the measured result.
+- Why is bare self-attention permutation equivariant?
+- Which three paths write into the residual stream?
+- What changes when a causal mask restricts visibility?
 :::
-
-```{python}
-#| label: local-constant-attention-check
-#| code-summary: "Code: verify softmax attention's local-constant optimum"
-#| code-fold: false
-# [1]
-ms_rng = np.random.default_rng(6050)
-ms_d, ms_T = 8, 12
-ms_K = ms_rng.standard_normal((ms_T, ms_d))
-ms_V = ms_rng.standard_normal((ms_T, 3))
-ms_q = ms_rng.standard_normal(ms_d)
-ms_scores = ms_K @ ms_q / np.sqrt(ms_d)
-ms_kappa = np.exp(ms_scores - ms_scores.max())
-ms_c = (ms_kappa[:, None] * ms_V).sum(0) / ms_kappa.sum()
-ms_attention = (ms_kappa / ms_kappa.sum()) @ ms_V
-ms_gradient = (ms_kappa[:, None] * (ms_c - ms_V)).sum(0)
-# [2]
-assert np.allclose(ms_c, ms_attention)
-# [3]
-print(f"max |stationarity gradient|: {np.abs(ms_gradient).max():.3e}")
-```
-::::
-This solver retains the key--value rows because a future query may weight every row
-differently. That is why dense causal attention carries a growing dataset forward.
-
-### Solver 2: collapse a factorized kernel into sufficient state
-
-Suppose the kernel factors through a finite feature map
-$\phi:\mathbb{R}^{d_k}\rightarrow\mathbb{R}^{r}$:
-
-$$
-\kappa(\vect{q},\vect{k})
-=\phi(\vect{q})^{\top}\phi(\vect{k}).
-$$
-
-Substitute that factorization into the weighted average and regroup terms:
-
-$$
-\begin{aligned}
-\vect{y}_t(\vect{q})
-&=\frac{\sum_{\tau\le t}
-\bigl[\phi(\vect{q})^{\top}\phi(\vect{k}_\tau)\bigr]\vect{v}_\tau}
-{\sum_{\tau\le t}\phi(\vect{q})^{\top}\phi(\vect{k}_\tau)} \\
-&=\frac{\phi(\vect{q})^{\top}\matr{S}_t}
-{\phi(\vect{q})^{\top}\vect{z}_t},
-\end{aligned}
-$$ {#eq-linear-attention-state}
-
-where
-
-$$
-\matr{S}_t=\sum_{\tau\le t}\phi(\vect{k}_\tau)\vect{v}_\tau^{\top},
-\qquad
-\vect{z}_t=\sum_{\tau\le t}\phi(\vect{k}_\tau).
-$$
-
-The sufficient state is the pair $(\matr{S}_t,\vect{z}_t)$, not $\matr{S}_t$ alone:
-the numerator needs accumulated value-weighted features and the denominator needs its
-normalizer. Each new pair updates that fixed-size state once. Any later query reads the
-same answer as a full traversal of all pairs, for this factorized kernel.
-
-:::: {.plan-code}
-::: {.plan}
-1. Define the reusable `ms_phi` helper.
-2. Prepare the inputs and fixed settings for the example.
-3. Compare a factorized-kernel traversal with its running state.
-4. Check the claimed identities, shapes, or invariants.
-5. Report or visualize the measured result.
-:::
-
-```{python}
-#| label: linear-attention-sufficient-state-check
-#| code-summary: "Code: compare a factorized-kernel traversal with its running state"
-#| code-fold: false
-# [1]
-def ms_phi(x):
-    return np.where(x > 0, x + 1, np.exp(x))
-
-# [2]
-ms_S = np.zeros((ms_d, ms_V.shape[1]))
-ms_z = np.zeros(ms_d)
-# [3]
-for ms_key, ms_value in zip(ms_K, ms_V, strict=True):
-    ms_S += np.outer(ms_phi(ms_key), ms_value)
-    ms_z += ms_phi(ms_key)
-ms_streaming = (ms_S.T @ ms_phi(ms_q)) / (ms_z @ ms_phi(ms_q))
-ms_weights = ms_phi(ms_K) @ ms_phi(ms_q)
-ms_traversal = (ms_weights[:, None] * ms_V).sum(0) / ms_weights.sum()
-# [4]
-assert np.allclose(ms_streaming, ms_traversal)
-# [5]
-print("streaming equals traversal:", np.allclose(ms_streaming, ms_traversal))
-print(f"max |difference|: {np.abs(ms_streaming-ms_traversal).max():.3e}")
-```
-::::
-The equality is exact up to floating-point order: the full dataset traversal has
-collapsed into two running sums. With $r$ and $d_v$ fixed, storage no longer grows
-with the prefix. This is the honest content behind “Transformers are RNNs” for
-causal **linear** attention: the recurrent state returns, dignified, as a sufficient
-statistic of a regression.
-
-There is a price. Ordinary softmax's exponential dot-product kernel does not have the
-finite exact feature map used above. Changing to a finite factorization changes the
-kernel, or approximates it. Collisions in $(S_t,z_t)$ cannot be undone by revisiting a
-discarded row. The traversal equality is exact for the chosen factorized kernel, not a
-proof that finite-state linear attention reproduces exact softmax for arbitrary
-prefixes.
-
-### Solver 3: take one gradient step and get the delta rule
-
-Now restrict the predictor to a scalar linear map
-$M(\vect{q})=\vect{h}^{\top}\vect{q}$ and let the solver take one SGD step on only
-the newest pair. Its instantaneous loss and gradient are
-
-$$
-\ell_t(\vect{h})
-=\frac{1}{2}(\vect{h}^{\top}\vect{k}_t-v_t)^2,
-\qquad
-\nabla_{\vect{h}}\ell_t
-=\vect{k}_t(\vect{k}_t^{\top}\vect{h}-v_t).
-$$
-
-Substituting the gradient into the update gives the delta recurrence in three lines:
-
-$$
-\begin{aligned}
-\vect{h}_t
-&=\vect{h}_{t-1}-\eta_t\vect{k}_t
-  (\vect{k}_t^{\top}\vect{h}_{t-1}-v_t)\\
-&=(\matr{I}-\eta_t\vect{k}_t\vect{k}_t^{\top})\vect{h}_{t-1}
-  +\eta_t v_t\vect{k}_t.
-\end{aligned}
-$$ {#eq-delta-recurrence}
-
-:::: {.plan-code}
-::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Verify that one SGD step is the delta recurrence.
-3. Report or visualize the measured result.
-:::
-
-```{python}
-#| label: delta-sgd-check
-#| code-summary: "Code: verify that one SGD step is the delta recurrence"
-#| code-fold: false
-# [1]
-ms_eta = 0.3
-ms_h = ms_rng.standard_normal(ms_d)
-ms_k = ms_rng.standard_normal(ms_d)
-ms_v = ms_rng.standard_normal()
-ms_sgd = ms_h - ms_eta * ms_k * (ms_k @ ms_h - ms_v)
-ms_delta = ((np.eye(ms_d) - ms_eta * np.outer(ms_k, ms_k)) @ ms_h
-            + ms_eta * ms_v * ms_k)
-# [2]
-assert np.allclose(ms_sgd, ms_delta)
-# [3]
-print("SGD equals Delta recurrence:", np.allclose(ms_sgd, ms_delta))
-print(f"max |difference|: {np.abs(ms_sgd-ms_delta).max():.3e}")
-```
-::::
-For vector values, store
-$\matr{H}_t\in\mathbb{R}^{d_v\times d_k}$ and replace the update by
-
-$$
-\matr{H}_t
-=\matr{H}_{t-1}
-+\eta_t(\vect{v}_t-\matr{H}_{t-1}\vect{k}_t)\vect{k}_t^{\top}.
-$$ {#eq-vector-delta-rule}
-
-Each outer product writes the residual left by the current key. DeltaNet turns that
-classical online least-squares step into a sequence layer. The recurrence also exposes
-a state-space form: its transition is
-$\matr{A}_t=\matr{I}-\eta_t\vect{k}_t\vect{k}_t^{\top}$ and its input write is
-$\eta_t v_t\vect{k}_t$. The state transition is therefore determined by the current
-token's learned key.
-
-Forgetting needs one more careful distinction. Exponential history weights
-$w_{t,\tau}=\gamma^{t-\tau}$ define an exponentially weighted least-squares
-*objective*, but its exact minimizer generally requires a recursive least-squares
-covariance state. Writing $\gamma\matr{H}_{t-1}$ into a one-step delta recurrence is
-a fading-memory solver choice, not an algebraic consequence of those weights. Gates
-can make that retention and the step size depend on the current token.
-
-This is the derivation-first connection to the wider SSM family. Mamba makes parts of
-its state transition, input injection, and readout depend on the token; in the present
-language, those mechanisms play roles analogous to a learnable retention-and-write
-schedule. Gated DeltaNet adds learned gating around delta-style updates. That is an
-interpretive bridge, not a claim that Mamba is literally obtained by differentiating
-@eq-test-time-regression. Structured SSMs also use different state parameterizations
-and can have costs below the dense outer-product ledger here.
-
-### The price list
-
-| Solver of the shared problem | State carried forward | Per-token read/write ledger | Statistical contract |
-|---|---|---:|---|
-| Local-constant exponential-kernel fit (softmax attention) | All prior $K,V$ rows: the KV cache | $O(t(d_k+d_v))$ | No state compression; every row remains available, but the read is still a query-dependent weighted average |
-| Factorized kernel | $(S_t,z_t)$ with $S_t\in\mathbb{R}^{r\times d_v}$ | $O(rd_v)$ plus feature-map cost | Exact for the chosen finite factorization; lossy relative to retaining arbitrary raw rows |
-| One newest-pair SGD step (Delta rule and gated variants) | $H_t\in\mathbb{R}^{d_v\times d_k}$ plus any gate state | $O(d_kd_v)$ for a dense update/read | Approximate online fit; fixed capacity whose writes can be steered |
-
-: Solver choices expose the memory spectrum of the shared regression problem. {#tbl-memory-spectrum}
-
-The asymptotic labels in @tbl-memory-spectrum name this dense educational setup, not
-every implementation.
-Feature width $r$, head dimensions, low-rank structure, convolutions, and hardware
-schedules change constants and sometimes orders. Most importantly, “retains every
-row” does not mean “recalls every association exactly.” Softmax still returns a convex
-mixture whose quality depends on keys, temperature, and interference.
-
-::: {.callout-warning}
-## Trap: attention's memory is a dataset, not a hidden box
-
-Attention does not *have* a separate memory in the recurrent sense. The attention
-operation is the estimator; during causal decoding, the KV cache is the observed
-key--value dataset it must retain. A nonparametric query rule keeps growing data so it
-can form a new local fit. A parametric state instead compresses those data into a
-fixed-size object. FlashAttention changes how the uncompressed fit is scheduled; it
-does not turn it into the compressed contract in the second or third row.
-:::
-
-### Mechanism test: recall under a fixed capacity
-
-@tbl-memory-spectrum makes a prediction we can test without pretending to train a
-language model. Store $N$ random unit key--value pairs, then query every stored key. Decode a
-read by the nearest stored value. Exact softmax attention keeps all pairs. A dense
-delta state has $d^2$ numbers regardless of $N$. A selective delta arm receives one
-extra priority bit and writes ordinary pairs at only one tenth strength, so it can
-choose what to sacrifice.
-
-The study was designed on seed branches 0 and 1. Those branches fixed
-$\eta=0.20$, the 25% priority rate, the 0.10 ordinary write gate, dimensions
-$(8,16,32)$, and loads $N/d\in(0.5,1,2,4,8)$. Only then was disjoint branch 2 opened
-for 30 endpoint repetitions. All methods in a trial receive the same keys, values,
-order, queries, and decoder. The endpoint code below is the frozen protocol; it runs
-on CPU in under a second on the reference machine.
-
-:::: {.plan-code .plan-code-wide}
-::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Define the reusable helpers: `ms_unit` and `ms_decode`.
-3. Define the reusable helpers: `ms_trial` and `ms_panel`.
-4. Run the sealed synthetic recall-under-capacity study.
-:::
-
-```{python}
-#| label: memory-capacity-study
-#| code-summary: "Code: run the sealed synthetic recall-under-capacity study"
-#| code-fold: false
-# [1]
-MS_SEED, MS_ETA, MS_GATE = 6050, 0.20, 0.10
-MS_DIMS, MS_LOADS, MS_REPEATS = (8, 16, 32), (0.5, 1, 2, 4, 8), 30
-
-# [2]
-def ms_unit(x):
-    return x / np.linalg.norm(x, axis=1, keepdims=True)
-
-def ms_decode(prediction, values):
-    return np.argmax(prediction @ values.T, axis=1)
-
-# [3]
-def ms_trial(rng, repeat, d, load):
-    n = max(4, round(load * d))
-    keys = ms_unit(rng.standard_normal((n, d)))
-    values = ms_unit(rng.standard_normal((n, d)))
-    priority = np.zeros(n, dtype=bool)
-    priority[rng.permutation(n)[:max(1, round(0.25 * n))]] = True
-
-    scores = 32.0 * (keys @ keys.T)
-    scores -= scores.max(axis=1, keepdims=True)
-    weights = np.exp(scores); weights /= weights.sum(axis=1, keepdims=True)
-    attention = weights @ values
-
-    def delta(write_gate):
-        state = np.zeros((d, d))
-        for key, value, gate in zip(keys, values, write_gate, strict=True):
-            state += MS_ETA * gate * np.outer(value - state @ key, key)
-        return keys @ state.T
-
-    plain = delta(np.ones(n))
-    selective = delta(np.where(priority, 1.0, MS_GATE))
-    truth = np.arange(n)
-    correct = lambda pred: ms_decode(pred, values) == truth
-    a_ok, d_ok, s_ok = correct(attention), correct(plain), correct(selective)
-    ordinary = ~priority
-    return [repeat, d, n, load, a_ok.mean(), ((attention-values)**2).mean(),
-            d_ok.mean(), d_ok[priority].mean(), d_ok[ordinary].mean(),
-            s_ok.mean(), s_ok[priority].mean(), s_ok[ordinary].mean()]
-
-def ms_panel(tag, repeats):
-    seeds = np.random.SeedSequence([MS_SEED, tag]).spawn(
-        repeats * len(MS_DIMS) * len(MS_LOADS))
-    rows, index = [], 0
-    for repeat in range(repeats):
-        for d in MS_DIMS:
-            for load in MS_LOADS:
-                rows.append(ms_trial(np.random.default_rng(seeds[index]),
-                                     repeat, d, load))
-                index += 1
-    return np.asarray(rows)
-
-# Tags 0 and 1 were development; tag 2 remained sealed until settings were fixed.
-ms_development = np.vstack([ms_panel(tag, 5) for tag in (0, 1)])
-assert np.all(ms_development[:, 4] == 1.0)
-ms_endpoint = ms_panel(2, MS_REPEATS)
-assert np.all(ms_endpoint[:, 4] == 1.0)
-
-print("study_seed=6050; development_tags=(0, 1); sealed_endpoint_tag=2")
-print("endpoint_trials=30 x 3 dimensions; d=(8, 16, 32); "
-      "N/d=(0.5, 1, 2, 4, 8)")
-print("fixed: eta=0.20; priority_fraction=0.25; ordinary_write_gate=0.10")
-print("load  attention  Delta  gated-all  gated-priority  gated-ordinary")
-# [4]
-for load in MS_LOADS:
-    block = ms_endpoint[ms_endpoint[:, 3] == load]
-    means = block[:, [4, 6, 9, 10, 11]].mean(0)
-    print(f"{load:>4.1f}   " + "  ".join(f"{value:.3f}" for value in means))
-
-hard = ms_endpoint[ms_endpoint[:, 3] == 8]
-priority_gain = hard[:, 10] - hard[:, 7]
-ordinary_gain = hard[:, 11] - hard[:, 8]
-print(f"N/d=8 gated-minus-Delta priority: {priority_gain.mean():+.3f} "
-      f"(SD {priority_gain.std(ddof=1):.3f})")
-print(f"N/d=8 gated-minus-Delta ordinary: {ordinary_gain.mean():+.3f} "
-      f"(SD {ordinary_gain.std(ddof=1):.3f})")
-print(f"attention top-1 failures=0/{int(ms_endpoint[:, 2].sum())}")
-print(f"mean value MSE={ms_endpoint[:, 5].mean():.2e}; "
-      f"max trial MSE={ms_endpoint[:, 5].max():.2e}")
-```
-::::
-:::: {.plan-code .plan-code-wide}
-::: {.plan}
-1. Compare full-table and fixed-state recall as load grows.
-:::
-
-```{python}
-#| label: fig-memory-capacity-spectrum
-#| fig-cap: "A sealed synthetic mechanism test, not a language-model or state-space benchmark. Left: the uncompressed softmax table has perfect top-1 identification in this constructed, sharp-softmax regime, while the fixed delta state loses associations as N/d grows; this is not exact numeric interpolation. Right: the selective arm receives an unmatched priority bit and trades ordinary recall for priority recall. Keys, values, order, queries, decoder, and state width are matched within each trial; inference arithmetic, stored data, and side information are not matched, and no wall-clock claim is made. Left-panel lines average 30 endpoint seeds per dimension; right-panel lines pool the three dimensions, for 90 dimension-by-seed trials per load."
-#| fig-alt: "Two line charts. In the left chart softmax top-1 recall stays at one while Delta recall falls with load for dimensions 8, 16, and 32. In the right chart a gated Delta update preserves priority items better than ordinary items, especially at high load, while the ungated update does not make that trade as strongly."
-#| code-summary: "Figure: compare full-table and fixed-state recall as load grows"
-#| code-fold: false
-# [1]
-fig, axes = plt.subplots(1, 2, figsize=(8.4, 3.35), constrained_layout=True)
-colors = {8: "#E57200", 16: "#2E7D32", 32: "#722F37"}
-for d in MS_DIMS:
-    means = [ms_endpoint[(ms_endpoint[:, 1] == d) &
-                         (ms_endpoint[:, 3] == load), 6].mean()
-             for load in MS_LOADS]
-    axes[0].plot(MS_LOADS, means, marker="o", color=colors[d], label=f"Delta, d={d}")
-axes[0].plot(MS_LOADS, np.ones(len(MS_LOADS)), color="#232D4B", lw=2,
-             label="softmax table")
-axes[0].set(xscale="log", xlabel="load N/d", ylabel="top-1 recall",
-            title="Fixed state meets capacity", ylim=(-0.03, 1.05))
-axes[0].set_xticks(MS_LOADS, [str(x) for x in MS_LOADS])
-axes[0].minorticks_off()
-axes[0].legend(fontsize=7.3)
-
-for column, label, style, color in [
-    (7, "Delta: priority", "--", "#B45309"),
-    (8, "Delta: ordinary", "--", "#64748B"),
-    (10, "gated: priority", "-", "#E57200"),
-    (11, "gated: ordinary", "-", "#232D4B"),
-]:
-    means = [ms_endpoint[ms_endpoint[:, 3] == load, column].mean()
-             for load in MS_LOADS]
-    axes[1].plot(MS_LOADS, means, marker="o", ls=style, color=color, label=label)
-axes[1].set(xscale="log", xlabel="load N/d", ylabel="top-1 recall",
-            title="A gate chooses what to forget", ylim=(-0.03, 1.05))
-axes[1].set_xticks(MS_LOADS, [str(x) for x in MS_LOADS])
-axes[1].minorticks_off()
-axes[1].legend(fontsize=7.3)
-plt.show()
-```
-::::
-At $N/d=8$, the gate raises priority recall over the plain delta state by 0.387 on
-average and lowers ordinary recall by 0.124. That is selective forgetting made
-visible, not a claim that the gated arm is globally better. Overall gated recall is
-0.138 while plain Delta recall is 0.134 at that load. The useful result is the trade:
-given an extra signal, a fixed state can spend capacity differently.
-
-The fixed-size state could not hold everything in @sec-10-sequences-rnn. It still
-cannot. Now we know the price list on which that failure was one entry. Keeping the
-dataset buys uncompressed access at growing cost; sufficient statistics buy an exact
-stream for a restricted kernel; online updates buy a steerable fixed state and accept
-interference. The RNN state has returned as a statistical choice rather than a design
-we were supposed to declare dead.
-<!-- /NOVEL -->
 
 ## Okay, so — the Transformer routes, then computes
 
@@ -1909,24 +1488,16 @@ we were supposed to declare dead.
    versus 1.9190.
    Architecture changes inductive bias; it does not guarantee victory in every
    data and scale regime.
-7. **One regression question admits several memory contracts.** Exact softmax keeps
-   the key--value table; a factorized kernel carries $(S_t,z_t)$; a delta update
-   carries a fixed matrix and accepts interference. The solver decides what the
-   layer remembers and what it pays.
-
 ## Sources and further reading {.unnumbered}
 
 - [Vaswani et al., *Attention Is All You Need*](https://papers.nips.cc/paper_files/paper/2017/hash/3f5ee243547dee91fbd053c1c4a845aa-Abstract.html): multi-head attention, sinusoidal position, and the original post-LayerNorm encoder–decoder.
+- [Su et al., *RoFormer: Enhanced Transformer with Rotary Position Embedding*](https://arxiv.org/abs/2104.09864): rotates queries and keys so their positional interaction is expressed through relative offset.
 - [Ba, Kiros, and Hinton, *Layer Normalization*](https://arxiv.org/abs/1607.06450): normalization within one example and identical train/evaluation computation.
+- [Zhang and Sennrich, *Root Mean Square Layer Normalization*](https://proceedings.neurips.cc/paper/2019/hash/1e8a19426224ca89e83cef47f1e7f53b-Abstract.html): RMSNorm's scale-only normalization and empirical study.
 - [Xiong et al., *On Layer Normalization in the Transformer Architecture*](https://proceedings.mlr.press/v119/xiong20b.html): a qualified comparison of pre- and post-LayerNorm optimization.
 - [Geva et al., *Transformer Feed-Forward Layers Are Key-Value Memories*](https://aclanthology.org/2021.emnlp-main.446/): empirical evidence behind the associative-memory interpretation of FFNs.
 - [Jain and Wallace, *Attention Is Not Explanation*](https://aclanthology.org/N19-1357/): an important limit on reading attention maps as explanations.
 - [Holtzman et al., *The Curious Case of Neural Text Degeneration*](https://arxiv.org/abs/1904.09751): nucleus sampling and the distinction between likely continuations and useful generation behavior.
-- [Katharopoulos et al., *Transformers Are RNNs: Fast Autoregressive Transformers with Linear Attention* (2020)](https://arxiv.org/abs/2006.16236): derives the recurrent sufficient-state form for causal linear attention.
-- [Schlag, Irie, & Schmidhuber, *Linear Transformers Are Secretly Fast Weight Programmers* (2021)](https://proceedings.mlr.press/v139/schlag21a.html): connects linear attention, fast weights, and the delta update.
-- [Gu & Dao, *Mamba: Linear-Time Sequence Modeling with Selective State Spaces* (2023)](https://arxiv.org/abs/2312.00752): makes state-space parameters input dependent; the chapter uses selectivity as a retention-and-write analogy, not an exact regression equivalence.
-- [Yang et al., *Gated Delta Networks: Improving Mamba2 with Delta Rule* (2024)](https://arxiv.org/abs/2412.06464): combines gated linear recurrence with delta-style associative updates.
-- [Wang, Shi, & Fox, *Test-Time Regression: A Unifying Framework for Designing Sequence Models with Associative Memory* (2025)](https://arxiv.org/abs/2501.12352): the shared regression objective and solver-design perspective.
 
 ## Exercises {.unnumbered}
 
@@ -1947,26 +1518,8 @@ we were supposed to declare dead.
    evaluating its formula beyond position 99, and propose an explicit extension
    rule for the learned table before testing either model on a longer context.
    Which design has a natural extension, and which has to invent one?
-5. **(Code and interpretation.)** Aggregate learned attention by relative offset
+5. **(Code.)** Aggregate learned attention by relative offset
    across the held-out tail rather than naming heads from one prompt. Report a
    distribution for every head and block. Then perturb the highest-weight key's
    value vector and measure the logit change. Explain why routing weight and causal
    influence need not rank tokens identically.
-6. **(Pencil.)** Starting from @eq-14-local-constant, derive the stationarity
-   equation and its normalized solution. Identify exactly where the local-constant
-   restriction enters. Why would an unrestricted function with no regularizer not
-   imply the same average?
-7. **(Code.)** Reproduce @eq-linear-attention-state with a positive feature map of
-   your choice. Assert that full traversal and the running pair $(S_t,z_t)$ agree for
-   every prefix, not only at the final time. Which assertion fails if you omit $z_t$?
-8. **(Pencil.)** Derive @eq-delta-recurrence from one SGD step. Then propose a
-   recurrence with a factor $\gamma$ multiplying the old state. Explain why this is a
-   fading-memory solver choice rather than the exact minimizer of exponentially
-   weighted least squares.
-9. **(Code.)** Sweep the capacity study over at least five state widths $d$. Preserve
-   the sealed-seed protocol, plot recall against both $N$ and $N/d$, and report where
-   the curves align. Do not call top-1 identification exact value recall.
-10. **(Pencil and critique.)** For each row of the price table, write the state size,
-    update cost, query cost, and information that cannot be reconstructed. Which pair
-    is compute-matched? Which is storage-matched? Design one rematch for a claim you
-    would actually be willing to make.

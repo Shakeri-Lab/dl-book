@@ -582,6 +582,20 @@ N_{KV}=2LBh_{KV}td_h\quad\text{elements},
 M_{KV}=2sLBh_{KV}td_h\quad\text{bytes}.
 $$
 
+Standard multi-head attention commonly uses $h_{KV}=h_Q$: every query head has its
+own key and value head. **Grouped-query attention (GQA)** instead lets several query
+heads share one key/value head. If $h_{KV}<h_Q$, the cache becomes
+
+$$
+\frac{M_{KV,\mathrm{GQA}}}{M_{KV,\mathrm{MHA}}}
+=\frac{h_{KV}}{h_Q}.
+$$
+
+This changes the number of stored and projected key/value heads. It does not change
+causal visibility, make the prefix shorter, or eliminate the score traversal over
+$t$. The grouping is therefore a serving-cost choice with an empirical quality and
+throughput trade-off, not a different masking rule.
+
 Thus caching spends storage that grows linearly with context length. For one new
 token, dense attention still reads a score row whose length grows with $t$; across a
 generation, that work is quadratic in final length. Caching avoids re-projecting and
@@ -813,7 +827,9 @@ remain. “Exact” means no modeling approximation; floating-point order still 
 Longer context is not free, and an implementation that is faster for one shape or
 device may not be faster for another.
 
-In @sec-14-memory-spectrum's terms, FlashAttention reorganizes the **same
+In the [test-time-regression
+interlude](../interludes/attention-as-test-time-regression.qmd)'s terms,
+FlashAttention reorganizes the **same
 nonparametric solve** to reduce traffic: it changes the schedule, not the statistics,
 and the KV dataset still grows. Linear-attention and delta-style solvers make a
 different bargain. They change the statistical contract by compressing history into
@@ -856,8 +872,8 @@ for full quadratic intermediates in slow memory.
 
 ## Sources and further reading {.unnumbered}
 
-- Instructor course seed `9.2-Faster-Transformers.tex` supplied the KV-cache
-  generation contract; the bridge above re-derives its storage ledger and does not
+- Instructor notes on faster Transformers supplied the KV-cache generation contract;
+  the bridge above re-derives its storage ledger and does not
   reproduce the seed's implementation or external figure.
 - [IEEE 754-2019, *Standard for Floating-Point Arithmetic*](https://standards.ieee.org/ieee/754/6210/): binary floating-point formats, exceptional values, rounding, and arithmetic semantics.
 - [PyTorch, `torch.finfo`](https://docs.pytorch.org/docs/stable/type_info.html): dtype-specific bit counts, spacing, normal range, and finite range used in the executable audit.
@@ -871,26 +887,30 @@ for full quadratic intermediates in slow memory.
 - [Milakov and Gimelshein, *Online Normalizer Calculation for Softmax*](https://arxiv.org/abs/1805.02867): the online maximum and normalizer recurrence used in the blockwise derivation.
 - [Dao et al., *FlashAttention: Fast and Memory-Efficient Exact Attention with IO-Awareness*](https://arxiv.org/abs/2205.14135): tiled exact attention and its I/O analysis.
 - [Dao, *FlashAttention-2: Faster Attention with Better Parallelism and Work Partitioning*](https://arxiv.org/abs/2307.08691): improved partitioning and parallelism around the same I/O-aware spine.
+- [Ainslie et al., *GQA: Training Generalized Multi-Query Transformer Models from Multi-Head Checkpoints*](https://aclanthology.org/2023.emnlp-main.298/): grouped query heads with fewer shared key/value heads and the resulting quality-throughput trade-off.
 - [PyTorch, `scaled_dot_product_attention`](https://docs.pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html): the public attention interface and backend-selection qualifications.
 
 ## Exercises {.unnumbered}
 
-1. **(Pencil + code.)** For FP16, BF16, and FP32, use `torch.nextafter` to measure the
-   gap above $2^{-10}$, 1, and $2^{10}$. Predict how the gap changes with the exponent,
-   verify it, and identify one update that is representable near zero but rounds away
-   when subtracted from each base value.
+1. **(Pencil.)** (a) For FP16, BF16, and FP32, predict how the representable gap
+   above $2^{-10}$, 1, and $2^{10}$ changes with the exponent.
+   **(Code.)** (b) Use `torch.nextafter` to verify the prediction and identify one
+   update that is representable near zero but rounds away when subtracted from each
+   base value.
 
-2. **(Code and interpretation.)** Compare direct softmax and max-shifted softmax for
+2. **(Code.)** Compare direct softmax and max-shifted softmax for
    `[10, 11, 12]`, `[1000, 1001, 1002]`, and `[10000, 10001, 10002]` in FP16, BF16,
    FP32, and FP64. Record the **stored logits** before interpreting the probabilities.
    Separate overflow prevented by stable algebra from distinctions erased by rounding.
 
-3. **(Pencil + code.)** Reproduce the serial-sum experiment for the terms 0.125 and
-   0.1 with FP16 and FP32 accumulators. Then implement the $2^{-26}$ loss-scaling
-   probe with several powers-of-two scales. Explain why loss scaling can preserve a
-   tiny gradient but cannot make a rounded-away FP16 master-weight update effective.
+3. **(Pencil.)** (a) Predict how FP16 and FP32 accumulators will differ for serial
+   sums of 0.125 and 0.1.
+   **(Code.)** (b) Reproduce the experiment, then implement the $2^{-26}$
+   loss-scaling probe with several powers-of-two scales. Explain why loss scaling can
+   preserve a tiny gradient but cannot make a rounded-away FP16 master-weight update
+   effective.
 
-4. **(Roofline analysis.)** Consider a hypothetical machine with a 60-TFLOP/s FP32
+4. **(Pencil.)** Consider a hypothetical machine with a 60-TFLOP/s FP32
    roof, a 120-TFLOP/s 16-bit matrix roof, and 1.5-TB/s memory bandwidth. Draw both
    Rooflines and compute both ridge points. Place an FP32 elementwise transform at
    0.25 FLOP/byte, then place both the FP32 and two-byte ideal square GEMMs from

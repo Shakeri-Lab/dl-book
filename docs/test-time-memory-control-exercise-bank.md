@@ -2,7 +2,8 @@
 
 <!-- NOVEL: needs sign-off -->
 
-*Maintainer/instructor companion to Chapter 14 §14.8 and the epilogue. These are
+*Maintainer/instructor companion to the Attention as Test-Time Regression interlude
+and the epilogue. These are
 solution sketches, not copy-ready graded solutions: code items state invariants and
 expected outputs but deliberately omit a complete implementation. Select or adapt
 items before assigning them. The public chapter retains unsolved versions in keeping

@@ -299,7 +299,15 @@ three things to code no human wrote.
   listings (the supervised update = Listing 4.1, masked softmax, padded
   cross-entropy, autoregressive decoding, seed-panel record) are printed once and
   cited by number. Later variants print only the lines that differ, introduced by
-  a prose reference or `# … as Listing 4.1 …` elision comments.
+  a prose reference or an ASCII comment such as
+  `# ... unchanged setup from Listing 4.1 ...`.
+- **Split the harness; do not filter the artifact.** Data generation, equations,
+  estimators, assertions, metrics, and mechanism-bearing loops remain in the
+  learner-visible Plan → Code cell. Move pure canvas construction, annotations,
+  legends, axis styling, layout, patches, arrows, and `show()` into the adjacent
+  executed `echo: false` cell that owns the figure caption and alt text. Do not use
+  a display filter to manufacture a shorter listing: printed code remains executed
+  code.
 - **Never abstract control flow that is the mechanism.** Teacher forcing, packed
   sequences, masked-token selection, contrastive batch construction, GAN
   alternation, diffusion timestep sampling, DPO masks, matched schedules stay
@@ -404,8 +412,27 @@ breakable `planbox` above the code. The markers read identically in both.
 ### Exercise taxonomy
 
 Three tags book-wide: **(Pencil.)**, **(Code.)**, and **(Audit.)** — judge-this-code
-items where the reader predicts a defect's direction before deriving it. Every
-(Audit.) exercise has a named wrong answer.
+or judge-this-evidence items that test a claim, protocol, or implementation rather
+than merely extending it. When the audit supplies a defect, the reader predicts its
+direction before deriving it; a named wrong answer is useful when one tempting
+misdiagnosis deserves to be made explicit.
+
+### Book voice and production hygiene
+
+- Arguments, derivations, analogies, editorial omissions, and numerical evidence
+  stand in the book's voice. A video link may invite a live demonstration, but the
+  book never delegates a load-bearing claim to an off-page narrator. Hidden
+  provenance comments retain the exact source trail; learner-facing Sources entries
+  name the human-readable work rather than internal filenames.
+- Greek letters, relation symbols, and fractions belong in math mode. Python comments
+  and code-elision markers stay ASCII. The PDF build scans retained LaTeX logs for
+  missing characters and the extracted text layer for NUL and U+FFFD.
+- Unnumbered interludes own independent figure namespaces in both formats:
+  **Figure EX.** for experimentation, **Figure AE.** for autoencoders, and
+  **Figure TTR.** for attention as test-time regression. Their display equations are
+  unnumbered so neither format inherits a neighboring chapter counter.
+- Decorative callout icons carry empty replacement text in PDF extraction. Meaning
+  lives in the callout title and prose, never in the icon.
 
 ### Reading loop
 
@@ -423,7 +450,8 @@ prediction before showing an outcome; recaps ask what evidence would falsify.
 - **t-SNE / UMAP as additional projection tools** — the book standardizes on PCA
   projections; a second projection tool is stuffing.
 - **Mixture-of-experts** — *not* refused as history: named in the epilogue's
-  roads-not-taken as the Hinton-era topic that became a frontier default.
+  roads-not-taken as an earlier specialist-routing idea that became a frontier
+  default.
 
 ## Closing Notes
 
@@ -442,4 +470,7 @@ When drafting chapters in this voice, ask yourself:
 - Is my notation consistent with what they learned in the prior module?
 - Have I acknowledged the human experience of debugging?
 
-The book should read like attending his lectures: rigorous but inviting, complete but never overwhelming, always with the sense that you are being taught by someone who has struggled through these concepts and wants you to really, truly understand them.
+The book should feel rigorous but inviting, complete without becoming overwhelming,
+and written by someone who has struggled through these concepts and wants the reader
+to understand them rather than merely repeat them. Every argument must stand on the
+page without depending on an off-page narrator.

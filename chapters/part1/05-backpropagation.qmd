@@ -126,15 +126,12 @@ runs from the last layer to the first.
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
 1. Prepare the inputs and fixed settings for the example.
-2. Compute and draw the blame flow.
-3. Report or visualize the measured result.
+2. Compute the backward blame signal through every layer.
 :::
 
 ```{python}
-#| label: fig-blame-flow
-#| fig-alt: "Four network columns run from three inputs through two four-unit hidden layers to one output. Connections carry blame backward, and node size and shading show the blame magnitudes changing across layers."
-#| fig-cap: "Equations 1 and 2 in action on a real network (sizes 3–4–4–1, random weights, one example). Node size and color show each neuron's blame $|\\delta_j|$: it starts at the output, where the error is obvious, and flows backward through $W^\\top$, shrinking wherever a sigmoid gate is nearly closed."
-#| code-summary: "Code: compute and draw the blame flow"
+#| label: blame-flow-values
+#| code-summary: "Code: compute the blame flow"
 #| code-fold: false
 import torch
 import matplotlib.pyplot as plt
@@ -157,8 +154,14 @@ sp = lambda z: torch.sigmoid(z) * (1 - torch.sigmoid(z))
 delta[2] = zs[2] - 1.0                               # eq. 1 (identity output, y = 1)
 delta[1] = (Ws[2].T @ delta[2]) * sp(zs[1])          # eq. 2
 delta[0] = (Ws[1].T @ delta[1]) * sp(zs[0])          # eq. 2 again
+```
+::::
 
-# [3]
+```{python}
+#| echo: false
+#| label: fig-blame-flow
+#| fig-alt: "Four network columns run from three inputs through two four-unit hidden layers to one output. Connections carry blame backward, and node size and shading show the blame magnitudes changing across layers."
+#| fig-cap: "Equations 1 and 2 in action on a real network (sizes 3–4–4–1, random weights, one example). Node size and color show each neuron's blame $|\\delta_j|$: it starts at the output, where the error is obvious, and flows backward through $W^\\top$, shrinking wherever a sigmoid gate is nearly closed."
 fig, ax = plt.subplots(figsize=(7, 3.2))
 blames = [torch.full((3,), float("nan"))] + delta    # input layer: no blame needed
 vmax = max(d.abs().max() for d in delta)
@@ -183,7 +186,6 @@ ax.set_yticks([]); ax.set_ylim(-1.4, 1.6)
 for s in ax.spines.values(): s.set_visible(False)
 plt.tight_layout(); plt.show()
 ```
-::::
 **3. Convert blame into weight gradients:**
 
 $$
@@ -205,22 +207,25 @@ $i$ times the activation of neuron $j$ that fed it. The update for a weight is
 
 :::: {.plan-code}
 ::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Draw the outer product.
+1. Form the weight-gradient outer product.
 :::
 
 ```{python}
-#| label: fig-outer-product
-#| fig-alt: "A four-entry blame column and a four-entry activation row sit beside their four-by-four outer-product matrix. Each matrix cell is numerically the product of its corresponding row and column entries."
-#| fig-cap: "Equation 3, pictured with the blame and activations from the network above: a $(4 \\times 1)$ blame column times a $(1 \\times 4)$ activation row yields the full $(4 \\times 4)$ gradient matrix in one stroke — entry $(i,j)$ is blame out $\\times$ signal in."
-#| code-summary: "Code: draw the outer product"
+#| label: outer-product-gradient
+#| code-summary: "Code: form the outer-product gradient"
 #| code-fold: false
 # [1]
 d2 = delta[1]                              # layer-2 blame        (4,)
 a1 = torch.sigmoid(zs[0])                  # layer-1 activations  (4,)
 G = torch.outer(d2, a1)                    # eq. 3
+```
+::::
 
-# [2]
+```{python}
+#| echo: false
+#| label: fig-outer-product
+#| fig-alt: "A four-entry blame column and a four-entry activation row sit beside their four-by-four outer-product matrix. Each matrix cell is numerically the product of its corresponding row and column entries."
+#| fig-cap: "Equation 3, pictured with the blame and activations from the network above: a $(4 \\times 1)$ blame column times a $(1 \\times 4)$ activation row yields the full $(4 \\times 4)$ gradient matrix in one stroke — entry $(i,j)$ is blame out $\\times$ signal in."
 fig, axes = plt.subplots(1, 3, figsize=(7.6, 2.6),
                          gridspec_kw={"width_ratios": [1, 4, 4.6]})
 panels = [(d2[:, None], r"$\delta^{(2)}$"), (a1[None, :], r"$(a^{(1)})^\top$"),
@@ -233,7 +238,6 @@ for ax, (M, title) in zip(axes, panels):
     ax.set_title(title, fontsize=11); ax.set_xticks([]); ax.set_yticks([])
 plt.tight_layout(); plt.show()
 ```
-::::
 No messy summations: the matrix form performs them all at once, and it maps directly
 onto the parallel matrix multiplies GPUs are built for. The same four equations govern
 a toy network and a billion-parameter model; only the matrix sizes change.
@@ -512,32 +516,37 @@ approaches $0$. The sigmoid gate is at best a quarter open, and often nearly clo
 
 :::: {.plan-code}
 ::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Plot the two gates.
+1. Evaluate the sigmoid and ReLU derivative gates.
 :::
 
 ```{python}
-#| label: fig-gates
-#| fig-alt: "The sigmoid-derivative panel is a bell-shaped curve capped at one quarter and approaching zero in both tails. The ReLU-derivative panel is a step: zero for negative inputs and one for positive inputs."
-#| fig-cap: "Two gates. The sigmoid's derivative never exceeds 0.25 and vanishes under saturation; ReLU's is fully open (exactly 1) for every active neuron."
-#| code-summary: "Code: plot the two gates"
+#| label: derivative-gates
+#| code-summary: "Code: evaluate the two derivative gates"
 #| code-fold: false
 import matplotlib.pyplot as plt
 
 # [1]
 z = torch.linspace(-6, 6, 300)
 sig = torch.sigmoid(z)
-# [2]
+sigmoid_gate = sig * (1 - sig)
+relu_gate = (z > 0).float()
+```
+::::
+
+```{python}
+#| echo: false
+#| label: fig-gates
+#| fig-alt: "The sigmoid-derivative panel is a bell-shaped curve capped at one quarter and approaching zero in both tails. The ReLU-derivative panel is a step: zero for negative inputs and one for positive inputs."
+#| fig-cap: "Two gates. The sigmoid's derivative never exceeds 0.25 and vanishes under saturation; ReLU's is fully open (exactly 1) for every active neuron."
 fig, axes = plt.subplots(1, 2, figsize=(7.4, 2.9), sharey=True)
-axes[0].plot(z, sig * (1 - sig), color="#232D4B")
+axes[0].plot(z, sigmoid_gate, color="#232D4B")
 axes[0].axhline(0.25, ls="--", color="#E57200", lw=1)
 axes[0].text(2.1, 0.26, "ceiling: 0.25", color="#E57200", fontsize=9)
 axes[0].set_title(r"sigmoid gate $\sigma'(z)$"); axes[0].set_xlabel("$z$")
-axes[1].plot(z, (z > 0).float(), color="#232D4B")
+axes[1].plot(z, relu_gate, color="#232D4B")
 axes[1].set_title(r"ReLU gate"); axes[1].set_xlabel("$z$")
 plt.tight_layout(); plt.show()
 ```
-::::
 Here is the consequence, and it is one of deep learning's most important failure modes.
 The chain rule *multiplies* local Jacobians across layers. The activation-derivative
 part of a sigmoid path contributes at most $0.25$ per layer, so that part is bounded by
@@ -714,6 +723,16 @@ a block's input straight to its output. Both belong to later chapters
 layer normalization where it becomes essential, inside the Transformer of
 @sec-14-self-attention-transformer). What you should carry from here is the invariant
 they all serve: *keep the signal, forward and backward, at constant energy*.
+
+::: {.callout-note}
+## Check yourself
+
+Close the book for one minute and run the chain rule backward.
+
+- What does each layer cache on the forward pass?
+- Why does the blame signal pass through a transposed weight matrix?
+- How do activation derivatives and initialization together control gradient scale with depth?
+:::
 
 ## Okay, so — the chain rule, organized
 

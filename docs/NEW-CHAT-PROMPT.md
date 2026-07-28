@@ -18,11 +18,10 @@ rest of my 6050 material; the virtualenv is deliberately outside it). Remote `ht
 `https://shakeri-lab.github.io/dl-book/`, PDF at
 `https://shakeri-lab.github.io/dl-book/Deep-Learning--Making-It-Learnable.pdf`.
 Current stable release **v1.1** is 502 pages. The post-release `main` revision is
-560 pages after the author-requested universal Plan → Code pass, two author
-revision passes on Chapter 1, the pacing/visual/full-scale experiment pass, and
-the July 26 Chapter 1/SGD responsive-visual pass;
-it still contains chapters 1–20 plus two interludes, four appendices, and an
-epilogue. Nothing is mid-flight.
+a 544-page rolling build after the universal Plan → Code pass, two Chapter 1 revisions,
+the pacing/visual/full-scale experiment pass, and the July 28 comprehensive
+book audit. It contains chapters 1–20 plus three interludes, four appendices,
+and an epilogue. Nothing is mid-flight.
 
 **Read before doing anything, in this order:**
 
@@ -53,6 +52,19 @@ answer.**
   surface uses the Plan → Code panel; only `echo: false` execution support is
   exempt. Markers in code are bracket-only (`# [1]`, or fused `# [2][5]`);
   repeating plan prose after a marker is an audit failure.
+- **Three exercise modes only.** Use `(Pencil.)`, `(Code.)`, or `(Audit.)`; split
+  compound demands into explicitly tagged parts. Audit exercises test a claim,
+  protocol, or implementation; when a defect is supplied, ask the reader to predict
+  its direction before deriving it.
+- **Book voice is self-contained.** Arguments, omissions, analogies, and evidence do
+  not defer to an off-page narrator. Keep exact source paths in hidden provenance,
+  not learner-facing Sources entries.
+- **Interlude numbering is independent.** Experiment, autoencoder, and test-time-
+  regression figures use `EX.`, `AE.`, and `TTR.` namespaces in both formats;
+  interlude display equations remain unnumbered.
+- **PDF glyph hygiene is enforced.** Greek and relation symbols belong in math mode;
+  code elisions are ASCII; the publish job audits LaTeX missing-character warnings,
+  NUL/U+FFFD extraction, and decorative icon text.
 - **Semantic colour is a contract.** Blue is input/design data, orange is
   learnable parameters, purple is observed targets, green is predictions, and
   wine is residuals/errors. Carry a colour into nearby prose when it clarifies

@@ -54,7 +54,7 @@ first-day price we recorded back in January finally ...". Context has no fixed
 radius.
 
 **A function per timestep.** Then let the model change over time: learn $f_1$ for
-step one, $f_2$ for step two, each passing a summary forward. The lecture builds
+step one, $f_2$ for step two, each passing a summary forward. We first build
 this strawman carefully, because its failure names the cure. The parameter count now
 grows with sequence *length*; a length-500 essay needs 500 learned functions; and
 the model is **non-stationary** — it insists the rules of language at position 17
@@ -285,7 +285,7 @@ product can make an update destabilize training.
 Practice handles explosion with **gradient clipping**: if the gradient's norm
 exceeds a threshold, rescale it down to the threshold before stepping
 (`nn.utils.clip_grad_norm_` — it appears in every training loop below). The
-lecture is blunt about what this buys: it tames the spikes so training survives,
+This tames the spikes so training survives,
 at the cost of damping legitimately large steps — and it does *nothing* for
 vanishing. You cannot clip your way to a longer memory.
 :::
@@ -425,7 +425,7 @@ matrix. Where Chapter 9's residual highway kept an unconditional identity lane
 open, the LSTM's lane has a valve the network controls: hold $\vect{f}_j$ near 1
 and gradients ride the conveyor belt across dozens of steps; drop it toward 0 and
 the memory (deliberately) expires. The practical corollary, straight from the
-lecture notes: *initialize the forget-gate bias positive* (say $+1$), so the cell
+practice: *initialize the forget-gate bias positive* (say $+1$), so the cell
 starts life remembering by default. PyTorch stores separate input-hidden and
 hidden-hidden bias vectors, then adds them. The code sets their **sum** to $+1$;
 setting both slices to $+1$ would silently create an effective bias of $+2$.
@@ -434,14 +434,12 @@ Watch what that buys, on the same axes as before:
 :::: {.plan-code}
 ::: {.plan}
 1. Prepare the inputs and fixed settings for the example.
-2. Gradient vs. lag, vanilla RNN against LSTM.
+2. Measure the LSTM gradient norm across lag.
 :::
 
 ```{python}
-#| label: fig-highway-time
-#| fig-cap: "The gradient-vs-lag experiment, rerun with an LSTM whose effective forget-gate bias is initialized to +1. The vanilla RNN's blame signal dies exponentially; the LSTM's rides the cell-state conveyor belt and arrives at lag 60 attenuated but alive, about ten orders of magnitude stronger. Chapter 9 built this highway across layers; the LSTM builds it across time, with a learned valve on the on-ramp."
-#| fig-alt: "Log-scale comparison of input-gradient norm versus lag. The vanilla RNN falls from above one to about 10 to the minus 15 by lag 60, while the LSTM with forget bias plus one declines much more slowly and remains near 10 to the minus 5."
-#| code-summary: "Code: gradient vs. lag, vanilla RNN against LSTM"
+#| label: lstm-gradient-lag
+#| code-summary: "Code: gradient versus lag, vanilla RNN against LSTM"
 #| code-fold: false
 # [1]
 torch.manual_seed(0)
@@ -450,17 +448,23 @@ with torch.no_grad():
     n = lstm.bias_ih_l0.shape[0] // 4
     lstm.bias_ih_l0[n:2 * n].fill_(1.0)
     lstm.bias_hh_l0[n:2 * n].zero_()             # the two bias slices sum to +1
+# [2]
 g_lstm = grad_at_first_input(lstm, lags)
+```
+::::
 
+```{python}
+#| echo: false
+#| label: fig-highway-time
+#| fig-cap: "The gradient-vs-lag experiment, rerun with an LSTM whose effective forget-gate bias is initialized to +1. The vanilla RNN's derivative signal dies exponentially; the LSTM's rides the cell-state conveyor belt and arrives at lag 60 attenuated but alive, about ten orders of magnitude stronger. Chapter 9 built this highway across layers; the LSTM builds it across time, with a learned valve on the on-ramp."
+#| fig-alt: "Log-scale comparison of input-gradient norm versus lag. The vanilla RNN falls from above one to about 10 to the minus 15 by lag 60, while the LSTM with forget bias plus one declines much more slowly and remains near 10 to the minus 5."
 plt.figure(figsize=(6.2, 3.2))
 plt.semilogy(lags, g_rnn, "o-", color="#E57200", ms=5, label="vanilla RNN")
 plt.semilogy(lags, g_lstm, "s-", color="#232D4B", ms=5, label="LSTM (forget bias +1)")
 plt.xlabel("lag $T$ between output and first input")
 plt.ylabel(r"$\|\partial L / \partial \mathbf{x}_1\|$")
-# [2]
 plt.legend(); plt.tight_layout(); plt.show()
 ```
-::::
 ### The memory test
 
 Gradients at initialization are promissory notes; training is where they get
@@ -471,7 +475,7 @@ early bit across a long stretch of identical noise. Here is that story as an
 executable task: sequences of 80 random tokens, where the label to predict at the
 end is simply *the first token*. Chance is 25%. Three contenders, three seeds
 each: the vanilla RNN, the LSTM as PyTorch hands it to you, and the LSTM with the
-lecture's remember-by-default initialization. Predict the three rows before
+remember-by-default initialization. Predict the three rows before
 running — in particular, does the *architecture* alone earn its keep?
 
 :::: {.plan-code .plan-code-wide}
@@ -578,7 +582,7 @@ failed twin's should sag near $\sigma(0) = \tfrac12$.
 
 ```{python}
 #| label: fig-forget-gate-diagnostic
-#| fig-cap: "The valve, observed. Mean forget-gate activation per timestep on 64 fresh probe sequences, replayed through the two trained seed-6050 LSTMs from the table above. The task-solving model (navy) holds its gates flat around 0.76 for all eighty steps — the conveyor belt stays open, and the first token survives to the readout. The default-initialized model (orange), same architecture and data, hovers near σ(0) ≈ ½ at about 0.56: a half-closed valve compounded eighty times, and chance accuracy. One task, one seed each, means over units and probes — a diagnostic of this experiment, not a general theory of trained LSTMs."
+#| fig-cap: "The valve, observed. Mean forget-gate activation per timestep on 64 fresh probe sequences, replayed through the two trained seed-6050 LSTMs from the table above. The task-solving model (navy) holds its gates flat around 0.76 for all eighty steps — the conveyor belt stays open, and the first token survives to the readout. The default-initialized model (orange), same architecture and data, hovers near $\\sigma(0)\\approx\\tfrac12$ at about 0.56: a half-closed valve compounded eighty times, and chance accuracy. One task, one seed each, means over units and probes — a diagnostic of this experiment, not a general theory of trained LSTMs."
 #| fig-alt: "Two lines over timesteps one to eighty. The navy line for the forget-bias model stays flat near 0.76. The orange line for the default model stays flat near 0.56, just above a dotted half line."
 #| code-summary: "Code: replay the trained LSTMs and read their forget gates"
 #| code-fold: false
@@ -642,7 +646,7 @@ $$
 $$ {#eq-gru}
 
 Two gates instead of three, one state instead of two, comparable performance in
-most settings. The lecture explicitly skips the derivation, and the book follows
+most settings. We skip the derivation
 suit. With the equations on record and Exercise 3 waiting, you can build one
 yourself and let it compete on the memory test.
 
@@ -859,14 +863,11 @@ split is opened.
 ::: {.plan}
 1. Load the nine pinned WikiText-2 Rivanna records.
 2. Summarize parameter count and held-out perplexity by model size.
-3. Plot seed means, individual runs, and one-standard-deviation error bars.
 :::
 
 ```{python}
-#| label: fig-wikitext-scale
-#| fig-cap: "Word-level LSTM scale on WikiText-2. Across seeds 6050–6052, the 9.61M-parameter model reaches test perplexity 146.59 ± 1.38, the 21.27M model 140.05 ± 0.98, and the 39.77M model 141.94 ± 13.49. The medium model improves reliably; the largest has two strong runs and one poor run, so more parameters did not buy a stable improvement under the shared 12-epoch recipe. Points are seed-level tests; bars are means ± one sample standard deviation."
-#| fig-alt: "Test perplexity is plotted against log-scaled parameter count for small, medium, and large word-level LSTMs. Small is near 147, medium near 140 with little variation, and large near 142 with a much larger error bar caused by one weak seed."
-#| code-summary: "Code: WikiText-2 word-LSTM scale rematch"
+#| label: wikitext-scale-summary
+#| code-summary: "Code: summarize the pinned WikiText-2 scale rematch"
 #| code-fold: false
 # [1]
 import json
@@ -889,8 +890,14 @@ for size in wikitext_order:
         "mean": perplexities.mean().item(),
         "sd": perplexities.std(unbiased=True).item(),
     }
+```
+::::
 
-# [3]
+```{python}
+#| echo: false
+#| label: fig-wikitext-scale
+#| fig-cap: "Word-level LSTM scale on WikiText-2. Across seeds 6050–6052, the 9.61M-parameter model reaches test perplexity 146.59 ± 1.38, the 21.27M model 140.05 ± 0.98, and the 39.77M model 141.94 ± 13.49. The medium model improves reliably; the largest has two strong runs and one poor run, so more parameters did not buy a stable improvement under the shared 12-epoch recipe. Points are seed-level tests; bars are means ± one sample standard deviation."
+#| fig-alt: "Test perplexity is plotted against log-scaled parameter count for small, medium, and large word-level LSTMs. Small is near 147, medium near 140 with little variation, and large near 142 with a much larger error bar caused by one weak seed."
 fig, ax = plt.subplots(figsize=(6.4, 3.5))
 colors = ["#B8B8A8", "#5379AA", "#E57200"]
 for size, color in zip(wikitext_order, colors):
@@ -906,7 +913,6 @@ ax.set_xlabel("parameters (log scale)"); ax.set_ylabel("test perplexity (lower i
 ax.set_ylim(125, 165)
 plt.tight_layout(); plt.show()
 ```
-::::
 
 The change in tokenization is audible: generated samples now contain full words and
 longer grammatical fragments, though their facts and discourse still drift. The
@@ -918,7 +924,7 @@ makes it one.
 
 ## What a fixed-size state cannot hold
 
-The lecture closes with the bridge this part of the book now crosses. If a
+This chapter closes with the bridge this part of the book now crosses. If a
 recurrent cell can read a sequence into a state, then two of them can translate:
 an **encoder** reads the source sentence into its final state, a **decoder** spins
 that state back out as words in another language. That architecture, plus its
@@ -936,6 +942,16 @@ The fixed-size state is about to face that rematch: the alternative will keep th
 evidence available instead of squeezing all of it through one vector. Much later the
 state will return—not as a defeated design, but as a deliberate point on a memory
 tradeoff whose price we can finally name.
+
+::: {.callout-note}
+## Check yourself
+
+Close the book for one minute and unroll the recurrence.
+
+- What is shared across timesteps, and what changes at each step?
+- How does an LSTM cell create a less obstructed path for information and gradients?
+- Why does a fixed-width recurrent state become a bottleneck as evidence grows?
+:::
 
 ## Okay, so — weight sharing moved into time
 

@@ -14,7 +14,7 @@ every source fact had to cross a single fixed-size bridge before the decoder wro
 first token. The encoder had computed a state at every source position. Then we threw
 all but the last one away.
 
-The lecture's repair begins with an almost embarrassing question: why throw them away?
+The repair begins with an almost embarrassing question: why throw them away?
 Keep the whole sequence of encoder states as a **memory bank**. At each decoding step,
 ask what the decoder needs, compare that query with every stored state, and retrieve a
 weighted mixture of the relevant content. Keeping a bank does not make its entries
@@ -167,12 +167,14 @@ of its history, the model or regularizer, or the online solver.
 That shared objective is a design language, not a claim that the architectures are
 equivalent. Softmax attention performs a query-dependent local fit while retaining
 its key--value rows. Other methods compress the history into a fixed-size parametric
-state and accept a different statistical contract. @sec-14-memory-spectrum derives
+state and accept a different statistical contract. The
+[test-time-regression interlude](../interludes/attention-as-test-time-regression.qmd)
+derives
 that price list from @eq-local-constant-fit rather than opening an architecture zoo.
 :::
 <!-- /NOVEL -->
 
-Now let us make the lecture's change of names. Locations $\vect{x}_i$ become
+Now let us change the names. Locations $\vect{x}_i$ become
 **keys** $\vect{k}_i$, observed responses become **values** $\vect{v}_i$, and
 $\vect{q}$ remains the **query**. The formula does not change. Here is the whole
 operator in NumPy. The shapes come before the multiplication:
@@ -235,18 +237,11 @@ print("weights:", weights3[0])
 print(f"prediction: {pred3.item():.4f}")
 ```
 ::::
-:::: {.plan-code}
-::: {.plan}
-1. Implement the three-point lookup.
-:::
-
 ```{python}
+#| echo: false
 #| label: fig-kernel-lookup
 #| fig-alt: "A query star connects to three observed points with line widths proportional to their influence. In the adjacent bar chart, the nearby middle key receives most of the normalized weight."
 #| fig-cap: "A fixed Gaussian lookup. The bars give the normalized weights, and the connecting lines show which observations feed the query. The query lands close to the second location, so its response dominates the mixture; no similarity function was learned."
-#| code-summary: "Figure: the three-point lookup"
-#| code-fold: false
-# [1]
 fig, axes = plt.subplots(1, 2, figsize=(7.2, 3.0), constrained_layout=True)
 axes[0].scatter(keys3[:, 0], values3[:, 0], s=55, color="#232D4B", zorder=3)
 axes[0].axvline(query3.item(), color="#E57200", ls="--", lw=1.4)
@@ -269,7 +264,6 @@ axes[1].set(ylabel="normalized weight", ylim=(0, 1.05),
             title="Similarity decides the mix")
 plt.show()
 ```
-::::
 The same code makes the OLS distinction concrete:
 
 :::: {.plan-code}
@@ -441,18 +435,11 @@ $h=0.18$ has the smallest MSE, $0.0236$.
 
 One noisy world shows what those numbers mean:
 
-:::: {.plan-code}
-::: {.plan}
-1. Bandwidth as the smoothness dial.
-:::
-
 ```{python}
+#| echo: false
 #| label: fig-bandwidth-fits
 #| fig-alt: "Noisy observations surround a smooth black truth curve. The narrow-bandwidth fit wiggles around local noise, the middle fit follows the truth most closely, and the broad fit smooths away smaller oscillations."
 #| fig-cap: "One fixed noisy sample under three bandwidths. The narrow rule follows local noise, the middle rule tracks the signal, and the broad rule erases the function's smaller-scale structure. The blue bandwidth is the grid minimum in the 1,000-world audit, not a hand-picked attractive curve."
-#| code-summary: "Figure: bandwidth as the smoothness dial"
-#| code-fold: false
-# [1]
 fig, ax = plt.subplots(figsize=(7.2, 4.1), constrained_layout=True)
 dense = np.linspace(-3.0, 3.0, 601)
 ax.plot(dense, truth(dense), color="black", lw=2.0, label="truth")
@@ -471,7 +458,6 @@ ax.set(xlabel="query $q$", ylabel="prediction",
 ax.legend(ncol=2, frameon=False, fontsize=9)
 plt.show()
 ```
-::::
 ::: {.callout-tip}
 ## Selecting $h$ when the truth is hidden
 
@@ -515,16 +501,31 @@ It is the allocation imposed by Euclidean distance and the chosen bandwidth.
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
-1. Measured trade-off and the first attention map.
+1. Form the first fixed attention map and audit its shapes and row sums.
 :::
 
 ```{python}
+#| label: fixed-attention-map-audit
+#| code-summary: "Code: form and audit the first fixed attention map"
+#| code-fold: false
+# [1]
+map_queries = np.linspace(-2.9, 2.9, 31)
+map_predictions, attention_map = gaussian_attention(
+    map_queries[:, None], keys[:, None], observed_values[:, None], best[0]
+)
+print(f"Q {map_queries[:, None].shape}, K {keys[:, None].shape}, "
+      f"V {observed_values[:, None].shape}, A {attention_map.shape}, "
+      f"AV {map_predictions.shape}")
+print("maximum row-sum error:",
+      f"{np.max(np.abs(attention_map.sum(axis=1) - 1)):.2e}")
+```
+::::
+
+```{python}
+#| echo: false
 #| label: fig-fixed-attention-map
 #| fig-alt: "The left panel shows variance falling as bandwidth grows, bias eventually rising, and their summed error reaching an interior minimum. The right heatmap has a narrow bright diagonal band where each query assigns weight to nearby sorted keys."
 #| fig-cap: "Left: the fixed-design bias--variance audit. Right: the same Gaussian rule written as a 31-query by 60-key attention matrix at $h=0.18$. Bright cells receive more of a row's unit mass; the white trace marks the $k=q$ locus in sorted-key coordinates. The map is local and interpretable, but it was specified rather than learned."
-#| code-summary: "Figure: measured trade-off and the first attention map"
-#| code-fold: false
-# [1]
 fig, axes = plt.subplots(1, 2, figsize=(7.4, 3.25), constrained_layout=True)
 row_array = np.asarray(rows)
 axes[0].plot(row_array[:, 0], row_array[:, 2], "o-", label=r"bias$^2$")
@@ -536,10 +537,6 @@ axes[0].set(xlabel="bandwidth $h$", ylabel="error against true $f$",
             title="The trade-off is measurable")
 axes[0].legend(frameon=False, fontsize=8)
 
-map_queries = np.linspace(-2.9, 2.9, 31)
-map_predictions, attention_map = gaussian_attention(
-    map_queries[:, None], keys[:, None], observed_values[:, None], best[0]
-)
 image = axes[1].imshow(
     attention_map, origin="lower", aspect="auto", cmap="magma",
     extent=(-0.5, len(keys) - 0.5, map_queries[0], map_queries[-1]),
@@ -552,14 +549,7 @@ axes[1].set(xlabel="key location $k_i$ (sorted)", ylabel="query $q$",
             title=fr"Fixed attention matrix, $h={best[0]:.2f}$")
 fig.colorbar(image, ax=axes[1], label="weight", fraction=0.05, pad=0.04)
 plt.show()
-
-print(f"Q {map_queries[:, None].shape}, K {keys[:, None].shape}, "
-      f"V {observed_values[:, None].shape}, A {attention_map.shape}, "
-      f"AV {map_predictions.shape}")
-print("maximum row-sum error:",
-      f"{np.max(np.abs(attention_map.sum(axis=1) - 1)):.2e}")
 ```
-::::
 Read the bright band as a moving magnifying glass. Each query row reallocates one unit
 of weight across the stored keys. Where keys are dense, that unit is divided among
 several neighbors. Where keys are sparse, one or two slots carry most of it. Changing
@@ -663,6 +653,16 @@ a query and key belong together. Chapter 13 makes that rule learnable, then retu
 Chapter 11's date task so the decoder can show us where it looked.
 :::
 
+::: {.callout-note}
+## Check yourself
+
+Close the book for one minute and reconstruct the weighted prediction.
+
+- How do scores become nonnegative weights that sum to one?
+- What does bandwidth change in a kernel smoother?
+- Which component is still hand designed at the end of this chapter?
+:::
+
 ## Okay, so — attention is normalized memory mixing
 
 1. **Chapter 1's linear prediction already mixed training targets.** OLS gives
@@ -706,9 +706,10 @@ Chapter 11's date task so the decoder can show us where it looked.
    validation, and sealed test sets. Select $h$ on validation data, report the test MSE
    once, and compare your selected curve with the synthetic-truth grid minimum above.
    Explain why the two procedures need not select the same bandwidth.
-4. **(Pencil + code.)** Derive @eq-bandwidth-temperature. Then use keys
-   $[0,0,1]$, query 0, and successively smaller positive bandwidths. What weights does
-   stable softmax assign to the exact nearest-key tie, and why is $h=0$ still invalid?
+4. **(Pencil.)** (a) Derive @eq-bandwidth-temperature.
+   **(Code.)** (b) Use keys $[0,0,1]$, query 0, and successively smaller positive
+   bandwidths. What weights does stable softmax assign to the exact nearest-key tie,
+   and why is $h=0$ still invalid?
 5. **(Code.)** Extend `gaussian_attention` to two-dimensional keys whose coordinates
    have very different units. Compare the attention map before and after standardizing
    each feature using training-set statistics. What does this reveal about the metric

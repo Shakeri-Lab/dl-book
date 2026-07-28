@@ -10,14 +10,16 @@ repository. The examples are written directly in Python and PyTorch and are CPU-
 
 **Read it:** <https://shakeri-lab.github.io/dl-book/> (HTML) · PDF built from the same sources
 
-**Stable release:** [v1.0 (July 2026)](https://github.com/Shakeri-Lab/dl-book/releases/tag/v1.0)
+**Stable release:** [v1.1 (July 24, 2026)](https://github.com/Shakeri-Lab/dl-book/releases/tag/v1.1).
+The live site is a rolling post-v1.1 build.
 
 ## The idea
 
 Nearly every construct in modern deep learning is a classical idea made **learnable**:
 linear regression → MLP; fixed image filters → CNNs; kernel regression → attention →
 Transformers; and finally the pretrained era, where we adapt rather than train. The book
-replays that one move, in his course's order and voice.
+replays that one move in the course's conceptual order and the book's
+self-contained voice.
 
 ## Structure
 
@@ -25,7 +27,7 @@ replays that one move, in his course's order and voice.
   backprop, and the signature chapter: *generalization failure in pictures → inductive bias*.
 - **Part II · Vision** — filters → learnable filters (CNNs) → modern CNNs & transfer.
 - **Interludes** — experimentation as a method; PCA → learnable linear and nonlinear
-  autoencoders as the bridge from fixed-size vision to sequences.
+  autoencoders; attention as test-time regression and a spectrum of memory solvers.
 - **Part III · Sequences** — RNNs, encoder–decoder.
 - **Part IV · Attention** — kernel regression → attention → self-attention → BERT → ViT/scaling.
 - **Part V · The Pretrained Era** — PEFT/quantization, alignment, generative models,
@@ -61,7 +63,7 @@ memory and are updated after every shipped chapter.
 ## Citation
 
 Suggested citation: Shakeri, Heman. 2026. *Deep Learning: Making It Learnable*.
-Version 1.0. <https://shakeri-lab.github.io/dl-book/>. The repository also provides
+Version 1.1. <https://shakeri-lab.github.io/dl-book/>. The repository also provides
 machine-readable metadata in [CITATION.cff](CITATION.cff).
 
 ## License

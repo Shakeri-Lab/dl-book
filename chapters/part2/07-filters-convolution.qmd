@@ -22,7 +22,7 @@ similarity. Everything below is that one primitive, applied locally, everywhere.
 ## Two principles, one strategy
 
 The failures of Chapter 6 tell us what knowledge to build in, the two principles from
-the lecture:
+the mechanism:
 
 1. **Spatial locality.** Nearby pixels are more related than distant ones. Edges,
    textures, and patterns emerge from *local neighborhoods*, not global pixel
@@ -44,14 +44,12 @@ moving average replaces each point by the mean of its neighborhood: locality, wi
 :::: {.plan-code}
 ::: {.plan}
 1. Prepare the inputs and fixed settings for the example.
-2. 1D moving average.
+2. Apply a one-dimensional moving-average filter.
 :::
 
 ```{python}
-#| label: fig-moving-average
-#| fig-alt: "A jagged noisy signal fluctuates around a smooth periodic trend. The nine-point moving-average curve removes the high-frequency variation while following the central oscillation."
-#| fig-cap: "A window of uniform weights, slid along a noisy signal, averaging as it goes: the simplest sliding-window operation, and already recognizably a denoiser."
-#| code-summary: "Code: 1D moving average"
+#| label: moving-average-values
+#| code-summary: "Code: one-dimensional moving average"
 #| code-fold: false
 import torch
 import torch.nn.functional as F
@@ -62,20 +60,26 @@ torch.manual_seed(6050)
 t = torch.linspace(0, 4 * torch.pi, 300)
 noisy = torch.sin(t) + 0.35 * torch.randn(300)
 kernel = torch.full((9,), 1 / 9)                       # uniform local weights
-smooth = F.conv1d(noisy[None, None], kernel[None, None]).squeeze()
-
-plt.figure(figsize=(6.4, 3))
 # [2]
+smooth = F.conv1d(noisy[None, None], kernel[None, None]).squeeze()
+```
+::::
+
+```{python}
+#| echo: false
+#| label: fig-moving-average
+#| fig-alt: "A jagged noisy signal fluctuates around a smooth periodic trend. The nine-point moving-average curve removes the high-frequency variation while following the central oscillation."
+#| fig-cap: "A window of uniform weights, slid along a noisy signal, averaging as it goes: the simplest sliding-window operation, and already recognizably a denoiser."
+plt.figure(figsize=(6.4, 3))
 plt.plot(t, noisy, color="#B8B8A8", lw=0.8, label="noisy signal")
 plt.plot(t[4:-4], smooth, color="#E57200", lw=2, label="moving average (9-wide)")
 plt.xlabel("$t$"); plt.legend()
 plt.tight_layout(); plt.show()
 ```
-::::
 ## To 2D: the recipe
 
 The image version is the same idea with a small 2-D window, and it is worth stating as
-the five-step recipe from the lecture, set beside the three lines that carry it:
+the five-step recipe, set beside the three lines that carry it:
 
 :::: {.plan-code}
 ::: {.plan}
@@ -255,7 +259,7 @@ tolerance. Exact invariance is a stronger property and must be tested, not presu
 
 ## The matrix view: a structured, weight-shared linear map
 
-One more pair of glasses, from the lecture's preview box. Every output pixel is a dot
+One more pair of glasses. Every output pixel is a dot
 product $\rightarrow$ the whole operation is *linear* $\rightarrow$ cross-correlation
 could be written as one enormous matrix multiplying the flattened image. But it is a
 matrix with a rigid structure: almost everywhere zero (locality: each row touches only
@@ -271,15 +275,12 @@ with almost nothing left to specify.
 
 :::: {.plan-code}
 ::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Draw the sparse weight-shared matrix.
+1. Construct the sparse weight-shared matrix.
 :::
 
 ```{python}
-#| label: fig-shared-matrix
-#| fig-alt: "A four-by-six matrix grid contains mostly zeros. Each row has the same three adjacent symbols v-one, v-two, and v-three, shifted one column right from the row above to form three repeating diagonals."
-#| fig-cap: "The 1-D version of convolution as a structured matrix (shown in 1-D only so the pattern is visible). Each output row touches one local three-value window, so most entries are zero. The same three kernel weights repeat along diagonals: locality creates sparsity; sharing ties the nonzero entries together. A 2-D image produces the analogous block-structured matrix."
-#| code-summary: "Code: draw the sparse weight-shared matrix"
+#| label: shared-matrix-values
+#| code-summary: "Code: construct the sparse weight-shared matrix"
 #| code-fold: false
 from matplotlib.colors import ListedColormap
 
@@ -287,8 +288,14 @@ from matplotlib.colors import ListedColormap
 weight_ids = torch.zeros(4, 6)
 for row in range(4):
     weight_ids[row, row:row + 3] = torch.tensor([1, 2, 3])
+```
+::::
 
-# [2]
+```{python}
+#| echo: false
+#| label: fig-shared-matrix
+#| fig-alt: "A four-by-six matrix grid contains mostly zeros. Each row has the same three adjacent symbols v-one, v-two, and v-three, shifted one column right from the row above to form three repeating diagonals."
+#| fig-cap: "The 1-D version of convolution as a structured matrix (shown in 1-D only so the pattern is visible). Each output row touches one local three-value window, so most entries are zero. The same three kernel weights repeat along diagonals: locality creates sparsity; sharing ties the nonzero entries together. A 2-D image produces the analogous block-structured matrix."
 fig, ax = plt.subplots(figsize=(5.7, 2.8))
 ax.imshow(weight_ids, cmap=ListedColormap(["white", "#DCE6F2", "#F8D9B0", "#E7D4E8"]),
           vmin=0, vmax=3)
@@ -306,12 +313,11 @@ ax.tick_params(which="minor", bottom=False, left=False)
 ax.set_title(r"$\mathbf{h}=\mathbf{T}(\mathbf{v})\mathbf{x}$: local and weight-shared")
 plt.tight_layout(); plt.show()
 ```
-::::
 ## The bottleneck: someone has to design the kernel
 
 So why did this classical machinery not solve vision decades ago? Because the kernels
 are only as good as their designers, and hand-crafted kernels have three limitations
-the lecture names:
+the operator exposes:
 
 1. **Limited expressiveness.** They detect simple, predefined patterns — gradients,
    blobs, corners. Nobody can write down nine numbers for "cat ear" or "car wheel."
@@ -331,6 +337,16 @@ numbers against a loss.
 
 *What if the template were learnable?* That question is @sec-08-cnn, and its answer
 has a name you already know.
+
+::: {.callout-note}
+## Check yourself
+
+Close the book for one minute and reconstruct the sliding operation.
+
+- Which two design commitments create locality and translation equivariance?
+- Why does weight sharing turn a dense linear map into a small kernel?
+- What remains hand designed at the end of this chapter?
+:::
 
 ## Okay, so — the machine before the learning
 
@@ -363,9 +379,10 @@ has a name you already know.
 1. **(Pencil.)** Compute by hand the full output of cross-correlating with the
    vertical Sobel kernel the $4\times4$ image whose rows are all
    $(0,0,1,1)$. Before computing: where should the detector fire?
-2. **(Pencil + code.)** Design a $3\times3$ kernel that detects *diagonal* edges
-   (bottom-left to top-right). State your design rule (what must the weights sum to,
-   and why?), then run it on `make_shapes()` and check it fires on the stripes.
+2. **(Pencil.)** (a) Design a $3\times3$ kernel that detects *diagonal* edges
+   (bottom-left to top-right). State your design rule: what must the weights sum to,
+   and why?
+   **(Code.)** (b) Run it on `make_shapes()` and check that it fires on the stripes.
 3. **(Pencil.)** Prove translation equivariance from @eq-crosscorr: substitute the
    shifted image $X'_{i,j} = X_{i-s,j}$ and show $H'_{i,j} = H_{i-s,j}$. Why does the
    same argument fail for the MLP of Chapter 6? State where the proof applies at a

@@ -64,19 +64,15 @@ There are four distinct decisions in play.
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Separate attention visibility from MLM selection.
+1. Construct causal and full visibility beside a separate MLM selector.
 :::
 
 ```{python}
-#| label: fig-visibility-corruption
-#| fig-cap: "Visibility and supervision are separate controls. A causal decoder sees a lower triangle (left); BERT-style attention sees every nonpadding key (center). The MLM selector marks one selected target position (right)."
-#| fig-alt: "Three aligned matrices for the tokens CLS, the, bank, rose, SEP, and PAD. Causal visibility forms a dark lower triangle and excludes PAD; full nonpadding visibility forms a dark rectangle over the first five key columns for every query; the separate one-column loss selector highlights only the token bank."
-#| fig-width: 10
-#| fig-height: 3.2
-#| code-summary: "Figure code: separate attention visibility from MLM selection"
+#| label: visibility-corruption-setup
+#| code-summary: "Code: separate attention visibility from MLM selection"
 #| code-fold: false
 
+# [1]
 import copy
 import itertools
 
@@ -86,15 +82,22 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
-# [1]
 tokens = ["[CLS]", "the", "bank", "rose", "[SEP]", "[PAD]"]
 nonpadding = np.array([1, 1, 1, 1, 1, 0], dtype=bool)
 causal = np.tril(np.ones((6, 6), dtype=int)) * nonpadding[None, :]
 full = np.ones((6, 6), dtype=int) * nonpadding[None, :]
 selector = np.zeros((1, 6), dtype=int)
 selector[0, 2] = 1
+```
+::::
 
-# [2]
+```{python}
+#| echo: false
+#| label: fig-visibility-corruption
+#| fig-cap: "Visibility and supervision are separate controls. A causal decoder sees a lower triangle (left); BERT-style attention sees every nonpadding key (center). The MLM selector marks one selected target position (right)."
+#| fig-alt: "Three aligned matrices for the tokens CLS, the, bank, rose, SEP, and PAD. Causal visibility forms a dark lower triangle and excludes PAD; full nonpadding visibility forms a dark rectangle over the first five key columns for every query; the separate one-column loss selector highlights only the token bank."
+#| fig-width: 10
+#| fig-height: 3.2
 fig, axes = plt.subplots(
     1, 3, figsize=(10, 3.2), gridspec_kw={"width_ratios": [1, 1, 0.45]}
 )
@@ -115,7 +118,6 @@ axes[2].set_title("MLM selector")
 plt.tight_layout()
 plt.show()
 ```
-::::
 The center matrix contains no future-blocking triangle. Every nonpadding query can
 route from every nonpadding key—including itself. That is what *bidirectional*
 means here: a token's representation can jointly use left and right context in
@@ -248,47 +250,126 @@ which normal-looking tokens were selected.
 
 :::: {.plan-code}
 ::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Trace the two-stage MLM selection policy.
+1. Compute the expected two-stage policy counts.
+2. Build and audit the five Boolean ledgers on one illustrative sequence.
+3. Report the policy totals.
 :::
 
 ```{python}
-#| label: fig-mlm-policy
-#| fig-cap: "BERT's 80/10/10 policy is conditional on the selected 15%. All three branches retain the original token as the prediction target."
-#| fig-alt: "Two-stage bar chart for 1,000 eligible positions. The first panel divides them into 850 not selected and 150 selected. The second divides those 150 selected positions into 120 replaced by MASK, 15 replaced randomly, and 15 left unchanged."
-#| fig-width: 9
-#| fig-height: 3.2
-#| code-summary: "Figure code: trace the two-stage MLM selection policy"
+#| label: mlm-policy-ledger
+#| code-summary: "Code: separate eligibility, supervision, and corruption"
 #| code-fold: false
 
 # [1]
 eligible_count = 1_000
 selected_count = round(0.15 * eligible_count)
 branch_counts = np.array([120, 15, 15])
-branch_labels = ["[MASK]", "random", "unchanged"]
-branch_colors = ["#3566a8", "#d37b29", "#6b7280"]
 
 # [2]
-fig, axes = plt.subplots(1, 2, figsize=(9, 3.2))
-axes[0].bar(
-    ["not selected", "selected"],
-    [eligible_count - selected_count, selected_count],
-    color=["#d9dde3", "#3566a8"],
+ledger_tokens = [
+    "[CLS]", "the", "quiet", "bank", "rose", "after",
+    "the", "rain", "today", "[SEP]", "[PAD]", "[PAD]",
+]
+eligible = np.array([False] + [True] * 8 + [False] * 3)
+selected = np.array(
+    [False, False, True, False, True, False, False, True, True, False, False, False]
 )
-axes[0].set_ylabel("eligible positions")
-axes[0].set_title("first draw: 15%")
-axes[0].bar_label(axes[0].containers[0])
-bars = axes[1].bar(branch_labels, branch_counts, color=branch_colors)
-axes[1].set_ylabel("selected positions")
-axes[1].set_title("conditional branch: 80 / 10 / 10")
-axes[1].bar_label(bars)
-plt.tight_layout()
-plt.show()
+mask_sites = np.array(
+    [False, False, True, False, False, False, False, True, False, False, False, False]
+)
+random_sites = np.array(
+    [False, False, False, False, True, False, False, False, False, False, False, False]
+)
+unchanged_sites = selected & ~mask_sites & ~random_sites
+assert np.all(selected <= eligible)
+assert np.array_equal(selected, mask_sites | random_sites | unchanged_sites)
+assert not np.any(mask_sites & random_sites)
 
+# [3]
 print(f"direct loss targets: {branch_counts.sum()}")
 print(f"[MASK] share of all eligible positions: {branch_counts[0] / 1000:.1%}")
 ```
 ::::
+
+```{python}
+#| label: fig-mlm-policy
+#| echo: false
+#| fig-cap: "Five Boolean ledgers keep BERT's controls separate. Eligibility excludes special and padding tokens; selection identifies direct loss targets; three disjoint corruption rows partition the selected sites into mask, random, and unchanged branches. Attention visibility remains full over nonpadding keys and is not encoded by any of these rows. The illustrated branch allocation is deliberately small; the 15% and 80/10/10 rates are population policies, not proportions to infer from twelve positions."
+#| fig-alt: "A token sequence runs across twelve columns. Five labeled Boolean rows mark eligible tokens, selected loss targets, mask replacements, random replacements, and unchanged selected tokens. Brackets group eligibility, supervision, and corruption, while a note states that full nonpadding attention visibility is a separate control."
+#| fig-width: 10
+#| fig-height: 4.3
+
+from matplotlib.colors import ListedColormap
+
+ledger_rows = np.vstack(
+    [eligible, selected, mask_sites, random_sites, unchanged_sites]
+).astype(int)
+ledger_names = [
+    "eligible", "selected", "mask_sites", "random_sites", "unchanged_sites"
+]
+fig, axis = plt.subplots(figsize=(10, 4.3))
+axis.imshow(
+    ledger_rows,
+    aspect="auto",
+    cmap=ListedColormap(["#F3F4F6", "#3566A8"]),
+    vmin=0,
+    vmax=1,
+)
+for row in range(ledger_rows.shape[0]):
+    for column in range(ledger_rows.shape[1]):
+        axis.text(
+            column,
+            row,
+            "T" if ledger_rows[row, column] else "·",
+            ha="center",
+            va="center",
+            color="white" if ledger_rows[row, column] else "#6B7280",
+            weight="bold",
+        )
+axis.set_xticks(range(len(ledger_tokens)), ledger_tokens, rotation=35, ha="left")
+axis.xaxis.tick_top()
+axis.set_yticks(range(len(ledger_names)), ledger_names)
+axis.set_xticks(np.arange(-0.5, len(ledger_tokens), 1), minor=True)
+axis.set_yticks(np.arange(-0.5, len(ledger_names), 1), minor=True)
+axis.grid(which="minor", color="white", linewidth=1.5)
+axis.tick_params(which="minor", bottom=False, left=False)
+axis.text(
+    len(ledger_tokens) + 0.15,
+    0,
+    "eligibility",
+    va="center",
+    color="#4B5563",
+    weight="bold",
+)
+axis.text(
+    len(ledger_tokens) + 0.15,
+    1,
+    "supervision",
+    va="center",
+    color="#805AD5",
+    weight="bold",
+)
+axis.text(
+    len(ledger_tokens) + 0.15,
+    3,
+    "corruption",
+    va="center",
+    color="#722F37",
+    weight="bold",
+)
+axis.text(
+    0,
+    5.15,
+    "visibility is separate: every query may attend to every nonpadding key",
+    color="#2F855A",
+    fontsize=9.5,
+)
+axis.set_xlim(-0.5, len(ledger_tokens) + 2.2)
+axis.set_title("one sequence, five Boolean controls", pad=42)
+plt.tight_layout()
+plt.show()
+```
+
 Original BERT pre-generated several masked versions of its training examples;
 RoBERTa later redrew masks as examples were presented. Our controlled lab uses the
 latter *dynamic corruption* choice—the same sentence can ask different questions
@@ -1098,12 +1179,8 @@ set? The task, control, and geometry answer different parts.
 :::
 
 ```{python}
-#| label: fig-pretraining-pays
-#| fig-cap: "Five paired end-to-end seeds in the synthetic transfer lab. MLM initialization separates covered latent families and improves every covered-type comparison (left and center); both arms stay near chance on input-vocabulary controls withheld from MLM inputs, replacements, and targets (left). Centered cosine similarity is a representation diagnostic, not a task metric (right)."
-#| fig-alt: "Three-panel transfer audit. Covered-token accuracy after MLM stays near one for one, two, and four labeled words per family, while scratch and both unexposed controls remain around chance. All 15 paired MLM-minus-scratch gains are positive, roughly 0.37 to 0.62. For seed 6050, centered cosine similarity changes from near zero for both pair types to positive within-family and negative between-family values after MLM."
-#| fig-width: 11
-#| fig-height: 3.7
-#| code-summary: "Figure code: audit paired transfer, source coverage, and representation geometry"
+#| label: pretraining-transfer-audit
+#| code-summary: "Audit paired transfer, source coverage, and representation geometry"
 #| code-fold: false
 
 # [1]
@@ -1153,6 +1230,19 @@ pretrained_uncovered_means = np.array([
 ])
 
 # [2]
+print(f"initial within/between: {initial_geometry}")
+print(f"after MLM within/between: {pretrained_geometry}")
+```
+::::
+
+```{python}
+#| label: fig-pretraining-pays
+#| fig-cap: "Five paired end-to-end seeds in the synthetic transfer lab. MLM initialization separates covered latent families and improves every covered-type comparison (left and center); both arms stay near chance on input-vocabulary controls withheld from MLM inputs, replacements, and targets (left). Centered cosine similarity is a representation diagnostic, not a task metric (right)."
+#| fig-alt: "Three-panel transfer audit. Covered-token accuracy after MLM stays near one for one, two, and four labeled words per family, while scratch and both unexposed controls remain around chance. All 15 paired MLM-minus-scratch gains are positive, roughly 0.37 to 0.62. For seed 6050, centered cosine similarity changes from near zero for both pair types to positive within-family and negative between-family values after MLM."
+#| fig-width: 11
+#| fig-height: 3.7
+#| echo: false
+
 fig, axes = plt.subplots(1, 3, figsize=(11, 3.7))
 for values, label, color, marker in [
     (scratch_means, "scratch, covered", "#6b7280", "o"),
@@ -1211,11 +1301,7 @@ axes[2].set_title("seed 6050 geometry")
 axes[2].legend(frameon=False, fontsize=8)
 plt.tight_layout()
 plt.show()
-
-print(f"initial within/between: {initial_geometry}")
-print(f"after MLM within/between: {pretrained_geometry}")
 ```
-::::
 | Labels / family | Scratch, covered | MLM, covered | Gain | Scratch, unexposed | MLM, unexposed |
 |---:|---:|---:|---:|---:|---:|
 | 1 | 0.468 | 0.995 | +0.526 | 0.475 | 0.425 |
@@ -1328,6 +1414,16 @@ center stage. Fine-tuning changed every encoder weight here; @sec-17-peft-quanti
 will ask what adaptation remains when most, or all, of those weights must stay
 fixed.
 
+::: {.callout-note}
+## Check yourself
+
+Close the book for one minute and reconstruct masked-language-model pretraining.
+
+- How are visibility, supervision, corruption, and padding represented separately?
+- Why is the 80/10/10 rule conditional on selection?
+- What changes between a frozen probe and full fine-tuning?
+:::
+
 ## Okay, so — pretraining manufactures supervision
 
 1. **Visibility, selection, corruption, and padding are separate.** BERT removes
@@ -1384,7 +1480,7 @@ fixed.
    tensors, labeled types, updates, and seeds. Plot all five paired results rather
    than only their means. Which regime wins here, and what broader claim would
    outrun the experiment?
-5. **(Code and interpretation.)** Reproduce paired gains for covered and control
+5. **(Audit.)** Reproduce paired gains for covered and control
    strings at all three budgets. Map the evidence to Chapter 9's gates. Explain
    the unchanged-row assertion, name two unsupported conclusions, and propose one
    predeclared coverage test.

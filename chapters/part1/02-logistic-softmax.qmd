@@ -42,24 +42,29 @@ $$ {#eq-sigmoid}
 
 :::: {.plan-code}
 ::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Implement the squashing function.
+1. Evaluate the sigmoid across a range of logits.
 :::
 
 ```{python}
-#| label: fig-sigmoid
-#| fig-alt: "An S-shaped curve rises from near zero to near one. Dotted guides intersect it at logit zero and probability one half, while both tails flatten."
-#| fig-cap: "The sigmoid maps any real score to $(0,1)$, crossing $\\tfrac{1}{2}$ exactly at $o=0$. The model's uncertainty lives in the middle; its confident regions saturate at the tails."
-#| code-summary: "Code: the squashing function"
+#| label: sigmoid-response
+#| code-summary: "Code: evaluate the squashing function"
 #| code-fold: false
 import torch
 import matplotlib.pyplot as plt
 
 # [1]
 o = torch.linspace(-6, 6, 300)
+sigmoid_response = torch.sigmoid(o)
+```
+::::
+
+```{python}
+#| echo: false
+#| label: fig-sigmoid
+#| fig-alt: "An S-shaped curve rises from near zero to near one. Dotted guides intersect it at logit zero and probability one half, while both tails flatten."
+#| fig-cap: "The sigmoid maps any real score to $(0,1)$, crossing $\\tfrac{1}{2}$ exactly at $o=0$. The model's uncertainty lives in the middle; its confident regions saturate at the tails."
 plt.figure(figsize=(5.8, 3))
-# [2]
-plt.plot(o, torch.sigmoid(o), color="#232D4B", lw=2.2)
+plt.plot(o, sigmoid_response, color="#232D4B", lw=2.2)
 plt.axhline(0.5, ls=":", color="#B8B8A8"); plt.axvline(0, ls=":", color="#B8B8A8")
 plt.annotate("decision boundary\n$o = 0$", xy=(0, 0.5), xytext=(1.6, 0.32),
              color="#E57200", arrowprops=dict(arrowstyle="-|>", color="#E57200"))
@@ -67,7 +72,6 @@ plt.xlabel(r"logit $o = \mathbf{w}^\top \mathbf{x} + b$")
 plt.ylabel(r"$\hat{p} = \sigma(o)$")
 plt.tight_layout(); plt.show()
 ```
-::::
 Notice what did *not* change: the decision boundary $\hat{p} = \tfrac{1}{2}$ is exactly
 $o = 0$, i.e. $\vect{w}^\top\vect{x} + b = 0$ — the same hyperplane geometry from
 @sec-01-linear-regression, with $\vect{w}$ still the template the input is scored
@@ -121,22 +125,27 @@ and the $e^c$ cancels top and bottom. Only the *differences* between scores matt
 
 :::: {.plan-code}
 ::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Scores to probabilities, shift invariance.
+1. Compare softmax probabilities before and after a common logit shift.
 :::
 
 ```{python}
-#| label: fig-softmax
-#| fig-alt: "Two four-bar probability charts have identical bar heights even though every logit label in the right chart is one hundred larger than its counterpart on the left."
-#| fig-cap: "Softmax turns scores into a distribution. Shifting every logit by the same constant (right panel) leaves the probabilities unchanged: only the differences between scores carry information."
+#| label: softmax-shift-audit
 #| code-summary: "Code: scores to probabilities, shift invariance"
 #| code-fold: false
 # [1]
 logits = torch.tensor([2.0, 0.5, -1.0, 1.0])
+softmax_cases = [(shift, torch.softmax(logits + shift, dim=0))
+                 for shift in (0.0, 100.0)]
+```
+::::
+
+```{python}
+#| echo: false
+#| label: fig-softmax
+#| fig-alt: "Two four-bar probability charts have identical bar heights even though every logit label in the right chart is one hundred larger than its counterpart on the left."
+#| fig-cap: "Softmax turns scores into a distribution. Shifting every logit by the same constant (right panel) leaves the probabilities unchanged: only the differences between scores carry information."
 fig, axes = plt.subplots(1, 2, figsize=(7.2, 2.9), sharey=True)
-# [2]
-for ax, shift in [(axes[0], 0.0), (axes[1], 100.0)]:
-    p = torch.softmax(logits + shift, dim=0)
+for ax, (shift, p) in zip(axes, softmax_cases):
     ax.bar(range(4), p, color="#5379AA", width=0.55)
     for j, v in enumerate(p):
         ax.text(j, v + 0.015, f"{v:.2f}", ha="center", fontsize=9)
@@ -147,7 +156,6 @@ for ax, shift in [(axes[0], 0.0), (axes[1], 100.0)]:
 axes[0].set_ylabel("probability")
 plt.tight_layout(); plt.show()
 ```
-::::
 ::: {.callout-tip}
 ## Remember this machine: scores $\rightarrow$ weights
 
@@ -191,27 +199,33 @@ that single address with a weighted read from several candidates.
 
 :::: {.plan-code}
 ::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Run one hard selection, three soft ones.
+1. Compare one hard selection with three temperature-softened distributions.
 :::
 
 ```{python}
-#| label: fig-soft-vs-hard
-#| fig-cap: "The softening move, in one row. The same four logits (left) pass through the hard argmax-plus-one-hot selection — a cliff with zero gradient almost everywhere — and through softmax at three temperatures. Small $\\tau$ sharpens toward the hard winner; large $\\tau$ flattens toward indifference; every version in between is smooth, so blame can flow to every logit. Chapter 13 cashes this exact picture as attention."
+#| label: soft-vs-hard-values
 #| code-summary: "Code: one hard selection, three soft ones"
 #| code-fold: false
 # [1]
 logits_demo = torch.tensor([2.0, 1.0, 0.2, -0.5])
 klasses = ["A", "B", "C", "D"]
+hard = torch.zeros(4); hard[logits_demo.argmax()] = 1.0
+temperatures = [0.5, 1.0, 4.0]
+soft_cases = [torch.softmax(logits_demo / temp, dim=0) for temp in temperatures]
+```
+::::
+
+```{python}
+#| echo: false
+#| label: fig-soft-vs-hard
+#| fig-cap: "The softening move, in one row. The same four logits (left) pass through the hard argmax-plus-one-hot selection — a cliff with zero gradient almost everywhere — and through softmax at three temperatures. Small $\\tau$ sharpens toward the hard winner; large $\\tau$ flattens toward indifference; every version in between is smooth, so a useful derivative reaches every logit. Chapter 13 returns to this same normalization pattern."
 fig, axes = plt.subplots(1, 5, figsize=(10, 2.6))
 axes[0].bar(klasses, logits_demo, color="#232D4B")
 axes[0].set_title("logits $o_j$", fontsize=9)
-hard = torch.zeros(4); hard[logits_demo.argmax()] = 1.0
 axes[1].bar(klasses, hard, color="#722F37")
 axes[1].set_title("hard max\n(winner takes all)", fontsize=9)
-# [2]
-for ax, temp in zip(axes[2:], [0.5, 1.0, 4.0]):
-    ax.bar(klasses, torch.softmax(logits_demo / temp, dim=0), color="#E57200")
+for ax, temp, probabilities in zip(axes[2:], temperatures, soft_cases):
+    ax.bar(klasses, probabilities, color="#E57200")
     ax.set_title(f"softmax, $\\tau={temp:g}$", fontsize=9)
 for ax in axes[1:]:
     ax.set_ylim(0, 1.05)
@@ -219,7 +233,6 @@ for ax in axes:
     ax.grid(axis="y", alpha=0.15)
 plt.tight_layout(); plt.show()
 ```
-::::
 ### Cross-entropy, multiclass edition
 
 With one-hot labels $\vect{y}$ (all zeros except a 1 at the true class), the
@@ -371,6 +384,16 @@ binary problems: prefer `binary_cross_entropy_with_logits` over sigmoid-then-BCE
 The classic bug is feeding softmax outputs into `CrossEntropyLoss` — the model still
 trains, just badly and silently. If a classifier is mysteriously mediocre, check this
 first.
+:::
+
+::: {.callout-note}
+## Check yourself
+
+Close the book for one minute and reconstruct the classifier.
+
+- What remains linear before sigmoid or softmax is applied?
+- Why does the target distribution determine the negative-log-likelihood loss?
+- Why should logits, rather than already normalized probabilities, enter PyTorch's cross-entropy loss?
 :::
 
 ## Okay, so — classification is regression plus a normalizer

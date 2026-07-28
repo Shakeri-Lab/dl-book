@@ -68,9 +68,15 @@ chapter stub's draft-sources; revisit during the planned outline session with th
 - **PDF index:** technically supported by the current TinyTeX toolchain, but deferred
   to a dedicated editorial pass. Select useful terms, subentries, ranges, and
   `see`/`see also` relationships across the full manuscript before enabling it; HTML
-  search remains the current navigation fallback.
-- Package the controlled transfer (§15.6), ICL ceiling (§17.1.1), and memory-capacity
-  (§14.8.6) mechanism tests as graded artifacts only after the author approves a shared
+  search remains the current navigation fallback. An editorial index is required
+  before any print run.
+- **Fully tagged PDF:** callout icons now carry empty replacement text and the build
+  audits glyph extraction, but the complete PDF is not yet structurally tagged.
+  Require heading, list, table, figure, and reading-order tags before claiming
+  screen-reader-complete PDF accessibility.
+- Package the controlled transfer (§15.6), ICL ceiling (§17.1.1), and the
+  test-time-regression interlude's memory-capacity mechanism test as graded artifacts
+  only after the author approves a shared
   autograder and submission contract.
 - Consider a one-page protocol card after the experimentation interlude: claim type,
   predeclared contract, seed panel, endpoint rule, and ledger fields. Link it from later

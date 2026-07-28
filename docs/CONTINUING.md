@@ -10,20 +10,18 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 
 ---
 
-> ## Current state — 2026-07-26 (read this first)
+> ## Current state — 2026-07-28 (read this first)
 >
 > The manuscript is **complete and released**: tag **v1.1** carries the stable
-> 502-page PDF. The post-release `main` revision is 560 pages after the
-> author-requested universal Plan → Code pass, two Chapter 1 author revisions,
-> and the July 25 pacing/visual/full-scale experiment pass; it remains chapters
-> 1–20 + two interludes + four appendices + epilogue, live in HTML and PDF after
-> deployment. **Nothing is mid-flight.**
-> Plan v2 (the readable-code and estimator-discipline overhaul) finished all
-> seven phases on July 20; the Plan → Code component became universal July 25.
-> Every open item is a decision waiting on the author — see **§9**, which
-> supersedes any older status text below it.
+> 502-page PDF. The live manuscript is a 544-page rolling post-v1.1 build with chapters
+> 1–20, three interludes, four appendices, and an epilogue. The July 28
+> comprehensive audit is complete: verified glyph losses are repaired, chapter
+> retrieval/source contracts are uniform, exercise modes are canonical, and
+> attention-as-test-time-regression is now its own interlude. **Nothing is
+> mid-flight.** Every open item is a decision waiting on the author — see **§9**,
+> which supersedes any older status text below it.
 >
-> The universal code pass covers all 204 learner-visible Python surfaces; 28
+> The universal code pass covers all 194 learner-visible Python surfaces; 92
 > `echo: false` execution-support cells are intentionally exempt. Every plan has
 > at most six steps and every step maps to a bracket-only numbered marker
 > (`# [1]`, or fused `# [2][5]`) in executed or tested source. Descriptive text
@@ -57,7 +55,7 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > Strang §VI.5. Narrow HTML viewports contain long math and code locally instead
 > of creating page-level horizontal panning.
 >
-> The next pass applies **show, then name** across chapter boundaries: Chapter 2
+> The pacing pass applies **show, then name** across chapter boundaries: Chapter 2
 > plants weighted selection without revealing attention, Chapter 13 names it
 > only after the behavior is built, and the autoencoder interlude now teaches
 > its own contract before PCA and recurrence. It also adds the neuron
@@ -68,22 +66,27 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > Fashion-MNIST scorecard, the ResNet-18 transfer rematch, and the Chapter 10
 > WikiText-2 word-LSTM scale study.
 >
-> The final July 25 verification parsed all 228 Python cells plus the included
-> module/script trees and exercised all nine affected executable units in both
-> formats without a runtime failure. Their pre-existing stdout remains
-> bit-identical in HTML and TeX. The Plan → Code audit passes at 204/28; all 30
-> Rivanna records agree on source digest, device, base commit, seed contract,
-> and task provenance. The final frozen full render preserves all 266 stdout
-> blocks exactly, is 560 pages, and passed HTML/PDF visual checks. The rendered
-> book contains no premature Chapter 2 attention/KL/blame reveals, broken
-> revised figures, descriptive Plan → Code markers, stale includes, or MathJax
-> macro errors.
+> The July 28 audit parses 282 executable cells, four transclusions, and eleven
+> included modules/scripts. The build now checks Plan → Code structure, exercise
+> tags, chapter checks and sources, book voice, interlude namespaces, frozen
+> stdout parity, LaTeX missing-character diagnostics, PDF replacement glyphs,
+> and decorative icon extraction. Interlude figures use independent `EX.`,
+> `AE.`, and `TTR.` namespaces; their display equations are unnumbered. Pure
+> plotting canvases in the densest learner listings run in adjacent hidden
+> harnesses while kernels, data, checks, metrics, and stdout remain visible.
 >
-> The July 26 verification re-executed Chapters 1–4 in both formats, kept every
-> touched stdout block bit-identical to the prior commit and across HTML/TeX,
-> passed the Plan → Code audit at 204/28, and rebuilt the complete 560-page PDF.
-> PDF inspection covered Figures 1.1, 1.5, 1.7, Equation 1.5, and Figure 4.1;
-> browser inspection at 390 px confirmed zero page-level horizontal overflow.
+> Chapter 14 now closes with the Transformer and hands off to the
+> **Attention as Test-Time Regression** interlude. Chapter 15 separates
+> visibility, eligibility, supervision, and corruption with a Boolean ledger;
+> Chapter 19 adds an analytic Gaussian-mixture score field and names
+> classifier-free guidance. RoPE, RMSNorm, grouped-query attention, and the
+> controlled-evidence limit on in-context learning are now named at the point
+> where their mechanisms have earned the name.
+>
+> The definitive two-format refresh preserves all 133 stdout blocks byte for
+> byte across the structural interlude move, and every HTML/TeX stdout pair
+> matches. The production PDF is 544 pages, sixteen pages below the pre-audit
+> 560-page ceiling.
 >
 > Fresh session? Read `CLAUDE.md`, then §9 and §2 of this file, then
 > `docs/style-guide.md` and `docs/arc-seeds.md`. A paste-ready bootstrap prompt
@@ -101,9 +104,9 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 | I · From Lines to Networks | 1–6 | **Shipped; repair pass complete and verified** (July 11, 2026) |
 | II · Vision | 7–9 | **Shipped; repair pass complete and verified** (July 11, 2026) |
 | III · Sequences | 10–11 | **Shipped; repair pass complete and verified** (July 11, 2026) |
-| IV · Attention | 12–16 | **Shipped; test-time memory spectrum extension verified** (July 15, 2026) |
+| IV · Attention | 12–16 | **Shipped; Transformer revision verified** (July 28, 2026) |
 | V · Pretrained Era | 17–20 | **Shipped and two-format verified** (July 15, 2026; ch. 19 revised, ch. 20 added) |
-| Unnumbered bridges | Experimentation/HPO after ch. 6; PCA/autoencoders after ch. 9 | **Shipped and two-format verified** (July 15, 2026) |
+| Unnumbered bridges | Experimentation/HPO after ch. 6; PCA/autoencoders after ch. 9; attention as test-time regression after ch. 14 | **Shipped and two-format verified** (July 28, 2026) |
 | Epilogue | The Question Is Yours | **Shipped; memory-to-planning frontier verified** (July 15, 2026) |
 | Appendices | A–D | **Shipped and verified** (Appendix C KV-cache bridge and Appendix D complete July 15, 2026) |
 
@@ -151,7 +154,8 @@ normal `main` → `gh-pages` path.
 The later July 15 **test-time memory/control extension** keeps the Chapter 11 → 12 →
 13 → 14 bottleneck arc intact and turns Chapter 12's regression lens one rung further.
 Chapter 12 now states the exact local-constant problem before using the phrase
-“attention is regression” and identifies the 2024–26 research program. New §14.8
+“attention is regression” and identifies the 2024–26 research program. The
+test-time-regression interlude
 derives three statistical contracts from one online regression objective: retain the
 key/value dataset, carry the factorized-kernel sufficient pair $(S_t,z_t)$, or update a
 bounded delta-rule state. Chapter 10 supplies the forward promise; §14.7 and Appendix C
@@ -184,7 +188,8 @@ These are top-1 identification rates, not exact value interpolation: softmax's m
 value MSE is `5.43e-06`, and its maximum trial MSE is `4.55e-04`.
 
 The complete frozen render is now 498 pages. Chapter 12's two-box addendum fits one
-page, §14.8 fits nine pages, and the epilogue frontier fits two. Every affected unit was
+page, the material now housed in the test-time-regression interlude fits nine pages,
+and the epilogue frontier fits two. Every affected unit was
 executed in HTML and TeX; printed outputs match, the complete book renders, the affected
 PDF ranges passed visual QA, and local browser checks confirm anchors, equations,
 figures, alt text, and course-site interaction. The companion site adds the two research
@@ -197,7 +202,8 @@ preserving their source, adds format-aware counter notes to both interludes and 
 epilogue, makes the preface's optional **Check yourself** scope accurate, and restores
 Sources-before-Exercises order in Chapter 20 and Appendix B. Chapter 8 and Chapter 13
 now distinguish a chapter-local or decision-inert endpoint from a globally untouched
-test set. The memory-spectrum price list is numbered as Table 14.1. An audit of all 100
+test set. The former memory-spectrum price table is now a two-axis retained-state
+and per-token-cost diagram in the test-time-regression interlude. An audit of all 100
 rendered HTML figure images found and closed five static-image alt-text gaps. Both
 formats were regenerated, the four-page reduction was visually checked across every
 affected range, and a PCA schematic overlap found during that check was repaired. The
@@ -356,12 +362,13 @@ dense quadratic arithmetic. Both freezes and all printed outputs match; the comp
 Appendix C PDF range, both original figures, and browser layout passed QA. It contains
 no GPU placeholder or unmeasured speedup. Its KV-cache bridge now says explicitly that
 FlashAttention changes the I/O schedule of the same nonparametric solve; the fixed-state
-solvers in §14.8 change the statistical contract instead.
+solvers in the test-time-regression interlude change the statistical contract instead.
 
 **Decisions still gated on the author:**
 - The author's final prose/sign-off pass remains a separate gate after the technical
   release. For this extension it covers Chapter 10's two-sentence forward pointer;
-  Chapter 12's precision/research boxes; §14.8 and its added exercises; Appendix C's
+  Chapter 12's precision/research boxes; the test-time-regression interlude and its
+  exercises; Appendix C's
   KV-cache/schedule bridge; the epilogue taxonomy and Riccati frontier; the entire
   maintainer exercise bank; and the Modules 8–10 readings, outline, prompt, and five
   self-checks. The manuscript blocks and exercise bank retain their `NOVEL` markers;
@@ -488,7 +495,7 @@ I. **Reading order**: chapter N's code uses only tools introduced in chapters
 J. **Exercises**: normally 4–5 core items, tagged **(Pencil.)** / **(Code.)** /
    mixed, each reinforcing an arc point; open-ended phrasing for untested outcomes.
    A specifically requested addendum may expand the chapter list or use a separately
-   scoped maintainer bank, as §14.8 and
+   scoped maintainer bank, as the test-time-regression interlude and
    `docs/test-time-memory-control-exercise-bank.md` do.
 K. **Provenance**: every chapter opens with the
    `<!-- lecture-source: … seeds: … -->` comment; deviations from the lecture's
@@ -697,7 +704,8 @@ experiment, and verification contract:
   1.1132/1.9190; no position yields 1.8672/2.3405. Position improves held-out loss
   by 0.4214 (18.0%), but the 1.8881 LSTM baseline narrowly wins by 0.0309 (1.64%).
   The positional run repeated exactly; the one-seed gap is not an average effect.
-- **Memory spectrum shipped**: new §14.8 writes one online regression objective and
+- **Memory spectrum shipped**: the test-time-regression interlude writes one online
+  regression objective and
   audits four dials—views, history weights, regularization, and solver. It re-derives
   the local-constant attention solution, collapses a factorized kernel into the exact
   running pair $(S_t,z_t)$, and derives the delta recurrence from one newest-pair SGD
@@ -956,7 +964,8 @@ experiment, and verification contract:
   are explicitly synthetic and no hardware-runtime claim is made. The recap now names
   the KV cache as the nonparametric estimator's retained dataset, explains why the
   naïve §14.6.2 sampler wasted projection work, and separates FlashAttention's
-  I/O-efficient schedule from §14.8's lossy fixed-state statistical contracts.
+  I/O-efficient schedule from the test-time-regression interlude's lossy fixed-state
+  statistical contracts.
 - **Appendix D — Notation (SHIPPED):** derived directly from
   `tex/macros.tex`, `mathjax-config.html`, and actual manuscript usage. It records
   typography, decorations, index/dimension roles, recurring dense/image/sequence/
@@ -1034,7 +1043,7 @@ in the reader's language beside the terse kernel, output beneath the code.
 | Rules, authoring form, six-step ceiling | `docs/style-guide.md` |
 | Audit | `scripts/audit_plan_code.py` |
 
-All 204 learner-visible Python surfaces now use the panel; 28 `echo: false`
+All 194 learner-visible Python surfaces now use the panel; 92 `echo: false`
 execution-only cells are exempt. Markers in executed/tested source are
 bracket-only (`# [1]`, or fused `# [2][5]`) and never repeat the plan text.
 Comments remain only when they explain shapes, numerical choices, or non-obvious

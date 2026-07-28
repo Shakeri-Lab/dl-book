@@ -50,6 +50,7 @@ import math
 import matplotlib.pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
+import numpy as np
 import torch
 from torch import Tensor, nn
 import torch.nn.functional as F
@@ -265,11 +266,7 @@ $q(z\mid x)=\mathcal{N}(0.35,0.75)$.
 :::
 
 ```{python}
-#| label: fig-vae-gap
-#| fig-cap: "The VAE lower bound is audited in a one-dimensional Gaussian model. For x = 1.2 and observation variance 0.36, the exact posterior has mean 0.882353 and variance 0.264706. The log evidence and exact-posterior ELBO are both -1.602093. For q = N(0.35, 0.75), the ELBO is -2.533343; its 0.931250 gap to the evidence exactly matches KL(q || p(z | x))."
-#| fig-alt: "The left panel separates the prior-to-decoder generation path from the input-to-encoder inference path. The middle panel plots the prior, exact posterior, and mismatched approximate posterior densities. The right panel shows the exact posterior bound touching the log evidence and the mismatched bound lying lower by the posterior KL gap."
-#| fig-width: 10
-#| fig-height: 4.2
+#| label: vae-gap-audit
 #| code-summary: "Identity test: verify the exact Gaussian ELBO gap"
 #| code-fold: false
 
@@ -294,6 +291,12 @@ def gaussian_elbo(
     return expected_log_likelihood - gaussian_kl(mean_q, variance_q, 0.0, 1.0)
 
 
+def gaussian_density(grid: Tensor, mean: float, variance: float) -> Tensor:
+    return torch.exp(-(grid - mean).square() / (2.0 * variance)) / math.sqrt(
+        2.0 * math.pi * variance
+    )
+
+
 # [2]
 x_observed = 1.2
 likelihood_variance = 0.36
@@ -315,6 +318,24 @@ posterior_gap = gaussian_kl(
 )
 
 # [3]
+print(f"posterior mean:     {posterior_mean:.12f}")
+print(f"posterior variance: {posterior_variance:.12f}")
+print(f"log evidence:       {log_evidence:.12f}")
+print(f"exact ELBO:         {exact_elbo:.12f}")
+print(f"mismatched ELBO:    {mismatch_elbo:.12f}")
+print(f"evidence - ELBO:    {log_evidence - mismatch_elbo:.12f}")
+print(f"KL(q || posterior): {posterior_gap:.12f}")
+```
+::::
+
+```{python}
+#| label: fig-vae-gap
+#| fig-cap: "The VAE lower bound is audited in a one-dimensional Gaussian model. For x = 1.2 and observation variance 0.36, the exact posterior has mean 0.882353 and variance 0.264706. The log evidence and exact-posterior ELBO are both -1.602093. For q = N(0.35, 0.75), the ELBO is -2.533343; its 0.931250 gap to the evidence exactly matches KL(q || p(z | x))."
+#| fig-alt: "The left panel separates the prior-to-decoder generation path from the input-to-encoder inference path. The middle panel plots the prior, exact posterior, and mismatched approximate posterior densities. The right panel shows the exact posterior bound touching the log evidence and the mismatched bound lying lower by the posterior KL gap."
+#| fig-width: 10
+#| fig-height: 4.2
+#| echo: false
+
 fig, axes = plt.subplots(1, 3, figsize=(10, 4.2))
 axes[0].axis("off")
 axes[0].set_xlim(0, 1)
@@ -332,12 +353,6 @@ axes[0].text(0.50, 0.08, "training-time approximation", ha="center",
              color=orange, fontsize=8.2)
 
 z_grid = torch.linspace(-2.5, 3.0, 500)
-
-def gaussian_density(grid: Tensor, mean: float, variance: float) -> Tensor:
-    return torch.exp(-(grid - mean).square() / (2.0 * variance)) / math.sqrt(
-        2.0 * math.pi * variance
-    )
-
 
 axes[1].plot(z_grid, gaussian_density(z_grid, 0.0, 1.0), color=navy,
              lw=1.7, label="prior $p(z)$")
@@ -365,16 +380,7 @@ axes[2].set_title("evidence = ELBO + posterior KL", color=navy, weight="bold")
 axes[2].grid(axis="y", alpha=0.15)
 plt.tight_layout()
 plt.show()
-
-print(f"posterior mean:     {posterior_mean:.12f}")
-print(f"posterior variance: {posterior_variance:.12f}")
-print(f"log evidence:       {log_evidence:.12f}")
-print(f"exact ELBO:         {exact_elbo:.12f}")
-print(f"mismatched ELBO:    {mismatch_elbo:.12f}")
-print(f"evidence - ELBO:    {log_evidence - mismatch_elbo:.12f}")
-print(f"KL(q || posterior): {posterior_gap:.12f}")
 ```
-::::
 When $q$ equals the true posterior, the gap vanishes to floating-point tolerance. The
 mismatched $q$ leaves almost one nat of evidence unexplained—we can improve the ELBO
 by improving the decoder likelihood, the approximate posterior, or both—one scalar
@@ -509,11 +515,7 @@ undertrained, or locally confused.
 :::
 
 ```{python}
-#| label: fig-gan-finite
-#| fig-cap: "A finite three-mode GAN audit. The covered generator q = (0.40, 0.45, 0.15) has Jensen–Shannon divergence 0.003253 and optimal-discriminator value -1.379789. The collapsed q = (0.02, 0.96, 0.02) has divergence 0.183270 and value -1.019755; both satisfy V(D*,G) = -log 4 + 2 JSD to floating-point precision. When the discriminator assigns a fake logit -6, its output is 0.002473: the original minimax generator's logit-gradient magnitude is 0.002473, versus 0.997527 for the non-saturating loss."
-#| fig-alt: "The first panel compares data mass with a well-covered generator over three modes. The second compares it with a generator concentrated on the middle mode and shows the optimal discriminator values. The third plots generator gradient magnitudes against discriminator logits, showing saturation of the original minimax loss when fake samples are confidently rejected."
-#| fig-width: 10
-#| fig-height: 4.0
+#| label: gan-finite-audit
 #| code-summary: "Identity test: audit finite GAN coverage and generator saturation"
 #| code-fold: false
 
@@ -544,6 +546,34 @@ for name, generator_mass in generator_masses.items():
     gan_rows[name] = optimal_discriminator, divergence, value, identity
 
 # [3]
+logit_grid = torch.linspace(-6.0, 6.0, 300)
+discriminator_output = torch.sigmoid(logit_grid)
+minimax_magnitude = discriminator_output
+nonsaturating_magnitude = 1.0 - discriminator_output
+
+print("candidate  JSD            V(D*,G)        -log(4)+2JSD    error")
+for name, (_, divergence, value, identity) in gan_rows.items():
+    print(
+        f"{name:9s}  {divergence.item():.12f}  {value.item():.12f}  "
+        f"{identity.item():.12f}  {(value - identity).abs().item():.2e}"
+    )
+for logit in [-6.0, -2.0, 0.0, 2.0]:
+    probability = torch.sigmoid(torch.tensor(logit)).item()
+    print(
+        f"logit {logit:4.1f}: D={probability:.6f}, "
+        f"minimax |grad|={probability:.6f}, "
+        f"non-saturating |grad|={1.0 - probability:.6f}"
+    )
+```
+::::
+
+```{python}
+#| echo: false
+#| label: fig-gan-finite
+#| fig-cap: "A finite three-mode GAN audit. The covered generator q = (0.40, 0.45, 0.15) has Jensen–Shannon divergence 0.003253 and optimal-discriminator value -1.379789. The collapsed q = (0.02, 0.96, 0.02) has divergence 0.183270 and value -1.019755; both satisfy V(D*,G) = -log 4 + 2 JSD to floating-point precision. When the discriminator assigns a fake logit -6, its output is 0.002473: the original minimax generator's logit-gradient magnitude is 0.002473, versus 0.997527 for the non-saturating loss."
+#| fig-alt: "The first panel compares data mass with a well-covered generator over three modes. The second compares it with a generator concentrated on the middle mode and shows the optimal discriminator values. The third plots generator gradient magnitudes against discriminator logits, showing saturation of the original minimax loss when fake samples are confidently rejected."
+#| fig-width: 10
+#| fig-height: 4.0
 fig, axes = plt.subplots(1, 3, figsize=(10, 4.0))
 mode_positions = torch.arange(3).numpy()
 for axis, (name, generator_mass), color in zip(
@@ -564,10 +594,6 @@ for axis, (name, generator_mass), color in zip(
     axis.legend(frameon=False, fontsize=7.5)
     axis.grid(axis="y", alpha=0.15)
 
-logit_grid = torch.linspace(-6.0, 6.0, 300)
-discriminator_output = torch.sigmoid(logit_grid)
-minimax_magnitude = discriminator_output
-nonsaturating_magnitude = 1.0 - discriminator_output
 axes[2].plot(logit_grid, minimax_magnitude, color=orange, lw=2.1,
              label=r"minimax: $|\partial\log(1-D)/\partial a|$")
 axes[2].plot(logit_grid, nonsaturating_magnitude, color=green, lw=2.1,
@@ -581,22 +607,7 @@ axes[2].legend(frameon=False, fontsize=6.8, loc="center right")
 axes[2].grid(alpha=0.15)
 plt.tight_layout()
 plt.show()
-
-print("candidate  JSD            V(D*,G)        -log(4)+2JSD    error")
-for name, (_, divergence, value, identity) in gan_rows.items():
-    print(
-        f"{name:9s}  {divergence.item():.12f}  {value.item():.12f}  "
-        f"{identity.item():.12f}  {(value - identity).abs().item():.2e}"
-    )
-for logit in [-6.0, -2.0, 0.0, 2.0]:
-    probability = torch.sigmoid(torch.tensor(logit)).item()
-    print(
-        f"logit {logit:4.1f}: D={probability:.6f}, "
-        f"minimax |grad|={probability:.6f}, "
-        f"non-saturating |grad|={1.0 - probability:.6f}"
-    )
 ```
-::::
 The non-saturating generator loss $-\E_{\vect{z}}\log D(G(\vect{z}))$ changes the
 early gradient signal without changing the ideal target. GANs can produce a sample in
 one generator pass and need not expose a tractable density. Their coupled optimization
@@ -669,12 +680,8 @@ variance becomes $0.25\bar\alpha_t+(1-\bar\alpha_t)$.
 :::
 
 ```{python}
-#| label: fig-forward-diffusion
-#| fig-cap: "Forward diffusion replaces a two-mode distribution by an almost standard-normal endpoint. Under the displayed 100-step schedule, alpha-bar is 0.954508 at t = 10, 0.282981 at t = 50, and 0.005619 at t = 100. The final signal and noise coefficients are 0.074958 and 0.997187. The lower chain is learned in the opposite direction; it is not the algebraic inverse of one realized forward chain."
-#| fig-alt: "The left panel shows a red forward chain from clean data toward noise and a green learned reverse chain from noise toward data. The middle panel shows the analytic two-mode density merging toward a standard normal across timesteps zero, ten, fifty, and one hundred. The right panel plots decreasing signal coefficient and increasing noise coefficient over time."
-#| fig-width: 10
-#| fig-height: 4.2
-#| code-summary: "Figure code: audit a forward noise schedule and its direct marginal"
+#| label: forward-diffusion-audit
+#| code-summary: "Audit a forward noise schedule and its direct marginal"
 #| code-fold: false
 
 # [1]
@@ -685,6 +692,55 @@ diffusion_alpha_bar = torch.cumprod(diffusion_alpha, dim=0)
 diffusion_bars_with_zero = torch.cat((torch.ones(1), diffusion_alpha_bar))
 
 # [2]
+torch.manual_seed(6050)
+audit_x0 = torch.randn(10_000)
+step_noises = torch.randn(diffusion_steps, audit_x0.numel())
+sequential_state = audit_x0.clone()
+accumulated_noise = torch.zeros_like(audit_x0)
+for step in range(diffusion_steps):
+    sequential_state = (
+        torch.sqrt(diffusion_alpha[step]) * sequential_state
+        + torch.sqrt(diffusion_beta[step]) * step_noises[step]
+    )
+    accumulated_noise = (
+        torch.sqrt(diffusion_alpha[step]) * accumulated_noise
+        + torch.sqrt(diffusion_beta[step]) * step_noises[step]
+    )
+direct_state = (
+    torch.sqrt(diffusion_alpha_bar[-1]) * audit_x0 + accumulated_noise
+)
+effective_epsilon = accumulated_noise / torch.sqrt(
+    1.0 - diffusion_alpha_bar[-1]
+)
+
+print("t  alpha_bar      signal          noise")
+for time_index in [1, 10, 50, 100]:
+    alpha_bar_at_time = diffusion_alpha_bar[time_index - 1]
+    print(
+        f"{time_index:3d}  {alpha_bar_at_time.item():.12f}  "
+        f"{torch.sqrt(alpha_bar_at_time).item():.12f}  "
+        f"{torch.sqrt(1.0 - alpha_bar_at_time).item():.12f}"
+    )
+print(
+    "largest sequential/direct difference at T:",
+    f"{(sequential_state - direct_state).abs().max().item():.2e}",
+)
+print(
+    "effective epsilon mean / variance:",
+    f"{effective_epsilon.mean().item():.6f}",
+    f"{effective_epsilon.var(unbiased=False).item():.6f}",
+)
+```
+::::
+
+```{python}
+#| label: fig-forward-diffusion
+#| fig-cap: "Forward diffusion replaces a two-mode distribution by an almost standard-normal endpoint. Under the displayed 100-step schedule, alpha-bar is 0.954508 at t = 10, 0.282981 at t = 50, and 0.005619 at t = 100. The final signal and noise coefficients are 0.074958 and 0.997187. The lower chain is learned in the opposite direction; it is not the algebraic inverse of one realized forward chain."
+#| fig-alt: "The left panel shows a red forward chain from clean data toward noise and a green learned reverse chain from noise toward data. The middle panel shows the analytic two-mode density merging toward a standard normal across timesteps zero, ten, fifty, and one hundred. The right panel plots decreasing signal coefficient and increasing noise coefficient over time."
+#| fig-width: 10
+#| fig-height: 4.2
+#| echo: false
+
 fig, axes = plt.subplots(1, 3, figsize=(10, 4.2))
 axes[0].axis("off")
 axes[0].set_xlim(0, 1)
@@ -742,47 +798,7 @@ axes[2].legend(frameon=False, fontsize=7.4)
 axes[2].grid(alpha=0.15)
 plt.tight_layout()
 plt.show()
-
-torch.manual_seed(6050)
-audit_x0 = torch.randn(10_000)
-step_noises = torch.randn(diffusion_steps, audit_x0.numel())
-sequential_state = audit_x0.clone()
-accumulated_noise = torch.zeros_like(audit_x0)
-for step in range(diffusion_steps):
-    sequential_state = (
-        torch.sqrt(diffusion_alpha[step]) * sequential_state
-        + torch.sqrt(diffusion_beta[step]) * step_noises[step]
-    )
-    accumulated_noise = (
-        torch.sqrt(diffusion_alpha[step]) * accumulated_noise
-        + torch.sqrt(diffusion_beta[step]) * step_noises[step]
-    )
-direct_state = (
-    torch.sqrt(diffusion_alpha_bar[-1]) * audit_x0 + accumulated_noise
-)
-effective_epsilon = accumulated_noise / torch.sqrt(
-    1.0 - diffusion_alpha_bar[-1]
-)
-
-print("t  alpha_bar      signal          noise")
-for time_index in [1, 10, 50, 100]:
-    alpha_bar_at_time = diffusion_alpha_bar[time_index - 1]
-    print(
-        f"{time_index:3d}  {alpha_bar_at_time.item():.12f}  "
-        f"{torch.sqrt(alpha_bar_at_time).item():.12f}  "
-        f"{torch.sqrt(1.0 - alpha_bar_at_time).item():.12f}"
-    )
-print(
-    "largest sequential/direct difference at T:",
-    f"{(sequential_state - direct_state).abs().max().item():.2e}",
-)
-print(
-    "effective epsilon mean / variance:",
-    f"{effective_epsilon.mean().item():.6f}",
-    f"{effective_epsilon.var(unbiased=False).item():.6f}",
-)
 ```
-::::
 At $t=100$, a trace of the original mixture remains because
 $\bar\alpha_T>0$. The endpoint is close to—but not exactly—a standard normal. That
 detail matters when generation starts from $p(\vect{x}_T)=\mathcal{N}(\vect{0},
@@ -860,6 +876,93 @@ $$ {#eq-diffusion-score}
 The score points locally toward higher noisy-data density—generation is not simple
 gradient ascent and not literal subtraction of one predicted noise image. It follows a
 time-dependent sequence of learned means plus calibrated stochastic terms.
+
+For a one-dimensional Gaussian mixture with component means $\mu_j$, shared variance
+$s^2$, and mixture weights $\pi_j$, the same normalized-weight machine from Chapter 12
+appears inside the score:
+
+$$
+\omega_j(x)
+=\frac{\pi_j\exp\!\left[-(x-\mu_j)^2/(2s^2)\right]}
+{\sum_k\pi_k\exp\!\left[-(x-\mu_k)^2/(2s^2)\right]},
+\qquad
+\frac{\partial}{\partial x}\log p_t(x)
+=\sum_j\omega_j(x)\frac{\mu_j-x}{s^2}.
+$$
+
+```{python}
+#| label: fig-score-mixture
+#| echo: false
+#| fig-cap: "A Gaussian-mixture score as a normalized local pull. The upper panel shows posterior component weights: each location asks which noisy component could have produced it. The lower panel adds the two responsibility-weighted pulls. Their sum is the score, which vanishes at critical points and points locally toward increasing density. This static field explains the score identity; reverse diffusion is a time-dependent stochastic process, not plain gradient ascent on this curve."
+#| fig-alt: "Two aligned plots over a one-dimensional coordinate. Posterior responsibility shifts smoothly from the left Gaussian component to the right. Below, two weighted pull curves add to a wine score curve that crosses zero at the symmetric midpoint and near the mixture modes; arrows point in the sign of the local score."
+#| fig-width: 8.8
+#| fig-height: 5.2
+
+score_x = np.linspace(-5.0, 5.0, 600)
+score_means = np.array([-2.0, 2.0])
+score_scale = 0.75
+score_prior = np.array([0.5, 0.5])
+score_unnormalized = score_prior[:, None] * np.exp(
+    -0.5 * ((score_x[None, :] - score_means[:, None]) / score_scale) ** 2
+)
+score_weights = score_unnormalized / score_unnormalized.sum(axis=0, keepdims=True)
+score_pulls = score_weights * (
+    score_means[:, None] - score_x[None, :]
+) / score_scale**2
+score_total = score_pulls.sum(axis=0)
+
+fig, axes = plt.subplots(2, 1, figsize=(8.8, 5.2), sharex=True)
+component_colors = ["#2B6CB0", "#C05621"]
+for index, color in enumerate(component_colors):
+    axes[0].plot(
+        score_x,
+        score_weights[index],
+        color=color,
+        lw=2.2,
+        label=fr"$\omega_{index + 1}(x)$",
+    )
+    axes[1].plot(
+        score_x,
+        score_pulls[index],
+        color=color,
+        lw=1.5,
+        alpha=0.8,
+        label=fr"weighted pull {index + 1}",
+    )
+axes[1].plot(
+    score_x,
+    score_total,
+    color="#722F37",
+    lw=2.8,
+    label=r"$\partial_x\log p_t(x)$",
+)
+axes[1].axhline(0.0, color="0.55", lw=1)
+arrow_x = np.linspace(-4.5, 4.5, 19)
+arrow_score = np.interp(arrow_x, score_x, score_total)
+axes[1].quiver(
+    arrow_x,
+    np.full_like(arrow_x, -2.15),
+    np.sign(arrow_score),
+    np.zeros_like(arrow_score),
+    angles="xy",
+    scale_units="xy",
+    scale=2.7,
+    color="#722F37",
+    width=0.004,
+)
+axes[0].set_ylabel("posterior weight")
+axes[0].set_ylim(-0.03, 1.03)
+axes[0].set_title("which component could have produced this noisy point?")
+axes[1].set_xlabel("noisy coordinate $x$")
+axes[1].set_ylabel("local pull")
+axes[1].set_ylim(-2.4, 2.4)
+axes[1].set_title("responsibility-weighted pulls add to the score")
+for axis in axes:
+    axis.grid(alpha=0.18)
+    axis.legend(frameon=False, ncol=3, fontsize=8)
+plt.tight_layout()
+plt.show()
+```
 
 The coefficients deserve their own audit before any sampler runs.
 
@@ -949,11 +1052,7 @@ $j=t-1$. Model index zero therefore represents the equation's first noising step
 :::
 
 ```{python}
-#| label: fig-time-conditioned-diffusion
-#| fig-cap: "A designed one-dimensional diffusion sampler isolates the value of time conditioning with identical 4,417-parameter networks and seeded initial weights. Across seeds 6050–6054, the time-conditioned denoiser has evaluation noise MSE 0.429707 (SD 0.000927), close to the analytic conditional-mean oracle's fixed-evaluation MSE of 0.425920. Its generated samples have mean standard deviation 2.062095, central mass 0.019470, and Wasserstein-1 distance 0.058570 from a matched target sample; the population targets are 2.061553 and 0.022750 for standard deviation and central mass. Zeroing the time channel raises noise MSE to 0.750689, central mass to 0.223490, and Wasserstein distance to 0.379806. This is a CPU mechanism study of a planted scalar mixture, not an image-generation result."
-#| fig-alt: "The first histogram shows time-conditioned generated samples matching two target modes near minus two and plus two. The second shows the no-time ablation placing too much mass between modes. The third panel compares five-seed noise error, central mass, and Wasserstein distance, with target or oracle reference lines."
-#| fig-width: 10
-#| fig-height: 4.1
+#| label: time-conditioned-diffusion-study
 #| code-summary: "Experiment: train a tiny diffusion denoiser with and without timestep conditioning"
 #| code-fold: false
 
@@ -1140,6 +1239,32 @@ normal_cdf = lambda value: 0.5 * (1.0 + math.erf(value / math.sqrt(2.0)))
 true_central_mass = normal_cdf(-2.0) - normal_cdf(-6.0)
 
 # [5]
+print("condition          metric              mean         sample SD")
+for condition_name, rows in diffusion_results.items():
+    for metric_name in [
+        "noise MSE", "oracle MSE", "mean", "standard deviation",
+        "positive mass", "central mass", "Wasserstein-1",
+    ]:
+        values = torch.tensor([row[metric_name] for row in rows])
+        print(
+            f"{condition_name:17s}  {metric_name:18s}  "
+            f"{values.mean().item():.9f}  {values.std().item():.9f}"
+        )
+print(f"target standard deviation: {true_standard_deviation:.9f}")
+print(f"target positive mass:      {0.5:.9f}")
+print(f"target central mass:       {true_central_mass:.9f}")
+print(f"alpha_bar_T:               {training_alpha_bar[-1].item():.12f}")
+```
+::::
+
+```{python}
+#| label: fig-time-conditioned-diffusion
+#| echo: false
+#| fig-cap: "A designed one-dimensional diffusion sampler isolates the value of time conditioning with identical 4,417-parameter networks and seeded initial weights. Across seeds 6050–6054, the time-conditioned denoiser has evaluation noise MSE 0.429707 (SD 0.000927), close to the analytic conditional-mean oracle's fixed-evaluation MSE of 0.425920. Its generated samples have mean standard deviation 2.062095, central mass 0.019470, and Wasserstein-1 distance 0.058570 from a matched target sample; the population targets are 2.061553 and 0.022750 for standard deviation and central mass. Zeroing the time channel raises noise MSE to 0.750689, central mass to 0.223490, and Wasserstein distance to 0.379806. This is a CPU mechanism study of a planted scalar mixture, not an image-generation result."
+#| fig-alt: "The first histogram shows time-conditioned generated samples matching two target modes near minus two and plus two. The second shows the no-time ablation placing too much mass between modes. The third panel compares five-seed noise error, central mass, and Wasserstein distance, with target or oracle reference lines."
+#| fig-width: 10
+#| fig-height: 4.1
+
 fig, axes = plt.subplots(1, 3, figsize=(10, 4.1))
 histogram_grid = torch.linspace(-4.2, 4.2, 500)
 target_density = 0.5 * gaussian_density(
@@ -1191,24 +1316,8 @@ axes[2].legend(frameon=False, fontsize=6.9)
 axes[2].grid(axis="y", alpha=0.15)
 plt.tight_layout()
 plt.show()
-
-print("condition          metric              mean         sample SD")
-for condition_name, rows in diffusion_results.items():
-    for metric_name in [
-        "noise MSE", "oracle MSE", "mean", "standard deviation",
-        "positive mass", "central mass", "Wasserstein-1",
-    ]:
-        values = torch.tensor([row[metric_name] for row in rows])
-        print(
-            f"{condition_name:17s}  {metric_name:18s}  "
-            f"{values.mean().item():.9f}  {values.std().item():.9f}"
-        )
-print(f"target standard deviation: {true_standard_deviation:.9f}")
-print(f"target positive mass:      {0.5:.9f}")
-print(f"target central mass:       {true_central_mass:.9f}")
-print(f"alpha_bar_T:               {training_alpha_bar[-1].item():.12f}")
 ```
-::::
+
 The time-conditioned network nearly matches the fixed-evaluation MSE of the analytic
 conditional-mean oracle and recovers the mixture's two-mode geometry. With its time
 channel zeroed, the identically initialized network must use one answer for
@@ -1240,8 +1349,18 @@ $$
 $$
 
 The noisy representation supplies the queries; the condition supplies keys and values.
-Guidance schemes can further combine conditional and unconditional predictions, but
-their scale convention and empirical trade-off must be stated.
+One common combination is **classifier-free guidance**. With the convention $w\ge0$,
+
+$$
+\widetilde{\vect{\epsilon}}_\theta(\vect{x}_t,t,\vect{c})
+=(1+w)\vect{\epsilon}_\theta(\vect{x}_t,t,\vect{c})
+-w\vect{\epsilon}_\theta(\vect{x}_t,t,\varnothing).
+$$
+
+At $w=0$ this is the conditional prediction; increasing $w$ amplifies the direction
+that distinguishes conditional from unconditional denoising. Stronger guidance can
+improve condition adherence while reducing diversity or exposing calibration errors,
+so the convention, scale sweep, and trade-off belong in the evaluation contract.
 
 For images, a U-Net is a natural denoiser. Its contracting path gathers broad
 context—its expanding path returns to the original resolution. Skip connections carry
@@ -1371,6 +1490,7 @@ Close the book for one minute and rebuild the sampling contracts from memory.
 - [Goodfellow et al., *Generative Adversarial Nets*](https://proceedings.neurips.cc/paper/2014/hash/f033ed80deb0234979a61f95710dbe25-Abstract.html): the original minimax game, optimal discriminator, and divergence result.
 - [Ho, Jain, and Abbeel, *Denoising Diffusion Probabilistic Models*](https://arxiv.org/abs/2006.11239): Gaussian diffusion transitions, reverse parameterization, and the simplified noise objective.
 - [Song et al., *Score-Based Generative Modeling through Stochastic Differential Equations*](https://openreview.net/forum?id=PxTIG12RRHS): the score perspective and continuous-time forward/reverse processes.
+- [Ho and Salimans, *Classifier-Free Diffusion Guidance*](https://arxiv.org/abs/2207.12598): combines conditional and unconditional denoiser predictions without a separate classifier.
 - [Chen et al., *Isolating Sources of Disentanglement in Variational Autoencoders*](https://arxiv.org/abs/1802.04942):
   the total-correlation decomposition whose aggregate-posterior KL is Exercise 5's
   boundary case — the term that does not batch naively.
@@ -1378,23 +1498,24 @@ Close the book for one minute and rebuild the sampling contracts from memory.
 
 ## Exercises {.unnumbered}
 
-1. **(Proof and code.)** Derive the posterior and marginal evidence for the scalar
-   Gaussian VAE audit. Verify @eq-elbo-gap for three approximate posteriors. Then use
+1. **(Pencil.)** (a) Derive the posterior and marginal evidence for the scalar
+   Gaussian VAE audit.
+   **(Code.)** (b) Verify @eq-elbo-gap for three approximate posteriors. Then use
    reparameterized samples to estimate its gradient with respect to the approximate
    posterior mean; compare it with the analytic gradient and report Monte Carlo
    uncertainty.
-2. **(Code and hygiene.)** Implement @eq-diffusion-direct-sample for a batch whose
+2. **(Code.)** Implement @eq-diffusion-direct-sample for a batch whose
    timesteps have shape $(B,)$. Gather coefficients into shape $(B,1)$ before
    multiplying data of shape $(B,d)$. Compare iterative and direct moments, verify
    @eq-diffusion-posterior-coefficients, and test the $t=1$ no-noise branch. Compare
    two schedules without promising which will train better.
-3. **(Pencil and evaluation audit.)** Derive @eq-gan-optimal-discriminator for one
+3. **(Audit.)** Derive @eq-gan-optimal-discriminator for one
    finite mode. Explain why an observed $D\approx0.5$ does not prove convergence.
    Then design separate fidelity, coverage, and memorization checks for supplied
    samples from a VAE, GAN, and diffusion model; state what evidence would make each
    check fail.
 
-4. **(Audit.)** A colleague's β-VAE uses `F.mse_loss(recon, x) + beta * kl.mean()`,
+4. **(Audit.)** A colleague's $\beta$-VAE uses `F.mse_loss(recon, x) + beta * kl.mean()`,
    with `kl` holding one KL per example. Before any algebra, predict the *direction*
    of the defect: which term was silently divided by what? Then prove the identity —
    with default `mean` reductions the loss equals
