@@ -82,7 +82,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../../site_libs/bootstrap/bootstrap-b6e5eebbcb8830f9107df4d77653d46e.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../../site_libs/bootstrap/bootstrap-05057be68374408b7a654baf632c5246.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -355,6 +355,12 @@ window.Quarto = {
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
+  <a href="../../chapters/interludes/attention-as-test-time-regression.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Interlude: Attention as Test-Time Regression</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
   <a href="../../chapters/part4/15-bert-pretraining.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text"><span class="chapter-number">15</span>&nbsp; <span class="chapter-title">The BERT Moment: Pretraining as the New Regime</span></span></a>
   </div>
@@ -501,7 +507,7 @@ window.Quarto = {
            with recurrent maps on both sides. -->
 <p>Chapter 10 ended with a promise: if one recurrent cell can read a sequence <em>into</em> a state, two cells can translate: one reads, one writes. This chapter builds that machine and the craft around it: how to train it fast (teacher forcing), what poisonous bookkeeping to avoid (padding), and how to get answers back out of it (greedy versus beam search). It ends where Part III must: staring at the fixed-size recurrent state in the middle.</p>
 <p>The names are not new. In the autoencoder interlude, an encoder compressed a fixed object and a decoder reconstructed it. Here both maps become recurrent processes. The encoder consumes however many source tokens arrive; the decoder produces however many target tokens are needed. What survives is the handoff: every source detail still has to cross through one fixed-size context.</p>
-<p>The lecture frames the stakes well. Before recurrence, every model lived on a <strong>fixed-size contract</strong>: 784 pixels in, 10 logits out; <span class="math inline">\(28 \times 28\)</span> garments in, one verdict out. The interesting world breaks that contract on both ends at once: translation maps a sentence of <em>any</em> length to a sentence of <em>some other</em> length, in a different vocabulary. Chapter 10’s recurrent cell broke the contract on the input side; today we break it on both.</p>
+<p>Before recurrence, every model lived on a <strong>fixed-size contract</strong>: 784 pixels in, 10 logits out; <span class="math inline">\(28 \times 28\)</span> garments in, one verdict out. The interesting world breaks that contract on both ends at once: translation maps a sentence of <em>any</em> length to a sentence of <em>some other</em> length, in a different vocabulary. Chapter 10’s recurrent cell broke the contract on the input side; today we break it on both.</p>
 <section id="two-rnns-and-a-handoff" class="level2" data-number="11.1">
 <h2 data-number="11.1" class="anchored" data-anchor-id="two-rnns-and-a-handoff"><span class="header-section-number">11.1</span> Two RNNs and a handoff</h2>
 <p>The architecture is one idea long. An <strong>encoder</strong> RNN reads the source sequence and keeps nothing but its final state, the entire input compressed into fixed-size memory, the <strong>context</strong>. A <strong>decoder</strong> RNN starts <em>from</em> that state and generates the output token by token, feeding each token back in, exactly like Chapter 10’s character model. A language model, in other words, but one with something to say.</p>
@@ -510,62 +516,72 @@ window.Quarto = {
 26 september 2024    -&gt; 2024-09-26
 12/15/1950           -&gt; 1950-12-15</code></pre>
 <p>Variable-length input, a different output alphabet, and real long-range structure (the year arrives <em>last</em> in most sources but must be emitted <em>first</em>). The target is deliberately fixed at ten characters, so this laboratory does <strong>not</strong> test variable-length target padding. It does include a dialect ambiguity that gives beam search something genuine to reveal: numeric dates are written <code>mm/dd/yyyy</code> by 70% of our imaginary writers (the US convention) and <code>dd/mm/yyyy</code> by 30%, and nothing in <code>03/05/2021</code> says which. Machine translation in miniature.</p>
+<div class="plan-code plan-code-wide">
+<div class="plan">
+<ol type="1">
+<li>Prepare the inputs and fixed settings for the example.</li>
+<li>Define the reusable <code>make_date</code> helper.</li>
+<li>Implement the two date languages, generated on the fly.</li>
+<li>Report or visualize the measured result.</li>
+</ol>
+</div>
 <div id="date-data" class="cell" data-execution_count="1">
-<details class="code-fold">
-<summary>Code: the two date languages, generated on the fly</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> random, torch</span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch.nn <span class="im">as</span> nn</span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch.nn.functional <span class="im">as</span> F</span>
 <span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
 <span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>MONTHS <span class="op">=</span> [<span class="st">"january"</span>, <span class="st">"february"</span>, <span class="st">"march"</span>, <span class="st">"april"</span>, <span class="st">"may"</span>, <span class="st">"june"</span>, <span class="st">"july"</span>,</span>
-<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>          <span class="st">"august"</span>, <span class="st">"september"</span>, <span class="st">"october"</span>, <span class="st">"november"</span>, <span class="st">"december"</span>]</span>
-<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>DAYS <span class="op">=</span> <span class="bu">dict</span>(<span class="bu">zip</span>(MONTHS, [<span class="dv">31</span>, <span class="dv">28</span>, <span class="dv">31</span>, <span class="dv">30</span>, <span class="dv">31</span>, <span class="dv">30</span>, <span class="dv">31</span>, <span class="dv">31</span>, <span class="dv">30</span>, <span class="dv">31</span>, <span class="dv">30</span>, <span class="dv">31</span>]))</span>
-<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> make_date(rng: random.Random) <span class="op">-&gt;</span> <span class="bu">tuple</span>[<span class="bu">str</span>, <span class="bu">str</span>]:</span>
-<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    mo <span class="op">=</span> rng.randrange(<span class="dv">12</span>)</span>
-<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    d <span class="op">=</span> rng.randrange(<span class="dv">1</span>, DAYS[MONTHS[mo]] <span class="op">+</span> <span class="dv">1</span>)</span>
-<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>    y <span class="op">=</span> rng.randrange(<span class="dv">1950</span>, <span class="dv">2026</span>)</span>
-<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    iso <span class="op">=</span> <span class="ss">f"</span><span class="sc">{</span>y<span class="sc">:04d}</span><span class="ss">-</span><span class="sc">{</span>mo<span class="op">+</span><span class="dv">1</span><span class="sc">:02d}</span><span class="ss">-</span><span class="sc">{</span>d<span class="sc">:02d}</span><span class="ss">"</span></span>
-<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    style <span class="op">=</span> rng.random()</span>
-<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> style <span class="op">&lt;</span> <span class="fl">0.35</span>:</span>
-<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>        src <span class="op">=</span> <span class="ss">f"</span><span class="sc">{</span>MONTHS[mo]<span class="sc">}</span><span class="ss"> </span><span class="sc">{</span>d<span class="sc">}</span><span class="ss">, </span><span class="sc">{</span>y<span class="sc">}</span><span class="ss">"</span></span>
-<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>    <span class="cf">elif</span> style <span class="op">&lt;</span> <span class="fl">0.6</span>:</span>
-<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>        src <span class="op">=</span> <span class="ss">f"</span><span class="sc">{</span>d<span class="sc">}</span><span class="ss"> </span><span class="sc">{</span>MONTHS[mo]<span class="sc">}</span><span class="ss"> </span><span class="sc">{</span>y<span class="sc">}</span><span class="ss">"</span></span>
-<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>    <span class="cf">elif</span> rng.random() <span class="op">&lt;</span> <span class="fl">0.7</span>:</span>
-<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>        src <span class="op">=</span> <span class="ss">f"</span><span class="sc">{</span>mo<span class="op">+</span><span class="dv">1</span><span class="sc">:02d}</span><span class="ss">/</span><span class="sc">{</span>d<span class="sc">:02d}</span><span class="ss">/</span><span class="sc">{</span>y<span class="sc">}</span><span class="ss">"</span>            <span class="co"># US convention: mm/dd</span></span>
-<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>    <span class="cf">else</span>:</span>
-<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a>        src <span class="op">=</span> <span class="ss">f"</span><span class="sc">{</span>d<span class="sc">:02d}</span><span class="ss">/</span><span class="sc">{</span>mo<span class="op">+</span><span class="dv">1</span><span class="sc">:02d}</span><span class="ss">/</span><span class="sc">{</span>y<span class="sc">}</span><span class="ss">"</span>            <span class="co"># EU convention: dd/mm</span></span>
-<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> src, iso</span>
-<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a>rng <span class="op">=</span> random.Random(<span class="dv">6050</span>)</span>
-<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a>pairs, seen_sources <span class="op">=</span> [], <span class="bu">set</span>()</span>
-<span id="cb2-28"><a href="#cb2-28" aria-hidden="true" tabindex="-1"></a><span class="cf">while</span> <span class="bu">len</span>(pairs) <span class="op">&lt;</span> <span class="dv">9000</span>:</span>
-<span id="cb2-29"><a href="#cb2-29" aria-hidden="true" tabindex="-1"></a>    pair <span class="op">=</span> make_date(rng)</span>
-<span id="cb2-30"><a href="#cb2-30" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> pair[<span class="dv">0</span>] <span class="kw">not</span> <span class="kw">in</span> seen_sources:</span>
-<span id="cb2-31"><a href="#cb2-31" aria-hidden="true" tabindex="-1"></a>        seen_sources.add(pair[<span class="dv">0</span>])</span>
-<span id="cb2-32"><a href="#cb2-32" aria-hidden="true" tabindex="-1"></a>        pairs.append(pair)</span>
-<span id="cb2-33"><a href="#cb2-33" aria-hidden="true" tabindex="-1"></a>train_pairs <span class="op">=</span> pairs[:<span class="dv">8000</span>]</span>
-<span id="cb2-34"><a href="#cb2-34" aria-hidden="true" tabindex="-1"></a>valid_pairs <span class="op">=</span> pairs[<span class="dv">8000</span>:<span class="dv">8500</span>]</span>
-<span id="cb2-35"><a href="#cb2-35" aria-hidden="true" tabindex="-1"></a>test_pairs <span class="op">=</span> pairs[<span class="dv">8500</span>:]</span>
-<span id="cb2-36"><a href="#cb2-36" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="op">*</span>pairs[:<span class="dv">4</span>], sep<span class="op">=</span><span class="st">"</span><span class="ch">\n</span><span class="st">"</span>)</span>
-<span id="cb2-37"><a href="#cb2-37" aria-hidden="true" tabindex="-1"></a>train_sources <span class="op">=</span> {s <span class="cf">for</span> s, _ <span class="kw">in</span> train_pairs}</span>
-<span id="cb2-38"><a href="#cb2-38" aria-hidden="true" tabindex="-1"></a>valid_sources <span class="op">=</span> {s <span class="cf">for</span> s, _ <span class="kw">in</span> valid_pairs}</span>
-<span id="cb2-39"><a href="#cb2-39" aria-hidden="true" tabindex="-1"></a>test_sources <span class="op">=</span> {s <span class="cf">for</span> s, _ <span class="kw">in</span> test_pairs}</span>
-<span id="cb2-40"><a href="#cb2-40" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"exact-source overlaps: "</span></span>
-<span id="cb2-41"><a href="#cb2-41" aria-hidden="true" tabindex="-1"></a>      <span class="ss">f"train/valid </span><span class="sc">{</span><span class="bu">len</span>(train_sources <span class="op">&amp;</span> valid_sources)<span class="sc">}</span><span class="ss">, "</span></span>
-<span id="cb2-42"><a href="#cb2-42" aria-hidden="true" tabindex="-1"></a>      <span class="ss">f"train/test </span><span class="sc">{</span><span class="bu">len</span>(train_sources <span class="op">&amp;</span> test_sources)<span class="sc">}</span><span class="ss">, "</span></span>
-<span id="cb2-43"><a href="#cb2-43" aria-hidden="true" tabindex="-1"></a>      <span class="ss">f"valid/test </span><span class="sc">{</span><span class="bu">len</span>(valid_sources <span class="op">&amp;</span> test_sources)<span class="sc">}</span><span class="ss">"</span>)</span>
-<span id="cb2-44"><a href="#cb2-44" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-45"><a href="#cb2-45" aria-hidden="true" tabindex="-1"></a>PAD, BOS, EOS <span class="op">=</span> <span class="dv">0</span>, <span class="dv">1</span>, <span class="dv">2</span>                             <span class="co"># special tokens first</span></span>
-<span id="cb2-46"><a href="#cb2-46" aria-hidden="true" tabindex="-1"></a>SRC <span class="op">=</span> <span class="bu">sorted</span>(<span class="bu">set</span>(<span class="st">""</span>.join(s <span class="cf">for</span> s, _ <span class="kw">in</span> pairs)))</span>
-<span id="cb2-47"><a href="#cb2-47" aria-hidden="true" tabindex="-1"></a>TGT <span class="op">=</span> <span class="bu">sorted</span>(<span class="bu">set</span>(<span class="st">""</span>.join(t <span class="cf">for</span> _, t <span class="kw">in</span> pairs)))</span>
-<span id="cb2-48"><a href="#cb2-48" aria-hidden="true" tabindex="-1"></a>src_stoi <span class="op">=</span> {c: i <span class="op">+</span> <span class="dv">3</span> <span class="cf">for</span> i, c <span class="kw">in</span> <span class="bu">enumerate</span>(SRC)}</span>
-<span id="cb2-49"><a href="#cb2-49" aria-hidden="true" tabindex="-1"></a>tgt_stoi <span class="op">=</span> {c: i <span class="op">+</span> <span class="dv">3</span> <span class="cf">for</span> i, c <span class="kw">in</span> <span class="bu">enumerate</span>(TGT)}</span>
-<span id="cb2-50"><a href="#cb2-50" aria-hidden="true" tabindex="-1"></a>tgt_itos <span class="op">=</span> {i: c <span class="cf">for</span> c, i <span class="kw">in</span> tgt_stoi.items()}</span>
-<span id="cb2-51"><a href="#cb2-51" aria-hidden="true" tabindex="-1"></a>V_src, V_tgt <span class="op">=</span> <span class="bu">len</span>(SRC) <span class="op">+</span> <span class="dv">3</span>, <span class="bu">len</span>(TGT) <span class="op">+</span> <span class="dv">3</span></span>
-<span id="cb2-52"><a href="#cb2-52" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"source vocab </span><span class="sc">{</span>V_src<span class="sc">}</span><span class="ss">, target vocab </span><span class="sc">{</span>V_tgt<span class="sc">}</span><span class="ss">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-</details>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="co"># [1]</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>MONTHS <span class="op">=</span> [<span class="st">"january"</span>, <span class="st">"february"</span>, <span class="st">"march"</span>, <span class="st">"april"</span>, <span class="st">"may"</span>, <span class="st">"june"</span>, <span class="st">"july"</span>,</span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>          <span class="st">"august"</span>, <span class="st">"september"</span>, <span class="st">"october"</span>, <span class="st">"november"</span>, <span class="st">"december"</span>]</span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>DAYS <span class="op">=</span> <span class="bu">dict</span>(<span class="bu">zip</span>(MONTHS, [<span class="dv">31</span>, <span class="dv">28</span>, <span class="dv">31</span>, <span class="dv">30</span>, <span class="dv">31</span>, <span class="dv">30</span>, <span class="dv">31</span>, <span class="dv">31</span>, <span class="dv">30</span>, <span class="dv">31</span>, <span class="dv">30</span>, <span class="dv">31</span>]))</span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a><span class="co"># [2]</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> make_date(rng: random.Random) <span class="op">-&gt;</span> <span class="bu">tuple</span>[<span class="bu">str</span>, <span class="bu">str</span>]:</span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>    mo <span class="op">=</span> rng.randrange(<span class="dv">12</span>)</span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    d <span class="op">=</span> rng.randrange(<span class="dv">1</span>, DAYS[MONTHS[mo]] <span class="op">+</span> <span class="dv">1</span>)</span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    y <span class="op">=</span> rng.randrange(<span class="dv">1950</span>, <span class="dv">2026</span>)</span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>    iso <span class="op">=</span> <span class="ss">f"</span><span class="sc">{</span>y<span class="sc">:04d}</span><span class="ss">-</span><span class="sc">{</span>mo<span class="op">+</span><span class="dv">1</span><span class="sc">:02d}</span><span class="ss">-</span><span class="sc">{</span>d<span class="sc">:02d}</span><span class="ss">"</span></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>    style <span class="op">=</span> rng.random()</span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> style <span class="op">&lt;</span> <span class="fl">0.35</span>:</span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>        src <span class="op">=</span> <span class="ss">f"</span><span class="sc">{</span>MONTHS[mo]<span class="sc">}</span><span class="ss"> </span><span class="sc">{</span>d<span class="sc">}</span><span class="ss">, </span><span class="sc">{</span>y<span class="sc">}</span><span class="ss">"</span></span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>    <span class="cf">elif</span> style <span class="op">&lt;</span> <span class="fl">0.6</span>:</span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>        src <span class="op">=</span> <span class="ss">f"</span><span class="sc">{</span>d<span class="sc">}</span><span class="ss"> </span><span class="sc">{</span>MONTHS[mo]<span class="sc">}</span><span class="ss"> </span><span class="sc">{</span>y<span class="sc">}</span><span class="ss">"</span></span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>    <span class="cf">elif</span> rng.random() <span class="op">&lt;</span> <span class="fl">0.7</span>:</span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a>        src <span class="op">=</span> <span class="ss">f"</span><span class="sc">{</span>mo<span class="op">+</span><span class="dv">1</span><span class="sc">:02d}</span><span class="ss">/</span><span class="sc">{</span>d<span class="sc">:02d}</span><span class="ss">/</span><span class="sc">{</span>y<span class="sc">}</span><span class="ss">"</span>            <span class="co"># US convention: mm/dd</span></span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>    <span class="cf">else</span>:</span>
+<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a>        src <span class="op">=</span> <span class="ss">f"</span><span class="sc">{</span>d<span class="sc">:02d}</span><span class="ss">/</span><span class="sc">{</span>mo<span class="op">+</span><span class="dv">1</span><span class="sc">:02d}</span><span class="ss">/</span><span class="sc">{</span>y<span class="sc">}</span><span class="ss">"</span>            <span class="co"># EU convention: dd/mm</span></span>
+<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> src, iso</span>
+<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-28"><a href="#cb2-28" aria-hidden="true" tabindex="-1"></a>rng <span class="op">=</span> random.Random(<span class="dv">6050</span>)</span>
+<span id="cb2-29"><a href="#cb2-29" aria-hidden="true" tabindex="-1"></a>pairs, seen_sources <span class="op">=</span> [], <span class="bu">set</span>()</span>
+<span id="cb2-30"><a href="#cb2-30" aria-hidden="true" tabindex="-1"></a><span class="co"># [3]</span></span>
+<span id="cb2-31"><a href="#cb2-31" aria-hidden="true" tabindex="-1"></a><span class="cf">while</span> <span class="bu">len</span>(pairs) <span class="op">&lt;</span> <span class="dv">9000</span>:</span>
+<span id="cb2-32"><a href="#cb2-32" aria-hidden="true" tabindex="-1"></a>    pair <span class="op">=</span> make_date(rng)</span>
+<span id="cb2-33"><a href="#cb2-33" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> pair[<span class="dv">0</span>] <span class="kw">not</span> <span class="kw">in</span> seen_sources:</span>
+<span id="cb2-34"><a href="#cb2-34" aria-hidden="true" tabindex="-1"></a>        seen_sources.add(pair[<span class="dv">0</span>])</span>
+<span id="cb2-35"><a href="#cb2-35" aria-hidden="true" tabindex="-1"></a>        pairs.append(pair)</span>
+<span id="cb2-36"><a href="#cb2-36" aria-hidden="true" tabindex="-1"></a>train_pairs <span class="op">=</span> pairs[:<span class="dv">8000</span>]</span>
+<span id="cb2-37"><a href="#cb2-37" aria-hidden="true" tabindex="-1"></a>valid_pairs <span class="op">=</span> pairs[<span class="dv">8000</span>:<span class="dv">8500</span>]</span>
+<span id="cb2-38"><a href="#cb2-38" aria-hidden="true" tabindex="-1"></a>test_pairs <span class="op">=</span> pairs[<span class="dv">8500</span>:]</span>
+<span id="cb2-39"><a href="#cb2-39" aria-hidden="true" tabindex="-1"></a><span class="co"># [4]</span></span>
+<span id="cb2-40"><a href="#cb2-40" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="op">*</span>pairs[:<span class="dv">4</span>], sep<span class="op">=</span><span class="st">"</span><span class="ch">\n</span><span class="st">"</span>)</span>
+<span id="cb2-41"><a href="#cb2-41" aria-hidden="true" tabindex="-1"></a>train_sources <span class="op">=</span> {s <span class="cf">for</span> s, _ <span class="kw">in</span> train_pairs}</span>
+<span id="cb2-42"><a href="#cb2-42" aria-hidden="true" tabindex="-1"></a>valid_sources <span class="op">=</span> {s <span class="cf">for</span> s, _ <span class="kw">in</span> valid_pairs}</span>
+<span id="cb2-43"><a href="#cb2-43" aria-hidden="true" tabindex="-1"></a>test_sources <span class="op">=</span> {s <span class="cf">for</span> s, _ <span class="kw">in</span> test_pairs}</span>
+<span id="cb2-44"><a href="#cb2-44" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"exact-source overlaps: "</span></span>
+<span id="cb2-45"><a href="#cb2-45" aria-hidden="true" tabindex="-1"></a>      <span class="ss">f"train/valid </span><span class="sc">{</span><span class="bu">len</span>(train_sources <span class="op">&amp;</span> valid_sources)<span class="sc">}</span><span class="ss">, "</span></span>
+<span id="cb2-46"><a href="#cb2-46" aria-hidden="true" tabindex="-1"></a>      <span class="ss">f"train/test </span><span class="sc">{</span><span class="bu">len</span>(train_sources <span class="op">&amp;</span> test_sources)<span class="sc">}</span><span class="ss">, "</span></span>
+<span id="cb2-47"><a href="#cb2-47" aria-hidden="true" tabindex="-1"></a>      <span class="ss">f"valid/test </span><span class="sc">{</span><span class="bu">len</span>(valid_sources <span class="op">&amp;</span> test_sources)<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb2-48"><a href="#cb2-48" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-49"><a href="#cb2-49" aria-hidden="true" tabindex="-1"></a>PAD, BOS, EOS <span class="op">=</span> <span class="dv">0</span>, <span class="dv">1</span>, <span class="dv">2</span>                             <span class="co"># special tokens first</span></span>
+<span id="cb2-50"><a href="#cb2-50" aria-hidden="true" tabindex="-1"></a>SRC <span class="op">=</span> <span class="bu">sorted</span>(<span class="bu">set</span>(<span class="st">""</span>.join(s <span class="cf">for</span> s, _ <span class="kw">in</span> pairs)))</span>
+<span id="cb2-51"><a href="#cb2-51" aria-hidden="true" tabindex="-1"></a>TGT <span class="op">=</span> <span class="bu">sorted</span>(<span class="bu">set</span>(<span class="st">""</span>.join(t <span class="cf">for</span> _, t <span class="kw">in</span> pairs)))</span>
+<span id="cb2-52"><a href="#cb2-52" aria-hidden="true" tabindex="-1"></a>src_stoi <span class="op">=</span> {c: i <span class="op">+</span> <span class="dv">3</span> <span class="cf">for</span> i, c <span class="kw">in</span> <span class="bu">enumerate</span>(SRC)}</span>
+<span id="cb2-53"><a href="#cb2-53" aria-hidden="true" tabindex="-1"></a>tgt_stoi <span class="op">=</span> {c: i <span class="op">+</span> <span class="dv">3</span> <span class="cf">for</span> i, c <span class="kw">in</span> <span class="bu">enumerate</span>(TGT)}</span>
+<span id="cb2-54"><a href="#cb2-54" aria-hidden="true" tabindex="-1"></a>tgt_itos <span class="op">=</span> {i: c <span class="cf">for</span> c, i <span class="kw">in</span> tgt_stoi.items()}</span>
+<span id="cb2-55"><a href="#cb2-55" aria-hidden="true" tabindex="-1"></a>V_src, V_tgt <span class="op">=</span> <span class="bu">len</span>(SRC) <span class="op">+</span> <span class="dv">3</span>, <span class="bu">len</span>(TGT) <span class="op">+</span> <span class="dv">3</span></span>
+<span id="cb2-56"><a href="#cb2-56" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"source vocab </span><span class="sc">{</span>V_src<span class="sc">}</span><span class="ss">, target vocab </span><span class="sc">{</span>V_tgt<span class="sc">}</span><span class="ss">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>('26 september 2024', '2024-09-26')
 ('april 7, 1962', '1962-04-07')
@@ -575,38 +591,44 @@ exact-source overlaps: train/valid 0, train/test 0, valid/test 0
 source vocab 37, target vocab 14</code></pre>
 </div>
 </div>
+</div>
 <p>The rejection loop is evaluation hygiene, not decoration. It removes duplicate source strings <strong>before</strong> the 8,000/500/500 train/validation/test split. We use validation sources for every learning curve and reserve test sources for one final audit after the design is fixed. The same underlying date may appear in another written dialect, which is the structural generalization we want; exact-string memorization is no longer available.</p>
 <p>Three special tokens run the show, the same conventions as the course’s full translation pipeline: <code>&lt;pad&gt;</code> fills the short sequences of a batch out to a rectangle, <code>&lt;bos&gt;</code> tells the decoder “begin,” and <code>&lt;eos&gt;</code> lets the <em>model</em> say “I’m done” — remember, the machine must be free to choose its output length.</p>
 <p>One more new tool, and it earns a pause. Chapter 10 fed characters in as one-hot vectors. This chapter gives each token a learned vector instead: <code>nn.Embedding</code>, a table with one trainable row per vocabulary entry. There is no new math — an embedding is exactly a one-hot vector times a weight matrix, Chapter 1’s linear map wearing a lookup table’s clothes — but the reading matters: <em>the address is hard, the content is learned</em>. Row 17 is fetched by index, rigidly; what lives in row 17 is whatever training decides that token should mean. Keep the phrase “hard address, learned content” nearby: in <a href="../part4/13-attention.html" class="quarto-xref"><span>Chapter 13</span></a> we soften the address too, and that will be the whole story.</p>
+<div class="plan-code">
+<div class="plan">
+<ol type="1">
+<li>Encoder, decoder, and the handoff.</li>
+</ol>
+</div>
 <div id="seq2seq-model" class="cell" data-execution_count="2">
-<details class="code-fold">
-<summary>Code: encoder, decoder, and the handoff</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Seq2Seq(nn.Module):</span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, v_src: <span class="bu">int</span>, v_tgt: <span class="bu">int</span>, embed: <span class="bu">int</span> <span class="op">=</span> <span class="dv">32</span>,</span>
-<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>                 hidden: <span class="bu">int</span> <span class="op">=</span> <span class="dv">128</span>, packed: <span class="bu">bool</span> <span class="op">=</span> <span class="va">True</span>):</span>
-<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().<span class="fu">__init__</span>()</span>
-<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.packed <span class="op">=</span> packed</span>
-<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.src_emb <span class="op">=</span> nn.Embedding(v_src, embed, padding_idx<span class="op">=</span>PAD)</span>
-<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.tgt_emb <span class="op">=</span> nn.Embedding(v_tgt, embed, padding_idx<span class="op">=</span>PAD)</span>
-<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.encoder <span class="op">=</span> nn.LSTM(embed, hidden, batch_first<span class="op">=</span><span class="va">True</span>)</span>
-<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.decoder <span class="op">=</span> nn.LSTM(embed, hidden, batch_first<span class="op">=</span><span class="va">True</span>)</span>
-<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.out <span class="op">=</span> nn.Linear(hidden, v_tgt)</span>
-<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> encode(</span>
-<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>, S: torch.Tensor, lengths: torch.Tensor,</span>
-<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>    ) <span class="op">-&gt;</span> <span class="bu">tuple</span>[torch.Tensor, torch.Tensor]:</span>
-<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a>        e <span class="op">=</span> <span class="va">self</span>.src_emb(S)                          <span class="co"># (B, T_src, embed)</span></span>
-<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="va">self</span>.packed:                              <span class="co"># stop at each true length</span></span>
-<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a>            e <span class="op">=</span> nn.utils.rnn.pack_padded_sequence(</span>
-<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a>                e, lengths, batch_first<span class="op">=</span><span class="va">True</span>, enforce_sorted<span class="op">=</span><span class="va">False</span>)</span>
-<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a>        _, state <span class="op">=</span> <span class="va">self</span>.encoder(e)</span>
-<span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> state                                 <span class="co"># (h, c): the context</span></span>
-<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> forward(<span class="va">self</span>, S: torch.Tensor, lengths: torch.Tensor,</span>
-<span id="cb4-23"><a href="#cb4-23" aria-hidden="true" tabindex="-1"></a>                T_in: torch.Tensor) <span class="op">-&gt;</span> torch.Tensor:  <span class="co"># teacher-forced pass</span></span>
-<span id="cb4-24"><a href="#cb4-24" aria-hidden="true" tabindex="-1"></a>        o, _ <span class="op">=</span> <span class="va">self</span>.decoder(<span class="va">self</span>.tgt_emb(T_in), <span class="va">self</span>.encode(S, lengths))</span>
-<span id="cb4-25"><a href="#cb4-25" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="va">self</span>.out(o)                           <span class="co"># (B, T_tgt, V_tgt) logits</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-</details>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co"># [1]</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Seq2Seq(nn.Module):</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, v_src: <span class="bu">int</span>, v_tgt: <span class="bu">int</span>, embed: <span class="bu">int</span> <span class="op">=</span> <span class="dv">32</span>,</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>                 hidden: <span class="bu">int</span> <span class="op">=</span> <span class="dv">128</span>, packed: <span class="bu">bool</span> <span class="op">=</span> <span class="va">True</span>):</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().<span class="fu">__init__</span>()</span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.packed <span class="op">=</span> packed</span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.src_emb <span class="op">=</span> nn.Embedding(v_src, embed, padding_idx<span class="op">=</span>PAD)</span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.tgt_emb <span class="op">=</span> nn.Embedding(v_tgt, embed, padding_idx<span class="op">=</span>PAD)</span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.encoder <span class="op">=</span> nn.LSTM(embed, hidden, batch_first<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.decoder <span class="op">=</span> nn.LSTM(embed, hidden, batch_first<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.out <span class="op">=</span> nn.Linear(hidden, v_tgt)</span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> encode(</span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>, S: torch.Tensor, lengths: torch.Tensor,</span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a>    ) <span class="op">-&gt;</span> <span class="bu">tuple</span>[torch.Tensor, torch.Tensor]:</span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a>        e <span class="op">=</span> <span class="va">self</span>.src_emb(S)                          <span class="co"># (B, T_src, embed)</span></span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="va">self</span>.packed:                              <span class="co"># stop at each true length</span></span>
+<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a>            e <span class="op">=</span> nn.utils.rnn.pack_padded_sequence(</span>
+<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a>                e, lengths, batch_first<span class="op">=</span><span class="va">True</span>, enforce_sorted<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a>        _, state <span class="op">=</span> <span class="va">self</span>.encoder(e)</span>
+<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> state                                 <span class="co"># (h, c): the context</span></span>
+<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-23"><a href="#cb4-23" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> forward(<span class="va">self</span>, S: torch.Tensor, lengths: torch.Tensor,</span>
+<span id="cb4-24"><a href="#cb4-24" aria-hidden="true" tabindex="-1"></a>                T_in: torch.Tensor) <span class="op">-&gt;</span> torch.Tensor:  <span class="co"># teacher-forced pass</span></span>
+<span id="cb4-25"><a href="#cb4-25" aria-hidden="true" tabindex="-1"></a>        o, _ <span class="op">=</span> <span class="va">self</span>.decoder(<span class="va">self</span>.tgt_emb(T_in), <span class="va">self</span>.encode(S, lengths))</span>
+<span id="cb4-26"><a href="#cb4-26" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="va">self</span>.out(o)                           <span class="co"># (B, T_tgt, V_tgt) logits</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
 </div>
 <p>The whole architecture is that <code>encode</code> return value: the LSTM’s final <span class="math inline">\((\vect{h},
 \vect{c})\)</span>, handed to the decoder as its <em>initial</em> state. With hidden width 128, that bridge carries two 128-dimensional vectors, or <strong>256 scalars</strong>. Everything the decoder will ever know about the source crosses it.</p>
@@ -633,122 +655,129 @@ Figure&nbsp;11.1: The encoder–decoder handoff. Packing stops each encoder at i
 <li><strong>The encoder.</strong> Subtler and far worse: an LSTM does not know your zeros are padding. It keeps stepping through them, and every pad step smears the final state, the context pair, for every sequence shorter than the batch’s longest. Worse still, at inference you feed single sequences with <em>no</em> padding, so the model is tested in a regime it never trained in.</li>
 </ol>
 <p>Watch what that costs. Same model, same data, same budget; the only difference is whether the encoder is told the true lengths (<code>pack_padded_sequence</code>, which runs the recurrence only through each sequence’s real tokens):</p>
+<div class="plan-code plan-code-wide">
+<div class="plan">
+<ol type="1">
+<li>Define the reusable helpers: <code>batchify</code>, <code>train_seq2seq</code>, and <code>translate</code>.</li>
+<li>Define the reusable helpers: <code>exact_match</code> and <code>unambiguous</code>.</li>
+<li>Prepare the inputs and fixed settings for the example.</li>
+<li>Train twice — naive right-padding vs.&nbsp;packed sequences.</li>
+<li>Report or visualize the measured result.</li>
+</ol>
+</div>
 <div id="padding-experiment" class="cell" data-execution_count="4">
-<details class="code-fold">
-<summary>Code: train twice — naive right-padding vs.&nbsp;packed sequences</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> batchify(prs: <span class="bu">list</span>[<span class="bu">tuple</span>[<span class="bu">str</span>, <span class="bu">str</span>]], idx: <span class="bu">list</span>[<span class="bu">int</span>]) <span class="op">-&gt;</span> <span class="bu">tuple</span>[</span>
-<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    torch.Tensor, torch.Tensor, torch.Tensor</span>
-<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>]:</span>
-<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    srcs <span class="op">=</span> [torch.tensor([src_stoi[c] <span class="cf">for</span> c <span class="kw">in</span> prs[i][<span class="dv">0</span>]]) <span class="cf">for</span> i <span class="kw">in</span> idx]</span>
-<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>    lengths <span class="op">=</span> torch.tensor([<span class="bu">len</span>(s) <span class="cf">for</span> s <span class="kw">in</span> srcs])</span>
-<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>    tgts <span class="op">=</span> [torch.tensor([BOS] <span class="op">+</span> [tgt_stoi[c] <span class="cf">for</span> c <span class="kw">in</span> prs[i][<span class="dv">1</span>]] <span class="op">+</span> [EOS])</span>
-<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> i <span class="kw">in</span> idx]</span>
-<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>    S <span class="op">=</span> nn.utils.rnn.pad_sequence(srcs, batch_first<span class="op">=</span><span class="va">True</span>, padding_value<span class="op">=</span>PAD)</span>
-<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>    T <span class="op">=</span> nn.utils.rnn.pad_sequence(tgts, batch_first<span class="op">=</span><span class="va">True</span>, padding_value<span class="op">=</span>PAD)</span>
-<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> S, lengths, T</span>
-<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> train_seq2seq(mode: <span class="bu">str</span> <span class="op">=</span> <span class="st">"tf"</span>, packed: <span class="bu">bool</span> <span class="op">=</span> <span class="va">True</span>, epochs: <span class="bu">int</span> <span class="op">=</span> <span class="dv">25</span>,</span>
-<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>                  seed: <span class="bu">int</span> <span class="op">=</span> <span class="dv">6050</span>, batch: <span class="bu">int</span> <span class="op">=</span> <span class="dv">128</span>,</span>
-<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>                  checkpoints: <span class="bu">tuple</span>[<span class="bu">int</span>, ...] <span class="op">=</span> ()) <span class="op">-&gt;</span> <span class="bu">tuple</span>[</span>
-<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>                      Seq2Seq, <span class="bu">dict</span>[<span class="bu">int</span>, <span class="bu">float</span>]</span>
-<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>                  ]:</span>
-<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>    torch.manual_seed(seed)</span>
-<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>    model <span class="op">=</span> Seq2Seq(V_src, V_tgt, packed<span class="op">=</span>packed)</span>
-<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a>    opt <span class="op">=</span> torch.optim.Adam(model.parameters(), lr<span class="op">=</span><span class="fl">1e-3</span>)</span>
-<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a>    n, curve <span class="op">=</span> <span class="bu">len</span>(train_pairs), {}</span>
-<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> ep <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">1</span>, epochs <span class="op">+</span> <span class="dv">1</span>):</span>
-<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a>        model.train()</span>
-<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a>        perm <span class="op">=</span> torch.randperm(n)</span>
-<span id="cb5-24"><a href="#cb5-24" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">0</span>, n, batch):</span>
-<span id="cb5-25"><a href="#cb5-25" aria-hidden="true" tabindex="-1"></a>            S, L, T <span class="op">=</span> batchify(train_pairs, perm[i:i <span class="op">+</span> batch].tolist())</span>
-<span id="cb5-26"><a href="#cb5-26" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> mode <span class="op">==</span> <span class="st">"tf"</span>:                         <span class="co"># gold rail: one fused call</span></span>
-<span id="cb5-27"><a href="#cb5-27" aria-hidden="true" tabindex="-1"></a>                logits <span class="op">=</span> model(S, L, T[:, :<span class="op">-</span><span class="dv">1</span>])</span>
-<span id="cb5-28"><a href="#cb5-28" aria-hidden="true" tabindex="-1"></a>            <span class="cf">else</span>:                                    <span class="co"># free-running: its own rail</span></span>
-<span id="cb5-29"><a href="#cb5-29" aria-hidden="true" tabindex="-1"></a>                state <span class="op">=</span> model.encode(S, L)</span>
-<span id="cb5-30"><a href="#cb5-30" aria-hidden="true" tabindex="-1"></a>                tok, outs <span class="op">=</span> T[:, :<span class="dv">1</span>], []</span>
-<span id="cb5-31"><a href="#cb5-31" aria-hidden="true" tabindex="-1"></a>                <span class="cf">for</span> t <span class="kw">in</span> <span class="bu">range</span>(T.shape[<span class="dv">1</span>] <span class="op">-</span> <span class="dv">1</span>):</span>
-<span id="cb5-32"><a href="#cb5-32" aria-hidden="true" tabindex="-1"></a>                    o, state <span class="op">=</span> model.decoder(model.tgt_emb(tok), state)</span>
-<span id="cb5-33"><a href="#cb5-33" aria-hidden="true" tabindex="-1"></a>                    logit <span class="op">=</span> model.out(o)</span>
-<span id="cb5-34"><a href="#cb5-34" aria-hidden="true" tabindex="-1"></a>                    outs.append(logit)</span>
-<span id="cb5-35"><a href="#cb5-35" aria-hidden="true" tabindex="-1"></a>                    tok <span class="op">=</span> logit.argmax(<span class="op">-</span><span class="dv">1</span>)           <span class="co"># feed its own prediction</span></span>
-<span id="cb5-36"><a href="#cb5-36" aria-hidden="true" tabindex="-1"></a>                logits <span class="op">=</span> torch.cat(outs, <span class="dv">1</span>)</span>
-<span id="cb5-37"><a href="#cb5-37" aria-hidden="true" tabindex="-1"></a>            loss <span class="op">=</span> F.cross_entropy(logits.reshape(<span class="op">-</span><span class="dv">1</span>, V_tgt),</span>
-<span id="cb5-38"><a href="#cb5-38" aria-hidden="true" tabindex="-1"></a>                                   T[:, <span class="dv">1</span>:].reshape(<span class="op">-</span><span class="dv">1</span>), ignore_index<span class="op">=</span>PAD)</span>
-<span id="cb5-39"><a href="#cb5-39" aria-hidden="true" tabindex="-1"></a>            opt.zero_grad()<span class="op">;</span> loss.backward()</span>
-<span id="cb5-40"><a href="#cb5-40" aria-hidden="true" tabindex="-1"></a>            nn.utils.clip_grad_norm_(model.parameters(), <span class="fl">5.0</span>)</span>
-<span id="cb5-41"><a href="#cb5-41" aria-hidden="true" tabindex="-1"></a>            opt.step()</span>
-<span id="cb5-42"><a href="#cb5-42" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> ep <span class="kw">in</span> checkpoints:</span>
-<span id="cb5-43"><a href="#cb5-43" aria-hidden="true" tabindex="-1"></a>            curve[ep] <span class="op">=</span> exact_match(model, valid_unamb[:<span class="dv">400</span>])</span>
-<span id="cb5-44"><a href="#cb5-44" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> model, curve</span>
-<span id="cb5-45"><a href="#cb5-45" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-46"><a href="#cb5-46" aria-hidden="true" tabindex="-1"></a><span class="at">@torch.no_grad</span>()</span>
-<span id="cb5-47"><a href="#cb5-47" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> translate(model: Seq2Seq, src: <span class="bu">str</span>, maxlen: <span class="bu">int</span> <span class="op">=</span> <span class="dv">12</span>) <span class="op">-&gt;</span> <span class="bu">str</span>:</span>
-<span id="cb5-48"><a href="#cb5-48" aria-hidden="true" tabindex="-1"></a>    model.<span class="bu">eval</span>()</span>
-<span id="cb5-49"><a href="#cb5-49" aria-hidden="true" tabindex="-1"></a>    S <span class="op">=</span> torch.tensor([[src_stoi[c] <span class="cf">for</span> c <span class="kw">in</span> src]])</span>
-<span id="cb5-50"><a href="#cb5-50" aria-hidden="true" tabindex="-1"></a>    state <span class="op">=</span> model.encode(S, torch.tensor([<span class="bu">len</span>(src)]))</span>
-<span id="cb5-51"><a href="#cb5-51" aria-hidden="true" tabindex="-1"></a>    tok, out <span class="op">=</span> torch.tensor([[BOS]]), <span class="st">""</span></span>
-<span id="cb5-52"><a href="#cb5-52" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(maxlen):</span>
-<span id="cb5-53"><a href="#cb5-53" aria-hidden="true" tabindex="-1"></a>        o, state <span class="op">=</span> model.decoder(model.tgt_emb(tok), state)</span>
-<span id="cb5-54"><a href="#cb5-54" aria-hidden="true" tabindex="-1"></a>        tok <span class="op">=</span> model.out(o).argmax(<span class="op">-</span><span class="dv">1</span>)                <span class="co"># greedy: best next char</span></span>
-<span id="cb5-55"><a href="#cb5-55" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> tok.item() <span class="op">==</span> EOS:</span>
-<span id="cb5-56"><a href="#cb5-56" aria-hidden="true" tabindex="-1"></a>            <span class="cf">break</span></span>
-<span id="cb5-57"><a href="#cb5-57" aria-hidden="true" tabindex="-1"></a>        out <span class="op">+=</span> tgt_itos.get(tok.item(), <span class="st">"?"</span>)</span>
-<span id="cb5-58"><a href="#cb5-58" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> out</span>
-<span id="cb5-59"><a href="#cb5-59" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-60"><a href="#cb5-60" aria-hidden="true" tabindex="-1"></a><span class="at">@torch.no_grad</span>()</span>
-<span id="cb5-61"><a href="#cb5-61" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> exact_match(model: Seq2Seq, prs: <span class="bu">list</span>[<span class="bu">tuple</span>[<span class="bu">str</span>, <span class="bu">str</span>]]) <span class="op">-&gt;</span> <span class="bu">float</span>:</span>
-<span id="cb5-62"><a href="#cb5-62" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="bu">sum</span>(translate(model, s) <span class="op">==</span> t <span class="cf">for</span> s, t <span class="kw">in</span> prs) <span class="op">/</span> <span class="bu">len</span>(prs)</span>
-<span id="cb5-63"><a href="#cb5-63" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-64"><a href="#cb5-64" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> unambiguous(prs: <span class="bu">list</span>[<span class="bu">tuple</span>[<span class="bu">str</span>, <span class="bu">str</span>]]) <span class="op">-&gt;</span> <span class="bu">list</span>[<span class="bu">tuple</span>[<span class="bu">str</span>, <span class="bu">str</span>]]:</span>
-<span id="cb5-65"><a href="#cb5-65" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> [(s, t) <span class="cf">for</span> s, t <span class="kw">in</span> prs</span>
-<span id="cb5-66"><a href="#cb5-66" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> <span class="st">"/"</span> <span class="kw">not</span> <span class="kw">in</span> s <span class="kw">or</span> <span class="bu">int</span>(s[:<span class="dv">2</span>]) <span class="op">&gt;</span> <span class="dv">12</span> <span class="kw">or</span> <span class="bu">int</span>(s[<span class="dv">3</span>:<span class="dv">5</span>]) <span class="op">&gt;</span> <span class="dv">12</span>]</span>
-<span id="cb5-67"><a href="#cb5-67" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-68"><a href="#cb5-68" aria-hidden="true" tabindex="-1"></a>valid_unamb <span class="op">=</span> unambiguous(valid_pairs)</span>
-<span id="cb5-69"><a href="#cb5-69" aria-hidden="true" tabindex="-1"></a>test_unamb <span class="op">=</span> unambiguous(test_pairs)</span>
-<span id="cb5-70"><a href="#cb5-70" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-71"><a href="#cb5-71" aria-hidden="true" tabindex="-1"></a>cps <span class="op">=</span> (<span class="dv">2</span>, <span class="dv">4</span>, <span class="dv">6</span>, <span class="dv">8</span>, <span class="dv">12</span>, <span class="dv">16</span>, <span class="dv">20</span>, <span class="dv">25</span>)</span>
-<span id="cb5-72"><a href="#cb5-72" aria-hidden="true" tabindex="-1"></a>naive, _ <span class="op">=</span> train_seq2seq(packed<span class="op">=</span><span class="va">False</span>)</span>
-<span id="cb5-73"><a href="#cb5-73" aria-hidden="true" tabindex="-1"></a>packed, packed_curve <span class="op">=</span> train_seq2seq(packed<span class="op">=</span><span class="va">True</span>, checkpoints<span class="op">=</span>cps)</span>
-<span id="cb5-74"><a href="#cb5-74" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"naive right-padding:   validation exact match "</span></span>
-<span id="cb5-75"><a href="#cb5-75" aria-hidden="true" tabindex="-1"></a>      <span class="ss">f"</span><span class="sc">{</span>exact_match(naive, valid_unamb)<span class="sc">:.1%}</span><span class="ss">"</span>)</span>
-<span id="cb5-76"><a href="#cb5-76" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"packed (true lengths): validation exact match "</span></span>
-<span id="cb5-77"><a href="#cb5-77" aria-hidden="true" tabindex="-1"></a>      <span class="ss">f"</span><span class="sc">{</span>exact_match(packed, valid_unamb)<span class="sc">:.1%}</span><span class="ss">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-</details>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co"># [1]</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> batchify(prs: <span class="bu">list</span>[<span class="bu">tuple</span>[<span class="bu">str</span>, <span class="bu">str</span>]], idx: <span class="bu">list</span>[<span class="bu">int</span>]) <span class="op">-&gt;</span> <span class="bu">tuple</span>[</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    torch.Tensor, torch.Tensor, torch.Tensor</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>]:</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>    srcs <span class="op">=</span> [torch.tensor([src_stoi[c] <span class="cf">for</span> c <span class="kw">in</span> prs[i][<span class="dv">0</span>]]) <span class="cf">for</span> i <span class="kw">in</span> idx]</span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>    lengths <span class="op">=</span> torch.tensor([<span class="bu">len</span>(s) <span class="cf">for</span> s <span class="kw">in</span> srcs])</span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>    tgts <span class="op">=</span> [torch.tensor([BOS] <span class="op">+</span> [tgt_stoi[c] <span class="cf">for</span> c <span class="kw">in</span> prs[i][<span class="dv">1</span>]] <span class="op">+</span> [EOS])</span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> i <span class="kw">in</span> idx]</span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>    S <span class="op">=</span> nn.utils.rnn.pad_sequence(srcs, batch_first<span class="op">=</span><span class="va">True</span>, padding_value<span class="op">=</span>PAD)</span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>    T <span class="op">=</span> nn.utils.rnn.pad_sequence(tgts, batch_first<span class="op">=</span><span class="va">True</span>, padding_value<span class="op">=</span>PAD)</span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> S, lengths, T</span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> train_seq2seq(mode: <span class="bu">str</span> <span class="op">=</span> <span class="st">"tf"</span>, packed: <span class="bu">bool</span> <span class="op">=</span> <span class="va">True</span>, epochs: <span class="bu">int</span> <span class="op">=</span> <span class="dv">25</span>,</span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>                  seed: <span class="bu">int</span> <span class="op">=</span> <span class="dv">6050</span>, batch: <span class="bu">int</span> <span class="op">=</span> <span class="dv">128</span>,</span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>                  checkpoints: <span class="bu">tuple</span>[<span class="bu">int</span>, ...] <span class="op">=</span> ()) <span class="op">-&gt;</span> <span class="bu">tuple</span>[</span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>                      Seq2Seq, <span class="bu">dict</span>[<span class="bu">int</span>, <span class="bu">float</span>]</span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>                  ]:</span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>    torch.manual_seed(seed)</span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a>    model <span class="op">=</span> Seq2Seq(V_src, V_tgt, packed<span class="op">=</span>packed)</span>
+<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a>    opt <span class="op">=</span> torch.optim.Adam(model.parameters(), lr<span class="op">=</span><span class="fl">1e-3</span>)</span>
+<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a>    n, curve <span class="op">=</span> <span class="bu">len</span>(train_pairs), {}</span>
+<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> ep <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">1</span>, epochs <span class="op">+</span> <span class="dv">1</span>):</span>
+<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a>        model.train()</span>
+<span id="cb5-24"><a href="#cb5-24" aria-hidden="true" tabindex="-1"></a>        perm <span class="op">=</span> torch.randperm(n)</span>
+<span id="cb5-25"><a href="#cb5-25" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">0</span>, n, batch):</span>
+<span id="cb5-26"><a href="#cb5-26" aria-hidden="true" tabindex="-1"></a>            S, L, T <span class="op">=</span> batchify(train_pairs, perm[i:i <span class="op">+</span> batch].tolist())</span>
+<span id="cb5-27"><a href="#cb5-27" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> mode <span class="op">==</span> <span class="st">"tf"</span>:                         <span class="co"># gold rail: one fused call</span></span>
+<span id="cb5-28"><a href="#cb5-28" aria-hidden="true" tabindex="-1"></a>                logits <span class="op">=</span> model(S, L, T[:, :<span class="op">-</span><span class="dv">1</span>])</span>
+<span id="cb5-29"><a href="#cb5-29" aria-hidden="true" tabindex="-1"></a>            <span class="cf">else</span>:                                    <span class="co"># free-running: its own rail</span></span>
+<span id="cb5-30"><a href="#cb5-30" aria-hidden="true" tabindex="-1"></a>                state <span class="op">=</span> model.encode(S, L)</span>
+<span id="cb5-31"><a href="#cb5-31" aria-hidden="true" tabindex="-1"></a>                tok, outs <span class="op">=</span> T[:, :<span class="dv">1</span>], []</span>
+<span id="cb5-32"><a href="#cb5-32" aria-hidden="true" tabindex="-1"></a>                <span class="cf">for</span> t <span class="kw">in</span> <span class="bu">range</span>(T.shape[<span class="dv">1</span>] <span class="op">-</span> <span class="dv">1</span>):</span>
+<span id="cb5-33"><a href="#cb5-33" aria-hidden="true" tabindex="-1"></a>                    o, state <span class="op">=</span> model.decoder(model.tgt_emb(tok), state)</span>
+<span id="cb5-34"><a href="#cb5-34" aria-hidden="true" tabindex="-1"></a>                    logit <span class="op">=</span> model.out(o)</span>
+<span id="cb5-35"><a href="#cb5-35" aria-hidden="true" tabindex="-1"></a>                    outs.append(logit)</span>
+<span id="cb5-36"><a href="#cb5-36" aria-hidden="true" tabindex="-1"></a>                    tok <span class="op">=</span> logit.argmax(<span class="op">-</span><span class="dv">1</span>)           <span class="co"># feed its own prediction</span></span>
+<span id="cb5-37"><a href="#cb5-37" aria-hidden="true" tabindex="-1"></a>                logits <span class="op">=</span> torch.cat(outs, <span class="dv">1</span>)</span>
+<span id="cb5-38"><a href="#cb5-38" aria-hidden="true" tabindex="-1"></a>            loss <span class="op">=</span> F.cross_entropy(logits.reshape(<span class="op">-</span><span class="dv">1</span>, V_tgt),</span>
+<span id="cb5-39"><a href="#cb5-39" aria-hidden="true" tabindex="-1"></a>                                   T[:, <span class="dv">1</span>:].reshape(<span class="op">-</span><span class="dv">1</span>), ignore_index<span class="op">=</span>PAD)</span>
+<span id="cb5-40"><a href="#cb5-40" aria-hidden="true" tabindex="-1"></a>            opt.zero_grad()<span class="op">;</span> loss.backward()</span>
+<span id="cb5-41"><a href="#cb5-41" aria-hidden="true" tabindex="-1"></a>            nn.utils.clip_grad_norm_(model.parameters(), <span class="fl">5.0</span>)</span>
+<span id="cb5-42"><a href="#cb5-42" aria-hidden="true" tabindex="-1"></a>            opt.step()</span>
+<span id="cb5-43"><a href="#cb5-43" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> ep <span class="kw">in</span> checkpoints:</span>
+<span id="cb5-44"><a href="#cb5-44" aria-hidden="true" tabindex="-1"></a>            curve[ep] <span class="op">=</span> exact_match(model, valid_unamb[:<span class="dv">400</span>])</span>
+<span id="cb5-45"><a href="#cb5-45" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> model, curve</span>
+<span id="cb5-46"><a href="#cb5-46" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-47"><a href="#cb5-47" aria-hidden="true" tabindex="-1"></a><span class="at">@torch.no_grad</span>()</span>
+<span id="cb5-48"><a href="#cb5-48" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> translate(model: Seq2Seq, src: <span class="bu">str</span>, maxlen: <span class="bu">int</span> <span class="op">=</span> <span class="dv">12</span>) <span class="op">-&gt;</span> <span class="bu">str</span>:</span>
+<span id="cb5-49"><a href="#cb5-49" aria-hidden="true" tabindex="-1"></a>    model.<span class="bu">eval</span>()</span>
+<span id="cb5-50"><a href="#cb5-50" aria-hidden="true" tabindex="-1"></a>    S <span class="op">=</span> torch.tensor([[src_stoi[c] <span class="cf">for</span> c <span class="kw">in</span> src]])</span>
+<span id="cb5-51"><a href="#cb5-51" aria-hidden="true" tabindex="-1"></a>    state <span class="op">=</span> model.encode(S, torch.tensor([<span class="bu">len</span>(src)]))</span>
+<span id="cb5-52"><a href="#cb5-52" aria-hidden="true" tabindex="-1"></a>    tok, out <span class="op">=</span> torch.tensor([[BOS]]), <span class="st">""</span></span>
+<span id="cb5-53"><a href="#cb5-53" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(maxlen):</span>
+<span id="cb5-54"><a href="#cb5-54" aria-hidden="true" tabindex="-1"></a>        o, state <span class="op">=</span> model.decoder(model.tgt_emb(tok), state)</span>
+<span id="cb5-55"><a href="#cb5-55" aria-hidden="true" tabindex="-1"></a>        tok <span class="op">=</span> model.out(o).argmax(<span class="op">-</span><span class="dv">1</span>)                <span class="co"># greedy: best next char</span></span>
+<span id="cb5-56"><a href="#cb5-56" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> tok.item() <span class="op">==</span> EOS:</span>
+<span id="cb5-57"><a href="#cb5-57" aria-hidden="true" tabindex="-1"></a>            <span class="cf">break</span></span>
+<span id="cb5-58"><a href="#cb5-58" aria-hidden="true" tabindex="-1"></a>        out <span class="op">+=</span> tgt_itos.get(tok.item(), <span class="st">"?"</span>)</span>
+<span id="cb5-59"><a href="#cb5-59" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> out</span>
+<span id="cb5-60"><a href="#cb5-60" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-61"><a href="#cb5-61" aria-hidden="true" tabindex="-1"></a><span class="co"># [2]</span></span>
+<span id="cb5-62"><a href="#cb5-62" aria-hidden="true" tabindex="-1"></a><span class="at">@torch.no_grad</span>()</span>
+<span id="cb5-63"><a href="#cb5-63" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> exact_match(model: Seq2Seq, prs: <span class="bu">list</span>[<span class="bu">tuple</span>[<span class="bu">str</span>, <span class="bu">str</span>]]) <span class="op">-&gt;</span> <span class="bu">float</span>:</span>
+<span id="cb5-64"><a href="#cb5-64" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="bu">sum</span>(translate(model, s) <span class="op">==</span> t <span class="cf">for</span> s, t <span class="kw">in</span> prs) <span class="op">/</span> <span class="bu">len</span>(prs)</span>
+<span id="cb5-65"><a href="#cb5-65" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-66"><a href="#cb5-66" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> unambiguous(prs: <span class="bu">list</span>[<span class="bu">tuple</span>[<span class="bu">str</span>, <span class="bu">str</span>]]) <span class="op">-&gt;</span> <span class="bu">list</span>[<span class="bu">tuple</span>[<span class="bu">str</span>, <span class="bu">str</span>]]:</span>
+<span id="cb5-67"><a href="#cb5-67" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> [(s, t) <span class="cf">for</span> s, t <span class="kw">in</span> prs</span>
+<span id="cb5-68"><a href="#cb5-68" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> <span class="st">"/"</span> <span class="kw">not</span> <span class="kw">in</span> s <span class="kw">or</span> <span class="bu">int</span>(s[:<span class="dv">2</span>]) <span class="op">&gt;</span> <span class="dv">12</span> <span class="kw">or</span> <span class="bu">int</span>(s[<span class="dv">3</span>:<span class="dv">5</span>]) <span class="op">&gt;</span> <span class="dv">12</span>]</span>
+<span id="cb5-69"><a href="#cb5-69" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-70"><a href="#cb5-70" aria-hidden="true" tabindex="-1"></a><span class="co"># [3]</span></span>
+<span id="cb5-71"><a href="#cb5-71" aria-hidden="true" tabindex="-1"></a>valid_unamb <span class="op">=</span> unambiguous(valid_pairs)</span>
+<span id="cb5-72"><a href="#cb5-72" aria-hidden="true" tabindex="-1"></a>test_unamb <span class="op">=</span> unambiguous(test_pairs)</span>
+<span id="cb5-73"><a href="#cb5-73" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-74"><a href="#cb5-74" aria-hidden="true" tabindex="-1"></a>cps <span class="op">=</span> (<span class="dv">2</span>, <span class="dv">4</span>, <span class="dv">6</span>, <span class="dv">8</span>, <span class="dv">12</span>, <span class="dv">16</span>, <span class="dv">20</span>, <span class="dv">25</span>)</span>
+<span id="cb5-75"><a href="#cb5-75" aria-hidden="true" tabindex="-1"></a><span class="co"># [4]</span></span>
+<span id="cb5-76"><a href="#cb5-76" aria-hidden="true" tabindex="-1"></a>naive, _ <span class="op">=</span> train_seq2seq(packed<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb5-77"><a href="#cb5-77" aria-hidden="true" tabindex="-1"></a>packed, packed_curve <span class="op">=</span> train_seq2seq(packed<span class="op">=</span><span class="va">True</span>, checkpoints<span class="op">=</span>cps)</span>
+<span id="cb5-78"><a href="#cb5-78" aria-hidden="true" tabindex="-1"></a><span class="co"># [5]</span></span>
+<span id="cb5-79"><a href="#cb5-79" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"naive right-padding:   validation exact match "</span></span>
+<span id="cb5-80"><a href="#cb5-80" aria-hidden="true" tabindex="-1"></a>      <span class="ss">f"</span><span class="sc">{</span>exact_match(naive, valid_unamb)<span class="sc">:.1%}</span><span class="ss">"</span>)</span>
+<span id="cb5-81"><a href="#cb5-81" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"packed (true lengths): validation exact match "</span></span>
+<span id="cb5-82"><a href="#cb5-82" aria-hidden="true" tabindex="-1"></a>      <span class="ss">f"</span><span class="sc">{</span>exact_match(packed, valid_unamb)<span class="sc">:.1%}</span><span class="ss">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>naive right-padding:   validation exact match 37.3%
 packed (true lengths): validation exact match 95.7%</code></pre>
 </div>
 </div>
+</div>
 <p>Validation exact match jumps from 37.3% to 95.7%, a 58.4-point gap. Not from a better architecture, optimizer, or dataset; from telling the encoder where the sentences actually end. Let the gap sink in, because this is the cheapest lesson in the book: the two runs are identical except for bookkeeping, and the bookkeeping was worth more than every design decision in Part III so far. The sealed test set remains untouched until both training-mode designs below are fixed.</p>
 <p>The mechanism is worth <em>seeing</em> once. Take the naive model and one short validation source, and watch its encoder state as the input runs past the last real character into the padding:</p>
-<div id="cell-fig-padding-drift" class="cell" data-execution_count="5">
-<details class="code-fold">
-<summary>Code: encoder-state drift through the padding tail</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>short_src <span class="op">=</span> <span class="bu">min</span>((s <span class="cf">for</span> s, _ <span class="kw">in</span> valid_pairs), key<span class="op">=</span><span class="bu">len</span>)</span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>ids <span class="op">=</span> torch.tensor([src_stoi[c] <span class="cf">for</span> c <span class="kw">in</span> short_src])</span>
-<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>n_pads <span class="op">=</span> <span class="dv">8</span></span>
-<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>padded_ids <span class="op">=</span> torch.cat([ids, torch.zeros(n_pads, dtype<span class="op">=</span>torch.<span class="bu">long</span>)])</span>
-<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> torch.no_grad():</span>
-<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>    states, _ <span class="op">=</span> naive.encoder(naive.src_emb(padded_ids[<span class="va">None</span>]))</span>
-<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>states <span class="op">=</span> states.squeeze(<span class="dv">0</span>)                        <span class="co"># (len + n_pads, hidden)</span></span>
-<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>T <span class="op">=</span> <span class="bu">len</span>(ids)</span>
-<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>drift <span class="op">=</span> (states[T <span class="op">-</span> <span class="dv">1</span>:] <span class="op">-</span> states[T <span class="op">-</span> <span class="dv">1</span>]).norm(dim<span class="op">=</span><span class="dv">1</span>)</span>
-<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>plt.figure(figsize<span class="op">=</span>(<span class="fl">6.4</span>, <span class="fl">2.9</span>))</span>
-<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>steps <span class="op">=</span> <span class="bu">range</span>(T, T <span class="op">+</span> n_pads <span class="op">+</span> <span class="dv">1</span>)</span>
-<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a>plt.plot(steps, drift, <span class="st">"o-"</span>, color<span class="op">=</span><span class="st">"#232D4B"</span>, lw<span class="op">=</span><span class="dv">2</span>, ms<span class="op">=</span><span class="dv">4</span>)</span>
-<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a>plt.axvspan(T <span class="op">+</span> <span class="fl">0.5</span>, T <span class="op">+</span> n_pads <span class="op">+</span> <span class="fl">0.4</span>, color<span class="op">=</span><span class="st">"#E57200"</span>, alpha<span class="op">=</span><span class="fl">0.12</span>)</span>
-<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a>plt.plot([T], [<span class="fl">0.0</span>], <span class="st">"o"</span>, color<span class="op">=</span><span class="st">"#2E7D32"</span>, ms<span class="op">=</span><span class="dv">8</span>)</span>
-<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a>plt.text(T <span class="op">+</span> <span class="fl">0.25</span>, <span class="bu">float</span>(drift.<span class="bu">max</span>()) <span class="op">*</span> <span class="fl">0.06</span>,</span>
-<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a>         <span class="st">"last real character:</span><span class="ch">\n</span><span class="st">the state the decoder should get"</span>,</span>
-<span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a>         fontsize<span class="op">=</span><span class="fl">8.5</span>, color<span class="op">=</span><span class="st">"#2E7D32"</span>, va<span class="op">=</span><span class="st">"bottom"</span>)</span>
-<span id="cb7-19"><a href="#cb7-19" aria-hidden="true" tabindex="-1"></a>plt.text(T <span class="op">+</span> n_pads <span class="op">/</span> <span class="dv">2</span> <span class="op">+</span> <span class="fl">1.2</span>, <span class="bu">float</span>(drift.<span class="bu">max</span>()) <span class="op">*</span> <span class="fl">0.55</span>,</span>
-<span id="cb7-20"><a href="#cb7-20" aria-hidden="true" tabindex="-1"></a>         <span class="st">"&lt;pad&gt; steps keep</span><span class="ch">\n</span><span class="st">moving the state"</span>, color<span class="op">=</span><span class="st">"#722F37"</span>, fontsize<span class="op">=</span><span class="dv">9</span>,</span>
-<span id="cb7-21"><a href="#cb7-21" aria-hidden="true" tabindex="-1"></a>         ha<span class="op">=</span><span class="st">"center"</span>)</span>
-<span id="cb7-22"><a href="#cb7-22" aria-hidden="true" tabindex="-1"></a>plt.xlabel(<span class="ss">f"encoder timestep (source </span><span class="sc">{</span>short_src<span class="sc">!r}</span><span class="ss">, length </span><span class="sc">{</span>T<span class="sc">}</span><span class="ss">)"</span>)</span>
-<span id="cb7-23"><a href="#cb7-23" aria-hidden="true" tabindex="-1"></a>plt.ylabel(<span class="vs">r"</span><span class="dv">$</span><span class="ch">\|</span><span class="dv">\m</span><span class="vs">athbf{h}_t - </span><span class="dv">\m</span><span class="vs">athbf{h}_T</span><span class="ch">\|</span><span class="dv">$</span><span class="vs">"</span>)</span>
-<span id="cb7-24"><a href="#cb7-24" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()<span class="op">;</span> plt.show()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-</details>
+<div class="plan-code">
+<div class="plan">
+<ol type="1">
+<li>Prepare the inputs and fixed settings for the example.</li>
+<li>Measure encoder-state drift through the padding tail.</li>
+</ol>
+</div>
+<div id="padding-drift-audit" class="cell" data-execution_count="5">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="co"># [1]</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>short_src <span class="op">=</span> <span class="bu">min</span>((s <span class="cf">for</span> s, _ <span class="kw">in</span> valid_pairs), key<span class="op">=</span><span class="bu">len</span>)</span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>ids <span class="op">=</span> torch.tensor([src_stoi[c] <span class="cf">for</span> c <span class="kw">in</span> short_src])</span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>n_pads <span class="op">=</span> <span class="dv">8</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>padded_ids <span class="op">=</span> torch.cat([ids, torch.zeros(n_pads, dtype<span class="op">=</span>torch.<span class="bu">long</span>)])</span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> torch.no_grad():</span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>    states, _ <span class="op">=</span> naive.encoder(naive.src_emb(padded_ids[<span class="va">None</span>]))</span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>states <span class="op">=</span> states.squeeze(<span class="dv">0</span>)                        <span class="co"># (len + n_pads, hidden)</span></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>T <span class="op">=</span> <span class="bu">len</span>(ids)</span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a><span class="co"># [2]</span></span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>drift <span class="op">=</span> (states[T <span class="op">-</span> <span class="dv">1</span>:] <span class="op">-</span> states[T <span class="op">-</span> <span class="dv">1</span>]).norm(dim<span class="op">=</span><span class="dv">1</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+</div>
+<div id="cell-fig-padding-drift" class="cell" data-execution_count="6">
 <div class="cell-output cell-output-display">
 <div id="fig-padding-drift" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-fig figure">
@@ -781,36 +810,39 @@ Figure&nbsp;11.2: Why naive right-padding hurts: the encoder state does not stop
 <p>Look back at the two <code>mode</code> branches in the training loop; they are this section. When the decoder is trained, what should it see as <em>its own previous output</em>?</p>
 <p><strong>Free-running</strong> (“fr”) is the honest answer: feed the model’s own predictions back in, exactly as at inference. But its flaws are structural. Early in training those predictions are garbage <span class="math inline">\(\rightarrow\)</span> the decoder learns conditioned on garbage <span class="math inline">\(\rightarrow\)</span> every sequence must be generated token-by-token in a Python loop, because step <span class="math inline">\(t\)</span>’s input does not exist until step <span class="math inline">\(t-1\)</span> is computed. Slow, and unstable exactly when training is young.</p>
 <p><strong>Teacher forcing</strong> (“tf”) conditions each step on the <em>ground-truth</em> previous token instead, the gold rail. Every conditioning input is then known in advance <span class="math inline">\(\rightarrow\)</span> the whole target can be submitted in <strong>one fused decoder call</strong> (the <code>model(S, L, T[:, :-1])</code> line), rather than a Python feedback loop. The LSTM still processes time recurrently inside that call; teacher forcing does not make its timesteps mathematically parallel. Every step nevertheless learns from a sensible context from epoch one. Watch both effects:</p>
-<div id="cell-fig-tf-vs-fr" class="cell" data-execution_count="6">
-<details class="code-fold">
-<summary>Code: teacher forcing vs.&nbsp;free-running, learning curves</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>tf_model, tf_curve <span class="op">=</span> packed, packed_curve</span>
-<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>fr_model, fr_curve <span class="op">=</span> train_seq2seq(<span class="st">"fr"</span>, checkpoints<span class="op">=</span>cps)</span>
-<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"one final test audit (unambiguous sources):"</span>)</span>
-<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> label, candidate <span class="kw">in</span> [(<span class="st">"naive padding"</span>, naive),</span>
-<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>                         (<span class="st">"packed / teacher forced"</span>, tf_model),</span>
-<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>                         (<span class="st">"packed / free-running"</span>, fr_model)]:</span>
-<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"  </span><span class="sc">{</span>label<span class="sc">:25s}</span><span class="ss"> </span><span class="sc">{</span>exact_match(candidate, test_unamb)<span class="sc">:.1%}</span><span class="ss">"</span>)</span>
-<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a>plt.figure(figsize<span class="op">=</span>(<span class="dv">6</span>, <span class="fl">3.2</span>))</span>
-<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a>plt.plot(cps, [tf_curve[c] <span class="cf">for</span> c <span class="kw">in</span> cps], <span class="st">"o-"</span>, color<span class="op">=</span><span class="st">"#232D4B"</span>, lw<span class="op">=</span><span class="dv">2</span>,</span>
-<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a>         label<span class="op">=</span><span class="st">"teacher forcing"</span>)</span>
-<span id="cb8-12"><a href="#cb8-12" aria-hidden="true" tabindex="-1"></a>plt.plot(cps, [fr_curve[c] <span class="cf">for</span> c <span class="kw">in</span> cps], <span class="st">"s-"</span>, color<span class="op">=</span><span class="st">"#E57200"</span>, lw<span class="op">=</span><span class="dv">2</span>,</span>
-<span id="cb8-13"><a href="#cb8-13" aria-hidden="true" tabindex="-1"></a>         label<span class="op">=</span><span class="st">"free-running"</span>)</span>
-<span id="cb8-14"><a href="#cb8-14" aria-hidden="true" tabindex="-1"></a>plt.xlabel(<span class="st">"epoch"</span>)<span class="op">;</span> plt.ylabel(<span class="st">"exact match"</span>)</span>
-<span id="cb8-15"><a href="#cb8-15" aria-hidden="true" tabindex="-1"></a>plt.legend()<span class="op">;</span> plt.tight_layout()<span class="op">;</span> plt.show()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-</details>
+<div class="plan-code">
+<div class="plan">
+<ol type="1">
+<li>Prepare the inputs and fixed settings for the example.</li>
+<li>Train the free-running comparison.</li>
+<li>Audit all three models once on the final test split.</li>
+</ol>
+</div>
+<div id="teacher-forcing-free-running-audit" class="cell" data-execution_count="7">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="co"># [1]</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>tf_model, tf_curve <span class="op">=</span> packed, packed_curve</span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="co"># [2]</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>fr_model, fr_curve <span class="op">=</span> train_seq2seq(<span class="st">"fr"</span>, checkpoints<span class="op">=</span>cps)</span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a><span class="co"># [3]</span></span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"one final test audit (unambiguous sources):"</span>)</span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> label, candidate <span class="kw">in</span> [(<span class="st">"naive padding"</span>, naive),</span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>                         (<span class="st">"packed / teacher forced"</span>, tf_model),</span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a>                         (<span class="st">"packed / free-running"</span>, fr_model)]:</span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"  </span><span class="sc">{</span>label<span class="sc">:25s}</span><span class="ss"> </span><span class="sc">{</span>exact_match(candidate, test_unamb)<span class="sc">:.1%}</span><span class="ss">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>one final test audit (unambiguous sources):
   naive padding             34.3%
   packed / teacher forced   93.1%
   packed / free-running     99.1%</code></pre>
 </div>
+</div>
+</div>
+<div id="cell-fig-tf-vs-fr" class="cell" data-execution_count="8">
 <div class="cell-output cell-output-display">
 <div id="fig-tf-vs-fr" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Exact-match accuracy rises with epoch for both training modes. Teacher forcing leads strongly in early and middle epochs, then the free-running curve catches it near the top by epoch twenty.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-tf-vs-fr-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<img src="11-encoder-decoder_files/figure-html/fig-tf-vs-fr-output-2.png" alt="Exact-match accuracy rises with epoch for both training modes. Teacher forcing leads strongly in early and middle epochs, then the free-running curve catches it near the top by epoch twenty." width="567" height="297" class="figure-img">
+<img src="11-encoder-decoder_files/figure-html/fig-tf-vs-fr-output-1.png" alt="Exact-match accuracy rises with epoch for both training modes. Teacher forcing leads strongly in early and middle epochs, then the free-running curve catches it near the top by epoch twenty." width="567" height="297" class="figure-img">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-tf-vs-fr-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 Figure&nbsp;11.3: Learning curves on a fixed subset of 400 unambiguous validation source strings, disjoint from both training and test. Teacher forcing leads through the early and middle epochs (53.8% vs.&nbsp;23.8% at epoch 6; 95.0% vs.&nbsp;81.2% at epoch 12) and uses one fused decoder call per batch where free-running needs a Python token loop. By epoch 20 the validation curves meet; the single final test audit favors free-running.
@@ -820,20 +852,27 @@ Figure&nbsp;11.3: Learning curves on a fixed subset of 400 unambiguous validatio
 </div>
 </div>
 <p>So teacher forcing is the pragmatic default: fused, stable, and fast out of the gate. What it costs has a name. A teacher-forced decoder has <em>only ever seen perfect histories</em>. At inference it must condition on its own imperfect predictions — a distribution it never trained on. This mismatch is <strong>exposure bias</strong>: the model never learned to recover from its own mistakes, so one early slip can send the rest of the sequence somewhere strange. You can see the shape of this failure in our model’s rare residual errors:</p>
-<div id="error-gallery" class="cell" data-execution_count="7">
-<details class="code-fold">
-<summary>Code: the residual errors, up close</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>errs <span class="op">=</span> [(s, t, translate(tf_model, s))</span>
-<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> s, t <span class="kw">in</span> test_unamb <span class="cf">if</span> translate(tf_model, s) <span class="op">!=</span> t]</span>
-<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"</span><span class="sc">{</span><span class="bu">len</span>(errs)<span class="sc">}</span><span class="ss"> errors on </span><span class="sc">{</span><span class="bu">len</span>(test_unamb)<span class="sc">}</span><span class="ss"> unambiguous test dates; a sample:"</span>)</span>
-<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> s, t, g <span class="kw">in</span> errs[:<span class="dv">3</span>]:</span>
-<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"  </span><span class="sc">{</span>s<span class="sc">!r}</span><span class="ss"> -&gt; </span><span class="sc">{</span>g<span class="sc">!r}</span><span class="ss">   (truth </span><span class="sc">{</span>t<span class="sc">}</span><span class="ss">)"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-</details>
+<div class="plan-code">
+<div class="plan">
+<ol type="1">
+<li>Prepare the inputs and fixed settings for the example.</li>
+<li>Implement the residual errors, up close.</li>
+</ol>
+</div>
+<div id="error-gallery" class="cell" data-execution_count="9">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="co"># [1]</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>errs <span class="op">=</span> [(s, t, translate(tf_model, s))</span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> s, t <span class="kw">in</span> test_unamb <span class="cf">if</span> translate(tf_model, s) <span class="op">!=</span> t]</span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"</span><span class="sc">{</span><span class="bu">len</span>(errs)<span class="sc">}</span><span class="ss"> errors on </span><span class="sc">{</span><span class="bu">len</span>(test_unamb)<span class="sc">}</span><span class="ss"> unambiguous test dates; a sample:"</span>)</span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a><span class="co"># [2]</span></span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> s, t, g <span class="kw">in</span> errs[:<span class="dv">3</span>]:</span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"  </span><span class="sc">{</span>s<span class="sc">!r}</span><span class="ss"> -&gt; </span><span class="sc">{</span>g<span class="sc">!r}</span><span class="ss">   (truth </span><span class="sc">{</span>t<span class="sc">}</span><span class="ss">)"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>30 errors on 437 unambiguous test dates; a sample:
   '03/21/1958' -&gt; '1958-03-22'   (truth 1958-03-21)
   '01/22/1996' -&gt; '1996-02-12'   (truth 1996-01-22)
   '21 november 2013' -&gt; '2013-11-22'   (truth 2013-11-21)</code></pre>
+</div>
 </div>
 </div>
 <p>The errors are plausible-looking digit substitutions and order slips. The decoder has learned a date-shaped language, but no hard mechanism forces each output field to copy the corresponding source fact. Off the gold rail, one wrong character can alter the context for every character after it. Hold that thought two sections.</p>
@@ -857,47 +896,58 @@ Figure&nbsp;11.3: Learning curves on a fixed subset of 400 unambiguous validatio
 <p>Training is settled; now the neglected half. At inference the decoder defines a probability for every possible output sequence, and we want the best one. That is a <em>search problem</em> over a tree where every node branches <span class="math inline">\(V_{\text{tgt}}\)</span> ways; exhaustive search is <span class="math inline">\(V^{T}\)</span>, hopeless. Everything practical is a heuristic walk through that tree.</p>
 <p><strong>Greedy search</strong>, which <code>translate</code> above already performs, takes the single most probable token at each step and never looks back. Complexity <span class="math inline">\(O(V \cdot T)\)</span>, quality: usually fine, occasionally myopic. The failure mode is structural: a token that looks best <em>right now</em> can commit the decoder to a mediocre continuation, when a slightly worse token now would have opened a much better path. Maximizing each step is not maximizing the sequence. You met this exact gap in <a href="../part1/02-logistic-softmax.html" class="quarto-xref"><span>Chapter 2</span></a>, where the hard max’s stepwise confidence hid the alternatives softmax kept alive.</p>
 <p><strong>Beam search</strong> widens the walk: carry the <span class="math inline">\(k\)</span> best partial sequences (the <em>beam</em>), expand each by all <span class="math inline">\(V\)</span> tokens, keep the top <span class="math inline">\(k\)</span> by <em>cumulative</em> log-probability, repeat. Complexity <span class="math inline">\(O(k \cdot V \cdot T)\)</span>, a small multiple of greedy, nothing like exhaustive.</p>
-<div id="beam-search" class="cell" data-execution_count="8">
-<details class="code-fold">
-<summary>Code: beam search, k candidate rails at once</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="at">@torch.no_grad</span>()</span>
-<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> beam_search(model: Seq2Seq, src: <span class="bu">str</span>, k: <span class="bu">int</span> <span class="op">=</span> <span class="dv">5</span>,</span>
-<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>                maxlen: <span class="bu">int</span> <span class="op">=</span> <span class="dv">12</span>) <span class="op">-&gt;</span> <span class="bu">list</span>[<span class="bu">tuple</span>[<span class="bu">str</span>, <span class="bu">float</span>]]:</span>
-<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>    model.<span class="bu">eval</span>()</span>
-<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>    S <span class="op">=</span> torch.tensor([[src_stoi[c] <span class="cf">for</span> c <span class="kw">in</span> src]])</span>
-<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>    state <span class="op">=</span> model.encode(S, torch.tensor([<span class="bu">len</span>(src)]))</span>
-<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>    beams <span class="op">=</span> [([], <span class="fl">0.0</span>, state, <span class="va">False</span>)]               <span class="co"># (tokens, logp, state, done)</span></span>
-<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(maxlen):</span>
-<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>        cand <span class="op">=</span> []</span>
-<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> seq, lp, st, done <span class="kw">in</span> beams:</span>
-<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> done:</span>
-<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a>                cand.append((seq, lp, st, <span class="va">True</span>))<span class="op">;</span> <span class="cf">continue</span></span>
-<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a>            tok <span class="op">=</span> torch.tensor([[seq[<span class="op">-</span><span class="dv">1</span>] <span class="cf">if</span> seq <span class="cf">else</span> BOS]])</span>
-<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a>            o, st2 <span class="op">=</span> model.decoder(model.tgt_emb(tok), st)</span>
-<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a>            logp <span class="op">=</span> F.log_softmax(model.out(o)[<span class="dv">0</span>, <span class="op">-</span><span class="dv">1</span>], <span class="op">-</span><span class="dv">1</span>)</span>
-<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a>            top <span class="op">=</span> torch.topk(logp, k)</span>
-<span id="cb12-17"><a href="#cb12-17" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> lg, ix <span class="kw">in</span> <span class="bu">zip</span>(top.values, top.indices):</span>
-<span id="cb12-18"><a href="#cb12-18" aria-hidden="true" tabindex="-1"></a>                cand.append((seq <span class="op">+</span> [ix.item()], lp <span class="op">+</span> lg.item(), st2,</span>
-<span id="cb12-19"><a href="#cb12-19" aria-hidden="true" tabindex="-1"></a>                             ix.item() <span class="op">==</span> EOS))</span>
-<span id="cb12-20"><a href="#cb12-20" aria-hidden="true" tabindex="-1"></a>        beams <span class="op">=</span> <span class="bu">sorted</span>(cand, key<span class="op">=</span><span class="kw">lambda</span> b: <span class="op">-</span>b[<span class="dv">1</span>])[:k]</span>
-<span id="cb12-21"><a href="#cb12-21" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="bu">all</span>(b[<span class="dv">3</span>] <span class="cf">for</span> b <span class="kw">in</span> beams):</span>
-<span id="cb12-22"><a href="#cb12-22" aria-hidden="true" tabindex="-1"></a>            <span class="cf">break</span></span>
-<span id="cb12-23"><a href="#cb12-23" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> [(<span class="st">""</span>.join(tgt_itos.get(i, <span class="st">"?"</span>) <span class="cf">for</span> i <span class="kw">in</span> seq <span class="cf">if</span> i <span class="op">&gt;</span> <span class="dv">2</span>), lp)</span>
-<span id="cb12-24"><a href="#cb12-24" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> seq, lp, _, _ <span class="kw">in</span> beams]</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-</details>
+<div class="plan-code">
+<div class="plan">
+<ol type="1">
+<li>Beam search, k candidate rails at once.</li>
+</ol>
+</div>
+<div id="beam-search" class="cell" data-execution_count="10">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="co"># [1]</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="at">@torch.no_grad</span>()</span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> beam_search(model: Seq2Seq, src: <span class="bu">str</span>, k: <span class="bu">int</span> <span class="op">=</span> <span class="dv">5</span>,</span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>                maxlen: <span class="bu">int</span> <span class="op">=</span> <span class="dv">12</span>) <span class="op">-&gt;</span> <span class="bu">list</span>[<span class="bu">tuple</span>[<span class="bu">str</span>, <span class="bu">float</span>]]:</span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>    model.<span class="bu">eval</span>()</span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>    S <span class="op">=</span> torch.tensor([[src_stoi[c] <span class="cf">for</span> c <span class="kw">in</span> src]])</span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>    state <span class="op">=</span> model.encode(S, torch.tensor([<span class="bu">len</span>(src)]))</span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>    beams <span class="op">=</span> [([], <span class="fl">0.0</span>, state, <span class="va">False</span>)]               <span class="co"># (tokens, logp, state, done)</span></span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(maxlen):</span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>        cand <span class="op">=</span> []</span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> seq, lp, st, done <span class="kw">in</span> beams:</span>
+<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> done:</span>
+<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a>                cand.append((seq, lp, st, <span class="va">True</span>))<span class="op">;</span> <span class="cf">continue</span></span>
+<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a>            tok <span class="op">=</span> torch.tensor([[seq[<span class="op">-</span><span class="dv">1</span>] <span class="cf">if</span> seq <span class="cf">else</span> BOS]])</span>
+<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a>            o, st2 <span class="op">=</span> model.decoder(model.tgt_emb(tok), st)</span>
+<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a>            logp <span class="op">=</span> F.log_softmax(model.out(o)[<span class="dv">0</span>, <span class="op">-</span><span class="dv">1</span>], <span class="op">-</span><span class="dv">1</span>)</span>
+<span id="cb12-17"><a href="#cb12-17" aria-hidden="true" tabindex="-1"></a>            top <span class="op">=</span> torch.topk(logp, k)</span>
+<span id="cb12-18"><a href="#cb12-18" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> lg, ix <span class="kw">in</span> <span class="bu">zip</span>(top.values, top.indices):</span>
+<span id="cb12-19"><a href="#cb12-19" aria-hidden="true" tabindex="-1"></a>                cand.append((seq <span class="op">+</span> [ix.item()], lp <span class="op">+</span> lg.item(), st2,</span>
+<span id="cb12-20"><a href="#cb12-20" aria-hidden="true" tabindex="-1"></a>                             ix.item() <span class="op">==</span> EOS))</span>
+<span id="cb12-21"><a href="#cb12-21" aria-hidden="true" tabindex="-1"></a>        beams <span class="op">=</span> <span class="bu">sorted</span>(cand, key<span class="op">=</span><span class="kw">lambda</span> b: <span class="op">-</span>b[<span class="dv">1</span>])[:k]</span>
+<span id="cb12-22"><a href="#cb12-22" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="bu">all</span>(b[<span class="dv">3</span>] <span class="cf">for</span> b <span class="kw">in</span> beams):</span>
+<span id="cb12-23"><a href="#cb12-23" aria-hidden="true" tabindex="-1"></a>            <span class="cf">break</span></span>
+<span id="cb12-24"><a href="#cb12-24" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> [(<span class="st">""</span>.join(tgt_itos.get(i, <span class="st">"?"</span>) <span class="cf">for</span> i <span class="kw">in</span> seq <span class="cf">if</span> i <span class="op">&gt;</span> <span class="dv">2</span>), lp)</span>
+<span id="cb12-25"><a href="#cb12-25" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> seq, lp, _, _ <span class="kw">in</span> beams]</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
 </div>
 <p>Now the payoff, and it is exactly where we buried it: the ambiguous dates. For <code>03/05/2021</code>, “the one best answer” is the wrong question. The training world itself was split 70/30 between two readings. Greedy silently hands you one sequence; beam search shows which complete alternatives the model ranks highly:</p>
-<div id="beam-demo" class="cell" data-execution_count="9">
-<details class="code-fold">
-<summary>Code: beam search on genuinely ambiguous dates</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>amb <span class="op">=</span> [(s, t) <span class="cf">for</span> s, t <span class="kw">in</span> test_pairs</span>
-<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>       <span class="cf">if</span> <span class="st">"/"</span> <span class="kw">in</span> s <span class="kw">and</span> <span class="bu">int</span>(s[:<span class="dv">2</span>]) <span class="op">&lt;=</span> <span class="dv">12</span> <span class="kw">and</span> <span class="bu">int</span>(s[<span class="dv">3</span>:<span class="dv">5</span>]) <span class="op">&lt;=</span> <span class="dv">12</span>]</span>
-<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> s, t <span class="kw">in</span> amb[:<span class="dv">4</span>]:</span>
-<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"</span><span class="sc">{</span>s<span class="sc">!r}</span><span class="ss">   truth: </span><span class="sc">{</span>t<span class="sc">!r}</span><span class="ss">   greedy: </span><span class="sc">{</span>translate(tf_model, s)<span class="sc">!r}</span><span class="ss">"</span>)</span>
-<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> text, lp <span class="kw">in</span> beam_search(tf_model, s, k<span class="op">=</span><span class="dv">4</span>)[:<span class="dv">2</span>]:</span>
-<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(<span class="ss">f"   beam: </span><span class="sc">{</span>text<span class="sc">!r}</span><span class="ss">   joint log score = </span><span class="sc">{</span>lp<span class="sc">:.2f}</span><span class="ss">"</span>)</span>
-<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-</details>
+<div class="plan-code">
+<div class="plan">
+<ol type="1">
+<li>Prepare the inputs and fixed settings for the example.</li>
+<li>Beam search on genuinely ambiguous dates.</li>
+</ol>
+</div>
+<div id="beam-demo" class="cell" data-execution_count="11">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="co"># [1]</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>amb <span class="op">=</span> [(s, t) <span class="cf">for</span> s, t <span class="kw">in</span> test_pairs</span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>       <span class="cf">if</span> <span class="st">"/"</span> <span class="kw">in</span> s <span class="kw">and</span> <span class="bu">int</span>(s[:<span class="dv">2</span>]) <span class="op">&lt;=</span> <span class="dv">12</span> <span class="kw">and</span> <span class="bu">int</span>(s[<span class="dv">3</span>:<span class="dv">5</span>]) <span class="op">&lt;=</span> <span class="dv">12</span>]</span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a><span class="co"># [2]</span></span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> s, t <span class="kw">in</span> amb[:<span class="dv">4</span>]:</span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"</span><span class="sc">{</span>s<span class="sc">!r}</span><span class="ss">   truth: </span><span class="sc">{</span>t<span class="sc">!r}</span><span class="ss">   greedy: </span><span class="sc">{</span>translate(tf_model, s)<span class="sc">!r}</span><span class="ss">"</span>)</span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> text, lp <span class="kw">in</span> beam_search(tf_model, s, k<span class="op">=</span><span class="dv">4</span>)[:<span class="dv">2</span>]:</span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(<span class="ss">f"   beam: </span><span class="sc">{</span>text<span class="sc">!r}</span><span class="ss">   joint log score = </span><span class="sc">{</span>lp<span class="sc">:.2f}</span><span class="ss">"</span>)</span>
+<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>'09/02/1995'   truth: '1995-09-02'   greedy: '1995-09-02'
    beam: '1995-09-02'   joint log score = -0.23
@@ -917,18 +967,26 @@ Figure&nbsp;11.3: Learning curves on a fixed subset of 400 unambiguous validatio
 </code></pre>
 </div>
 </div>
+</div>
 <p>Each displayed score is the sum of token log-probabilities along that one sequence, including <code>&lt;eos&gt;</code> when it was reached. These are <strong>raw joint log scores</strong>, not a normalized distribution over the printed beam, so exponentiating two of them and calling the result a 70/30 posterior would be wrong. Some pairs correspond cleanly to the month/day and day/month readings. Others include a high-scoring hybrid that matches neither convention, an honest reminder that beam search searches the model; it does not install a calendar constraint. The ranking still exposes alternatives that greedy search hides.</p>
 <p>Honesty requires the other half of the report:</p>
-<div id="beam-vs-greedy-stat" class="cell" data-execution_count="10">
-<details class="code-fold">
-<summary>Code: how often beam actually changes the answer</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>sub <span class="op">=</span> random.Random(<span class="dv">0</span>).sample(test_pairs, <span class="dv">200</span>)</span>
-<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>n_diff <span class="op">=</span> <span class="bu">sum</span>(beam_search(tf_model, s, k<span class="op">=</span><span class="dv">5</span>)[<span class="dv">0</span>][<span class="dv">0</span>] <span class="op">!=</span> translate(tf_model, s)</span>
-<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>             <span class="cf">for</span> s, _ <span class="kw">in</span> sub)</span>
-<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"beam-5 disagrees with greedy on </span><span class="sc">{</span>n_diff<span class="sc">}</span><span class="ss"> of </span><span class="sc">{</span><span class="bu">len</span>(sub)<span class="sc">}</span><span class="ss"> test dates"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-</details>
+<div class="plan-code">
+<div class="plan">
+<ol type="1">
+<li>How often beam actually changes the answer.</li>
+<li>Report or visualize the measured result.</li>
+</ol>
+</div>
+<div id="beam-vs-greedy-stat" class="cell" data-execution_count="12">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="co"># [1]</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>sub <span class="op">=</span> random.Random(<span class="dv">0</span>).sample(test_pairs, <span class="dv">200</span>)</span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>n_diff <span class="op">=</span> <span class="bu">sum</span>(beam_search(tf_model, s, k<span class="op">=</span><span class="dv">5</span>)[<span class="dv">0</span>][<span class="dv">0</span>] <span class="op">!=</span> translate(tf_model, s)</span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>             <span class="cf">for</span> s, _ <span class="kw">in</span> sub)</span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a><span class="co"># [2]</span></span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"beam-5 disagrees with greedy on </span><span class="sc">{</span>n_diff<span class="sc">}</span><span class="ss"> of </span><span class="sc">{</span><span class="bu">len</span>(sub)<span class="sc">}</span><span class="ss"> test dates"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>beam-5 disagrees with greedy on 1 of 200 test dates</code></pre>
+</div>
 </div>
 </div>
 <p>On this small, well-trained model, beam search changes almost nothing. Beam search earns its keep at the margins, but real translation, with vocabularies of tens of thousands and long sentences, lives entirely at those margins, which is why beam decoding became a standard tool of the seq2seq era.</p>
