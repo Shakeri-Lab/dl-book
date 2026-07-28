@@ -13,7 +13,7 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > ## Current state — 2026-07-28 (read this first)
 >
 > The manuscript is **complete and released**: tag **v1.1** carries the stable
-> 502-page PDF. The live manuscript is a 544-page rolling post-v1.1 build with chapters
+> 502-page PDF. The live manuscript is a 546-page rolling post-v1.1 build with chapters
 > 1–20, three interludes, four appendices, and an epilogue. The July 28
 > comprehensive audit is complete: verified glyph losses are repaired, chapter
 > retrieval/source contracts are uniform, exercise modes are canonical, and
@@ -21,7 +21,7 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > mid-flight.** Every open item is a decision waiting on the author — see **§9**,
 > which supersedes any older status text below it.
 >
-> The universal code pass covers all 194 learner-visible Python surfaces; 92
+> The universal code pass covers all 194 learner-visible Python surfaces; 94
 > `echo: false` execution-support cells are intentionally exempt. Every plan has
 > at most six steps and every step maps to a bracket-only numbered marker
 > (`# [1]`, or fused `# [2][5]`) in executed or tested source. Descriptive text
@@ -66,7 +66,8 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > Fashion-MNIST scorecard, the ResNet-18 transfer rematch, and the Chapter 10
 > WikiText-2 word-LSTM scale study.
 >
-> The July 28 audit parses 282 executable cells, four transclusions, and eleven
+> The July 28 audit plus Chapter 15 follow-on parses 284 executable cells, four
+> transclusions, and eleven
 > included modules/scripts. The build now checks Plan → Code structure, exercise
 > tags, chapter checks and sources, book voice, interlude namespaces, frozen
 > stdout parity, LaTeX missing-character diagnostics, PDF replacement glyphs,
@@ -83,9 +84,16 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > controlled-evidence limit on in-context learning are now named at the point
 > where their mechanisms have earned the name.
 >
+> The Chapter 15 editorial follow-on removes the remaining off-page live-session
+> and internal seed-note residue book-wide, adds a CI tripwire for that splice
+> class, and clarifies that the displayed GRU equation follows Cho et al.'s
+> original keep-old update-gate convention. Chapter 15 now adds a controlled-lab
+> schematic that exposes its covered/uncovered type roles and a visibility
+> triptych for BERT, GPT, and T5.
+>
 > The definitive two-format refresh preserves all 133 stdout blocks byte for
 > byte across the structural interlude move, and every HTML/TeX stdout pair
-> matches. The production PDF is 544 pages, sixteen pages below the pre-audit
+> matches. The production PDF is 546 pages, fourteen pages below the pre-audit
 > 560-page ceiling.
 >
 > Fresh session? Read `CLAUDE.md`, then §9 and §2 of this file, then
@@ -1051,7 +1059,7 @@ in the reader's language beside the terse kernel, output beneath the code.
 | Rules, authoring form, six-step ceiling | `docs/style-guide.md` |
 | Audit | `scripts/audit_plan_code.py` |
 
-All 194 learner-visible Python surfaces now use the panel; 92 `echo: false`
+All 194 learner-visible Python surfaces now use the panel; 94 `echo: false`
 execution-only cells are exempt. Markers in executed/tested source are
 bracket-only (`# [1]`, or fused `# [2][5]`) and never repeat the plan text.
 Comments remain only when they explain shapes, numerical choices, or non-obvious

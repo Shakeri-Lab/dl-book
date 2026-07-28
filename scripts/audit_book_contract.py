@@ -23,6 +23,23 @@ HINTON_COURSE_RE = re.compile(
     r"Hinton(?:'s|’s)\s+lectures",
     re.IGNORECASE,
 )
+PUBLIC_RESIDUE_PATTERNS = {
+    "off-page live-session reference": re.compile(
+        r"\blive sessions?\b",
+        re.IGNORECASE,
+    ),
+    "internal seed-note jargon": re.compile(
+        r"\bseed(?:'s|’s)?\s+notes\b|\bthe\s+seed(?:'s|’s)\b",
+        re.IGNORECASE,
+    ),
+    "derivation/follows-suit splice": re.compile(
+        r"\bderivation\s+suit\.",
+        re.IGNORECASE,
+    ),
+    "doubled sentence-head splice": re.compile(
+        r"\bThe\s+(?:Here is|This)\b",
+    ),
+}
 PYTHON_CELL_RE = re.compile(r"```\{python\}\n(.*?)\n```", re.DOTALL)
 FIGURE_LABEL_RE = re.compile(r"^#\| label: fig-[A-Za-z0-9_-]+\s*$", re.MULTILINE)
 SUBSTANTIVE_VISIBLE_TOKENS = ("print(", "assert ", "raise ", "def ", "class ")
@@ -91,6 +108,13 @@ def main() -> None:
                 errors,
                 f"{path.relative_to(ROOT)}:{line}: public internal TeX source path",
             )
+        for description, pattern in PUBLIC_RESIDUE_PATTERNS.items():
+            for match in pattern.finditer(visible):
+                line = visible.count("\n", 0, match.start()) + 1
+                fail(
+                    errors,
+                    f"{path.relative_to(ROOT)}:{line}: {description}",
+                )
 
         for cell in PYTHON_CELL_RE.findall(text):
             is_figure = FIGURE_LABEL_RE.search(cell)
@@ -143,7 +167,8 @@ def main() -> None:
         raise SystemExit(1)
     print(
         "PASS: 20 chapter retrieval/source contracts, canonical exercise tags, "
-        "book voice, hidden display-only figures, and three interlude namespaces"
+        "book voice and splice hygiene, hidden display-only figures, and three "
+        "interlude namespaces"
     )
 
 

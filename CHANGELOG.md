@@ -11,13 +11,16 @@ experiment.
 Production: interludes use independent figure namespaces in HTML and PDF; the build
 checks the PDF text layer and LaTeX log for missing glyphs; callout icons carry empty
 accessible replacement text; and release metadata now identifies v1.1 as the stable
-502-page edition while `main` remains a rolling post-release build.
+502-page edition while `main` remains a rolling post-release build. A follow-on
+Chapter 15 editorial pass removes remaining off-page/session splice residue, adds a
+strict leak-vocabulary tripwire, clarifies the original GRU gate convention, and adds
+the controlled-lab schematic plus the three-family visibility triptych.
 
-Acceptance: 194 learner-visible Plan → Code surfaces and 92 execution-only
-harnesses pass the strengthened audit; 282 executable cells, four transclusions,
+Acceptance: 194 learner-visible Plan → Code surfaces and 94 execution-only
+harnesses pass the strengthened audit; 284 executable cells, four transclusions,
 and eleven included modules/scripts parse; all 133 pre-existing stdout blocks remain
 byte-identical across the structural move and between HTML and TeX; and the complete
-post-v1.1 book renders in 544 pages, below the prior 560-page ceiling.
+post-v1.1 book renders in 546 pages, below the prior 560-page ceiling.
 
 ## Earlier post-v1.1 work — Chapter 1 and universal code-surface revision
 
