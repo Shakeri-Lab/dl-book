@@ -111,6 +111,13 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > calibration. The CLIP source note distinguishes the paper's scale cap from the
 > uncapped released implementation.
 >
+> The final Part II pass certifies Chapters 7–9 under the same equation,
+> printed-number, prose, source, exercise, and convention battery used later in
+> the book; its only findings were two Chapter 9 splice typos, now repaired.
+> Chapter 15's complete lab also reproduces exactly from its canonical source.
+> `scripts/audit_python_sources.py` now protects the lab's self-contained design
+> by rejecting repository-local imports and code transclusions in that chapter.
+>
 > The definitive two-format refresh preserves all 133 stdout blocks byte for
 > byte across the structural interlude move, and every HTML/TeX stdout pair
 > matches. The production PDF is 552 pages, eight pages below the pre-audit

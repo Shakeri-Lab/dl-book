@@ -10,6 +10,8 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+CHAPTER_15 = ROOT / "chapters/part4/15-bert-pretraining.qmd"
+REPO_IMPORT_ROOTS = {"dlbook"}
 FENCE_RE = re.compile(r"^```(\{python\})\s*$\n(.*?)^```\s*$", re.MULTILINE | re.DOTALL)
 INCLUDE_RE = re.compile(r'book-include="([^"]+)"')
 START_RE = re.compile(r"start-line=(\d+)")
@@ -42,6 +44,44 @@ def included_source(chapter: Path, opener: str) -> tuple[str, str]:
     return "\n".join(lines[start:end]) + "\n", str(include_path.relative_to(ROOT))
 
 
+def audit_chapter_15_self_containment(text: str, errors: list[str]) -> None:
+    if INCLUDE_FENCE_RE.search(text):
+        errors.append(
+            f"{CHAPTER_15.relative_to(ROOT)}: must not transclude repository code"
+        )
+    for index, match in enumerate(FENCE_RE.finditer(text), start=1):
+        try:
+            tree = ast.parse(
+                match.group(2),
+                filename=f"{CHAPTER_15.relative_to(ROOT)}:cell-{index}",
+            )
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                roots = {alias.name.split(".", 1)[0] for alias in node.names}
+            elif isinstance(node, ast.ImportFrom):
+                roots = (
+                    {node.module.split(".", 1)[0]}
+                    if node.module is not None
+                    else set()
+                )
+                if node.level:
+                    errors.append(
+                        f"{CHAPTER_15.relative_to(ROOT)}:cell-{index}: "
+                        "relative import violates the self-contained lab contract"
+                    )
+            else:
+                continue
+            local_roots = roots & REPO_IMPORT_ROOTS
+            if local_roots:
+                errors.append(
+                    f"{CHAPTER_15.relative_to(ROOT)}:cell-{index}: repo-local "
+                    f"import(s) violate the self-contained lab contract: "
+                    f"{', '.join(sorted(local_roots))}"
+                )
+
+
 def main() -> None:
     errors: list[str] = []
     cell_count = 0
@@ -61,6 +101,8 @@ def main() -> None:
             # Resolve it here; the complete referenced module is parsed below.
             included_source(chapter, match.group(1))
 
+    audit_chapter_15_self_containment(CHAPTER_15.read_text(), errors)
+
     module_paths = sorted((ROOT / "code").rglob("*.py")) + sorted(
         (ROOT / "scripts").glob("*.py")
     )
@@ -73,7 +115,8 @@ def main() -> None:
         raise SystemExit(1)
     print(
         f"PASS: parsed {cell_count} executable cells, {include_count} transclusions, "
-        f"and {len(module_paths)} Python modules/scripts"
+        f"and {len(module_paths)} Python modules/scripts; Chapter 15 remains "
+        "self-contained"
     )
 
 

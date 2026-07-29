@@ -26,7 +26,10 @@ epilogue's `E.` figure namespace, the explicit canonical-edition sentence, compl
 interlude retrieval checks, the RMSProp provenance line, strict CI text-layer
 tripwires, and the reviewed exercise bank. The Chapter 20 deep pass closes the
 temperature arc with a learned-logit-scale bridge, a derivation and paired-study
-exercise, and an exact paper-versus-reference-code source note. Nothing is mid-flight.
+exercise, and an exact paper-versus-reference-code source note. The final Part II
+pass certifies Chapters 7–9, repairs Chapter 9's last two splice typos, and records
+an exact source-level re-execution of Chapter 15's now CI-protected self-contained
+lab. Nothing is mid-flight.
 
 **Read before doing anything, in this order:**
 

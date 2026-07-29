@@ -35,6 +35,11 @@ fixed-versus-learned comparison, and separates training sharpness from post-hoc
 calibration. The source note distinguishes the cap reported in the CLIP paper from
 the uncapped released reference implementation.
 
+The closing Part II certification finds no mathematical defects in Chapters 7–9
+and repairs Chapter 9's two remaining splice typos. An independent source-level
+re-execution reproduces every printed Chapter 15 lab value; CI now preserves that
+lab's self-contained design by rejecting repository-local imports or transclusions.
+
 Acceptance: 194 learner-visible Plan → Code surfaces and 94 execution-only
 harnesses pass the strengthened audit; 284 executable cells, four transclusions,
 and eleven included modules/scripts parse; all 133 pre-existing stdout blocks remain
