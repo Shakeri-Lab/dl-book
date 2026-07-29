@@ -16,6 +16,13 @@ Chapter 15 editorial pass removes remaining off-page/session splice residue, add
 strict leak-vocabulary tripwire, clarifies the original GRU gate convention, and adds
 the controlled-lab schematic plus the three-family visibility triptych.
 
+The July 29 closeout gives the epilogue its own `E.` figure namespace, states
+explicitly that HTML is canonical and PDF is its derived print conversion, restores
+the original RMSProp slide-deck provenance, and makes every interlude both visibly
+named and retrieval-complete. A twelve-item exercise-bank review adds ten genuinely
+new exercises and strengthens two existing ones across Chapters 3, 5, 6, 9, 11, 12,
+15, 16, and 19 plus the experiment interlude.
+
 Acceptance: 194 learner-visible Plan → Code surfaces and 94 execution-only
 harnesses pass the strengthened audit; 284 executable cells, four transclusions,
 and eleven included modules/scripts parse; all 133 pre-existing stdout blocks remain

@@ -21,7 +21,10 @@ Current stable release **v1.1** is 502 pages. The post-release `main` revision i
 a 546-page rolling build after the universal Plan → Code pass, two Chapter 1 revisions,
 the pacing/visual/full-scale experiment pass, the July 28 comprehensive book audit,
 and the Chapter 15 editorial/figure pass. It contains chapters 1–20 plus three
-interludes, four appendices, and an epilogue. Nothing is mid-flight.
+interludes, four appendices, and an epilogue. The July 29 closeout adds the
+epilogue's `E.` figure namespace, the explicit canonical-edition sentence, complete
+interlude retrieval checks, the RMSProp provenance line, strict CI text-layer
+tripwires, and the reviewed exercise bank. Nothing is mid-flight.
 
 **Read before doing anything, in this order:**
 
@@ -64,9 +67,9 @@ answer.**
   pagination, line breaking, float placement, or print-safe sizing requires it.
   Repair disagreements in the shared source or conversion layer; never create a
   substantively different PDF edition.
-- **Interlude numbering is independent.** Experiment, autoencoder, and test-time-
-  regression figures use `EX.`, `AE.`, and `TTR.` namespaces in both formats;
-  interlude display equations remain unnumbered.
+- **Unnumbered-section figures are independent.** Experiment, autoencoder, and
+  test-time-regression figures use `EX.`, `AE.`, and `TTR.` namespaces; epilogue
+  figures use `E.` in both formats. Interlude display equations remain unnumbered.
 - **PDF glyph hygiene is enforced.** Greek and relation symbols belong in math mode;
   code elisions are ASCII; the publish job audits LaTeX missing-character warnings,
   NUL/U+FFFD extraction, and decorative icon text.

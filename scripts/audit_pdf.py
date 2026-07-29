@@ -40,7 +40,7 @@ def main() -> None:
         errors.append(r"repaired $\sigma(0)\approx\tfrac12$ text is missing")
     if "β-VAE" not in normalized_text:
         errors.append(r"repaired $\beta$-VAE text is missing")
-    for prefix in ("EX", "AE", "TTR"):
+    for prefix in ("EX", "AE", "TTR", "E"):
         if f"Figure {prefix}.1" not in normalized_text:
             errors.append(f"independent Figure {prefix}. namespace is missing")
         if re.search(rf"Figure {prefix}\.\d+\.\d+", normalized_text):

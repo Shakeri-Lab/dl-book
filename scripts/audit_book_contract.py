@@ -16,8 +16,20 @@ INTERLUDES = {
     "ttrfig": ROOT / "chapters/interludes/attention-as-test-time-regression.qmd",
 }
 EXPECTED_CUSTOM_FLOATS = {"exfig": 2, "aefig": 4, "ttrfig": 2}
+EPILOGUE = ROOT / "chapters/epilogue.qmd"
+RMSPROP_PROVENANCE = (
+    "- Tieleman and Hinton, “Lecture 6.5 — RMSProp,” *COURSERA: Neural Networks for"
+)
+CANONICAL_EDITION_SENTENCE = (
+    "The HTML edition is canonical; the PDF is a derived print conversion."
+)
 CANONICAL_EXERCISE_TAGS = {"Pencil.", "Code.", "Audit."}
 EXERCISE_RE = re.compile(r"\*\*\(([^)\n]+)\)\*\*")
+EXERCISE_SECTION_RE = re.compile(
+    r"^## Exercises[^\n]*\n(.*?)(?=^##\s|\Z)",
+    re.MULTILINE | re.DOTALL,
+)
+NUMBERED_EXERCISE_RE = re.compile(r"^(\d+)\.\s+(.+)$", re.MULTILINE)
 HINTON_COURSE_RE = re.compile(
     r"Hinton(?:'s|’s)\s+(?:Coursera\s+)?course|Lecture[- ]?6e|"
     r"Hinton(?:'s|’s)\s+lectures",
@@ -89,13 +101,22 @@ def main() -> None:
                     errors,
                     f"{path.relative_to(ROOT)}: noncanonical exercise tag ({tag})",
                 )
+        for section in EXERCISE_SECTION_RE.findall(text):
+            for number, opening in NUMBERED_EXERCISE_RE.findall(section):
+                if not EXERCISE_RE.match(opening):
+                    fail(
+                        errors,
+                        f"{path.relative_to(ROOT)}: exercise {number} must begin "
+                        "with a canonical tag",
+                    )
 
         visible = without_html_comments(text)
         for match in re.finditer(r"\blectures?\b", visible, re.IGNORECASE):
             line = visible.count("\n", 0, match.start()) + 1
+            line_text = visible.splitlines()[line - 1]
             allowed = (
-                path.name == "index.qmd"
-                and "[lecture videos]" in visible.splitlines()[line - 1]
+                path.name == "04-training-loss-sgd.qmd"
+                and line_text.startswith(RMSPROP_PROVENANCE)
             )
             if not allowed:
                 fail(
@@ -143,6 +164,10 @@ def main() -> None:
 
     for key, path in INTERLUDES.items():
         text = path.read_text()
+        if not text.startswith("# Interlude:"):
+            fail(errors, f"{path.relative_to(ROOT)}: title must begin 'Interlude:'")
+        if text.count("## Check yourself") != 1:
+            fail(errors, f"{path.relative_to(ROOT)}: expected one Check yourself")
         if "Numbering note" in text:
             fail(errors, f"{path.relative_to(ROOT)}: obsolete numbering note")
         if "{#eq-" in text:
@@ -154,6 +179,24 @@ def main() -> None:
                 f"{path.relative_to(ROOT)}: expected {EXPECTED_CUSTOM_FLOATS[key]} "
                 f"{key} floats, found {count}",
             )
+
+    epilogue_text = EPILOGUE.read_text()
+    if "Numbering note" in epilogue_text:
+        fail(errors, f"{EPILOGUE.relative_to(ROOT)}: obsolete numbering note")
+    epilogue_figures = len(re.findall(r"#epfig-[A-Za-z0-9_-]+", epilogue_text))
+    if epilogue_figures != 2:
+        fail(
+            errors,
+            f"{EPILOGUE.relative_to(ROOT)}: expected 2 epfig floats, "
+            f"found {epilogue_figures}",
+        )
+
+    index_text = (ROOT / "index.qmd").read_text()
+    if index_text.count(CANONICAL_EDITION_SENTENCE) != 1:
+        fail(errors, "index.qmd: canonical HTML/PDF sentence must appear exactly once")
+    chapter4_text = (ROOT / "chapters/part1/04-training-loss-sgd.qmd").read_text()
+    if chapter4_text.count(RMSPROP_PROVENANCE) != 1:
+        fail(errors, "Chapter 4: RMSProp provenance must appear exactly once")
 
     all_qmd = "\n".join(
         path.read_text() for path in sorted((ROOT / "chapters").rglob("*.qmd"))
@@ -167,8 +210,8 @@ def main() -> None:
         raise SystemExit(1)
     print(
         "PASS: 20 chapter retrieval/source contracts, canonical exercise tags, "
-        "book voice and splice hygiene, hidden display-only figures, and three "
-        "interlude namespaces"
+        "book voice and splice hygiene, hidden display-only figures, three interlude "
+        "namespaces, the epilogue namespace, and canonical-edition metadata"
     )
 
 

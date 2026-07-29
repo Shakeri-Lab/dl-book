@@ -441,8 +441,9 @@ misdiagnosis deserves to be made explicit.
   missing characters and the extracted text layer for NUL and U+FFFD.
 - Unnumbered interludes own independent figure namespaces in both formats:
   **Figure EX.** for experimentation, **Figure AE.** for autoencoders, and
-  **Figure TTR.** for attention as test-time regression. Their display equations are
-  unnumbered so neither format inherits a neighboring chapter counter.
+  **Figure TTR.** for attention as test-time regression. The epilogue owns
+  **Figure E.**. Interlude display equations are unnumbered so neither format
+  inherits a neighboring chapter counter.
 - Decorative callout icons carry empty replacement text in PDF extraction. Meaning
   lives in the callout title and prose, never in the icon.
 

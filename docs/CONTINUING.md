@@ -10,7 +10,7 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 
 ---
 
-> ## Current state — 2026-07-28 (read this first)
+> ## Current state — 2026-07-29 (read this first)
 >
 > The manuscript is **complete and released**: tag **v1.1** carries the stable
 > 502-page PDF. The live manuscript is a 546-page rolling post-v1.1 build with chapters
@@ -91,6 +91,14 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > schematic that exposes its covered/uncovered type roles and a visibility
 > triptych for BERT, GPT, and T5.
 >
+> The July 29 closeout gives the epilogue an independent `E.` figure namespace in
+> both formats and states the edition contract explicitly: HTML is canonical; PDF
+> is its derived print conversion. RMSProp's original slide-deck provenance is back
+> in Chapter 4. All three interludes are visibly prefixed and end with a retrieval
+> check. The CI contract now pins NUL, missing-character, and leak-vocabulary
+> tripwires. A twelve-proposal exercise review adds ten new exercises and strengthens
+> two existing ones without changing the 546-page total.
+>
 > The definitive two-format refresh preserves all 133 stdout blocks byte for
 > byte across the structural interlude move, and every HTML/TeX stdout pair
 > matches. The production PDF is 546 pages, fourteen pages below the pre-audit
@@ -133,7 +141,7 @@ verified in the full-book PDF. The author's own edit pass remains a separate gat
 than a condition of either release.
 
 The July 15 course-alignment pass adds two unnumbered bridges without renumbering any
-chapter or changing existing chapter URLs. **Who Trains the Trainer? Learning by
+chapter or changing existing chapter URLs. **Interlude: Who Trains the Trainer? Learning by
 Experiment** restores Module 3's empirical-science, HPO, and ablation spine. Its paired
 Fashion study separates fixed-recipe effects from a tuned comparison. Across the four
 predeclared shared learning rates, BatchNorm minus no BatchNorm is +22.800 percentage
@@ -614,7 +622,7 @@ two unnumbered bridges, the multimodal continuation, and an epilogue while prese
 every existing chapter number and URL. Each record preserves its source, harvest,
 experiment, and verification contract:
 
-### Interlude after ch. 6 — Who Trains the Trainer? Learning by Experiment
+### Interlude after ch. 6 — Interlude: Who Trains the Trainer? Learning by Experiment
 - **Sources and provenance**: sanitized `sources/3-HPO-experimentation.tex`, the full
   instructor HPO deck (SHA-256 `6deaf680...`), and the full September 18, 2025 live
   VTT (SHA-256 `65a63bd...`). D2L-derived legacy planning files, product tutorials,
