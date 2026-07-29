@@ -13,7 +13,7 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > ## Current state — 2026-07-29 (read this first)
 >
 > The manuscript is **complete and released**: tag **v1.1** carries the stable
-> 502-page PDF. The live manuscript is a 548-page rolling post-v1.1 build with chapters
+> 502-page PDF. The live manuscript is a 552-page rolling post-v1.1 build with chapters
 > 1–20, three interludes, four appendices, and an epilogue. The July 28
 > comprehensive audit is complete: verified glyph losses are repaired, chapter
 > retrieval/source contracts are uniform, exercise modes are canonical, and
@@ -103,9 +103,17 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > the carried summary learnable. The added epilogue leaf and recto appendix opening
 > bring the rolling PDF to 548 pages.
 >
+> The Chapter 20 deep pass closes the temperature thread planted across the book:
+> Chapter 12 interprets temperature as bandwidth, Chapter 13 learns the comparison,
+> and Chapter 20 now asks what changes when the logit scale itself is learned. Its
+> new exercise derives the symmetric-loss gradient, specifies a paired fixed-versus-
+> learned study, and separates joint training sharpness from Chapter 16's post-hoc
+> calibration. The CLIP source note distinguishes the paper's scale cap from the
+> uncapped released implementation.
+>
 > The definitive two-format refresh preserves all 133 stdout blocks byte for
 > byte across the structural interlude move, and every HTML/TeX stdout pair
-> matches. The production PDF is 548 pages, twelve pages below the pre-audit
+> matches. The production PDF is 552 pages, eight pages below the pre-audit
 > 560-page ceiling.
 >
 > Fresh session? Read `CLAUDE.md`, then §9 and §2 of this file, then

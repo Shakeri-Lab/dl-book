@@ -18,13 +18,15 @@ rest of my 6050 material; the virtualenv is deliberately outside it). Remote `ht
 `https://shakeri-lab.github.io/dl-book/`, PDF at
 `https://shakeri-lab.github.io/dl-book/Deep-Learning--Making-It-Learnable.pdf`.
 Current stable release **v1.1** is 502 pages. The post-release `main` revision is
-a 548-page rolling build after the universal Plan → Code pass, two Chapter 1 revisions,
+a 552-page rolling build after the universal Plan → Code pass, two Chapter 1 revisions,
 the pacing/visual/full-scale experiment pass, the July 28 comprehensive book audit,
 and the Chapter 15 editorial/figure pass. It contains chapters 1–20 plus three
 interludes, four appendices, and an epilogue. The July 29 closeout adds the
 epilogue's `E.` figure namespace, the explicit canonical-edition sentence, complete
 interlude retrieval checks, the RMSProp provenance line, strict CI text-layer
-tripwires, and the reviewed exercise bank. Nothing is mid-flight.
+tripwires, and the reviewed exercise bank. The Chapter 20 deep pass closes the
+temperature arc with a learned-logit-scale bridge, a derivation and paired-study
+exercise, and an exact paper-versus-reference-code source note. Nothing is mid-flight.
 
 **Read before doing anything, in this order:**
 

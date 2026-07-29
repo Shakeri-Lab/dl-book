@@ -28,11 +28,18 @@ epilogue, grounding its test-time-control and mixture-of-experts claims in their
 primary papers, and voices the book's learnability question explicitly in Part III:
 recurrence makes the carried summary learnable.
 
+The Chapter 20 deep pass closes the book's temperature arc. A compact bridge now
+connects Chapter 12's bandwidth, Chapter 13's similarity scale, and CLIP's learned
+logit scale; a three-part exercise derives the scale gradient, runs a paired
+fixed-versus-learned comparison, and separates training sharpness from post-hoc
+calibration. The source note distinguishes the cap reported in the CLIP paper from
+the uncapped released reference implementation.
+
 Acceptance: 194 learner-visible Plan → Code surfaces and 94 execution-only
 harnesses pass the strengthened audit; 284 executable cells, four transclusions,
 and eleven included modules/scripts parse; all 133 pre-existing stdout blocks remain
 byte-identical across the structural move and between HTML and TeX; and the complete
-post-v1.1 book renders in 548 pages, below the prior 560-page ceiling.
+post-v1.1 book renders in 552 pages, below the prior 560-page ceiling.
 
 ## Earlier post-v1.1 work — Chapter 1 and universal code-surface revision
 

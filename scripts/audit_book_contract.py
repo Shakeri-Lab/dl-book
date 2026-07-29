@@ -26,6 +26,7 @@ CANONICAL_EDITION_SENTENCE = (
 PART_III_LEARNABILITY_CALLBACK = (
     "Recurrence asks us to make the carried summary learnable:"
 )
+CHAPTER_20_TEMPERATURE_CALLBACK = "## What if the temperature were learnable?"
 CANONICAL_EXERCISE_TAGS = {"Pencil.", "Code.", "Audit."}
 EXERCISE_RE = re.compile(r"\*\*\(([^)\n]+)\)\*\*")
 EXERCISE_SECTION_RE = re.compile(
@@ -205,6 +206,9 @@ def main() -> None:
     chapter10_text = (ROOT / "chapters/part3/10-sequences-rnn.qmd").read_text()
     if chapter10_text.count(PART_III_LEARNABILITY_CALLBACK) != 1:
         fail(errors, "Chapter 10: Part III learnability callback must appear exactly once")
+    chapter20_text = (ROOT / "chapters/part5/20-multimodal.qmd").read_text()
+    if chapter20_text.count(CHAPTER_20_TEMPERATURE_CALLBACK) != 1:
+        fail(errors, "Chapter 20: learnable-temperature callback must appear exactly once")
 
     all_qmd = "\n".join(
         path.read_text() for path in sorted((ROOT / "chapters").rglob("*.qmd"))
@@ -220,7 +224,8 @@ def main() -> None:
         "PASS: 20 chapter retrieval/source contracts, canonical exercise tags, "
         "book voice and splice hygiene, hidden display-only figures, three interlude "
         "namespaces, the epilogue namespace and source contract, the Part III "
-        "learnability callback, and canonical-edition metadata"
+        "learnability callback, the Chapter 20 temperature harvest, and "
+        "canonical-edition metadata"
     )
 
 

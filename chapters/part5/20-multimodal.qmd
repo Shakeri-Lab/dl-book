@@ -183,6 +183,30 @@ where $\tau>0$ is the **temperature**. Dividing by a small temperature spreads t
 logits farther apart; a larger temperature softens them. Temperature does not decide
 which pair is correct—it decides how sharply the softmax reacts to score differences.
 
+::: {.callout-note}
+## What if the temperature were learnable?
+
+Chapter 12 read temperature as bandwidth: for its Gaussian score,
+$\tau=2h^2$. Chapter 13 learned the comparison itself while retaining a fixed
+scale. Here one scalar can move too. Write the inverse temperature as
+$a=e^\gamma=1/\tau$:
+
+$$
+S_{ij}=e^\gamma u_i^\top v_j.
+$$
+
+The encoders learn where the two modalities sit; $\gamma$ learns how sharply a
+given angular gap should count. CLIP trained this log scale jointly with its two
+towers and initialized it at the equivalent of $\tau=0.07$. The paper reports
+capping $e^\gamma$ at $100$ for stability. That cap is a training-recipe choice:
+the released reference model initializes and exponentiates the parameter but
+does not apply the cap.
+
+This scalar belongs inside the training objective. It is not the post-hoc
+temperature scaling in @sec-16-vit-scaling, Exercise 6, where the model is
+frozen and validation labels calibrate its confidence after training.
+:::
+
 Chapter 2 introduced softmax as the **scores-to-weights machine**. Apply it across row
 $i$:
 
@@ -860,7 +884,11 @@ only learn the alignment that the data actually declares.
 - Radford et al., [“Learning Transferable Visual Models From Natural Language
   Supervision”](https://arxiv.org/abs/2103.00020) (2021), introduced CLIP's paired
   image–text dual-encoder training and zero-shot transfer program; the reported study
-  used 400 million internet image–text pairs.
+  used 400 million internet image–text pairs. The paper directly optimized a
+  log-parameterized score scale, initialized it at the equivalent of $\tau=0.07$,
+  and reports capping the scale at $100$. The
+  [released reference model](https://github.com/openai/CLIP/blob/main/clip/model.py)
+  initializes and exponentiates that parameter but does not implement the cap.
 - Jia et al., [“Scaling Up Visual and Vision-Language Representation Learning With
   Noisy Text Supervision”](https://arxiv.org/abs/2102.05918) (2021), developed ALIGN's
   dual-encoder contrastive approach with a deliberately noisy large paired corpus.
@@ -898,3 +926,24 @@ only learn the alignment that the data actually declares.
    the candidate construction. Propose a prompt and evaluation policy that makes the
    zero-shot claim bounded and reproducible without claiming the resulting softmax is
    a universal probability of truth.
+
+6. **(Pencil.)** (a) Let $C_{ij}=u_i^\top v_j$, write
+   $S_{ij}=e^\gamma C_{ij}$, and derive $\partial\mathcal{L}/\partial\gamma$
+   for the symmetric loss. Express each directional term as a
+   softmax-weighted mean similarity minus the diagonal similarity. Determine the
+   gradient's sign when every diagonal similarity exceeds that weighted mean,
+   predict how gradient descent moves $\gamma$, and explain why the gradient
+   fades as diagonal probabilities approach one.
+
+   (b) **(Code.)** Add a learned `logit_scale` to the two-tower study. Initialize
+   it at $\log(1/0.08)$ and use
+   `logit_scale.exp().clamp(max=100)` in the score matrix. Keep initialization,
+   minibatch order, checkpoint policy, and evaluation queries paired with the
+   fixed-$\tau$ run. Report Recall@1 in both directions, the final learned
+   temperature, and fixed-temperature baselines for
+   $\tau\in\{0.03,0.08,0.2\}$. Does the learned value lie inside the sweep's
+   performance plateau?
+
+   (c) **(Audit.)** State why this jointly trained sharpness parameter is not the
+   post-hoc calibration temperature in @sec-16-vit-scaling, Exercise 6. Name
+   which parameters and data split each procedure is permitted to use.
