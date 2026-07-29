@@ -23,6 +23,9 @@ RMSPROP_PROVENANCE = (
 CANONICAL_EDITION_SENTENCE = (
     "The HTML edition is canonical; the PDF is a derived print conversion."
 )
+PART_III_LEARNABILITY_CALLBACK = (
+    "Recurrence asks us to make the carried summary learnable:"
+)
 CANONICAL_EXERCISE_TAGS = {"Pencil.", "Code.", "Audit."}
 EXERCISE_RE = re.compile(r"\*\*\(([^)\n]+)\)\*\*")
 EXERCISE_SECTION_RE = re.compile(
@@ -183,6 +186,8 @@ def main() -> None:
     epilogue_text = EPILOGUE.read_text()
     if "Numbering note" in epilogue_text:
         fail(errors, f"{EPILOGUE.relative_to(ROOT)}: obsolete numbering note")
+    if epilogue_text.count("## Sources and further reading") != 1:
+        fail(errors, f"{EPILOGUE.relative_to(ROOT)}: expected one Sources section")
     epilogue_figures = len(re.findall(r"#epfig-[A-Za-z0-9_-]+", epilogue_text))
     if epilogue_figures != 2:
         fail(
@@ -197,6 +202,9 @@ def main() -> None:
     chapter4_text = (ROOT / "chapters/part1/04-training-loss-sgd.qmd").read_text()
     if chapter4_text.count(RMSPROP_PROVENANCE) != 1:
         fail(errors, "Chapter 4: RMSProp provenance must appear exactly once")
+    chapter10_text = (ROOT / "chapters/part3/10-sequences-rnn.qmd").read_text()
+    if chapter10_text.count(PART_III_LEARNABILITY_CALLBACK) != 1:
+        fail(errors, "Chapter 10: Part III learnability callback must appear exactly once")
 
     all_qmd = "\n".join(
         path.read_text() for path in sorted((ROOT / "chapters").rglob("*.qmd"))
@@ -211,7 +219,8 @@ def main() -> None:
     print(
         "PASS: 20 chapter retrieval/source contracts, canonical exercise tags, "
         "book voice and splice hygiene, hidden display-only figures, three interlude "
-        "namespaces, the epilogue namespace, and canonical-edition metadata"
+        "namespaces, the epilogue namespace and source contract, the Part III "
+        "learnability callback, and canonical-edition metadata"
     )
 
 

@@ -23,11 +23,16 @@ named and retrieval-complete. A twelve-item exercise-bank review adds ten genuin
 new exercises and strengthens two existing ones across Chapters 3, 5, 6, 9, 11, 12,
 15, 16, and 19 plus the experiment interlude.
 
+The final July 29 receipt-and-callback follow-up extends Sources coverage through the
+epilogue, grounding its test-time-control and mixture-of-experts claims in their
+primary papers, and voices the book's learnability question explicitly in Part III:
+recurrence makes the carried summary learnable.
+
 Acceptance: 194 learner-visible Plan → Code surfaces and 94 execution-only
 harnesses pass the strengthened audit; 284 executable cells, four transclusions,
 and eleven included modules/scripts parse; all 133 pre-existing stdout blocks remain
 byte-identical across the structural move and between HTML and TeX; and the complete
-post-v1.1 book renders in 546 pages, below the prior 560-page ceiling.
+post-v1.1 book renders in 548 pages, below the prior 560-page ceiling.
 
 ## Earlier post-v1.1 work — Chapter 1 and universal code-surface revision
 

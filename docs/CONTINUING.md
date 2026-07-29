@@ -13,7 +13,7 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > ## Current state — 2026-07-29 (read this first)
 >
 > The manuscript is **complete and released**: tag **v1.1** carries the stable
-> 502-page PDF. The live manuscript is a 546-page rolling post-v1.1 build with chapters
+> 502-page PDF. The live manuscript is a 548-page rolling post-v1.1 build with chapters
 > 1–20, three interludes, four appendices, and an epilogue. The July 28
 > comprehensive audit is complete: verified glyph losses are repaired, chapter
 > retrieval/source contracts are uniform, exercise modes are canonical, and
@@ -97,11 +97,15 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > in Chapter 4. All three interludes are visibly prefixed and end with a retrieval
 > check. The CI contract now pins NUL, missing-character, and leak-vocabulary
 > tripwires. A twelve-proposal exercise review adds ten new exercises and strengthens
-> two existing ones without changing the 546-page total.
+> two existing ones; that pass held the build at 546 pages.
+> A final receipt-and-callback follow-up gives the epilogue its two primary-source
+> entries and makes Part III say the book's question aloud: recurrence asks us to make
+> the carried summary learnable. The added epilogue leaf and recto appendix opening
+> bring the rolling PDF to 548 pages.
 >
 > The definitive two-format refresh preserves all 133 stdout blocks byte for
 > byte across the structural interlude move, and every HTML/TeX stdout pair
-> matches. The production PDF is 546 pages, fourteen pages below the pre-audit
+> matches. The production PDF is 548 pages, twelve pages below the pre-audit
 > 560-page ceiling.
 >
 > Fresh session? Read `CLAUDE.md`, then §9 and §2 of this file, then
