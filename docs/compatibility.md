@@ -4,13 +4,13 @@ The book's PDF and HTML print **stable semantics**: shapes, masks, reductions,
 train/eval mode, and numerical-stability choices. Everything **version-fragile**
 lives here, where it can be updated without reprinting a chapter.
 
-## Tested environment (last verified: July 2026, v1.1 cycle)
+## Tested environment (last verified: July 2026, v1.2 cycle)
 
 | Component | Version | Where it matters |
 |---|---|---|
 | Python | 3.12 | all executable cells |
 | PyTorch | 2.12.1 (CPU) — **2.13.0 verified equivalent**, see below | all executable cells |
-| Quarto | 1.9.38 | rendering only |
+| Quarto | 1.10.18 | rendering only |
 | OS | macOS 15 (arm64) / ubuntu-latest (CI) | render + Execution Audit |
 
 Working tree location: `~/Library/CloudStorage/Box-Box/Teaching/6050/dl-book` (in

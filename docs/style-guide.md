@@ -439,6 +439,9 @@ misdiagnosis deserves to be made explicit.
 - Greek letters, relation symbols, and fractions belong in math mode. Python comments
   and code-elision markers stay ASCII. The PDF build scans retained LaTeX logs for
   missing characters and the extracted text layer for NUL and U+FFFD.
+- Use **minibatch** and **feedforward** in authorial prose. Use **fine-tuning** and
+  **pretraining** elsewhere. Preserve exact paper titles and code identifiers such as
+  *Efficient Finetuning*, *Hyper-Parameter*, and `dim_feedforward`.
 - Unnumbered interludes own independent figure namespaces in both formats:
   **Figure EX.** for experimentation, **Figure AE.** for autoencoders, and
   **Figure TTR.** for attention as test-time regression. The epilogue owns

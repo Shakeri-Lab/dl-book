@@ -17,8 +17,8 @@ rendering to HTML + PDF, the course text for DS 6050.
 rest of my 6050 material; the virtualenv is deliberately outside it). Remote `https://github.com/Shakeri-Lab/dl-book`, live at
 `https://shakeri-lab.github.io/dl-book/`, PDF at
 `https://shakeri-lab.github.io/dl-book/Deep-Learning--Making-It-Learnable.pdf`.
-Current stable release **v1.1** is 502 pages. The post-release `main` revision is
-a 552-page rolling build after the universal Plan → Code pass, two Chapter 1 revisions,
+Current stable release **v1.2** is 552 pages. The live `main` revision is a rolling
+post-v1.2 build after the universal Plan → Code pass, two Chapter 1 revisions,
 the pacing/visual/full-scale experiment pass, the July 28 comprehensive book audit,
 and the Chapter 15 editorial/figure pass. It contains chapters 1–20 plus three
 interludes, four appendices, and an epilogue. The July 29 closeout adds the
@@ -29,7 +29,9 @@ temperature arc with a learned-logit-scale bridge, a derivation and paired-study
 exercise, and an exact paper-versus-reference-code source note. The final Part II
 pass certifies Chapters 7–9, repairs Chapter 9's last two splice typos, and records
 an exact source-level re-execution of Chapter 15's now CI-protected self-contained
-lab. Nothing is mid-flight.
+lab. The v1.2 release also restores Chapter 16's post-hoc calibration exercise,
+unnumbers the epilogue equations, and pins the final PDF text-layer regression.
+Nothing is mid-flight.
 
 **Read before doing anything, in this order:**
 

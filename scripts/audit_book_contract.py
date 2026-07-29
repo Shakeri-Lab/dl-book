@@ -27,6 +27,14 @@ PART_III_LEARNABILITY_CALLBACK = (
     "Recurrence asks us to make the carried summary learnable:"
 )
 CHAPTER_20_TEMPERATURE_CALLBACK = "## What if the temperature were learnable?"
+CHAPTER_16_CALIBRATION_EXERCISE = (
+    "6. **(Code.)** Freeze one pinned Fashion CNN checkpoint from this chapter"
+)
+CHAPTER_16_CALIBRATION_BOUNDARY = (
+    "This is post-hoc calibration of a frozen model, not\n"
+    "   Chapter 20's training-time $\\gamma$."
+)
+CHAPTER_16_CALIBRATION_POINTER = "@sec-16-vit-scaling, Exercise 6"
 CANONICAL_EXERCISE_TAGS = {"Pencil.", "Code.", "Audit."}
 EXERCISE_RE = re.compile(r"\*\*\(([^)\n]+)\)\*\*")
 EXERCISE_SECTION_RE = re.compile(
@@ -187,6 +195,8 @@ def main() -> None:
     epilogue_text = EPILOGUE.read_text()
     if "Numbering note" in epilogue_text:
         fail(errors, f"{EPILOGUE.relative_to(ROOT)}: obsolete numbering note")
+    if "{#eq-" in epilogue_text:
+        fail(errors, f"{EPILOGUE.relative_to(ROOT)}: epilogue equation is numbered")
     if epilogue_text.count("## Sources and further reading") != 1:
         fail(errors, f"{EPILOGUE.relative_to(ROOT)}: expected one Sources section")
     epilogue_figures = len(re.findall(r"#epfig-[A-Za-z0-9_-]+", epilogue_text))
@@ -209,6 +219,13 @@ def main() -> None:
     chapter20_text = (ROOT / "chapters/part5/20-multimodal.qmd").read_text()
     if chapter20_text.count(CHAPTER_20_TEMPERATURE_CALLBACK) != 1:
         fail(errors, "Chapter 20: learnable-temperature callback must appear exactly once")
+    chapter16_text = (ROOT / "chapters/part4/16-vit-scaling.qmd").read_text()
+    if chapter16_text.count(CHAPTER_16_CALIBRATION_EXERCISE) != 1:
+        fail(errors, "Chapter 16: post-hoc calibration must remain Exercise 6")
+    if chapter16_text.count(CHAPTER_16_CALIBRATION_BOUNDARY) != 1:
+        fail(errors, "Chapter 16: training-time/post-hoc temperature boundary is missing")
+    if chapter20_text.count(CHAPTER_16_CALIBRATION_POINTER) != 2:
+        fail(errors, "Chapter 20: Exercise 6 calibration pointers are stale or missing")
 
     all_qmd = "\n".join(
         path.read_text() for path in sorted((ROOT / "chapters").rglob("*.qmd"))
@@ -224,8 +241,8 @@ def main() -> None:
         "PASS: 20 chapter retrieval/source contracts, canonical exercise tags, "
         "book voice and splice hygiene, hidden display-only figures, three interlude "
         "namespaces, the epilogue namespace and source contract, the Part III "
-        "learnability callback, the Chapter 20 temperature harvest, and "
-        "canonical-edition metadata"
+        "learnability callback, the complete temperature arc, and canonical-edition "
+        "metadata"
     )
 
 

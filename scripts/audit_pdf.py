@@ -40,6 +40,15 @@ def main() -> None:
         errors.append(r"repaired $\sigma(0)\approx\tfrac12$ text is missing")
     if "β-VAE" not in normalized_text:
         errors.append(r"repaired $\beta$-VAE text is missing")
+    # These are intentionally invented words in the no-position Transformer sample.
+    # Their presence proves that the page's embedded text remains searchable and
+    # copyable even though the generated prose itself is supposed to be nonsense.
+    for sample_token in ("Thrivofforical", "Xaysherd"):
+        if sample_token not in normalized_text:
+            errors.append(
+                "known Transformer sample token is missing from the PDF text layer: "
+                f"{sample_token}"
+            )
     for prefix in ("EX", "AE", "TTR", "E"):
         if f"Figure {prefix}.1" not in normalized_text:
             errors.append(f"independent Figure {prefix}. namespace is missing")

@@ -11,8 +11,8 @@ repository. The examples are written directly in Python and PyTorch and are CPU-
 **Read it:** <https://shakeri-lab.github.io/dl-book/> (canonical HTML edition) ·
 PDF derived from that edition for print and offline reading
 
-**Stable release:** [v1.1 (July 24, 2026)](https://github.com/Shakeri-Lab/dl-book/releases/tag/v1.1).
-The live site is a rolling post-v1.1 build.
+**Stable release:** [v1.2 (July 29, 2026)](https://github.com/Shakeri-Lab/dl-book/releases/tag/v1.2).
+The live site is a rolling post-v1.2 build.
 
 ## The idea
 
@@ -64,7 +64,7 @@ memory and are updated after every shipped chapter.
 ## Citation
 
 Suggested citation: Shakeri, Heman. 2026. *Deep Learning: Making It Learnable*.
-Version 1.1. <https://shakeri-lab.github.io/dl-book/>. The repository also provides
+Version 1.2. <https://shakeri-lab.github.io/dl-book/>. The repository also provides
 machine-readable metadata in [CITATION.cff](CITATION.cff).
 
 ## License

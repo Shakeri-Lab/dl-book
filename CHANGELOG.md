@@ -1,5 +1,5 @@
 
-# Post-v1.1 main — book-wide audit and revision (July 2026)
+# v1.2 — comprehensive audit and convention parity (July 29, 2026)
 
 Editorial and structure: repaired text-mode mathematical glyphs, established one
 closing retrieval check per numbered chapter, removed off-page lecture narration,
@@ -10,8 +10,8 @@ experiment.
 
 Production: interludes use independent figure namespaces in HTML and PDF; the build
 checks the PDF text layer and LaTeX log for missing glyphs; callout icons carry empty
-accessible replacement text; and release metadata now identifies v1.1 as the stable
-502-page edition while `main` remains a rolling post-release build. A follow-on
+accessible replacement text; and release metadata identifies v1.2 as the stable
+552-page edition while `main` becomes a rolling post-release build. A follow-on
 Chapter 15 editorial pass removes remaining off-page/session splice residue, adds a
 strict leak-vocabulary tripwire, clarifies the original GRU gate convention, and adds
 the controlled-lab schematic plus the three-family visibility triptych.
@@ -40,11 +40,18 @@ and repairs Chapter 9's two remaining splice typos. An independent source-level
 re-execution reproduces every printed Chapter 15 lab value; CI now preserves that
 lab's self-contained design by rejecting repository-local imports or transclusions.
 
+The release polish restores Chapter 16's already-authored post-hoc temperature
+calibration exercise to both frozen editions, leaves epilogue equations unnumbered,
+and standardizes `minibatch` and `feedforward` in authorial prose while preserving
+exact paper titles and code identifiers. A targeted PDF regression check protects
+the searchable text beneath the intentionally nonsensical no-position Transformer
+sample on page 316.
+
 Acceptance: 194 learner-visible Plan → Code surfaces and 94 execution-only
 harnesses pass the strengthened audit; 284 executable cells, four transclusions,
 and eleven included modules/scripts parse; all 133 pre-existing stdout blocks remain
 byte-identical across the structural move and between HTML and TeX; and the complete
-post-v1.1 book renders in 552 pages, below the prior 560-page ceiling.
+v1.2 book renders in 552 pages, below the prior 560-page ceiling.
 
 ## Earlier post-v1.1 work — Chapter 1 and universal code-surface revision
 

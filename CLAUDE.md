@@ -2,7 +2,7 @@
 
 > **Fresh session?** Paste `docs/NEW-CHAT-PROMPT.md` to bootstrap, then read
 > `docs/CONTINUING.md` — its top state block and §9 carry the current picture
-> (release v1.1; Plan v2 complete; Plan → Code panels shipped; open decisions
+> (release v1.2; Plan v2 complete; Plan → Code panels shipped; open decisions
 > listed). Version-fragile engineering lives in `docs/compatibility.md`, not in
 > the chapters.
 

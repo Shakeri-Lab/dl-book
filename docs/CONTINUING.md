@@ -12,8 +12,8 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 
 > ## Current state — 2026-07-29 (read this first)
 >
-> The manuscript is **complete and released**: tag **v1.1** carries the stable
-> 502-page PDF. The live manuscript is a 552-page rolling post-v1.1 build with chapters
+> The manuscript is **complete and released**: tag **v1.2** carries the stable
+> 552-page PDF. The live manuscript is a rolling post-v1.2 build with chapters
 > 1–20, three interludes, four appendices, and an epilogue. The July 28
 > comprehensive audit is complete: verified glyph losses are repaired, chapter
 > retrieval/source contracts are uniform, exercise modes are canonical, and
@@ -117,6 +117,11 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > Chapter 15's complete lab also reproduces exactly from its canonical source.
 > `scripts/audit_python_sources.py` now protects the lab's self-contained design
 > by rejecting repository-local imports and code transclusions in that chapter.
+>
+> The v1.2 release polish restores Chapter 16's post-hoc temperature-calibration
+> exercise to both formats, leaves the epilogue's control equations unnumbered,
+> standardizes `minibatch` and `feedforward` in authorial prose, and protects the
+> page-316 no-position sample's searchable PDF text with a targeted regression.
 >
 > The definitive two-format refresh preserves all 133 stdout blocks byte for
 > byte across the structural interlude move, and every HTML/TeX stdout pair
@@ -819,7 +824,7 @@ experiment, and verification contract:
   stride-4 convolution agree to maximum absolute error `7.15e-07`. Halving patch
   width from 32 to 16 multiplies tokens by four and score entries by sixteen; the
   chapter distinguishes attention's $O(N^2d)$ mixing term from $O(Nd^2)$
-  projections and feed-forward work.
+  projections and feedforward work.
 - **Pinned paired experiment**: fixed ch. 6 split (1,000 fit / 200 validation;
   the already-opened 600-image benchmark is descriptive), seeds 6050–6054,
   AdamW 0.003 with weight decay 0.01, cosine decay over 120 epochs, batch 100,
