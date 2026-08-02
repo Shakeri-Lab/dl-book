@@ -12,8 +12,8 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 
 > ## Current state — 2026-07-29 (read this first)
 >
-> The manuscript is **complete and released**: tag **v1.2** carries the stable
-> 552-page PDF. The live manuscript is a rolling post-v1.2 build with chapters
+> The manuscript is **complete and released**: tag **v1.2.1** carries the stable
+> point-release PDF. The live manuscript is a rolling post-v1.2.1 build with chapters
 > 1–20, three interludes, four appendices, and an epilogue. The July 28
 > comprehensive audit is complete: verified glyph losses are repaired, chapter
 > retrieval/source contracts are uniform, exercise modes are canonical, and
@@ -138,6 +138,11 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 
 **Live:** https://shakeri-lab.github.io/dl-book/ (canonical HTML edition plus its
 derived PDF conversion, auto-deployed from `main` via GitHub Actions → `gh-pages`).
+
+**Cross-book interface:** v1.2.1 protects the ten anchors consumed by
+*Deep Learning: Making It Trainable* in `docs/public-anchors.md` and CI. Five bounded
+forward pointers and mutual colophon links complete the D23 reciprocity contract; any
+future move of a declared anchor requires a coordinated update in both repositories.
 
 **Format authority:** HTML is the source of truth for the book's content, order,
 semantics, and interactive/responsive presentation. PDF is the print/offline

@@ -3,6 +3,13 @@
 Planned items from the author's chapter reviews. Pick these up only when he green-lights
 them or a chapter naturally touches them.
 
+## Cross-book reciprocity — COMPLETED 2026-08-02
+
+The v1.2.1 point release declares and audits the ten stable anchors consumed by
+*Deep Learning: Making It Trainable*. Five forward pointers and mutual colophon links
+separate this volume's first-course mechanics from the graduate companion's diagnostic
+extensions. Future anchor moves are coordinated interface changes, not local cleanup.
+
 ## Release stewardship — COMPLETED 2026-07-16
 
 The stable v1.0 edition is fixed at July 16, 2026. The repository now carries validated

@@ -17,8 +17,9 @@ rendering to HTML + PDF, the course text for DS 6050.
 rest of my 6050 material; the virtualenv is deliberately outside it). Remote `https://github.com/Shakeri-Lab/dl-book`, live at
 `https://shakeri-lab.github.io/dl-book/`, PDF at
 `https://shakeri-lab.github.io/dl-book/Deep-Learning--Making-It-Learnable.pdf`.
-Current stable release **v1.2** is 552 pages. The live `main` revision is a rolling
-post-v1.2 build after the universal Plan → Code pass, two Chapter 1 revisions,
+Current stable release **v1.2.1** is the reciprocal-companion point release. The live
+`main` revision is a rolling post-v1.2.1 build after the universal Plan → Code pass,
+two Chapter 1 revisions,
 the pacing/visual/full-scale experiment pass, the July 28 comprehensive book audit,
 and the Chapter 15 editorial/figure pass. It contains chapters 1–20 plus three
 interludes, four appendices, and an epilogue. The July 29 closeout adds the

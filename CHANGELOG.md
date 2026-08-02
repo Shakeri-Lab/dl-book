@@ -1,4 +1,13 @@
 
+# v1.2.1 — reciprocal companion interface (August 2, 2026)
+
+This point release establishes the cross-book contract with *Deep Learning: Making It
+Trainable*. Ten public chapter anchors are declared in `docs/public-anchors.md` and
+checked in both source and rendered HTML. Five bounded forward pointers separate the
+first-course mechanics owned here—precision/performance, experiment discipline,
+backpropagation, normalization, and attention/Transformer assembly—from their graduate
+diagnostic continuations. The colophons now point in both directions.
+
 # v1.2 — comprehensive audit and convention parity (July 29, 2026)
 
 Editorial and structure: repaired text-mode mathematical glyphs, established one
