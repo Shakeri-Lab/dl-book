@@ -400,14 +400,21 @@ Rules:
   block over about 35 lines stacks the plan above a full-width implementation
   in HTML. Shorter panels remain side by side. Both forms stack in print.
 - **Watch the print width.** The code column is full-width in print, so lines
-  must still fit the book's block (about 76 characters); a panel is not a licence
-  to widen code.
+  must still fit the book's block. The automated hard ceiling is 88 source
+  columns for learner-visible Python, but shorter lines are preferable when they
+  improve scanability; a panel is not a licence to widen code. `#|` directives
+  and `echo: false` execution harnesses are exempt from the learner-facing guard.
 
 Format behaviour: HTML lays compact panels side by side (`dlbook.scss`).
 `.plan-code-wide` panels and all panels below 900px stack with the plan first.
 Print has a five-inch text block, where two columns of Python would wrap into
 noise, so `filters/plan-code.lua` always stacks them — the plan becomes a ruled,
 breakable `planbox` above the code. The markers read identically in both.
+
+The PDF conversion enables breakable verbatim code and stdout as a final safety
+net. Do not rely on that conversion to repair confusing source: rewrap authored
+code first, then let the print layer protect generated output that cannot be
+changed without altering the experiment's recorded result.
 
 ### Estimator discipline
 
@@ -449,6 +456,15 @@ misdiagnosis deserves to be made explicit.
   inherits a neighboring chapter counter.
 - Decorative callout icons carry empty replacement text in PDF extraction. Meaning
   lives in the callout title and prose, never in the icon.
+- A release PDF must reach the LaTeX reference fixpoint: use at least three passes,
+  then audit outline destinations against the pages containing their headings.
+  Scan geometry with a capture rectangle larger than the media box; any text beyond
+  the physical page is a hard failure, while smaller text-block intrusions are soft
+  warnings that require visual review.
+- The title page identifies rolling versus stable status. The title verso records
+  copyright, licenses, the canonical HTML URL, stable citation guidance, and
+  institutional affiliation. A rolling build must not imply that an uncut release
+  tag exists.
 
 ### Reading loop
 

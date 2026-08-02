@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Parse every executable book cell and every included Python module."""
+"""Parse Python sources and enforce readable learner-visible listings."""
 
 from __future__ import annotations
 
@@ -20,6 +20,25 @@ INCLUDE_FENCE_RE = re.compile(
     r"^```(\{\.python [^}\n]*book-include=[^}\n]*\})\s*$\n.*?^```\s*$",
     re.MULTILINE | re.DOTALL,
 )
+VISIBLE_LINE_LIMIT = 88
+
+
+def audit_visible_width(
+    source: str,
+    label: str,
+    errors: list[str],
+    *,
+    line_offset: int = 0,
+) -> None:
+    """Reject long learner-visible source lines; Quarto directives are metadata."""
+    for line_number, line in enumerate(source.splitlines(), start=1 + line_offset):
+        if line.lstrip().startswith("#|"):
+            continue
+        if len(line.expandtabs(4)) > VISIBLE_LINE_LIMIT:
+            errors.append(
+                f"{label}:{line_number}: learner-visible source exceeds "
+                f"{VISIBLE_LINE_LIMIT} columns ({len(line.expandtabs(4))})"
+            )
 
 
 def parse_source(source: str, label: str, errors: list[str]) -> None:
@@ -29,7 +48,7 @@ def parse_source(source: str, label: str, errors: list[str]) -> None:
         errors.append(f"{label}:{error.lineno}: {error.msg}")
 
 
-def included_source(chapter: Path, opener: str) -> tuple[str, str]:
+def included_source(chapter: Path, opener: str) -> tuple[str, str, int]:
     include_match = INCLUDE_RE.search(opener)
     if include_match is None:
         raise ValueError("missing book-include path")
@@ -41,7 +60,11 @@ def included_source(chapter: Path, opener: str) -> tuple[str, str]:
     end_match = END_RE.search(opener)
     start = int(start_match.group(1)) - 1 if start_match else 0
     end = int(end_match.group(1)) if end_match else len(lines)
-    return "\n".join(lines[start:end]) + "\n", str(include_path.relative_to(ROOT))
+    return (
+        "\n".join(lines[start:end]) + "\n",
+        str(include_path.relative_to(ROOT)),
+        start,
+    )
 
 
 def audit_chapter_15_self_containment(text: str, errors: list[str]) -> None:
@@ -90,16 +113,31 @@ def main() -> None:
         text = chapter.read_text()
         for index, match in enumerate(FENCE_RE.finditer(text), start=1):
             cell_count += 1
+            source = match.group(2)
             parse_source(
-                match.group(2),
+                source,
                 f"{chapter.relative_to(ROOT)}:cell-{index}",
                 errors,
             )
+            if not re.search(r"^#\|\s*echo:\s*false\s*$", source, re.MULTILINE):
+                source_line = text.count("\n", 0, match.start(2)) + 1
+                audit_visible_width(
+                    source,
+                    str(chapter.relative_to(ROOT)),
+                    errors,
+                    line_offset=source_line - 1,
+                )
         for match in INCLUDE_FENCE_RE.finditer(text):
             include_count += 1
             # A displayed slice can intentionally stop at a function signature.
             # Resolve it here; the complete referenced module is parsed below.
-            included_source(chapter, match.group(1))
+            source, label, line_offset = included_source(chapter, match.group(1))
+            audit_visible_width(
+                source,
+                label,
+                errors,
+                line_offset=line_offset,
+            )
 
     audit_chapter_15_self_containment(CHAPTER_15.read_text(), errors)
 
@@ -115,8 +153,8 @@ def main() -> None:
         raise SystemExit(1)
     print(
         f"PASS: parsed {cell_count} executable cells, {include_count} transclusions, "
-        f"and {len(module_paths)} Python modules/scripts; Chapter 15 remains "
-        "self-contained"
+        f"and {len(module_paths)} Python modules/scripts; learner-visible lines are "
+        f"at most {VISIBLE_LINE_LIMIT} columns and Chapter 15 remains self-contained"
     )
 
 

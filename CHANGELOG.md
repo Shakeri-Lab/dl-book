@@ -1,4 +1,23 @@
 
+# Rolling post-v1.2.1 — print hardening (August 2, 2026)
+
+The derived PDF now wraps long learner-visible code and frozen stdout instead of
+silently placing glyphs beyond the paper edge. Visible Python is also guarded at 88
+columns, while pure execution harnesses and Quarto directives remain exempt. A new
+geometry audit treats any text outside the media box as a release failure and reports
+smaller text-block intrusions for visual review.
+
+Three LaTeX passes are now the minimum for the full print conversion. The PDF audit
+checks late-book outline destinations and unit namespaces, preventing stale Chapter 20
+and epilogue pagination from shipping. The rolling title page identifies the build,
+and the title verso records copyright, licenses, the canonical HTML edition, stable
+citation guidance, and the UVA affiliation.
+
+The same pass repairs the literal RNN cross-reference token, the Chapter 17 page-break
+orphan, and the remaining `minibatch`, `color`, and `log-likelihood` terminology
+stragglers. All 133 frozen stdout blocks remain byte-identical. The complete derived
+PDF is 560 pages and contains no off-paper text or missing glyphs.
+
 # v1.2.1 — reciprocal companion interface (August 2, 2026)
 
 This point release establishes the cross-book contract with *Deep Learning: Making It

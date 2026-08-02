@@ -32,6 +32,11 @@ pass certifies Chapters 7–9, repairs Chapter 9's last two splice typos, and re
 an exact source-level re-execution of Chapter 15's now CI-protected self-contained
 lab. The v1.2 release also restores Chapter 16's post-hoc calibration exercise,
 unnumbers the epilogue equations, and pins the final PDF text-layer regression.
+The August 2 print-hardening pass adds an 88-column learner-visible Python guard,
+print-side wrapping for code and frozen stdout, media-box geometry and PDF-outline
+audits, a three-pass LaTeX minimum, and a copyright/title verso. The current derived
+PDF is 560 pages with no off-paper text or missing glyphs; all 133 frozen stdout
+blocks remain byte-identical.
 Nothing is mid-flight.
 
 **Read before doing anything, in this order:**
@@ -81,6 +86,11 @@ answer.**
 - **PDF glyph hygiene is enforced.** Greek and relation symbols belong in math mode;
   code elisions are ASCII; the publish job audits LaTeX missing-character warnings,
   NUL/U+FFFD extraction, and decorative icon text.
+- **Print geometry is enforced.** Learner-visible Python is at most 88 columns.
+  Print-side wrapping is a safety net, not permission for unreadable source. The PDF
+  audit fails if text leaves the media box, reports text-block intrusions for visual
+  review, and verifies late-book outline destinations after at least three LaTeX
+  passes.
 - **Semantic colour is a contract.** Blue is input/design data, orange is
   learnable parameters, purple is observed targets, green is predictions, and
   wine is residuals/errors. Carry a colour into nearby prose when it clarifies

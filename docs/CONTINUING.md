@@ -10,7 +10,7 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 
 ---
 
-> ## Current state — 2026-07-29 (read this first)
+> ## Current state — 2026-08-02 (read this first)
 >
 > The manuscript is **complete and released**: tag **v1.2.1** carries the stable
 > point-release PDF. The live manuscript is a rolling post-v1.2.1 build with chapters
@@ -123,10 +123,16 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > standardizes `minibatch` and `feedforward` in authorial prose, and protects the
 > page-316 no-position sample's searchable PDF text with a targeted regression.
 >
-> The definitive two-format refresh preserves all 133 stdout blocks byte for
-> byte across the structural interlude move, and every HTML/TeX stdout pair
-> matches. The production PDF is 552 pages, eight pages below the pre-audit
-> 560-page ceiling.
+> The post-v1.2.1 print-hardening pass preserves all 133 stdout blocks byte for
+> byte and every HTML/TeX stdout pair matches. Learner-visible Python is guarded
+> at 88 columns; `fvextra` wraps code and frozen stdout as a print-side safety
+> net; and the PDF audit now fails on media-box loss while reporting smaller
+> text-block intrusions for visual review. Three LaTeX passes plus an outline
+> destination audit protect the late Chapter 20 and epilogue pagination. The
+> title page identifies the rolling build and the title verso records copyright,
+> licensing, the canonical HTML edition, stable citation guidance, and UVA.
+> The derived PDF is 560 pages, contains no off-paper text or missing glyphs, and
+> stays within the book's pre-audit ceiling.
 >
 > Fresh session? Read `CLAUDE.md`, then §9 and §2 of this file, then
 > `docs/style-guide.md` and `docs/arc-seeds.md`. A paste-ready bootstrap prompt
@@ -1129,9 +1135,10 @@ colour alone. Selective use is preferred over colouring every variable.
 
 ### Open decisions — waiting on the author
 
-1. **NOVEL sign-offs.** Sixteen chapter files carry
-   `<!-- NOVEL: needs sign-off -->` markers (invisible in output) on passages
-   written without a direct lecture/seed source. List them with:
+1. **NOVEL sign-offs.** Seventy-six `<!-- NOVEL: needs sign-off -->` markers
+   remain across eighteen files (invisible in output). Decide whether to close and
+   strip them after review or migrate them to a dated ledger so the inline marker
+   regains a precise meaning. List them with:
    `grep -rl "NOVEL: needs sign-off" chapters/ --include="*.qmd"`
 2. **Delta typography.** Both trials are live in chapter 14 — the elided
    `include` of an imported signature versus the prose-referenced delta cell.
@@ -1143,6 +1150,17 @@ colour alone. Selective use is preferred over colouring every variable.
    multimodal, device-profiling, and test-time-control rematches. Run only
    predeclared comparisons and keep **all placeholders out of published
    chapters**.
+4. **Print-navigation decisions.** Decide whether the web-canonical book should
+   gain a curated print index and whether the five currently spare part openers
+   should carry 3–6 sentences naming each part's learnability move. Retitling Parts
+   III/V is a separate, higher-churn alternative.
+5. **Structural symmetry choices.** Decide whether Appendix B needs a recap,
+   whether Chapter 20 should keep its deliberately prose-shaped closing recap, and
+   whether `(Audit.)` exercises should be added selectively to Chapters 1–12 and
+   14. These are authorial cadence and curriculum choices, not contract defects.
+6. **Reference and seed conventions.** Decide whether plain `Chapter N` mentions
+   should be normalized to links, and document the intentional two-tier seed
+   convention rather than silently reseeding frozen studies.
 
 Page arithmetic for v1.1 is recorded honestly in `CHANGELOG.md` (502 vs v1.0's
 498: Plan v2 netted about −1 page; the +4 came from the earlier commissioned
