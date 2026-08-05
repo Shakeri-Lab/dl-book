@@ -164,8 +164,11 @@ few minutes rather than forty:
 cd ~/Library/CloudStorage/Box-Box/Teaching/6050/dl-book
 export QUARTO_PYTHON="$HOME/.venvs/dl-book/bin/python"
 quarto render
-ls -la _book/Deep-Learning--Making-It-Learnable.pdf     # expect ~4 MB
-pdfinfo _book/Deep-Learning--Making-It-Learnable.pdf | grep Pages   # 504 on current main
+ls -la _book/Deep-Learning--Making-It-Learnable.pdf     # expect ~5 MB
+pdfinfo _book/Deep-Learning--Making-It-Learnable.pdf | grep Pages   # 524 on current main
+QUARTO_PYTHON=$HOME/.venvs/dl-book/bin/python quarto render \
+  --profile screen --to pdf --no-clean
+pdfinfo _book/Deep-Learning--Making-It-Learnable--Continuous.pdf | grep Pages  # 502
 ```
 
 **B. Execute one chapter and check it reproduces.** This is the real test of the

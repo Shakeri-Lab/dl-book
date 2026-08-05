@@ -59,7 +59,8 @@ export GH_TOKEN=$(printf "protocol=https\nhost=github.com\n" | git credential fi
 ```
 
 Remote: `https://github.com/Shakeri-Lab/dl-book` (push to `main` → CI renders and
-publishes to `gh-pages` → https://shakeri-lab.github.io/dl-book/). Never commit to
+publishes HTML plus print and continuous-screen PDFs to `gh-pages` →
+https://shakeri-lab.github.io/dl-book/). Never commit to
 `gh-pages` manually.
 
 **This repo lives in Box** (author's decision, July 25 2026):
@@ -118,7 +119,9 @@ compositions for figures. Full guide: `docs/dl-course-code.md`.
 7. **Execute + render** (this refreshes the committed freeze cache — CI never executes):
    ```bash
    QUARTO_PYTHON=$HOME/.venvs/dl-book/bin/python quarto render chapters/partN/XX-*.qmd  # NO --to flag!
-   QUARTO_PYTHON=$HOME/.venvs/dl-book/bin/python quarto render        # full book, HTML + PDF
+   QUARTO_PYTHON=$HOME/.venvs/dl-book/bin/python quarto render        # HTML + print PDF
+   QUARTO_PYTHON=$HOME/.venvs/dl-book/bin/python quarto render \
+     --profile screen --to pdf --no-clean                            # continuous PDF
    ```
    An `--to html` single-file render leaves the PDF freeze (`tex.json`) stale → the
    book PDF ships without your changes. Any later prose edit invalidates the freeze

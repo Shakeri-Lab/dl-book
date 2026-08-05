@@ -16,7 +16,9 @@ rendering to HTML + PDF, the course text for DS 6050.
 **Repo:** `~/Library/CloudStorage/Box-Box/Teaching/6050/dl-book` (in Box with the
 rest of my 6050 material; the virtualenv is deliberately outside it). Remote `https://github.com/Shakeri-Lab/dl-book`, live at
 `https://shakeri-lab.github.io/dl-book/`, PDF at
-`https://shakeri-lab.github.io/dl-book/Deep-Learning--Making-It-Learnable.pdf`.
+`https://shakeri-lab.github.io/dl-book/Deep-Learning--Making-It-Learnable.pdf`, and
+continuous-screen PDF at
+`https://shakeri-lab.github.io/dl-book/Deep-Learning--Making-It-Learnable--Continuous.pdf`.
 Current stable release **v1.2.1** is the reciprocal-companion point release. The live
 `main` revision is a rolling post-v1.2.1 build after the universal Plan → Code pass,
 two Chapter 1 revisions,
@@ -35,8 +37,9 @@ unnumbers the epilogue equations, and pins the final PDF text-layer regression.
 The August 2 print-hardening pass adds an 88-column learner-visible Python guard,
 print-side wrapping for code and frozen stdout, media-box geometry and PDF-outline
 audits, a three-pass LaTeX minimum, and a copyright/title verso. The current derived
-PDF is 560 pages with no off-paper text or missing glyphs; all 133 frozen stdout
-blocks remain byte-identical.
+PDFs use a uniform 0.85-inch margin: the two-sided print edition is 524 pages and
+the one-sided, open-any continuous-screen edition is 502 pages. Both contain no
+off-paper text or missing glyphs; all 133 frozen stdout blocks remain byte-identical.
 Nothing is mid-flight.
 
 **Read before doing anything, in this order:**

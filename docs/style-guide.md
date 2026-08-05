@@ -4,10 +4,11 @@
 
 The **HTML edition is the book's source of truth**. Author and review the reading
 order, wording, equations, code surfaces, figures, cross-references, and responsive
-behavior in HTML first. The PDF is a derived conversion for print and offline reading:
-it must preserve the HTML edition's content, semantics, and order, while allowing only
-format-required differences such as pagination, line breaking, float placement, and
-print-safe sizing. Never solve a PDF layout problem by changing, omitting, or
+behavior in HTML first. The two PDF editions are derived conversions: the default
+two-sided PDF is for print, while the one-sided, open-any edition is for continuous
+screen reading. Both must preserve the HTML edition's content, semantics, and order,
+while allowing only format-required differences such as pagination, line breaking,
+float placement, and print-safe sizing. Never solve a PDF layout problem by changing, omitting, or
 reordering substantive content only in PDF. When the formats appear to disagree,
 repair the shared Quarto source or conversion layer so the PDF follows the canonical
 HTML edition.

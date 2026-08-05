@@ -9,7 +9,8 @@ Experiments show their code, while concept diagrams keep their drawing source in
 repository. The examples are written directly in Python and PyTorch and are CPU-friendly.
 
 **Read it:** <https://shakeri-lab.github.io/dl-book/> (canonical HTML edition) ·
-PDF derived from that edition for print and offline reading
+[print PDF](https://shakeri-lab.github.io/dl-book/Deep-Learning--Making-It-Learnable.pdf) ·
+[continuous-screen PDF](https://shakeri-lab.github.io/dl-book/Deep-Learning--Making-It-Learnable--Continuous.pdf)
 
 **Stable release:** [v1.2.1 (August 2, 2026)](https://github.com/Shakeri-Lab/dl-book/releases/tag/v1.2.1).
 The live site is a rolling post-v1.2.1 build.
@@ -39,7 +40,9 @@ self-contained voice.
 
 ```bash
 python3.12 -m venv ~/.venvs/dl-book && ~/.venvs/dl-book/bin/pip install -r requirements.txt
-QUARTO_PYTHON=$HOME/.venvs/dl-book/bin/python quarto render  # HTML + PDF; install TinyTeX once
+QUARTO_PYTHON=$HOME/.venvs/dl-book/bin/python quarto render  # HTML + print PDF
+QUARTO_PYTHON=$HOME/.venvs/dl-book/bin/python quarto render \
+  --profile screen --to pdf --no-clean                       # continuous PDF
 ```
 
 Execution uses Quarto **freeze** — CI never runs cells; refresh a chapter's cache with

@@ -13,10 +13,18 @@ from pathlib import Path
 import fitz
 
 
-TEXT_RIGHT_EDGE = 72 * (8.5 - 1.1)
 TEXT_EDGE_WARNING = 4.0
 MEDIA_BOX_TOLERANCE = 0.5
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def configured_text_right_edge() -> float:
+    """Read the shared uniform PDF margin from the Quarto configuration."""
+    config = (ROOT / "_quarto.yml").read_text()
+    match = re.search(r"^\s*-\s*margin=([0-9.]+)in\s*$", config, re.MULTILINE)
+    if match is None:
+        raise ValueError("Could not find a uniform inch margin in _quarto.yml")
+    return 72 * (8.5 - float(match.group(1)))
 
 
 def normalized_heading(text: str) -> str:
@@ -153,6 +161,7 @@ def audit_geometry(pdf: Path, errors: list[str]) -> None:
     """Inspect the un-clipped text layer so print loss cannot hide at an edge."""
     document = fitz.open(pdf)
     audit_outline(document, errors)
+    text_right_edge = configured_text_right_edge()
     clip = fitz.Rect(-500, -500, 3000, 3000)
     hard: list[tuple[int, tuple[float, float, float, float], str]] = []
     soft_pages: dict[int, float] = {}
@@ -174,9 +183,9 @@ def audit_geometry(pdf: Path, errors: list[str]) -> None:
                     )
                     if outside_media:
                         hard.append((page_number, (x0, y0, x1, y1), content))
-                    elif x1 > TEXT_RIGHT_EDGE + TEXT_EDGE_WARNING:
+                    elif x1 > text_right_edge + TEXT_EDGE_WARNING:
                         soft_pages[page_number] = max(
-                            soft_pages.get(page_number, 0.0), x1 - TEXT_RIGHT_EDGE
+                            soft_pages.get(page_number, 0.0), x1 - text_right_edge
                         )
 
     for page_number, bbox, content in hard:

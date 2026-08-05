@@ -1,4 +1,20 @@
 
+# Rolling post-v1.2.1 — compact PDF editions (August 5, 2026)
+
+Both derived PDF editions now use a uniform 0.85-inch margin, reduced from 1.1
+inches. The default two-sided print PDF repaginates from 560 to 524 pages. A new
+one-sided, open-any continuous-screen PDF establishes a 539-page old-margin baseline
+and repaginates to 502 pages at the shared 0.85-inch margin. HTML and manuscript
+content are unchanged.
+
+The continuous profile has its own output filename and is rendered, audited, and
+published beside the print PDF. The PDF geometry audit now reads the configured
+uniform margin rather than hard-coding the former text edge. Both editions retain
+the three-pass LaTeX, outline, cross-reference, text-layer, missing-character,
+media-box, and accessible-icon gates. Plan boxes use a locally scoped line-breaking
+opportunity after underscores so long helper names wrap inside the text block rather
+than crowding the physical page edge.
+
 # Rolling post-v1.2.1 — print hardening (August 2, 2026)
 
 The derived PDF now wraps long learner-visible code and frozen stdout instead of

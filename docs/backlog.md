@@ -65,12 +65,13 @@ chapter stub's draft-sources; revisit during the planned outline session with th
 
 ## 4. Standing smaller items
 
-- **Print hardening completed (2026-08-02):** visible Python now has an 88-column
+- **PDF hardening completed (2026-08-05):** visible Python now has an 88-column
   audit, code/stdout wrap in the derived PDF, media-box geometry and outline-target
   gates, a three-pass LaTeX minimum, and a copyright/title verso. The rolling
-  post-v1.2.1 conversion is 560 pages with no off-paper text. The remaining index
-  and tagged-PDF items below are editorial/print-era choices, not repairs to this
-  gate.
+  post-v1.2.1 build uses a uniform 0.85-inch margin: the two-sided print conversion
+  is 524 pages and the one-sided continuous-screen conversion is 502 pages, both
+  with no off-paper text. The remaining index and tagged-PDF items below are
+  editorial/print-era choices, not repairs to this gate.
 
 - Run `scripts/fetch_notebooks.py` for the remaining Colab notebooks (m02-03 fetched
   2026-07-07; others pending) — provenance for later chapters' code.

@@ -10,7 +10,7 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 
 ---
 
-> ## Current state — 2026-08-02 (read this first)
+> ## Current state — 2026-08-05 (read this first)
 >
 > The manuscript is **complete and released**: tag **v1.2.1** carries the stable
 > point-release PDF. The live manuscript is a rolling post-v1.2.1 build with chapters
@@ -131,8 +131,12 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > destination audit protect the late Chapter 20 and epilogue pagination. The
 > title page identifies the rolling build and the title verso records copyright,
 > licensing, the canonical HTML edition, stable citation guidance, and UVA.
-> The derived PDF is 560 pages, contains no off-paper text or missing glyphs, and
-> stays within the book's pre-audit ceiling.
+> The August 5 presentation-only pass reduces the shared PDF margin from 1.1 to
+> 0.85 inches without changing HTML or manuscript content. The two-sided print PDF
+> repaginates from 560 to 524 pages. A new one-sided, open-any continuous-screen
+> profile establishes a 539-page old-margin baseline and renders in 502 pages at
+> 0.85 inches. Both editions retain the three-pass reference, geometry, glyph,
+> text-layer, outline, and accessibility gates.
 >
 > Fresh session? Read `CLAUDE.md`, then §9 and §2 of this file, then
 > `docs/style-guide.md` and `docs/arc-seeds.md`. A paste-ready bootstrap prompt
