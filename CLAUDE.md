@@ -92,7 +92,7 @@ compositions for figures. Full guide: `docs/dl-course-code.md`.
 
 1. **Pick the chapter or review pass.** Follow the status table and roadmap in
    `docs/CONTINUING.md`; every chapter lists its seed files and transcripts in the
-   `draft-sources` comment. Chapters 1–20 and Appendices A–D are complete; change them
+   `draft-sources` comment. Chapters 1–20 and Appendices A–E are complete; change them
    only through an explicit review or correction pass, preserving planted harvests.
 2. **Snapshot seeds** from Box into `sources/` (spaces → underscores), then apply the
    licensing boundary in `sources/README.md`: remove explicitly third-party-derived

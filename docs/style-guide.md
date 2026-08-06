@@ -266,7 +266,9 @@ retrieve from memory: title the mistaken inference, then state the repair.
     empirical risk, population risk, and distribution shift with the minimum notation
     needed to say what an experiment estimates. Do not repeat a statistical-learning
     course, but never let clean-distribution validation stand in for robustness under
-    a different deployment distribution.
+    a different deployment distribution. Appendix E is the consolidation layer for
+    these contracts; main chapters remain self-contained and point there only when a
+    reader wants to audit the complete chain.
 
 ## The Editorial Contract (Plan v2, July 2026)
 

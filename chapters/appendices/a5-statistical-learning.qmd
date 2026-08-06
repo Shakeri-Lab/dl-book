@@ -1,0 +1,330 @@
+# Statistical Learning Contracts {#sec-a5-statistical-learning}
+
+<!-- source-note:
+     This appendix consolidates statistical distinctions already used across the
+     manuscript. Simon J. D. Prince, Understanding Deep Learning (2023), including
+     the repository reference Resources/prince2023udl.pdf, was used only as a
+     completeness cross-check. The exposition, examples, tables, and exercises are
+     independent. Primary and standard sources are listed at the end. -->
+
+A training loss is a number, but the claim we want to make is usually about a
+population, a distribution, or a future use. Those are not the same object. This
+appendix gathers the statistical contracts used throughout the book so we can retrieve
+them without interrupting a chapter's mechanism.
+
+It is a reference, not a prerequisite. Chapters 1, 4, 6, 18, and 19 state the pieces
+they need where they need them. Come here when you want to audit the whole chain:
+
+> sample $\rightarrow$ estimator $\rightarrow$ population $\rightarrow$ claim.
+
+## One dataset, two risks
+
+Let the observed dataset be
+$\mathcal D=\{(\vect{x}_i,y_i)\}_{i=1}^{n}$, drawn from a distribution $P$. For a
+model $f_\theta$ and per-example loss $\ell$, training commonly minimizes the
+**empirical risk**
+
+$$
+\widehat R_{\mathcal D}(\theta)
+=\frac{1}{n}\sum_{i=1}^{n}
+\ell\bigl(f_\theta(\vect{x}_i),y_i\bigr).
+$$ {#eq-a5-empirical-risk}
+
+The corresponding **population risk** is
+
+$$
+R_P(\theta)
+=\E_{(X,Y)\sim P}
+\left[\ell\bigl(f_\theta(X),Y\bigr)\right].
+$$ {#eq-a5-population-risk}
+
+The first is computed from the sample in hand. The second is an expectation over the
+declared population. Even if @eq-a5-empirical-risk is an unbiased estimate of
+@eq-a5-population-risk for one fixed $\theta$, the fitted
+$\widehat\theta_{\mathcal D}$ was selected using the same data. Its training risk is
+therefore not an independent estimate of its population risk.
+
+This gives the data splits different jobs:
+
+| Split | Permitted use | Quantity it can estimate |
+|---|---|---|
+| Training | Fit parameters | The empirical objective used by the optimizer |
+| Validation | Select models, stopping rules, or hyperparameters | Risk under its sampling distribution for the selection procedure being compared |
+| Test or sealed endpoint | Evaluate after analysis choices are fixed | Risk under its declared sampling distribution for the selected procedure |
+
+An independent validation mean estimates $R_P(\widehat\theta_{\mathcal D})$
+conditional on the fitted model when the validation examples are drawn from $P$. Once
+we repeatedly inspect that validation set and adapt choices to it, it becomes part of
+the selection procedure. The estimate can become optimistic. “Never used for gradient
+updates” is not the same as “never used to make a decision.”
+
+::: {.callout-warning}
+## Trap: independent data is not automatically the right data
+
+A perfectly independent test set drawn from $P$ estimates performance under $P$. It
+does not estimate deployment risk under a different distribution $Q$. Independence
+protects against reuse; it does not repair a mismatched population.
+:::
+
+## Name the distribution that carries the claim
+
+If deployment follows $Q$ rather than $P$, then the target quantity is
+
+$$
+R_Q(\theta)
+=\E_{(X,Y)\sim Q}
+\left[\ell\bigl(f_\theta(X),Y\bigr)\right].
+$$ {#eq-a5-deployment-risk}
+
+Chapter 6 uses a controlled transformation to make this distinction visible. For a
+label-preserving input map $T$, the shifted risk is
+
+$$
+R_{T_\#P}(\theta)
+=\E_{(X,Y)\sim P}
+\left[\ell\bigl(f_\theta(T(X)),Y\bigr)\right],
+$$ {#eq-a5-pushforward-risk}
+
+where $T_\#P$ denotes the distribution produced by applying $T$ to inputs drawn from
+$P$. Keeping $Y$ unchanged is part of the assumption. A horizontal shift may preserve
+a garment label; the same statement would be false for a transformation that changes
+the semantic target.
+
+When $T$ is itself drawn from a declared augmentation distribution $\mathcal A$, the
+population objective becomes
+
+$$
+R_{\mathcal A}(\theta)
+=\E_{(X,Y)\sim P}
+\E_{T\sim\mathcal A}
+\left[\ell\bigl(f_\theta(T(X)),Y\bigr)\right].
+$$ {#eq-a5-augmentation-risk}
+
+Sampling one fresh transformation per example is a Monte Carlo estimator of the inner
+expectation. It optimizes average behavior under $\mathcal A$; it does not prove exact
+invariance to every transformation, including transformations outside the declared
+support.
+
+The reusable audit is short: name the training distribution, the validation and test
+distributions, the deployment distribution, and every transformation relating them.
+If two of those happen to be equal, say so rather than leaving the equality implicit.
+
+## A loss is a conditional probability contract
+
+Suppose a model specifies a conditional distribution
+$p_\theta(y\mid\vect{x})$. Under conditionally independent observations, its
+likelihood and mean negative log-likelihood are
+
+$$
+\mathcal L(\theta)
+=\prod_{i=1}^{n}p_\theta(y_i\mid\vect{x}_i),
+\qquad
+\operatorname{NLL}(\theta)
+=-\frac{1}{n}\sum_{i=1}^{n}
+\log p_\theta(y_i\mid\vect{x}_i).
+$$ {#eq-a5-nll}
+
+Maximizing the likelihood is equivalent to minimizing NLL. The target space and
+conditional distribution determine the familiar loss:
+
+| Target contract | Model parameterization | NLL, up to constants or scale | Familiar loss |
+|---|---|---|---|
+| $Y\mid X\sim\mathcal N(\mu_\theta(X),\sigma^2)$ with fixed $\sigma$ | $\mu_\theta\in\R$ | $(y-\mu_\theta)^2$ | Squared error |
+| $Y\mid X\sim\operatorname{Bernoulli}(p_\theta(X))$ | $p_\theta=\operatorname{sigmoid}(o_\theta)$ | $-y\log p_\theta-(1-y)\log(1-p_\theta)$ | Binary cross-entropy |
+| $Y\mid X\sim\operatorname{Categorical}(\vect{p}_\theta(X))$ | $\vect{p}_\theta=\operatorname{softmax}(\vect{o}_\theta)$ | $-\log p_{\theta,y}$ | Categorical cross-entropy |
+| $Y\mid X\sim\operatorname{Laplace}(\mu_\theta(X),b)$ with fixed $b$ | $\mu_\theta\in\R$ | $|y-\mu_\theta|$ | Absolute error |
+
+This table is not a command to force every problem into four rows. It is a way to ask
+what kind of target is being modeled, which parameters must stay in a valid domain,
+and what deviations the loss treats as plausible. Counts, angles, intervals, censored
+values, and structured outputs may require different conditional contracts.
+
+### Why the Gaussian is plausible, and where it is not
+
+The Gaussian assumption is mathematically convenient, but convenience is not its only
+motivation. If a residual is the sum of many small, weakly dependent perturbations with
+finite variance, a central-limit argument can make a Gaussian approximation plausible.
+Among distributions on $\R$ with a fixed mean and variance, the Gaussian also has
+maximum differential entropy: it adds no further shape constraint beyond those two
+moments.
+
+Neither argument proves that a particular residual is Gaussian. A few dominant causes,
+heavy tails, changing variance, dependence, truncation, or multimodality can break the
+approximation. The honest sequence is:
+
+1. state the conditional residual assumption;
+2. derive the loss it implies;
+3. inspect residuals and relevant slices;
+4. revise the likelihood or estimator when the mismatch changes the claim.
+
+The maximum-entropy statement is also conditional on knowing the mean and variance and
+using support $\R$. Change the support or known constraints and the maximum-entropy
+distribution changes.
+
+## Three ways to compare distributions
+
+Chapters 18 and 19 compare distributions for different reasons. The symbol “distance”
+can hide very different geometry, so start with the question rather than the formula.
+
+For densities or mass functions $p$ and $q$, the Kullback--Leibler divergence is
+
+$$
+D_{\mathrm{KL}}(P\|Q)
+=\E_{X\sim P}\left[\log\frac{p(X)}{q(X)}\right].
+$$ {#eq-a5-kl}
+
+It is nonnegative and equals zero only when the distributions agree almost everywhere
+under the usual conditions. It is not symmetric, does not satisfy the triangle
+inequality, and becomes infinite when $P$ puts positive mass where $Q$ puts none. Its
+direction matters: $D_{\mathrm{KL}}(P\|Q)$ averages a log density ratio under $P$.
+
+Let $M=\tfrac12(P+Q)$. The Jensen--Shannon divergence is
+
+$$
+D_{\mathrm{JS}}(P\|Q)
+=\tfrac12D_{\mathrm{KL}}(P\|M)
++\tfrac12D_{\mathrm{KL}}(Q\|M).
+$$ {#eq-a5-js}
+
+It is symmetric and lies between $0$ and $\log 2$ when natural logarithms and equal
+mixture weights are used. The mixture prevents the support failure that can make a KL
+term between $P$ and $Q$ infinite. JSD still compares probability mass, not the
+physical distance between locations.
+
+Given a ground metric $d$ on the sample space, the Wasserstein-1 distance is
+
+$$
+W_1(P,Q)
+=\inf_{\gamma\in\Pi(P,Q)}
+\E_{(X,Y)\sim\gamma}[d(X,Y)],
+$$ {#eq-a5-wasserstein}
+
+where $\Pi(P,Q)$ is the set of couplings with marginals $P$ and $Q$. In one dimension,
+
+$$
+W_1(P,Q)
+=\int_0^1\left|F_P^{-1}(u)-F_Q^{-1}(u)\right|\,\dd u.
+$$ {#eq-a5-wasserstein-1d}
+
+Wasserstein distance uses the geometry of the sample space and inherits the units of
+the ground metric. That can be valuable, but it also means the answer depends on
+whether the chosen ground metric represents meaningful movement.
+
+| Quantity | What it makes visible | Boundary to remember |
+|---|---|---|
+| $D_{\mathrm{KL}}(P\|Q)$ | Expected log-density mismatch in a declared direction | Asymmetric; support mismatch can make it infinite |
+| $D_{\mathrm{JS}}(P\|Q)$ | Symmetric mass disagreement with a shared mixture | Does not know that two nearby points are near |
+| $W_1(P,Q)$ | Amount and distance of mass movement | Requires a meaningful ground metric; estimation can be difficult in high dimensions |
+
+No row certifies sample quality, fairness, or deployment safety by itself. The metric
+must be paired with a population, an estimator, and the substantive property the
+measurement is meant to probe.
+
+## What the code estimates
+
+Monte Carlo turns an expectation into an average. If
+$Z_1,\ldots,Z_B$ are independent draws and $g(Z)$ has finite variance, then
+
+$$
+\widehat\mu_B=\frac{1}{B}\sum_{b=1}^{B}g(Z_b),
+\qquad
+\E[\widehat\mu_B]=\E[g(Z)],
+\qquad
+\operatorname{Var}(\widehat\mu_B)=\frac{\operatorname{Var}(g(Z))}{B}.
+$$ {#eq-a5-monte-carlo}
+
+The $1/B$ variance law assumes independent draws. Correlated samples contain less
+information than the same number of independent samples, so the sampling mechanism is
+part of the estimator contract.
+
+@sec-04-estimator-cases distinguishes three cases that recur across the book:
+
+1. **Decomposable per-example objective.** A batch mean estimates a population mean.
+   Squared error and cross-entropy usually live here.
+2. **Nonlinear functional of an aggregate.** If the target is
+   $R(\E[g(Z)])$, the plug-in $R(\widehat\mu_B)$ is generally biased. Jensen's
+   inequality gives a direction when $R$ is convex or concave. More optimization
+   steps do not remove fixed-batch plug-in bias; larger or restructured estimators may.
+3. **Batch-defined objective.** The batch supplies candidates or negatives and is part
+   of the objective itself. Changing batch size changes the target, not merely its
+   Monte Carlo noise.
+
+The code audit is therefore not “does this line contain `.mean()`?” It is:
+
+| Field | Question |
+|---|---|
+| Target | Which population quantity or protocol-defined objective do we want? |
+| Estimator | Which random quantity does the code compute? |
+| Reduction | Which axes and examples enter the sum, mean, or denominator? |
+| Validity | Under what sampling and independence assumptions does it estimate the target? |
+| Boundary | What bias, dependence, missing support, or protocol change remains? |
+
+## Standard deviation is not standard error
+
+Uncertainty must name what was repeated. Suppose a complete training protocol is run
+with $K$ independently chosen seeds and produces metrics $M_1,\ldots,M_K$.
+
+- The **seed standard deviation** describes spread among those $K$ optimization runs
+  under the fixed dataset and protocol.
+- The **standard error of the seed mean**, often estimated as $s/\sqrt K$, describes
+  uncertainty in that mean under an idealized population of comparable independent
+  runs. With very small $K$, both $s$ and the resulting interval are unstable.
+- Neither quantity automatically measures variation across new datasets, deployment
+  populations, annotator groups, prompts, or future time periods.
+
+When two methods use the same data split, initialization family, and minibatch
+schedule, analyze paired differences $D_k=M_{A,k}-M_{B,k}$. Pairing can remove shared
+variation and answers the comparison more directly than two unrelated marginal SDs.
+If several observations come from one prompt, person, subject, or source document, that
+cluster may be the sampling unit; treating its rows as independent understates
+uncertainty.
+
+::: {.callout-note}
+## A compact statistical audit
+
+Before interpreting a reported number, retrieve five nouns:
+
+1. **Population:** which $P$, $Q$, slice, or transformed distribution?
+2. **Estimand:** risk, accuracy, divergence, calibration error, or another quantity?
+3. **Estimator:** what exact calculation and denominator produced the number?
+4. **Variation:** data, optimization, sampling, annotation, or deployment variation?
+5. **Boundary:** which tempting conclusion does this evidence not establish?
+:::
+
+## Sources and further reading {.unnumbered}
+
+- [Fisher, *On the Mathematical Foundations of Theoretical Statistics*](https://doi.org/10.1098/rsta.1922.0009): likelihood.
+- [Geman, Bienenstock, and Doursat, *Neural Networks and the Bias/Variance Dilemma*](https://doi.org/10.1162/neco.1992.4.1.1): classical bias and variance.
+- [Kullback and Leibler, *On Information and Sufficiency*](https://doi.org/10.1214/aoms/1177729694): KL divergence.
+- [Lin, *Divergence Measures Based on the Shannon Entropy*](https://doi.org/10.1109/18.61115): Jensen--Shannon divergence.
+- [Jaynes, *Information Theory and Statistical Mechanics*](https://doi.org/10.1103/PhysRev.106.620): maximum entropy under declared constraints.
+- [Metropolis and Ulam, *The Monte Carlo Method*](https://doi.org/10.1080/01621459.1949.10483310): Monte Carlo estimation.
+- [Villani, *Optimal Transport: Old and New*](https://doi.org/10.1007/978-3-540-71050-9): transport geometry.
+- [Prince, *Understanding Deep Learning*](https://udlbook.github.io/udlbook/): an external completeness check for probability and loss coverage.
+
+## Exercises {.unnumbered}
+
+1. **(Pencil.)** At a fixed $x$, write
+   $\widehat f_{\mathcal D}(x)-Y$ as the sum of the mean-prediction error, the
+   training-set fluctuation, and the fresh-outcome noise. Expand the square. State the
+   zero-mean and conditional-independence assumptions that remove the cross terms and
+   recover @eq-bias-variance.
+2. **(Pencil.)** Derive the Gaussian and Laplace rows of the likelihood table by taking
+   negative logarithms. Which constants may be dropped when their scale parameters are
+   fixed, and what changes if those scales are learned?
+3. **(Code.)** Let $Z\sim\mathcal N(0,1)$ and estimate
+   $\log\E[e^Z]$ with $\log(B^{-1}\sum_b e^{Z_b})$. Sweep $B$ and many repetitions.
+   Measure the plug-in bias, predict its sign from Jensen's inequality, and distinguish
+   it from the Monte Carlo variance within one $B$.
+4. **(Audit.)** A team trains on $P$, tunes repeatedly on one validation set from $P$,
+   and reports accuracy on an independent shifted set $T_\#P$ as “test accuracy.” Name
+   the three separate questions hidden by that phrase and propose a split and reporting
+   contract that answers each one.
+5. **(Audit.)** Two scalar generators have similar JSD but different Wasserstein-1
+   distance under the usual Euclidean metric. Give one configuration where this is
+   plausible. Explain which conclusion would change if the coordinate units were
+   rescaled, and why neither number alone establishes perceptual fidelity.
+6. **(Code.)** Compare two methods across five matched seeds. Report the five paired
+   differences, their mean and SD, and the two unpaired marginal SDs. Then repeat after
+   breaking the pairing. Explain which source of variation the paired summary removes
+   and which sources remain outside the experiment.

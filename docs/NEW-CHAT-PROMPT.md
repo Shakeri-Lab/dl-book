@@ -24,7 +24,7 @@ Current stable release **v1.2.1** is the reciprocal-companion point release. The
 two Chapter 1 revisions,
 the pacing/visual/full-scale experiment pass, the July 28 comprehensive book audit,
 and the Chapter 15 editorial/figure pass. It contains chapters 1–20 plus three
-interludes, four appendices, and an epilogue. The July 29 closeout adds the
+interludes, five appendices, and an epilogue. The July 29 closeout adds the
 epilogue's `E.` figure namespace, the explicit canonical-edition sentence, complete
 interlude retrieval checks, the RMSProp provenance line, strict CI text-layer
 tripwires, and the reviewed exercise bank. The Chapter 20 deep pass closes the
@@ -37,9 +37,15 @@ unnumbers the epilogue equations, and pins the final PDF text-layer regression.
 The August 2 print-hardening pass adds an 88-column learner-visible Python guard,
 print-side wrapping for code and frozen stdout, media-box geometry and PDF-outline
 audits, a three-pass LaTeX minimum, and a copyright/title verso. The current derived
-PDFs use a uniform 0.85-inch margin: the two-sided print edition is 524 pages and
-the one-sided, open-any continuous-screen edition is 502 pages. Both contain no
+PDFs use a uniform 0.85-inch margin: the two-sided print edition is 530 pages and
+the one-sided, open-any continuous-screen edition is 508 pages. Both contain no
 off-paper text or missing glyphs; all 133 frozen stdout blocks remain byte-identical.
+The August 6 coherence pass adds Appendix E as an optional statistical-contract
+retrieval layer, replaces Chapter 1's bias--variance cartoon with a seeded
+show-then-name experiment, separates representation, optimization, and generalization
+evidence in Chapter 6, and bounds Chapter 18 alignment claims within a broader
+sociotechnical audit. The current code contract covers 194 visible surfaces, 95
+execution-only harnesses, and 285 executable cells.
 Nothing is mid-flight.
 
 **Read before doing anything, in this order:**

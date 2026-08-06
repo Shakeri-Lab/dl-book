@@ -69,7 +69,7 @@ chapter stub's draft-sources; revisit during the planned outline session with th
   audit, code/stdout wrap in the derived PDF, media-box geometry and outline-target
   gates, a three-pass LaTeX minimum, and a copyright/title verso. The rolling
   post-v1.2.1 build uses a uniform 0.85-inch margin: the two-sided print conversion
-  is 524 pages and the one-sided continuous-screen conversion is 502 pages, both
+  is 530 pages and the one-sided continuous-screen conversion is 508 pages, both
   with no off-paper text. The remaining index and tagged-PDF items below are
   editorial/print-era choices, not repairs to this gate.
 
@@ -96,11 +96,11 @@ chapter stub's draft-sources; revisit during the planned outline session with th
 - Consider a one-page protocol card after the experimentation interlude: claim type,
   predeclared contract, seed panel, endpoint rule, and ledger fields. Link it from later
   designed studies if adopted.
-- Consider a compact statistical-learning reference that collects empirical versus
-  population risk, transformed distributions, likelihood assumptions, and the
-  CLT/maximum-entropy rationale for Gaussian residuals. Chapter 1 and Chapter 6 now
-  carry the minimum notation needed in the main path; any appendix must support those
-  passages without asking the reader to leave the mechanism midstream.
+- **Statistical-learning reference completed (2026-08-06):** Appendix E collects
+  empirical and population risk, transformed distributions, likelihood contracts,
+  Gaussian residual assumptions, distribution comparisons, estimator cases, and
+  uncertainty reporting. Chapters 1, 4, 6, and 18 carry only the notation needed in
+  the main path and point to the appendix as an optional audit layer.
 - Consider a compact coding-practice reference for reproducibility, shape contracts,
   testing, device placement, and the boundary between teaching kernels and production
   systems. Keep production scaffolding out of the conceptual cells unless it changes

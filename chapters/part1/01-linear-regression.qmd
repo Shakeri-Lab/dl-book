@@ -54,7 +54,8 @@ $$
 We will assume this distinction is familiar and use it precisely. An independent
 validation set drawn from $P$ estimates performance under $P$; it does not
 automatically estimate performance under a transformed or deployment distribution
-$Q$. Chapter 6 will make that difference visible.
+$Q$. Chapter 6 will make that difference visible; @sec-a5-statistical-learning later
+gathers the full statistical contract in one reference.
 
 ::: {.callout-note}
 ## Supervised learning, three flavors
@@ -642,11 +643,140 @@ memorizing a lookup table.
 
 ## A first look at bias and variance
 
-Our learned predictor $\hat f_{\mathcal D}$ depends on the random training set
-$\mathcal D$. Collect a fresh dataset and you get a different prediction at the same
-input $\vect{x}$. Let $f^*(\vect{x}) = \E[Y\mid X=\vect{x}]$ be the noise-free
-regression function. Then the expected squared error on a fresh outcome at this fixed
-input decomposes into three parts:
+Keep the fitting recipe fixed, but collect the data again. The observed points move,
+so the fitted line moves too. At one fixed input, the cloud of green predictions has a
+center and a spread. Its center can miss the black data-generating curve, and a fresh
+purple outcome still varies around that curve even if the prediction were perfect.
+
+```{python}
+#| label: fig-bias-variance
+#| echo: false
+#| fig-cap: "Bias and variance, shown before they are named. Left: forty fresh noisy datasets produce forty fitted lines under one unchanged linear-regression recipe; one dataset is shown in purple, the mean fitted prediction in green, and the data-generating curve in black. Middle: at one fixed input, the prediction cloud has a systematic offset from the truth and a spread across training sets, while fresh outcomes retain their own noise. Right: the familiar U-curve compresses those three effects into a classical complexity cartoon. The seeded construction reveals the decomposition; it does not claim that every modern model follows one U-shaped path."
+#| fig-alt: "Three panels explain bias and variance. Repeated noisy datasets produce different fitted green lines around a black nonlinear truth. At one input, green prediction points have a mean offset from truth and a spread, while purple fresh outcomes show irreducible noise. A final schematic plots falling squared bias, rising variance, constant noise, and their U-shaped total against model flexibility."
+#| fig-width: 11
+#| fig-height: 4.2
+import matplotlib.pyplot as plt
+import torch
+
+feature_color = "#2B6CB0"
+target_color = "#805AD5"
+prediction_color = "#2F855A"
+residual_color = "#722F37"
+neutral_color = "#333333"
+light_neutral = "#8A8A8A"
+
+generator = torch.Generator().manual_seed(6050)
+dtype = torch.float64
+noise_sd = 0.32
+grid = torch.linspace(-1.0, 1.0, 240, dtype=dtype)
+
+def generating_curve(x: torch.Tensor) -> torch.Tensor:
+    return 0.25 + 0.75 * x + 0.85 * x.square()
+
+fitted_curves = []
+shown_x = shown_y = None
+for repeat in range(40):
+    x_train = 2.0 * torch.rand(12, generator=generator, dtype=dtype) - 1.0
+    y_train = (
+        generating_curve(x_train)
+        + noise_sd * torch.randn(12, generator=generator, dtype=dtype)
+    )
+    design = torch.stack([x_train, torch.ones_like(x_train)], dim=1)
+    coefficients = torch.linalg.lstsq(design, y_train).solution
+    fitted_curves.append(coefficients[0] * grid + coefficients[1])
+    if repeat == 0:
+        shown_x, shown_y = x_train, y_train
+
+fits = torch.stack(fitted_curves)
+mean_fit = fits.mean(dim=0)
+anchor = 0.65
+anchor_index = int(torch.argmin((grid - anchor).abs()))
+anchor_predictions = fits[:, anchor_index]
+anchor_truth = generating_curve(torch.tensor(anchor, dtype=dtype))
+fresh_outcomes = (
+    anchor_truth
+    + noise_sd * torch.randn(40, generator=generator, dtype=dtype)
+)
+
+fig, axes = plt.subplots(1, 3, figsize=(11, 4.2))
+
+axes[0].plot(grid, generating_curve(grid), color=neutral_color, lw=2.2,
+             label="data-generating curve")
+for curve in fits:
+    axes[0].plot(grid, curve, color=prediction_color, alpha=0.10, lw=0.9)
+axes[0].plot(grid, mean_fit, color=prediction_color, lw=2.6,
+             label="mean fitted prediction")
+axes[0].scatter(shown_x, shown_y, color=target_color, s=22, zorder=4,
+                label="one observed dataset")
+axes[0].set(xlabel="input $x$", ylabel="output $y$",
+            title="A  Fresh data, fresh fit")
+axes[0].legend(frameon=False, fontsize=7.5, loc="upper left")
+
+prediction_jitter = torch.linspace(0.91, 1.09, len(anchor_predictions))
+outcome_jitter = torch.linspace(0.13, 0.31, len(fresh_outcomes))
+axes[1].scatter(anchor_predictions, prediction_jitter, color=prediction_color,
+                s=18, alpha=0.58, label="predictions")
+axes[1].scatter(fresh_outcomes, outcome_jitter, color=target_color,
+                s=18, alpha=0.48, label="fresh outcomes")
+prediction_mean = anchor_predictions.mean()
+prediction_sd = anchor_predictions.std(unbiased=False)
+truth_line = axes[1].axvline(anchor_truth, color=neutral_color, lw=2.0)
+mean_line = axes[1].axvline(
+    prediction_mean, color=prediction_color, lw=2.0, ls="--",
+)
+axes[1].annotate(
+    "systematic offset",
+    xy=(anchor_truth, 0.70), xytext=(prediction_mean, 0.70),
+    ha="center", va="bottom", color=residual_color, fontsize=8,
+    arrowprops=dict(arrowstyle="<->", color=residual_color, lw=1.4),
+)
+axes[1].plot(
+    [prediction_mean - prediction_sd, prediction_mean + prediction_sd],
+    [0.55, 0.55], color=prediction_color, lw=4, solid_capstyle="round",
+)
+axes[1].text(prediction_mean, 0.47, "spread across datasets", ha="center",
+             color=prediction_color, fontsize=8)
+axes[1].set_yticks([])
+axes[1].set(xlabel=f"prediction or outcome at $x={anchor}$",
+            title="B  Hold the input fixed")
+axes[1].legend(
+    [truth_line, mean_line], ["truth", "mean prediction"],
+    frameon=False, fontsize=7.5, loc="center right",
+)
+
+complexity = torch.linspace(0.0, 1.0, 200, dtype=dtype)
+bias_squared = 0.72 * torch.exp(-4.2 * complexity) + 0.025
+variance = 0.045 + 0.52 * complexity.square()
+noise = torch.full_like(complexity, 0.12)
+total = bias_squared + variance + noise
+best = int(total.argmin())
+axes[2].plot(complexity, bias_squared, color=residual_color, lw=2,
+             label="bias$^2$")
+axes[2].plot(complexity, variance, color=light_neutral, lw=2,
+             label="variance")
+axes[2].plot(complexity, noise, color=target_color, lw=1.7, ls=":",
+             label="noise")
+axes[2].plot(complexity, total, color=neutral_color, lw=2.7,
+             label="total")
+axes[2].scatter(complexity[best], total[best], color=feature_color, s=32, zorder=4)
+axes[2].text(complexity[best], total[best] + 0.06, "classical sweet spot",
+             ha="center", color=feature_color, fontsize=8)
+axes[2].set(xlabel="model flexibility", ylabel="expected error",
+            title="C  Classical summary")
+axes[2].set_yticks([])
+axes[2].legend(frameon=False, fontsize=7.5, ncol=2, loc="upper center")
+
+for axis in axes:
+    axis.spines[["top", "right"]].set_visible(False)
+fig.tight_layout()
+plt.show()
+```
+
+Now we can name what the picture separated. Our learned predictor
+$\hat f_{\mathcal D}$ depends on the random training set $\mathcal D$. Let
+$f^*(\vect{x}) = \E[Y\mid X=\vect{x}]$ be the regression function. For a fresh
+outcome independent of the training set once $X=\vect{x}$ is fixed, the expected
+squared error decomposes into three parts:
 
 $$
 \begin{aligned}
@@ -680,8 +810,6 @@ wrong (underfitting). **Variance** measures how much the prediction would change
 collected a fresh training set (the model's sensitivity to sampling noise); a complex
 model can fit the noise itself (overfitting). The **irreducible noise** is inherent to
 the data-generating process and cannot be learned away.
-
-![The classical picture: as model complexity grows, bias falls while variance rises; total error is U-shaped, with sweet spots between under- and overfitting.](../../figures/generated/1_1_lin_Recap-fig07.svg){#fig-bias-variance width=70% fig-alt="Bias decreases and variance increases with model complexity, producing a U-shaped total-error curve."}
 
 This is why we split data into training, validation, and test: the model sees the
 training set, the validation set referees the bias–variance trade-off, and the test set

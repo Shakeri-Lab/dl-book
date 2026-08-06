@@ -1,4 +1,28 @@
 
+# Rolling post-v1.2.1 — statistical-learning coherence pass (August 6, 2026)
+
+Appendix E, **Statistical Learning Contracts**, now gathers the probability and
+estimation contracts already used across the manuscript: empirical versus population
+risk, transformed and deployment distributions, likelihood-derived losses, the
+Gaussian assumption and its limits, KL/Jensen--Shannon/Wasserstein comparisons,
+Monte Carlo estimator cases, and uncertainty reporting. The appendix is a retrieval
+layer, not a prerequisite; Chapters 1, 4, 6, and 18 remain self-contained and point
+there only when the full audit chain is useful. Prince's *Understanding Deep Learning*
+served as a reference-only completeness crosscheck; the exposition, examples, and
+exercises remain independently authored.
+
+Chapter 1 replaces the static bias--variance cartoon with a seeded three-panel
+show-then-name experiment. Chapter 6 separates representation, optimization, and
+generalization claims before its failure demonstrations and strengthens its capacity
+exercise with an evidence-boundary audit. Chapter 18 makes explicit that behavioral
+alignment is one contract inside a broader ethics and governance assessment.
+
+Acceptance: 194 learner-visible Plan → Code surfaces and 95 execution-only harnesses
+pass; 285 executable cells, four transclusions, and twelve included modules/scripts
+parse; all 133 frozen stdout blocks remain byte-identical. The canonical HTML has no
+page-level overflow at a 390-pixel viewport. At the shared 0.85-inch margin, the
+derived print PDF is 530 pages and the continuous-screen PDF is 508 pages.
+
 # Rolling post-v1.2.1 — compact PDF editions (August 5, 2026)
 
 Both derived PDF editions now use a uniform 0.85-inch margin, reduced from 1.1

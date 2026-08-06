@@ -8,9 +8,9 @@ new rows here. The pedagogical-efficiency rule (drafting-template) depends on
 this file: a concept with no payoff chapter listed here should be an exercise or
 a cut.*
 
-*Updated: 2026-07-29, after the course-alignment, structural-review,
-test-time memory/control, show-then-name pacing, and Chapter 20 temperature
-passes.*
+*Updated: 2026-08-06, after the course-alignment, structural-review,
+test-time memory/control, show-then-name pacing, Chapter 20 temperature, and
+statistical-contract coherence passes.*
 
 ## 1. Seeds planted and their harvest contracts
 
@@ -68,6 +68,7 @@ passes.*
 | Solve, don't invert | ch. 1 | Appendix A — `solve` for square systems; `lstsq` for rectangular projection; forming normal equations squares the condition number | done |
 | A tensor's dtype becomes more than a software label; gather dtype, shape, stride, and physical layout | ch. 17 | Appendix B — six-part tensor contract, shape dictionary, broadcasting, views, strides, and dtype-aware construction | done |
 | Storage precision ≠ compute precision ≠ trainable state | ch. 17 | Appendix C — operand, evaluation, accumulation, output, gradient, and optimizer roles are audited separately | done |
+| A reported number needs a population, estimand, estimator, variation source, and boundary | chs. 1, 4, 6, and 18 | Appendix E — empirical/population and shifted risks, likelihood contracts, distribution comparisons, estimator cases, and uncertainty are gathered into one optional audit | done |
 
 ## 2. Cross-chapter running benchmarks
 
@@ -145,6 +146,7 @@ optimizers or `backward()` before Chapter 5.
 | B | six-part tensor contract; book-wide axis dictionary; `nn.Linear` row batches; broadcasting; `expand`/`repeat`; views, strides, contiguity; batched `@`/`einsum`; indexing, masks, and dtype-aware factories |
 | C | binary floating-point range and resolution; `torch.finfo`/`nextafter`; rounded-away updates, cancellation, stable softmax, and log-domain products; mixed-precision and loss-scaling contracts; operational intensity, Roofline bounds, and ridge points; I/O-aware exact attention and online softmax; performance-measurement contracts |
 | D | book-wide typography, decorations, index/dimension dictionary, recurring tensor shapes, probability/optimization roles, and four-question notation audit |
+| E | empirical, population, shifted, and augmentation risks; likelihood-to-loss contracts; KL/Jensen--Shannon/Wasserstein comparison; Monte Carlo estimator cases; SD, SE, pairing, and clustering |
 
 ## 4. His signature analogies (use them; don't invent competitors)
 

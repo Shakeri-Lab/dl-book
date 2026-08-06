@@ -10,18 +10,18 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 
 ---
 
-> ## Current state — 2026-08-05 (read this first)
+> ## Current state — 2026-08-06 (read this first)
 >
 > The manuscript is **complete and released**: tag **v1.2.1** carries the stable
 > point-release PDF. The live manuscript is a rolling post-v1.2.1 build with chapters
-> 1–20, three interludes, four appendices, and an epilogue. The July 28
+> 1–20, three interludes, five appendices, and an epilogue. The July 28
 > comprehensive audit is complete: verified glyph losses are repaired, chapter
 > retrieval/source contracts are uniform, exercise modes are canonical, and
 > attention-as-test-time-regression is now its own interlude. **Nothing is
 > mid-flight.** Every open item is a decision waiting on the author — see **§9**,
 > which supersedes any older status text below it.
 >
-> The universal code pass covers all 194 learner-visible Python surfaces; 94
+> The universal code pass covers all 194 learner-visible Python surfaces; 95
 > `echo: false` execution-support cells are intentionally exempt. Every plan has
 > at most six steps and every step maps to a bracket-only numbered marker
 > (`# [1]`, or fused `# [2][5]`) in executed or tested source. Descriptive text
@@ -66,8 +66,7 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > Fashion-MNIST scorecard, the ResNet-18 transfer rematch, and the Chapter 10
 > WikiText-2 word-LSTM scale study.
 >
-> The July 28 audit plus Chapter 15 follow-on parses 284 executable cells, four
-> transclusions, and eleven
+> The current audit parses 285 executable cells, four transclusions, and twelve
 > included modules/scripts. The build now checks Plan → Code structure, exercise
 > tags, chapter checks and sources, book voice, interlude namespaces, frozen
 > stdout parity, LaTeX missing-character diagnostics, PDF replacement glyphs,
@@ -138,6 +137,16 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > 0.85 inches. Both editions retain the three-pass reference, geometry, glyph,
 > text-layer, outline, and accessibility gates.
 >
+> The August 6 coherence pass adds Appendix E as the optional statistical-contract
+> retrieval layer used across Chapters 1, 4, 6, 18, and 19. Chapter 1 now shows
+> repeated datasets, prediction spread, and the classical summary before naming
+> bias and variance. Chapter 6 separates representation, optimization, and
+> generalization evidence before its failure experiments. Chapter 18 bounds its
+> alignment contract within broader data-rights, distributional, production, and
+> governance questions. The canonical HTML passes a 390-pixel no-overflow check;
+> the derived 0.85-inch PDFs now contain 530 print pages and 508 continuous-screen
+> pages, with all 133 frozen stdout blocks unchanged.
+>
 > Fresh session? Read `CLAUDE.md`, then §9 and §2 of this file, then
 > `docs/style-guide.md` and `docs/arc-seeds.md`. A paste-ready bootstrap prompt
 > lives in `docs/NEW-CHAT-PROMPT.md`.
@@ -169,7 +178,7 @@ edition. Resolve disagreements in the shared Quarto source or conversion layer.
 | V · Pretrained Era | 17–20 | **Shipped and two-format verified** (July 15, 2026; ch. 19 revised, ch. 20 added) |
 | Unnumbered bridges | Experimentation/HPO after ch. 6; PCA/autoencoders after ch. 9; attention as test-time regression after ch. 14 | **Shipped and two-format verified** (July 28, 2026) |
 | Epilogue | The Question Is Yours | **Shipped; memory-to-planning frontier verified** (July 15, 2026) |
-| Appendices | A–D | **Shipped and verified** (Appendix C KV-cache bridge and Appendix D complete July 15, 2026) |
+| Appendices | A–E | **Shipped and verified** (Appendix E statistical-learning contracts complete August 6, 2026) |
 
 **Milestone 1** (Part I complete + skeleton) is met. The July 11 quantitative,
 mathematical, licensing, evaluation-hygiene, and two-format repair pass over Chapters
@@ -442,7 +451,7 @@ solvers in the test-time-regression interlude change the statistical contract in
   research-scale jobs stay backlog-only until each comparison has a predeclared
   contract and real results. Do not publish placeholder callouts.
 
-## 2. The working protocol (refined over chapters 7–20 and Appendices A–D)
+## 2. The working protocol (refined over chapters 7–20 and Appendices A–E)
 
 The single most important lesson of this project: **pre-test every experiment
 regime before writing a word of prose.** Roughly half of all planned experiments
@@ -1035,6 +1044,14 @@ experiment, and verification contract:
   attention shapes, probability and optimization conventions, and a four-question
   notation audit. The old public stub/warning is gone; its HTML layout and complete PDF
   range passed QA.
+- **Appendix E — Statistical Learning Contracts (SHIPPED):** gathers empirical,
+  population, deployment, shifted, and augmentation risks; likelihood-to-loss
+  contracts; a bounded Gaussian/CLT/maximum-entropy explanation; KL,
+  Jensen--Shannon, and Wasserstein comparisons; Monte Carlo estimator cases; and
+  SD/SE/pairing/clustering distinctions. It is explicitly a reference rather than a
+  prerequisite, preserving the momentum of Chapters 1, 4, 6, 18, and 19. Six
+  canonical exercises, responsive HTML, and the complete six-page PDF range passed
+  QA. Prince (2023) was used only as an external completeness crosscheck.
 
 ## 8. Document map
 
@@ -1106,7 +1123,7 @@ in the reader's language beside the terse kernel, output beneath the code.
 | Rules, authoring form, six-step ceiling | `docs/style-guide.md` |
 | Audit | `scripts/audit_plan_code.py` |
 
-All 194 learner-visible Python surfaces now use the panel; 94 `echo: false`
+All 194 learner-visible Python surfaces now use the panel; 95 `echo: false`
 execution-only cells are exempt. Markers in executed/tested source are
 bracket-only (`# [1]`, or fused `# [2][5]`) and never repeat the plan text.
 Comments remain only when they explain shapes, numerical choices, or non-obvious
