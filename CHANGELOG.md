@@ -1,4 +1,44 @@
 
+# Rolling post-v1.2.1 — interactive Plan → Code mapping (August 8, 2026)
+
+The canonical HTML edition keeps each Plan visible while its Code region is closed.
+Selecting a numbered plan item reveals the executed cell and highlights the source
+region begun by its matching bracket-only marker; selecting it again or pressing
+Escape closes the code. Mouse, Enter/Space, fused-marker, long-panel,
+transcluded-listing, and narrow-screen paths share one implementation. Numbers,
+focus, and an inset rule make the state legible without depending on colour.
+The publication pipeline now renders the canonical HTML bundle after both derived
+PDFs, then audits every page's local stylesheet and script references. This prevents
+a PDF profile from pruning shared `site_libs` and leaving an otherwise valid website
+unstyled.
+
+Figure 9.1 is rebuilt from its TikZ source with a compact component grid, separate
+block-to-stack connectors, and a residual skip confined to its own row. The SVG
+scales fluidly at ordinary widths; below phone width a reusable wide-figure rule
+classifies unusually wide artwork by intrinsic aspect ratio and preserves legible
+labels inside a local, keyboard-accessible horizontal inspection strip while the
+caption and page continue to reflow. The standalone TikZ builder now supplies the
+Quarto-created counters and accessibility placeholders expected by the shared book
+preamble. Both derived formats pass the geometry, text-layer, missing-character, and
+accessibility checks.
+
+Figure 1.9 now makes its middle panel a literal vertical slice through Panel A:
+both retain output on the vertical axis, Panel A marks $x_0=0.65$, and Panel B replaces
+cosmetic jitter with seeded prediction and fresh-outcome density profiles. Separate
+dimension columns identify bias, prediction variance, and irreducible noise; the
+caption states that the spread arrows show $\pm 1$ sample standard deviation while the
+decomposition uses squared bias and variances.
+
+Chapter 1 completes its semantic-colour pass across the dataset contract,
+empirical/population risk, MSE residual, gradient update, Gaussian likelihood, ridge
+objective, bias--variance decomposition, and linear-to-neuron bridge. Inputs remain
+blue, learnable parameters orange, targets purple, predictions green, and
+residuals/errors wine in both the equations and their immediate explanations. Long
+numbered displays use authored breaks plus a phone-width size adjustment, with local
+horizontal scrolling retained as the no-clipping fallback. The combined August 8
+revision repaginates the derived print PDF from 530 to 534 pages and the
+continuous-screen PDF from 508 to 510 pages.
+
 # Rolling post-v1.2.1 — statistical-learning coherence pass (August 6, 2026)
 
 Appendix E, **Statistical Learning Contracts**, now gathers the probability and
@@ -18,7 +58,7 @@ exercise with an evidence-boundary audit. Chapter 18 makes explicit that behavio
 alignment is one contract inside a broader ethics and governance assessment.
 
 Acceptance: 194 learner-visible Plan → Code surfaces and 95 execution-only harnesses
-pass; 285 executable cells, four transclusions, and twelve included modules/scripts
+pass; 285 executable cells, four transclusions, and thirteen included modules/scripts
 parse; all 133 frozen stdout blocks remain byte-identical. The canonical HTML has no
 page-level overflow at a 390-pixel viewport. At the shared 0.85-inch margin, the
 derived print PDF is 530 pages and the continuous-screen PDF is 508 pages.

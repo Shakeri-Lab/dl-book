@@ -1,0 +1,189 @@
+<script>
+(() => {
+  "use strict";
+
+  const markerPattern = /^#\s*((?:\[\d+\])+?)\s*$/;
+  const numberPattern = /\[(\d+)\]/g;
+  const panelMappings = new WeakMap();
+
+  function codeRegions(panel) {
+    return [...panel.children].filter((child) => !child.classList.contains("plan"));
+  }
+
+  function markerSteps(line) {
+    const steps = new Set();
+
+    line.querySelectorAll("span.co").forEach((comment) => {
+      const match = comment.textContent.trim().match(markerPattern);
+      if (!match) return;
+
+      for (const number of match[1].matchAll(numberPattern)) {
+        steps.add(Number(number[1]));
+      }
+    });
+
+    return [...steps];
+  }
+
+  function indentation(line) {
+    const leading = line.textContent.match(/^[\t ]*/)?.[0] ?? "";
+    return [...leading].reduce(
+      (width, character) => width + (character === "\t" ? 4 : 1),
+      0
+    );
+  }
+
+  function buildMapping(panel) {
+    const lines = [...panel.querySelectorAll(
+      "pre.sourceCode > code.sourceCode > span[id]"
+    )];
+    const markers = [];
+
+    lines.forEach((line, lineIndex) => {
+      const steps = markerSteps(line);
+      if (steps.length) {
+        markers.push({ lineIndex, steps, indent: indentation(line) });
+      }
+    });
+
+    const stepLines = new Map();
+
+    markers.forEach((marker, markerIndex) => {
+      let endIndex = lines.length;
+
+      for (let next = markerIndex + 1; next < markers.length; next += 1) {
+        if (markers[next].indent <= marker.indent) {
+          endIndex = markers[next].lineIndex;
+          break;
+        }
+      }
+
+      marker.steps.forEach((step) => {
+        if (!stepLines.has(step)) stepLines.set(step, new Set());
+        for (let lineIndex = marker.lineIndex; lineIndex < endIndex; lineIndex += 1) {
+          stepLines.get(step).add(lines[lineIndex]);
+        }
+      });
+    });
+
+    return { lines, stepLines };
+  }
+
+  function clearPanel(panel) {
+    const mapping = panelMappings.get(panel);
+    mapping?.lines.forEach((line) => {
+      line.classList.remove("plan-code-line-active");
+    });
+    panel.querySelectorAll(".plan-step-active").forEach((item) => {
+      item.classList.remove("plan-step-active");
+    });
+    panel.querySelectorAll(".plan-step-button").forEach((button) => {
+      button.setAttribute("aria-pressed", "false");
+      button.setAttribute("aria-expanded", "false");
+    });
+    mapping?.codeRegions.forEach((region) => {
+      region.hidden = true;
+      region.setAttribute("aria-hidden", "true");
+    });
+    panel.classList.remove("plan-code-has-active-step");
+    panel.classList.add("plan-code-code-collapsed");
+    panel.removeAttribute("data-active-plan-step");
+    panel.style.removeProperty("--plan-active-color");
+  }
+
+  function clearAllPanels() {
+    document.querySelectorAll(".plan-code-is-interactive").forEach(clearPanel);
+  }
+
+  function revealStep(panel, step, item, button) {
+    const wasActive = panel.dataset.activePlanStep === String(step);
+    clearAllPanels();
+    if (wasActive) return;
+
+    const mapping = panelMappings.get(panel);
+    const matchingLines = [...(mapping?.stepLines.get(step) ?? [])];
+    if (!matchingLines.length) return;
+
+    panel.classList.remove("plan-code-code-collapsed");
+    mapping.codeRegions.forEach((region) => {
+      region.hidden = false;
+      region.removeAttribute("aria-hidden");
+    });
+    const chipColor = getComputedStyle(item, "::before").backgroundColor;
+    panel.style.setProperty("--plan-active-color", chipColor);
+    panel.dataset.activePlanStep = String(step);
+    panel.classList.add("plan-code-has-active-step");
+    item.classList.add("plan-step-active");
+    button.setAttribute("aria-pressed", "true");
+    button.setAttribute("aria-expanded", "true");
+    matchingLines.forEach((line) => {
+      line.classList.add("plan-code-line-active");
+    });
+
+    const firstLine = matchingLines[0];
+    const bounds = firstLine.getBoundingClientRect();
+    if (bounds.top < 0 || bounds.bottom > window.innerHeight) {
+      firstLine.scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          ? "auto"
+          : "smooth",
+        block: "center"
+      });
+    }
+  }
+
+  function initializePanel(panel, panelIndex) {
+    const mapping = buildMapping(panel);
+    const items = [...panel.querySelectorAll(":scope > .plan > ol > li")];
+    if (!mapping.lines.length || !items.length) return;
+
+    const regions = codeRegions(panel);
+    regions.forEach((region, regionIndex) => {
+      if (!region.id) region.id = `plan-code-${panelIndex}-${regionIndex}`;
+    });
+
+    mapping.codeRegions = regions;
+    panelMappings.set(panel, mapping);
+    panel.classList.add("plan-code-is-interactive");
+
+    items.forEach((item, index) => {
+      const step = index + 1;
+      if (!mapping.stepLines.has(step)) return;
+
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "plan-step-button";
+      while (item.firstChild) button.appendChild(item.firstChild);
+      item.appendChild(button);
+      item.classList.add("plan-step-available");
+      item.dataset.planStep = String(step);
+      button.dataset.planStep = String(step);
+      button.setAttribute("aria-pressed", "false");
+      button.setAttribute("aria-expanded", "false");
+      button.setAttribute("title", `Reveal the code for step ${step}`);
+      if (regions.length) {
+        button.setAttribute(
+          "aria-controls",
+          regions.map((region) => region.id).join(" ")
+        );
+      }
+
+      button.addEventListener("click", () => {
+        revealStep(panel, step, item, button);
+      });
+      button.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        revealStep(panel, step, item, button);
+      });
+    });
+
+    clearPanel(panel);
+  }
+
+  document.querySelectorAll(".plan-code").forEach(initializePanel);
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") clearAllPanels();
+  });
+})();
+</script>

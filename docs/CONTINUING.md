@@ -10,7 +10,7 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 
 ---
 
-> ## Current state — 2026-08-06 (read this first)
+> ## Current state — 2026-08-08 (read this first)
 >
 > The manuscript is **complete and released**: tag **v1.2.1** carries the stable
 > point-release PDF. The live manuscript is a rolling post-v1.2.1 build with chapters
@@ -29,6 +29,16 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > keeps the four canonical
 > transclusions stable in chapter and whole-book renders. The audit lives at
 > `scripts/audit_plan_code.py`.
+> In canonical HTML, the Plan stays visible while its Code region is initially
+> closed. Click a plan item or use Enter/Space to reveal the executed cell and
+> highlight the region begun by the matching marker; selecting it again or
+> pressing Escape closes the code. The interaction preserves fused markers,
+> stacks at the existing 900-pixel breakpoint, and leaves both PDF editions
+> static and content-equivalent.
+> Because all formats share `_book`, render the two derived PDFs first and the
+> canonical HTML bundle last with `--no-clean`. A PDF profile can prune Quarto's
+> generated `site_libs`; `scripts/audit_html_assets.py` makes any resulting missing
+> stylesheet or script a build failure.
 >
 > Chapter 1 now follows the author's momentum-first revision: sparse em dashes,
 > show-then-name geometry, three new TikZ figures, colour-linked equations,
@@ -41,6 +51,10 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > ridge-only exercise plus a careful angular-responsiveness footnote. Chapter 6
 > names shifted risk $R_{T_\#P}$ and the augmentation population objective
 > $R_{\mathcal A}$.
+> The August 8 completion carries the same semantic roles through the dataset,
+> empirical/population risk, MSE residual, gradient, Gaussian likelihood, ridge,
+> bias--variance, and linear-to-neuron equations. Responsive long displays retain
+> authored logical breaks and fit their equation numbers at phone width.
 >
 > The July 26 Chapter 1/SGD visual pass replaces Figure 1.1's ambiguous
 > frame-pointing arrows with a highlighted first row, highlighted $y_1$, an
@@ -65,8 +79,21 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > promises with 30 pinned per-seed records: the Chapter 9 full-data
 > Fashion-MNIST scorecard, the ResNet-18 transfer rematch, and the Chapter 10
 > WikiText-2 word-LSTM scale study.
+> Figure 9.1's component, block, and architecture rows are now collision-free at
+> the TikZ source. Its SVG scales fluidly at ordinary widths, then preserves a
+> legible vector width inside a local horizontal inspection strip on phones while
+> the caption and page continue to reflow. Responsive presentation never
+> substitutes for correcting internal diagram geometry. The aspect-ratio classifier
+> and accessible narrow-screen frame live in `responsive-figures.html`. The repaired
+> figure and Chapter 1 equation pass repaginate the derived PDFs to 534 print pages
+> and 510 continuous-screen pages; both full conversions pass the PDF geometry,
+> text-layer, and glyph audit.
+> Chapter 1's Figure 1.9 now preserves the output axis from its repeated-fit panel
+> into a literal $x_0=0.65$ slice. Seeded KDE profiles replace cosmetic jitter, and
+> separate dimension arrows distinguish bias, prediction variance, and irreducible
+> noise without changing the decomposition or any printed numerical output.
 >
-> The current audit parses 285 executable cells, four transclusions, and twelve
+> The current audit parses 285 executable cells, four transclusions, and thirteen
 > included modules/scripts. The build now checks Plan → Code structure, exercise
 > tags, chapter checks and sources, book voice, interlude namespaces, frozen
 > stdout parity, LaTeX missing-character diagnostics, PDF replacement glyphs,
@@ -1119,6 +1146,7 @@ in the reader's language beside the terse kernel, output beneath the code.
 | Piece | Path |
 |---|---|
 | Two-column grid, chips, Output strip (HTML) | `dlbook.scss` |
+| Closed-by-default, click/keyboard step-to-source reveal (HTML) | `plan-code-interactions.html` |
 | Stacked print form | `filters/plan-code.lua` + `planbox` in `tex/macros.tex` |
 | Rules, authoring form, six-step ceiling | `docs/style-guide.md` |
 | Audit | `scripts/audit_plan_code.py` |

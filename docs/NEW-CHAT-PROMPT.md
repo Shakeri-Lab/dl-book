@@ -37,15 +37,17 @@ unnumbers the epilogue equations, and pins the final PDF text-layer regression.
 The August 2 print-hardening pass adds an 88-column learner-visible Python guard,
 print-side wrapping for code and frozen stdout, media-box geometry and PDF-outline
 audits, a three-pass LaTeX minimum, and a copyright/title verso. The current derived
-PDFs use a uniform 0.85-inch margin: the two-sided print edition is 530 pages and
-the one-sided, open-any continuous-screen edition is 508 pages. Both contain no
+PDFs use a uniform 0.85-inch margin: the two-sided print edition is 534 pages and
+the one-sided, open-any continuous-screen edition is 510 pages. Both contain no
 off-paper text or missing glyphs; all 133 frozen stdout blocks remain byte-identical.
 The August 6 coherence pass adds Appendix E as an optional statistical-contract
 retrieval layer, replaces Chapter 1's bias--variance cartoon with a seeded
 show-then-name experiment, separates representation, optimization, and generalization
 evidence in Chapter 6, and bounds Chapter 18 alignment claims within a broader
 sociotechnical audit. The current code contract covers 194 visible surfaces, 95
-execution-only harnesses, and 285 executable cells.
+execution-only harnesses, and 285 executable cells. The August 8 presentation pass
+adds interactive Plan → Code mapping, responsive wide-figure inspection, a repaired
+Figure 9.1, and a complete Chapter 1 semantic-colour equation sweep.
 Nothing is mid-flight.
 
 **Read before doing anything, in this order:**

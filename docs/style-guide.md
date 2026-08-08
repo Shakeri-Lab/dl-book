@@ -213,7 +213,10 @@ retrieve from memory: title the mistaken inference, then state the repair.
    descent paths, U-curves, gates, flows). Before designing one, check
    `~/dl-course-code/<module>/scenes/` for how his Manim animations compose the same
    idea, and echo that composition (see `docs/dl-course-code.md`). Verify TikZ
-   conversions *visually* before embedding — captions must match content.
+   conversions *visually* before embedding — captions must match content. When one
+   panel is a slice or zoom of another, preserve and align the mapped axes so the
+   relation is geometric rather than verbal. Do not add cosmetic jitter that looks
+   like an undeclared variable; show a distribution or name the jitter's sole purpose.
 3. **Code: lean, typed, educational.** Keep type hints and shape comments (his hygiene),
    cut every comment that merely restates the line. One idea per cell. Experiments,
    derivations, assertions, and numerical audits show their code. Pure concept diagrams
@@ -391,8 +394,18 @@ Rules:
   their own; the coloured chips are a redundant channel, so the panel survives
   greyscale print, colour-blind readers, and copy-paste. Never key a step by
   colour alone, and never rely on drawn arrows — they do not survive reflow.
-- **Set `code-fold: false`.** In a panel the code *is* the content; folding it
-  leaves the reader with half a comparison.
+- **Keep Quarto's cell fold off inside the panel.** Use `code-fold: false` so the
+  Plan → Code interaction owns one predictable disclosure state rather than
+  nesting a second fold control around the executed source.
+- **Let HTML reveal code and mapping together.** In the canonical HTML edition,
+  the Plan remains visible and its Code region starts closed. Each plan item is a
+  mouse- and keyboard-selectable control. Selecting step `[n]` opens the executed
+  cell and highlights the source region begun by `# [n]`; that region continues
+  until the next marker at the same or shallower indentation. Fused markers make
+  the same region selectable from either step. Selecting the active step again,
+  or pressing Escape, clears the state and closes the Code region. The number,
+  focus state, and inset rule carry the interaction independently of colour. PDF
+  keeps the same static numbered mapping without browser-only controls.
 - **Fusion is a teaching moment.** When one line implements two plan steps
   (`# [2][5]`), say so in the prose beneath: the gap between a sequential plan
   and a vectorised kernel is where tensor bugs live.
@@ -413,6 +426,20 @@ Format behaviour: HTML lays compact panels side by side (`dlbook.scss`).
 Print has a five-inch text block, where two columns of Python would wrap into
 noise, so `filters/plan-code.lua` always stacks them — the plan becomes a ruled,
 breakable `planbox` above the code. The markers read identically in both.
+
+### Responsive wide figures
+
+Vector artwork should own a valid SVG viewBox and normally scale fluidly with the
+reading column. Uniform scaling cannot repair collisions inside a diagram; correct
+those in the TikZ or plotting source first. In HTML, `responsive-figures.html`
+identifies unusually wide figure media (at least 600 intrinsic pixels and a 2.8:1
+aspect ratio). Below phone width it preserves a readable vector size inside a local,
+keyboard-accessible horizontal inspection strip while the caption and page reflow.
+Use `#| classes: responsive-wide-opt-in` for a dense multi-panel figure whose labels
+need the same treatment even though its outer aspect ratio falls below the automatic
+threshold. Ordinary plots keep scaling without a pan region. The derived PDF remains
+a fixed-page conversion and uses the authored figure width; a LaTeX
+`resizebox`-style transform is not a substitute for sound internal geometry.
 
 The PDF conversion enables breakable verbatim code and stdout as a final safety
 net. Do not rely on that conversion to repair confusing source: rewrap authored

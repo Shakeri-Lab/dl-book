@@ -24,6 +24,18 @@ pathlib.Path(sys.argv[2]).write_text("\n".join(blocks) if blocks else text)
 PY
   cat > "$TMP/$name.tex" <<WRAP
 \\documentclass[tikz,border=4pt]{standalone}
+% The book preamble customizes counters, icons, and verbatim environments that
+% Quarto normally creates. Supply inert standalone equivalents before loading
+% the same canonical macros so figure builds remain isolated and reproducible.
+\\newcounter{exfig}
+\\newcounter{aefig}
+\\newcounter{ttrfig}
+\\newcounter{epfig}
+\\providecommand{\\faInfo}{}
+\\providecommand{\\faLightbulb}{}
+\\providecommand{\\faExclamationTriangle}{}
+\\newenvironment{Highlighting}{}{}
+\\newenvironment{Highlighting*}{}{}
 \\input{$(pwd)/tex/macros.tex}
 \\usetikzlibrary{arrows.meta, chains, positioning, matrix, shapes.symbols, shapes.geometric, shadows, calc, backgrounds, fit, decorations.pathreplacing}
 \\begin{document}
