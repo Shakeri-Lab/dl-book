@@ -82,7 +82,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../../site_libs/bootstrap/bootstrap-05057be68374408b7a654baf632c5246.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../../site_libs/bootstrap/bootstrap-d14544a11c70a9bb55a2c32a23c62f94.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -1118,6 +1118,259 @@ Figure&nbsp;5.6: Signal energy through 40 ReLU layers. Careless scales lose or a
 </section>
 
 </main> <!-- /main -->
+<script>
+(() => {
+  "use strict";
+
+  const markerPattern = /^#\s*((?:\[\d+\])+?)\s*$/;
+  const numberPattern = /\[(\d+)\]/g;
+  const panelMappings = new WeakMap();
+
+  function codeRegions(panel) {
+    return [...panel.children].filter((child) => !child.classList.contains("plan"));
+  }
+
+  function markerSteps(line) {
+    const steps = new Set();
+
+    line.querySelectorAll("span.co").forEach((comment) => {
+      const match = comment.textContent.trim().match(markerPattern);
+      if (!match) return;
+
+      for (const number of match[1].matchAll(numberPattern)) {
+        steps.add(Number(number[1]));
+      }
+    });
+
+    return [...steps];
+  }
+
+  function indentation(line) {
+    const leading = line.textContent.match(/^[\t ]*/)?.[0] ?? "";
+    return [...leading].reduce(
+      (width, character) => width + (character === "\t" ? 4 : 1),
+      0
+    );
+  }
+
+  function buildMapping(panel) {
+    const lines = [...panel.querySelectorAll(
+      "pre.sourceCode > code.sourceCode > span[id]"
+    )];
+    const markers = [];
+
+    lines.forEach((line, lineIndex) => {
+      const steps = markerSteps(line);
+      if (steps.length) {
+        markers.push({ lineIndex, steps, indent: indentation(line) });
+      }
+    });
+
+    const stepLines = new Map();
+
+    markers.forEach((marker, markerIndex) => {
+      let endIndex = lines.length;
+
+      for (let next = markerIndex + 1; next < markers.length; next += 1) {
+        if (markers[next].indent <= marker.indent) {
+          endIndex = markers[next].lineIndex;
+          break;
+        }
+      }
+
+      marker.steps.forEach((step) => {
+        if (!stepLines.has(step)) stepLines.set(step, new Set());
+        for (let lineIndex = marker.lineIndex; lineIndex < endIndex; lineIndex += 1) {
+          stepLines.get(step).add(lines[lineIndex]);
+        }
+      });
+    });
+
+    return { lines, stepLines };
+  }
+
+  function clearPanel(panel) {
+    const mapping = panelMappings.get(panel);
+    mapping?.lines.forEach((line) => {
+      line.classList.remove("plan-code-line-active");
+    });
+    panel.querySelectorAll(".plan-step-active").forEach((item) => {
+      item.classList.remove("plan-step-active");
+    });
+    panel.querySelectorAll(".plan-step-button").forEach((button) => {
+      button.setAttribute("aria-pressed", "false");
+      button.setAttribute("aria-expanded", "false");
+    });
+    mapping?.codeRegions.forEach((region) => {
+      region.hidden = true;
+      region.setAttribute("aria-hidden", "true");
+    });
+    panel.classList.remove("plan-code-has-active-step");
+    panel.classList.add("plan-code-code-collapsed");
+    panel.removeAttribute("data-active-plan-step");
+    panel.style.removeProperty("--plan-active-color");
+  }
+
+  function clearAllPanels() {
+    document.querySelectorAll(".plan-code-is-interactive").forEach(clearPanel);
+  }
+
+  function revealStep(panel, step, item, button) {
+    const wasActive = panel.dataset.activePlanStep === String(step);
+    clearAllPanels();
+    if (wasActive) return;
+
+    const mapping = panelMappings.get(panel);
+    const matchingLines = [...(mapping?.stepLines.get(step) ?? [])];
+    if (!matchingLines.length) return;
+
+    panel.classList.remove("plan-code-code-collapsed");
+    mapping.codeRegions.forEach((region) => {
+      region.hidden = false;
+      region.removeAttribute("aria-hidden");
+    });
+    const chipColor = getComputedStyle(item, "::before").backgroundColor;
+    panel.style.setProperty("--plan-active-color", chipColor);
+    panel.dataset.activePlanStep = String(step);
+    panel.classList.add("plan-code-has-active-step");
+    item.classList.add("plan-step-active");
+    button.setAttribute("aria-pressed", "true");
+    button.setAttribute("aria-expanded", "true");
+    matchingLines.forEach((line) => {
+      line.classList.add("plan-code-line-active");
+    });
+
+    const firstLine = matchingLines[0];
+    const bounds = firstLine.getBoundingClientRect();
+    if (bounds.top < 0 || bounds.bottom > window.innerHeight) {
+      firstLine.scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          ? "auto"
+          : "smooth",
+        block: "center"
+      });
+    }
+  }
+
+  function initializePanel(panel, panelIndex) {
+    const mapping = buildMapping(panel);
+    const items = [...panel.querySelectorAll(":scope > .plan > ol > li")];
+    if (!mapping.lines.length || !items.length) return;
+
+    const regions = codeRegions(panel);
+    regions.forEach((region, regionIndex) => {
+      if (!region.id) region.id = `plan-code-${panelIndex}-${regionIndex}`;
+    });
+
+    mapping.codeRegions = regions;
+    panelMappings.set(panel, mapping);
+    panel.classList.add("plan-code-is-interactive");
+
+    items.forEach((item, index) => {
+      const step = index + 1;
+      if (!mapping.stepLines.has(step)) return;
+
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "plan-step-button";
+      while (item.firstChild) button.appendChild(item.firstChild);
+      item.appendChild(button);
+      item.classList.add("plan-step-available");
+      item.dataset.planStep = String(step);
+      button.dataset.planStep = String(step);
+      button.setAttribute("aria-pressed", "false");
+      button.setAttribute("aria-expanded", "false");
+      button.setAttribute("title", `Reveal the code for step ${step}`);
+      if (regions.length) {
+        button.setAttribute(
+          "aria-controls",
+          regions.map((region) => region.id).join(" ")
+        );
+      }
+
+      button.addEventListener("click", () => {
+        revealStep(panel, step, item, button);
+      });
+      button.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        revealStep(panel, step, item, button);
+      });
+    });
+
+    clearPanel(panel);
+  }
+
+  document.querySelectorAll(".plan-code").forEach(initializePanel);
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") clearAllPanels();
+  });
+})();
+</script>
+<script>
+(() => {
+  "use strict";
+
+  const minimumAspectRatio = 2.8;
+  const minimumNaturalWidth = 600;
+  const narrowViewport = window.matchMedia("(max-width: 600px)");
+  const wideFrames = new Set();
+
+  function synchronizeAccessibility() {
+    wideFrames.forEach((frame) => {
+      if (narrowViewport.matches) {
+        const image = frame.querySelector("img.responsive-wide-figure");
+        const description = (image?.alt || "Wide figure")
+          .trim()
+          .replace(/[.!?]+$/, "");
+        frame.tabIndex = 0;
+        frame.setAttribute("role", "region");
+        frame.setAttribute(
+          "aria-label",
+          `${description}. Scroll horizontally to inspect.`
+        );
+      } else {
+        frame.removeAttribute("tabindex");
+        frame.removeAttribute("role");
+        frame.removeAttribute("aria-label");
+      }
+    });
+  }
+
+  function classify(image) {
+    const apply = () => {
+      if (!image.naturalHeight) return;
+      const aspectRatio = image.naturalWidth / image.naturalHeight;
+      const explicitlyWide = Boolean(
+        image.closest(".responsive-wide-opt-in")
+      );
+      if (
+        image.naturalWidth < minimumNaturalWidth ||
+        (!explicitlyWide && aspectRatio < minimumAspectRatio)
+      ) return;
+
+      const frame = image.parentElement;
+      if (!frame) return;
+      image.classList.add("responsive-wide-figure");
+      frame.classList.add("responsive-wide-figure-frame");
+      frame.addEventListener("keydown", (event) => {
+        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+        event.preventDefault();
+        const direction = event.key === "ArrowRight" ? 1 : -1;
+        frame.scrollBy({ left: direction * frame.clientWidth * 0.6 });
+      });
+      wideFrames.add(frame);
+      synchronizeAccessibility();
+    };
+
+    if (image.complete) apply();
+    else image.addEventListener("load", apply, { once: true });
+  }
+
+  document.querySelectorAll(".quarto-figure img.figure-img").forEach(classify);
+  narrowViewport.addEventListener("change", synchronizeAccessibility);
+})();
+</script>
 <script id="quarto-html-after-body" type="application/javascript">
   window.document.addEventListener("DOMContentLoaded", function (event) {
     const icon = "";
