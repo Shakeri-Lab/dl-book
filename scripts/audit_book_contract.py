@@ -16,6 +16,8 @@ INTERLUDES = {
     "ttrfig": ROOT / "chapters/interludes/attention-as-test-time-regression.qmd",
 }
 EXPECTED_CUSTOM_FLOATS = {"exfig": 2, "aefig": 4, "ttrfig": 2}
+EXPERIMENT_INTERLUDE = ROOT / "chapters/interludes/learning-by-experiment.qmd"
+EXPECTED_EXPERIMENT_TABLES = 2
 EPILOGUE = ROOT / "chapters/epilogue.qmd"
 RMSPROP_PROVENANCE = (
     "- Tieleman and Hinton, “Lecture 6.5 — RMSProp,” *COURSERA: Neural Networks for"
@@ -23,6 +25,17 @@ RMSPROP_PROVENANCE = (
 CANONICAL_EDITION_SENTENCE = (
     "The HTML edition is canonical; the PDF is a derived print conversion."
 )
+SUPPORT_URL = "https://buymeacoffee.com/hshakeri"
+SUPPORT_FREE_CONTRACT = (
+    "This book is free to read and download at **$0**, and no contribution unlocks\n"
+    "additional content."
+)
+SUPPORT_INVITATION = (
+    "If it has been useful and you would like to help sustain ongoing\n"
+    "corrections, new figures, and open releases, you may make an optional contribution\n"
+    "here:"
+)
+COVER_PATH = ROOT / "figures/cover.png"
 PART_III_LEARNABILITY_CALLBACK = (
     "Recurrence asks us to make the carried summary learnable:"
 )
@@ -48,6 +61,10 @@ HINTON_COURSE_RE = re.compile(
     re.IGNORECASE,
 )
 PUBLIC_RESIDUE_PATTERNS = {
+    "reader-inaccessible instructor provenance": re.compile(
+        r"\bInstructor\s+(?:coding transcripts?|lecture seeds?|course seeds?|notes?)\b",
+        re.IGNORECASE,
+    ),
     "off-page live-session reference": re.compile(
         r"\blive sessions?\b",
         re.IGNORECASE,
@@ -192,6 +209,22 @@ def main() -> None:
                 f"{key} floats, found {count}",
             )
 
+    experiment_text = EXPERIMENT_INTERLUDE.read_text()
+    experiment_tables = len(
+        re.findall(r"#extbl-[A-Za-z0-9_-]+", experiment_text)
+    )
+    if experiment_tables != EXPECTED_EXPERIMENT_TABLES:
+        fail(
+            errors,
+            f"{EXPERIMENT_INTERLUDE.relative_to(ROOT)}: expected "
+            f"{EXPECTED_EXPERIMENT_TABLES} extbl floats, found {experiment_tables}",
+        )
+    if re.search(r"(?:@|#)tbl-(?:experiment-claim-types|batchnorm-study-contract)", experiment_text):
+        fail(
+            errors,
+            f"{EXPERIMENT_INTERLUDE.relative_to(ROOT)}: global interlude table label remains",
+        )
+
     epilogue_text = EPILOGUE.read_text()
     if "Numbering note" in epilogue_text:
         fail(errors, f"{EPILOGUE.relative_to(ROOT)}: obsolete numbering note")
@@ -210,6 +243,19 @@ def main() -> None:
     index_text = (ROOT / "index.qmd").read_text()
     if index_text.count(CANONICAL_EDITION_SENTENCE) != 1:
         fail(errors, "index.qmd: canonical HTML/PDF sentence must appear exactly once")
+    if index_text.count(SUPPORT_URL) != 1:
+        fail(errors, "index.qmd: optional support URL must appear exactly once")
+    if index_text.count(SUPPORT_FREE_CONTRACT) != 1:
+        fail(errors, "index.qmd: the $0/no-gated-content support contract is missing")
+    if index_text.count(SUPPORT_INVITATION) != 1:
+        fail(errors, "index.qmd: the amount-free optional-support invitation is missing")
+    if not COVER_PATH.is_file():
+        fail(errors, "figures/cover.png: PDF cover asset is missing")
+    tex_macros = (ROOT / "tex/macros.tex").read_text()
+    if tex_macros.count("\\extratitle{") != 1:
+        fail(errors, "tex/macros.tex: KOMA PDF cover hook is missing or duplicated")
+    if tex_macros.count("figures/cover.png") != 1:
+        fail(errors, "tex/macros.tex: PDF cover asset reference must appear once")
     chapter4_text = (ROOT / "chapters/part1/04-training-loss-sgd.qmd").read_text()
     if chapter4_text.count(RMSPROP_PROVENANCE) != 1:
         fail(errors, "Chapter 4: RMSProp provenance must appear exactly once")
@@ -239,10 +285,10 @@ def main() -> None:
         raise SystemExit(1)
     print(
         "PASS: 20 chapter retrieval/source contracts, canonical exercise tags, "
-        "book voice and splice hygiene, hidden display-only figures, three interlude "
-        "namespaces, the epilogue namespace and source contract, the Part III "
+        "book voice and splice hygiene, hidden display-only figures, interlude "
+        "figure/table namespaces, the epilogue namespace and source contract, the Part III "
         "learnability callback, the complete temperature arc, and canonical-edition "
-        "metadata"
+        "metadata, cover, and optional-support contract"
     )
 
 

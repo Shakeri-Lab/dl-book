@@ -31,6 +31,7 @@ PY
 \\newcounter{aefig}
 \\newcounter{ttrfig}
 \\newcounter{epfig}
+\\newcounter{extbl}
 \\providecommand{\\faInfo}{}
 \\providecommand{\\faLightbulb}{}
 \\providecommand{\\faExclamationTriangle}{}

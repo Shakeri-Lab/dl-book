@@ -1,4 +1,49 @@
 
+# Rolling post-v1.2.1 — PDF cover and open-book support (August 19, 2026)
+
+Both derived PDF editions now open with the author-supplied cover. The artwork is a
+presentation layer before the ordinary searchable title page and title verso; its
+3:4 aspect ratio is preserved against a matching full-page background rather than
+stretched to Letter proportions.
+
+The end of the Preface now offers one optional way to support continued corrections,
+new figures, and open releases. The contract is explicit in every format: the complete
+book remains free to read and download at $0, contributions unlock no additional
+content, and readers may contribute through one stable Buy Me a Coffee link.
+
+The cover and support invitation repaginate the two-sided print PDF from 534 to 536
+pages and the one-sided continuous-screen PDF from 511 to 513 pages. Both full
+conversions pass the structural, cross-reference, geometry, text-layer, glyph,
+accessibility, cover, and support-link audits; the canonical HTML passes its desktop
+and phone-width responsive checks.
+
+# Rolling post-v1.2.1 — portable web identity and finishing pass (August 8, 2026)
+
+The canonical HTML now carries a book favicon, a concise description, Open Graph and
+Twitter-card metadata, a 1200×630 social card, and machine-readable citation fields on
+every Quarto page. A branded `404.html` returns lost readers to the table of contents.
+The MathJax URL is pinned exactly at 4.1.3, and the UVA link blue is darkened from
+`#5379AA` to `#4A6E9D` so ordinary links clear WCAG AA on white. The landing-page
+thesis line receives one restrained Rotunda-orange rule; the surrounding Cosmo/UVA
+design remains unchanged.
+
+The experiment interlude's tables now use the independent `EX.` namespace in both
+formats, matching its figures. Each interactive Plan → Code panel remains closed at
+first but adds an explicit **Show all code** control. Long prose-like stdout in
+Chapters 14 and 20 wraps locally on narrow screens, while code retains horizontal
+inspection. Two soft raster figures are re-exported at 1590×1215 and 1954×1368.
+Public source lists no longer cite inaccessible instructor artifacts; hidden
+provenance comments retain the audit trail. Dataset sources now receipt Fashion-MNIST,
+ImageNet, SqueezeNet, and WikiText, and Appendix D records the recurring temperature
+symbol alongside the book's other scalar knobs.
+
+Acceptance: 194 learner-visible Plan → Code surfaces and 95 execution-only harnesses
+pass; 285 executable cells, four transclusions, and thirteen modules/scripts parse;
+all 133 frozen stdout blocks remain byte-identical. The complete canonical HTML and
+both 0.85-inch PDF conversions pass structural, asset, cross-reference, text-layer,
+glyph, geometry, and accessibility audits. The derived print PDF is 534 pages and the
+continuous-screen PDF is 511 pages.
+
 # Rolling post-v1.2.1 — interactive Plan → Code mapping (August 8, 2026)
 
 The canonical HTML edition keeps each Plan visible while its Code region is closed.
@@ -36,8 +81,9 @@ blue, learnable parameters orange, targets purple, predictions green, and
 residuals/errors wine in both the equations and their immediate explanations. Long
 numbered displays use authored breaks plus a phone-width size adjustment, with local
 horizontal scrolling retained as the no-clipping fallback. The combined August 8
-revision repaginates the derived print PDF from 530 to 534 pages and the
-continuous-screen PDF from 508 to 510 pages.
+revision repaginates the derived print PDF from 530 to 534 pages; the later web
+finishing pass leaves print unchanged and brings the continuous-screen PDF from 508
+to 511 pages.
 
 # Rolling post-v1.2.1 — statistical-learning coherence pass (August 6, 2026)
 

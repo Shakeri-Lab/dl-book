@@ -12,6 +12,10 @@ repository. The examples are written directly in Python and PyTorch and are CPU-
 [print PDF](https://shakeri-lab.github.io/dl-book/Deep-Learning--Making-It-Learnable.pdf) ·
 [continuous-screen PDF](https://shakeri-lab.github.io/dl-book/Deep-Learning--Making-It-Learnable--Continuous.pdf)
 
+**Support it:** The complete book remains free at $0. Optional contributions toward
+continued corrections, figures, and open releases are welcome at
+[Buy Me a Coffee](https://buymeacoffee.com/hshakeri).
+
 **Stable release:** [v1.2.1 (August 2, 2026)](https://github.com/Shakeri-Lab/dl-book/releases/tag/v1.2.1).
 The live site is a rolling post-v1.2.1 build.
 

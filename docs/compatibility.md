@@ -4,13 +4,14 @@ The book's PDF and HTML print **stable semantics**: shapes, masks, reductions,
 train/eval mode, and numerical-stability choices. Everything **version-fragile**
 lives here, where it can be updated without reprinting a chapter.
 
-## Tested environment (last verified: July 2026, v1.2 cycle)
+## Tested environment (last verified: August 2026, rolling post-v1.2.1)
 
 | Component | Version | Where it matters |
 |---|---|---|
 | Python | 3.12 | all executable cells |
 | PyTorch | 2.12.1 (CPU) — **2.13.0 verified equivalent**, see below | all executable cells |
 | Quarto | 1.10.18 | rendering only |
+| MathJax | 4.1.3 (exact jsDelivr pin) | canonical HTML mathematics |
 | OS | macOS 15 (arm64) / ubuntu-latest (CI) | render + Execution Audit |
 
 Working tree location: `~/Library/CloudStorage/Box-Box/Teaching/6050/dl-book` (in
@@ -38,6 +39,13 @@ real changes.
 
 ## Version-fragile engineering the chapters rely on
 
+- **MathJax renderer pin:** canonical HTML loads
+  `https://cdn.jsdelivr.net/npm/mathjax@4.1.3/tex-chtml.js`; a floating major or minor
+  is not allowed because it could change line breaking or glyph layout without a book
+  revision. The three authored `.responsive-long-equation` displays remain the
+  tested wrapping contract. MathJax 4's native `output.linebreaks` is a future
+  replacement candidate, but enabling it is a book-wide rendering change and requires
+  narrow-screen equation and cross-reference inspection first.
 - **Thread pinning** (`torch.set_num_threads(...)` in heavy chapters): keeps CPU
   runs deterministic-in-time on shared machines and reduces nondeterministic
   parallel reductions. The count is a machine choice, not a semantic one.

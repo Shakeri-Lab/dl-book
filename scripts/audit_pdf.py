@@ -16,6 +16,7 @@ import fitz
 TEXT_EDGE_WARNING = 4.0
 MEDIA_BOX_TOLERANCE = 0.5
 ROOT = Path(__file__).resolve().parents[1]
+SUPPORT_URL = "buymeacoffee.com/hshakeri"
 
 
 def configured_text_right_edge() -> float:
@@ -207,6 +208,25 @@ def audit_geometry(pdf: Path, errors: list[str]) -> None:
         )
 
 
+def audit_cover(document: fitz.Document, errors: list[str]) -> None:
+    """Require one near-full-page raster cover before the searchable title page."""
+    first_page = document[0]
+    media = first_page.rect
+    image_rects = [
+        rect
+        for image in first_page.get_images(full=True)
+        for rect in first_page.get_image_rects(image[0])
+    ]
+    covers_page = any(
+        rect.width >= 0.95 * media.width and rect.height >= 0.98 * media.height
+        for rect in image_rects
+    )
+    if not covers_page:
+        errors.append(
+            "PDF page 1: expected a near-full-page raster cover before the title page"
+        )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("pdf", type=Path)
@@ -228,6 +248,8 @@ def main() -> None:
     normalized_text = unicodedata.normalize("NFKC", text)
     errors: list[str] = []
 
+    document = fitz.open(args.pdf)
+    audit_cover(document, errors)
     audit_geometry(args.pdf, errors)
 
     if b"\x00" in extracted:
@@ -238,6 +260,8 @@ def main() -> None:
         errors.append(r"repaired $\sigma(0)\approx\tfrac12$ text is missing")
     if "β-VAE" not in normalized_text:
         errors.append(r"repaired $\beta$-VAE text is missing")
+    if SUPPORT_URL not in normalized_text:
+        errors.append("optional support URL is missing from the PDF text layer")
     # These are intentionally invented words in the no-position Transformer sample.
     # Their presence proves that the page's embedded text remains searchable and
     # copyable even though the generated prose itself is supposed to be nonsense.

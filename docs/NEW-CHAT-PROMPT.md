@@ -37,8 +37,8 @@ unnumbers the epilogue equations, and pins the final PDF text-layer regression.
 The August 2 print-hardening pass adds an 88-column learner-visible Python guard,
 print-side wrapping for code and frozen stdout, media-box geometry and PDF-outline
 audits, a three-pass LaTeX minimum, and a copyright/title verso. The current derived
-PDFs use a uniform 0.85-inch margin: the two-sided print edition is 534 pages and
-the one-sided, open-any continuous-screen edition is 510 pages. Both contain no
+PDFs use a uniform 0.85-inch margin: the two-sided print edition is 536 pages and
+the one-sided, open-any continuous-screen edition is 513 pages. Both contain no
 off-paper text or missing glyphs; all 133 frozen stdout blocks remain byte-identical.
 The August 6 coherence pass adds Appendix E as an optional statistical-contract
 retrieval layer, replaces Chapter 1's bias--variance cartoon with a seeded
@@ -48,6 +48,15 @@ sociotechnical audit. The current code contract covers 194 visible surfaces, 95
 execution-only harnesses, and 285 executable cells. The August 8 presentation pass
 adds interactive Plan → Code mapping, responsive wide-figure inspection, a repaired
 Figure 9.1, and a complete Chapter 1 semantic-colour equation sweep.
+The final August 8 web pass adds an audited favicon, social card, description,
+citation metadata, exact MathJax 4.1.3 pin, AA-safe link color, branded 404 page,
+interlude `Table EX.` namespace, per-panel **Show all code**, narrow-screen prose
+output wrapping, and high-density exports for the two remaining soft figures.
+The August 19 pass adds the author-supplied cover to both derived PDFs without
+replacing the searchable title machinery, then closes the shared Preface with a
+restrained support invitation. The complete book remains free at $0, contributions
+unlock nothing, and one stable Buy Me a Coffee link leaves contribution amounts to
+the external account without inventing amount-specific URLs.
 Nothing is mid-flight.
 
 **Read before doing anything, in this order:**
@@ -93,7 +102,8 @@ answer.**
   substantively different PDF edition.
 - **Unnumbered-section figures are independent.** Experiment, autoencoder, and
   test-time-regression figures use `EX.`, `AE.`, and `TTR.` namespaces; epilogue
-  figures use `E.` in both formats. Interlude display equations remain unnumbered.
+  figures use `E.` in both formats. Experiment-interlude tables use `EX.` too.
+  Interlude display equations remain unnumbered.
 - **PDF glyph hygiene is enforced.** Greek and relation symbols belong in math mode;
   code elisions are ASCII; the publish job audits LaTeX missing-character warnings,
   NUL/U+FFFD extraction, and decorative icon text.

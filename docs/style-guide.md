@@ -403,9 +403,11 @@ Rules:
   cell and highlights the source region begun by `# [n]`; that region continues
   until the next marker at the same or shallower indentation. Fused markers make
   the same region selectable from either step. Selecting the active step again,
-  or pressing Escape, clears the state and closes the Code region. The number,
-  focus state, and inset rule carry the interaction independently of colour. PDF
-  keeps the same static numbered mapping without browser-only controls.
+  or pressing Escape, clears the state and closes the Code region. A per-panel
+  **Show all code** control opens the complete executed surface without applying a
+  step highlight and toggles back to the closed state. The number, focus state, and
+  inset rule carry the interaction independently of colour. PDF keeps the same
+  static numbered mapping without browser-only controls.
 - **Fusion is a teaching moment.** When one line implements two plan steps
   (`# [2][5]`), say so in the prose beneath: the gap between a sequential plan
   and a vectorised kernel is where tensor bugs live.
@@ -472,7 +474,8 @@ misdiagnosis deserves to be made explicit.
   stand in the book's voice. A video link may invite a live demonstration, but the
   book never delegates a load-bearing claim to an off-page narrator. Hidden
   provenance comments retain the exact source trail; learner-facing Sources entries
-  name the human-readable work rather than internal filenames.
+  name accessible human-readable works rather than internal filenames or private
+  instructor artifacts.
 - Greek letters, relation symbols, and fractions belong in math mode. Python comments
   and code-elision markers stay ASCII. The PDF build scans retained LaTeX logs for
   missing characters and the extracted text layer for NUL and U+FFFD.
@@ -482,8 +485,14 @@ misdiagnosis deserves to be made explicit.
 - Unnumbered interludes own independent figure namespaces in both formats:
   **Figure EX.** for experimentation, **Figure AE.** for autoencoders, and
   **Figure TTR.** for attention as test-time regression. The epilogue owns
-  **Figure E.**. Interlude display equations are unnumbered so neither format
-  inherits a neighboring chapter counter.
+  **Figure E.**. Numbered experimentation-interlude tables use **Table EX.**.
+  Interlude display equations are unnumbered so neither format inherits a neighboring
+  chapter counter.
+- The canonical HTML carries a favicon, one book-level description, Open Graph and
+  Twitter-card metadata, and stable citation metadata. Social identity uses a
+  restrained UVA palette and must not trigger a theme redesign. Pin third-party math
+  rendering to an exact tested version so the canonical edition cannot change under a
+  floating dependency.
 - Decorative callout icons carry empty replacement text in PDF extraction. Meaning
   lives in the callout title and prose, never in the icon.
 - A release PDF must reach the LaTeX reference fixpoint: use at least three passes,
@@ -495,6 +504,10 @@ misdiagnosis deserves to be made explicit.
   copyright, licenses, the canonical HTML URL, stable citation guidance, and
   institutional affiliation. A rolling build must not imply that an uncut release
   tag exists.
+- A PDF cover is a presentation layer before the ordinary title page; it does not
+  replace the searchable title, title verso, or canonical HTML landing page. Any
+  support invitation states that the complete book remains available at $0, unlocks
+  no extra content, and stays outside the instructional chapters.
 
 ### Reading loop
 

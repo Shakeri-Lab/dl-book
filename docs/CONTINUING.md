@@ -10,7 +10,7 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 
 ---
 
-> ## Current state — 2026-08-08 (read this first)
+> ## Current state — 2026-08-19 (read this first)
 >
 > The manuscript is **complete and released**: tag **v1.2.1** carries the stable
 > point-release PDF. The live manuscript is a rolling post-v1.2.1 build with chapters
@@ -32,7 +32,9 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > In canonical HTML, the Plan stays visible while its Code region is initially
 > closed. Click a plan item or use Enter/Space to reveal the executed cell and
 > highlight the region begun by the matching marker; selecting it again or
-> pressing Escape closes the code. The interaction preserves fused markers,
+> pressing Escape closes the code. A per-panel **Show all code** control removes
+> the discoverability tax for skimming and instruction without weakening the
+> plan-first default. The interaction preserves fused markers,
 > stacks at the existing 900-pixel breakpoint, and leaves both PDF editions
 > static and content-equivalent.
 > Because all formats share `_book`, render the two derived PDFs first and the
@@ -85,8 +87,8 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > the caption and page continue to reflow. Responsive presentation never
 > substitutes for correcting internal diagram geometry. The aspect-ratio classifier
 > and accessible narrow-screen frame live in `responsive-figures.html`. The repaired
-> figure and Chapter 1 equation pass repaginate the derived PDFs to 534 print pages
-> and 510 continuous-screen pages; both full conversions pass the PDF geometry,
+> figure, Chapter 1 equation, web-identity, cover, and open-support passes leave the
+> derived PDFs at 536 print pages and 513 continuous-screen pages; both full conversions pass the PDF geometry,
 > text-layer, and glyph audit.
 > Chapter 1's Figure 1.9 now preserves the output axis from its repeated-fit panel
 > into a literal $x_0=0.65$ slice. Seeded KDE profiles replace cosmetic jitter, and
@@ -101,6 +103,21 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > `AE.`, and `TTR.` namespaces; their display equations are unnumbered. Pure
 > plotting canvases in the densest learner listings run in adjacent hidden
 > harnesses while kernels, data, checks, metrics, and stdout remain visible.
+> The experimentation interlude's numbered tables use their own `EX.` namespace in
+> both formats, matching its figures.
+>
+> The canonical web edition carries the favicon, description, Open Graph/Twitter
+> social card, and citation metadata as an audited publication contract. MathJax is
+> pinned exactly at 4.1.3; native line breaking remains a controlled future
+> evaluation, while authored responsive wrappers remain the present contract. The
+> link palette clears WCAG AA on white, Chapters 14 and 20 wrap prose-like stdout
+> locally, and the two formerly soft Part II figures now exceed 1,500 pixels wide.
+> A branded 404 page returns stale links to the canonical table of contents.
+> The two derived PDFs now begin with the author-supplied cover while retaining the
+> searchable title page and title verso. The Preface closes with one optional support
+> invitation in all formats: the book remains free at $0, nothing is gated, and the
+> single Buy Me a Coffee link leaves contribution amounts to the external account.
+> Do not invent amount-specific URLs or embed a tracking widget.
 >
 > Chapter 14 now closes with the Transformer and hands off to the
 > **Attention as Test-Time Regression** interlude. Chapter 15 separates

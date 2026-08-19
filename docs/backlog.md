@@ -65,13 +65,22 @@ chapter stub's draft-sources; revisit during the planned outline session with th
 
 ## 4. Standing smaller items
 
+- **Dark mode remains deliberately deferred.** The executed PNG corpus uses white
+  canvases. Do not add a dark theme until the figure pipeline can emit transparent or
+  matched light/dark variants; otherwise the book becomes a field of glowing white
+  rectangles. The current light theme and AA-safe link palette are the supported
+  reading surface.
+- **MathJax native line breaking is evaluation-only.** Version 4.1.3 is pinned and the
+  three authored responsive wrappers are cheap and predictable. Revisit
+  `output.linebreaks` only as a controlled replacement pass with phone-width visual
+  regression tests; do not combine it with a dependency bump.
 - **PDF hardening completed (2026-08-05):** visible Python now has an 88-column
   audit, code/stdout wrap in the derived PDF, media-box geometry and outline-target
   gates, a three-pass LaTeX minimum, and a copyright/title verso. The rolling
   post-v1.2.1 build uses a uniform 0.85-inch margin: the two-sided print conversion
-  is 530 pages and the one-sided continuous-screen conversion is 508 pages, both
-  with no off-paper text. The remaining index and tagged-PDF items below are
-  editorial/print-era choices, not repairs to this gate.
+  is 536 pages and the one-sided continuous-screen conversion is 513 pages after
+  the August 19 cover/support layer, both with no off-paper text. The remaining index
+  and tagged-PDF items below are editorial/print-era choices, not repairs to this gate.
 
 - Run `scripts/fetch_notebooks.py` for the remaining Colab notebooks (m02-03 fetched
   2026-07-07; others pending) — provenance for later chapters' code.
