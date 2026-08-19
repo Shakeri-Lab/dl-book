@@ -259,6 +259,8 @@ def main() -> None:
     materializer_call = "python scripts/materialize_frozen_pdf_assets.py"
     if workflow_text.count(materializer_call) != 2:
         fail(errors, "publish workflow must restore frozen figures before both PDFs")
+    if workflow_text.count("render: false") != 1:
+        fail(errors, "publish workflow must deploy the audited bundle without re-rendering")
     tex_macros = (ROOT / "tex/macros.tex").read_text()
     if tex_macros.count("\\extratitle{") != 1:
         fail(errors, "tex/macros.tex: KOMA PDF cover hook is missing or duplicated")

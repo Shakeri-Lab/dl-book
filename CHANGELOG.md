@@ -20,7 +20,8 @@ and phone-width responsive checks.
 The clean-checkout publication path now self-updates TinyTeX before installing layout
 packages and materializes committed frozen figures into Quarto's transient PDF
 directories before each PDF profile. CI therefore no longer depends on ignored
-workstation build residue.
+workstation build residue. The Pages step publishes that audited bundle without a
+second render.
 
 # Rolling post-v1.2.1 — portable web identity and finishing pass (August 8, 2026)
 

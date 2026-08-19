@@ -66,6 +66,9 @@ real changes.
   `python scripts/materialize_frozen_pdf_assets.py` immediately before each PDF
   profile on a clean checkout. The publication workflow does this twice because one
   profile may prune another profile's transient directories.
+- **Audited publication bundle:** the Pages publish step uses `render: false`. Rendering
+  after the audits can silently replace the artifacts that were checked, so deployment
+  must publish the existing `_book` directory unchanged.
 
 When a version bump changes any printed number or figure, the fix is: update the
 pinned environment here, re-run the Execution Audit, refresh freeze caches
