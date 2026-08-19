@@ -36,6 +36,8 @@ SUPPORT_INVITATION = (
     "here:"
 )
 COVER_PATH = ROOT / "figures/cover.png"
+PDF_ASSET_MATERIALIZER = ROOT / "scripts/materialize_frozen_pdf_assets.py"
+PUBLISH_WORKFLOW = ROOT / ".github/workflows/publish.yml"
 PART_III_LEARNABILITY_CALLBACK = (
     "Recurrence asks us to make the carried summary learnable:"
 )
@@ -251,6 +253,12 @@ def main() -> None:
         fail(errors, "index.qmd: the amount-free optional-support invitation is missing")
     if not COVER_PATH.is_file():
         fail(errors, "figures/cover.png: PDF cover asset is missing")
+    if not PDF_ASSET_MATERIALIZER.is_file():
+        fail(errors, "scripts/materialize_frozen_pdf_assets.py: helper is missing")
+    workflow_text = PUBLISH_WORKFLOW.read_text()
+    materializer_call = "python scripts/materialize_frozen_pdf_assets.py"
+    if workflow_text.count(materializer_call) != 2:
+        fail(errors, "publish workflow must restore frozen figures before both PDFs")
     tex_macros = (ROOT / "tex/macros.tex").read_text()
     if tex_macros.count("\\extratitle{") != 1:
         fail(errors, "tex/macros.tex: KOMA PDF cover hook is missing or duplicated")

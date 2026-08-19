@@ -61,6 +61,11 @@ real changes.
   this build; expect different choices on other devices or releases.
 - **Editable install**: `pip install -e ./code` provides `dlbook`; CI installs it
   via `requirements.txt`. If imports fail in a fresh clone, run that line.
+- **Frozen PDF assets:** Quarto records executed PDF figures under `_freeze`, while
+  LuaLaTeX resolves them through ignored `*_files/figure-latex` directories. Run
+  `python scripts/materialize_frozen_pdf_assets.py` immediately before each PDF
+  profile on a clean checkout. The publication workflow does this twice because one
+  profile may prune another profile's transient directories.
 
 When a version bump changes any printed number or figure, the fix is: update the
 pinned environment here, re-run the Execution Audit, refresh freeze caches

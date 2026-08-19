@@ -17,6 +17,11 @@ conversions pass the structural, cross-reference, geometry, text-layer, glyph,
 accessibility, cover, and support-link audits; the canonical HTML passes its desktop
 and phone-width responsive checks.
 
+The clean-checkout publication path now self-updates TinyTeX before installing layout
+packages and materializes committed frozen figures into Quarto's transient PDF
+directories before each PDF profile. CI therefore no longer depends on ignored
+workstation build residue.
+
 # Rolling post-v1.2.1 — portable web identity and finishing pass (August 8, 2026)
 
 The canonical HTML now carries a book favicon, a concise description, Open Graph and
