@@ -38,6 +38,36 @@ SUPPORT_INVITATION = (
 COVER_PATH = ROOT / "figures/cover.png"
 PDF_ASSET_MATERIALIZER = ROOT / "scripts/materialize_frozen_pdf_assets.py"
 PUBLISH_WORKFLOW = ROOT / ".github/workflows/publish.yml"
+DISCLOSURE_SCRIPT = ROOT / "disclosure-interactions.html"
+DOWNLOAD_PAGE = ROOT / "download.html"
+DOWNLOAD_STYLES = ROOT / "download.css"
+DOWNLOAD_TOOL_CONFIG = (
+    '    tools:\n'
+    '      - icon: file-pdf\n'
+    '        text: "Get the PDF"\n'
+    '        aria-label: "Get the PDF"\n'
+    '        href: download.html'
+)
+DOWNLOAD_RESOURCE_CONFIG = (
+    "  resources:\n"
+    "    - download.html\n"
+    "    - download.css\n"
+    "    - figures/cover.png"
+)
+PRINT_PDF_NAME = "Deep-Learning--Making-It-Learnable.pdf"
+CONTINUOUS_PDF_NAME = "Deep-Learning--Making-It-Learnable--Continuous.pdf"
+SIDEBAR_COLLAPSE_CONFIG = "    collapse-level: 1"
+ABOUT_COLLAPSE_CONTRACT = (
+    '::: {.callout-note collapse="true"}\n## About this edition'
+)
+REVISION_COLLAPSE_CONTRACT = (
+    '::: {#revision-notes .callout-note collapse="true"}\n'
+    '## Revision notes {.unnumbered}'
+)
+COFFEE_ICON_CONTRACT = (
+    '<span class="bi bi-cup-hot-fill support-project-icon" '
+    'aria-hidden="true"></span> Support this open book'
+)
 PART_III_LEARNABILITY_CALLBACK = (
     "Recurrence asks us to make the carried summary learnable:"
 )
@@ -251,16 +281,99 @@ def main() -> None:
         fail(errors, "index.qmd: the $0/no-gated-content support contract is missing")
     if index_text.count(SUPPORT_INVITATION) != 1:
         fail(errors, "index.qmd: the amount-free optional-support invitation is missing")
+    if index_text.count(ABOUT_COLLAPSE_CONTRACT) != 1:
+        fail(errors, "index.qmd: About this edition must default closed in HTML")
+    if index_text.count(REVISION_COLLAPSE_CONTRACT) != 1:
+        fail(errors, "index.qmd: Revision notes must default closed in HTML")
+    if index_text.count(COFFEE_ICON_CONTRACT) != 1:
+        fail(errors, "index.qmd: the decorative support coffee icon is missing")
     if not COVER_PATH.is_file():
         fail(errors, "figures/cover.png: PDF cover asset is missing")
     if not PDF_ASSET_MATERIALIZER.is_file():
         fail(errors, "scripts/materialize_frozen_pdf_assets.py: helper is missing")
     workflow_text = PUBLISH_WORKFLOW.read_text()
+    quarto_text = (ROOT / "_quarto.yml").read_text()
+    if "downloads: [pdf]" in quarto_text:
+        fail(errors, "_quarto.yml: direct native PDF action bypasses the landing page")
+    if quarto_text.count(DOWNLOAD_TOOL_CONFIG) != 1:
+        fail(errors, "_quarto.yml: cover-led PDF landing-page action is missing")
+    if quarto_text.count(DOWNLOAD_RESOURCE_CONFIG) != 1:
+        fail(errors, "_quarto.yml: download-page resources are missing or duplicated")
+    if quarto_text.count(SIDEBAR_COLLAPSE_CONFIG) != 1:
+        fail(errors, "_quarto.yml: root chapter groups must default closed")
+    if quarto_text.count("      - disclosure-interactions.html") != 1:
+        fail(errors, "_quarto.yml: disclosure interaction include is missing")
+    if not DISCLOSURE_SCRIPT.is_file():
+        fail(errors, "disclosure-interactions.html: accessibility helper is missing")
+    else:
+        disclosure_text = DISCLOSURE_SCRIPT.read_text()
+        for required in (
+            'header.setAttribute("role", "button")',
+            'header.setAttribute("tabindex", "0")',
+            'header.setAttribute("aria-label", label)',
+            'header.querySelector(":scope > .callout-title-container")',
+            'copy.querySelectorAll(".screen-reader-only")',
+            'event.key !== "Enter" && event.key !== " "',
+            '"#quarto-sidebar .sidebar-item-section > .sidebar-item-container > "',
+            'document.querySelectorAll(sidebarToggleSelector)',
+            'chevron.setAttribute("aria-hidden", "true")',
+            'chevron.setAttribute("tabindex", "-1")',
+            'window.addEventListener("hashchange", revealHashTarget)',
+        ):
+            if required not in disclosure_text:
+                fail(
+                    errors,
+                    "disclosure-interactions.html: keyboard/hash contract is incomplete",
+                )
+                break
+    if not DOWNLOAD_PAGE.is_file():
+        fail(errors, "download.html: cover-led PDF landing page is missing")
+    else:
+        download_text = DOWNLOAD_PAGE.read_text()
+        for required in (
+            'src="figures/cover.png"',
+            'alt="Cover of Deep Learning: Making It Learnable by Heman Shakeri"',
+            PRINT_PDF_NAME,
+            CONTINUOUS_PDF_NAME,
+            SUPPORT_URL,
+            "$0 · Free",
+            "Suggested contribution",
+            "$20",
+            "Contribution and download are independent.",
+            'id="download-options" tabindex="-1"',
+            'class="price-support-link"',
+            "Download Deep Learning: Making It Learnable",
+            "downloadOptions.focus();",
+            'downloadOptions.scrollIntoView({ block: "start" })',
+        ):
+            if required not in download_text:
+                fail(errors, f"download.html: required contract is missing: {required}")
+        if not re.search(
+            rf'<a class="price-support-link"\s+'
+            rf'href="{re.escape(SUPPORT_URL)}">\$20</a>',
+            download_text,
+        ):
+            fail(errors, "download.html: suggested $20 must link to the support page")
+        for removed in (
+            "Choose your PDF",
+            "Choose an optional contribution",
+            'name="contribution"',
+        ):
+            if removed in download_text:
+                fail(errors, f"download.html: redundant picker copy remains: {removed}")
+        if 'target="_blank"' in download_text:
+            fail(errors, "download.html: support link must not open an unannounced new tab")
+    if not DOWNLOAD_STYLES.is_file():
+        fail(errors, "download.css: PDF landing-page styles are missing")
+    elif ".contribution-picker" in DOWNLOAD_STYLES.read_text():
+        fail(errors, "download.css: removed contribution-picker styles remain")
     materializer_call = "python scripts/materialize_frozen_pdf_assets.py"
     if workflow_text.count(materializer_call) != 2:
         fail(errors, "publish workflow must restore frozen figures before both PDFs")
     if workflow_text.count("render: false") != 1:
         fail(errors, "publish workflow must deploy the audited bundle without re-rendering")
+    if "chapters/ index.qmd download.html README.md" not in workflow_text:
+        fail(errors, "publish workflow must include download.html in external-link checks")
     tex_macros = (ROOT / "tex/macros.tex").read_text()
     if tex_macros.count("\\extratitle{") != 1:
         fail(errors, "tex/macros.tex: KOMA PDF cover hook is missing or duplicated")
@@ -298,7 +411,8 @@ def main() -> None:
         "book voice and splice hygiene, hidden display-only figures, interlude "
         "figure/table namespaces, the epilogue namespace and source contract, the Part III "
         "learnability callback, the complete temperature arc, and canonical-edition "
-        "metadata, cover, and optional-support contract"
+        "metadata, cover, free-PDF landing, optional-support, and collapsed-disclosure "
+        "contracts"
     )
 
 

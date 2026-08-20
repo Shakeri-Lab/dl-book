@@ -1,4 +1,23 @@
 
+# Rolling post-v1.2.1 — quieter navigation and a free-PDF landing page (August 20, 2026)
+
+The canonical HTML now starts ancillary surfaces closed: **About this edition**,
+**Revision notes**, and the six root chapter groups. Quarto still opens the active
+chapter's parent Part for orientation, while narrative tips, traps, and retrieval
+checks remain visible. Collapsible callout headers and chapter groups are keyboard
+operable, their controls carry specific accessible names, and a deep link opens the
+disclosure containing its target.
+
+The left sidebar now opens a cover-led PDF landing page directly below the book title,
+with a depth-correct path from every nested chapter. Both the print and continuous
+editions remain direct free downloads. The page states a $0 minimum, marks $20 as the
+suggested optional contribution, and links that amount directly to Buy Me a Coffee.
+It does not reproduce a redundant amount picker that cannot transfer the choice, and
+support never gates either file. A small decorative coffee mark accompanies the
+Preface support heading without adding assistive-text noise. These are HTML
+presentation changes; both derived PDFs remain 536 and 513 pages with unchanged
+manuscript content.
+
 # Rolling post-v1.2.1 — PDF cover and open-book support (August 19, 2026)
 
 Both derived PDF editions now open with the author-supplied cover. The artwork is a

@@ -69,6 +69,14 @@ real changes.
 - **Audited publication bundle:** the Pages publish step uses `render: false`. Rendering
   after the audits can silently replace the artifacts that were checked, so deployment
   must publish the existing `_book` directory unchanged.
+- **Navigation disclosures and PDF landing:** Quarto 1.10.18 owns the depth-correct
+  `download.html` sidebar-tool URL and `collapse-level: 1` sidebar state. The static
+  landing source, stylesheet, and cover are copied through `project.resources`; both
+  derived PDFs must already be present before the final HTML asset audit checks its
+  free links. `disclosure-interactions.html` adds the keyboard role, focusability,
+  Enter/Space activation, and hash-target opening that this renderer does not emit for
+  collapsible callout headers and chapter-group controls. Recheck those contracts when
+  Quarto changes its sidebar or callout markup.
 
 When a version bump changes any printed number or figure, the fix is: update the
 pinned environment here, re-run the Execution Audit, refresh freeze caches

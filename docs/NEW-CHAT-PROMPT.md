@@ -57,6 +57,13 @@ replacing the searchable title machinery, then closes the shared Preface with a
 restrained support invitation. The complete book remains free at $0, contributions
 unlock nothing, and one stable Buy Me a Coffee link leaves contribution amounts to
 the external account without inventing amount-specific URLs.
+The August 20 navigation pass closes root chapter groups and the two ancillary Preface
+disclosures by default, and adds specific accessible names plus keyboard/deep-link
+support for those controls. The sidebar PDF action now opens a cover-led static landing
+page with direct free links to both editions, a $0 minimum, a suggested $20 optional
+contribution linked directly to Buy Me a Coffee, and no local amount picker that cannot
+transfer its choice. Download access is never gated. Narrative teaching callouts
+remain open.
 Nothing is mid-flight.
 
 **Read before doing anything, in this order:**

@@ -508,6 +508,20 @@ misdiagnosis deserves to be made explicit.
   replace the searchable title, title verso, or canonical HTML landing page. Any
   support invitation states that the complete book remains available at $0, unlocks
   no extra content, and stays outside the instructional chapters.
+- A download landing page may borrow the cover-and-price hierarchy of a storefront,
+  but access is not a checkout: direct free links to every PDF edition remain visible
+  and independent of support. State the $0 minimum before any suggested contribution.
+  When a third-party service owns amount entry, link the suggested contribution to that
+  service instead of recreating a local picker that cannot transfer its choice. Never
+  imply that payment unlocks a file.
+- Ancillary HTML material may begin closed when that protects the reading path:
+  edition metadata, revision history, root chapter groups, source code, and drawing
+  source are disclosures. Their complete content remains present in the document and
+  static in PDF. Disclosure controls must be keyboard operable, expose their state to
+  assistive technology, and open when a URL targets content inside them. Collapsed
+  chapter groups follow the same keyboard and state contract. Narrative
+  tips, traps, derivations, and retrieval checks stay open unless a specific teaching
+  reason says otherwise; momentum is not served by hiding the lesson itself.
 
 ### Reading loop
 
