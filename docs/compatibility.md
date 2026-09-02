@@ -23,17 +23,17 @@ than repair in place.
 The **Execution Audit** workflow re-executes every cell from scratch weekly. The public
 notebook gate runs on the explicit `ubuntu-24.04` label with Python 3.12.14 and records
 the resolved runner image, CPU, numerical libraries, and full package set. A green run
-is the current compatibility statement. Both notebook workflows begin with a one-thread
-numerical-library default, and the publication gate records and verifies that initial
-state; individual heavy manuscript cells may deliberately replace PyTorch's thread count.
-The default reduces scheduling-dependent reduction variation but is not itself a blanket
-determinism guarantee—the output comparisons remain the proof. The weekly full-manuscript
-audit overlays the same exact numerical-runtime pins on the broader rendering requirements
-before it regenerates the freeze. Reproduction policy: generated notebook and full
-manuscript reference output is byte-identical within that one runtime; committed HTML/TeX
-freeze records are byte-identical to each other. Across CPU backends, outputs must instead
-satisfy the narrow, surface-specific portability ledger—every unlisted surface remains
-byte-exact (see PyTorch's reproducibility notes).
+is the current compatibility statement. The Appendix A1 public/reference pair alone is
+launched with a recorded one-thread numerical-library environment; that removes
+scheduling-dependent LAPACK reduction drift without changing the seeded training
+trajectories elsewhere. This setting reduces one source of variation but is not itself a
+blanket determinism guarantee—the output comparisons remain the proof. The weekly
+full-manuscript audit overlays the same exact numerical-runtime pins on the broader
+rendering requirements before it regenerates the freeze. Reproduction policy: generated
+notebook and full manuscript reference output is byte-identical within that one runtime;
+committed HTML/TeX freeze records are byte-identical to each other. Across CPU backends,
+outputs must instead satisfy the narrow, surface-specific portability ledger—every
+unlisted surface remains byte-exact (see PyTorch's reproducibility notes).
 
 ### Verified version equivalence
 
@@ -63,11 +63,11 @@ real changes.
   tested wrapping contract. MathJax 4's native `output.linebreaks` is a future
   replacement candidate, but enabling it is a book-wide rendering change and requires
   narrow-screen equation and cross-reference inspection first.
-- **Thread pinning:** notebook CI begins with a one-thread numerical-library default;
-  `torch.set_num_threads(...)` in selected heavy chapters may then choose a larger count.
-  These settings make runtime more predictable on shared machines and reduce one source
-  of scheduling-dependent reductions. The count is a machine choice, not a semantic one,
-  and exact/typed output gates still decide whether a run is acceptable.
+- **Thread pinning:** the Appendix A1 notebook-validation pair uses one numerical thread
+  because separate multithreaded LAPACK processes can differ in their final residual bits.
+  Selected heavy chapters independently use `torch.set_num_threads(...)` for predictable
+  runtime on shared machines. Thread counts are machine choices, not semantic ones, and
+  exact/typed output gates still decide whether a run is acceptable.
 - **Determinism flags**: `torch.use_deterministic_algorithms(True)` where paired
   digests demand it (ch. 14/16). Some backends lack deterministic kernels; if a
   future version errors, the fallback is documented in the PyTorch determinism

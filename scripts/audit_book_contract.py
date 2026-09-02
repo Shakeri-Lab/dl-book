@@ -806,33 +806,44 @@ def main() -> None:
             errors,
             f"execution audit must pin the validated Quarto {QUARTO_VERSION}",
         )
-    for workflow_name, job_name, workflow_source in (
-        ("publish workflow", "validate_notebooks", workflow_text),
-        ("execution audit", "execute-all", execution_workflow_text),
-    ):
-        job_source = workflow_job(workflow_source, job_name)
-        thread_env_block = "    env:\n" + "".join(
-            f'      {variable}: "1"\n' for variable in NOTEBOOK_THREAD_DEFAULTS
-        )
-        if job_source.count(thread_env_block) != 1:
-            fail(
-                errors,
-                f"{workflow_name} {job_name} job must declare the complete "
-                "one-thread numerical-library env block once",
-            )
     validation_job = workflow_job(workflow_text, "validate_notebooks")
+    a1_thread_block = (
+        "            notebook_thread_env=()\n"
+        + '            if [[ "$notebook_slug" == "a1-linear-algebra" ]]; then\n'
+        "              notebook_thread_env=(\n"
+        + "".join(
+            f"                {variable}=1\n"
+            for variable in NOTEBOOK_THREAD_DEFAULTS
+        )
+        + "              )\n"
+        + "              printf 'notebook=%s numerical_thread_env=%s\\n' \\\n"
+        + '                "$notebook_slug" "${notebook_thread_env[*]}" \\\n'
+        + "                >> build/notebooks/evidence/environment.txt\n"
+        + "            fi\n"
+    )
     for required in (
-        "torch.get_num_threads() != 1",
+        a1_thread_block,
+        'if ! env "${notebook_thread_env[@]}" \\',
         '"torch_num_interop_threads": torch.get_num_interop_threads()',
-        '"thread_env": thread_env',
     ):
         if required not in validation_job:
             fail(
                 errors,
-                "publish workflow notebook provenance does not verify and record "
-                "its thread defaults",
+                "publish workflow does not scope and record the complete A1 "
+                "one-thread numerical-library override",
             )
             break
+    for variable in NOTEBOOK_THREAD_DEFAULTS:
+        if workflow_text.count(variable) != 1:
+            fail(
+                errors,
+                f"publish workflow must scope {variable} to A1 exactly once",
+            )
+        if variable in execution_workflow_text:
+            fail(
+                errors,
+                f"execution audit must not globally pin {variable}",
+            )
     html_only_flag = "--allow-missing-generated-pdfs"
     notebook_html_only_flag = "--allow-missing-generated-notebooks"
     if execution_workflow_text.count(html_only_flag) != 1:
