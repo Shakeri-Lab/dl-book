@@ -19,8 +19,9 @@ rest of my 6050 material; the virtualenv is deliberately outside it). Remote `ht
 `https://shakeri-lab.github.io/dl-book/Deep-Learning--Making-It-Learnable.pdf`, and
 continuous-screen PDF at
 `https://shakeri-lab.github.io/dl-book/Deep-Learning--Making-It-Learnable--Continuous.pdf`.
-Current stable release **v1.3** is the course-arc and publication-contract release.
-The live `main` revision currently matches v1.3 after the universal Plan → Code pass,
+Current stable release **v1.3** is the course-arc and publication-contract release
+and the fixed edition to cite and pitch. The live canonical HTML is a rolling
+post-v1.3 build; the released v1.3 PDFs remain fixed. It follows the universal Plan → Code pass,
 two Chapter 1 revisions,
 the pacing/visual/full-scale experiment pass, the July 28 comprehensive book audit,
 and the Chapter 15 editorial/figure pass. It contains chapters 1–20 plus three
@@ -78,6 +79,13 @@ Part V is **The Pretrained Era: Learning What to Reuse**. The HTML sidebar, Part
 pages, PDF openers, and route labels now state the same five-part arc. The release
 keeps 20 numbered chapters, 37 rendered HTML pages, and 390 nonduplicated PDF outline
 entries.
+The Phase D HTML-only pass adds a direct GitHub Source control to all 35 QMD-backed
+pages and an accessible chapter-tools strip to 30 non-Part reading pages. Twenty-seven
+have specific public DS 6050 lecture resources; `index.qmd`, the Epilogue, and the
+notation appendix use the complete playlist, with reasons recorded in
+`docs/lectures-unresolved.md`. The five Part transition pages remain quiet. The
+Notebook slot is deliberately a non-linking placeholder until Phase F, and the global
+Quarto show/hide code toggle remains disabled so Plan → Code owns code visibility.
 Nothing is mid-flight.
 
 **Read before doing anything, in this order:**

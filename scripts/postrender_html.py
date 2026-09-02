@@ -66,13 +66,13 @@ def source_metadata() -> tuple[str, str, str, str]:
         re.MULTILINE,
     )
     status_match = re.search(
-        r"^dlbook-edition-status:\s*(stable|rolling)\s*$",
+        r"^dlbook-html-edition-status:\s*(stable|rolling)\s*$",
         index,
         re.MULTILINE,
     )
     if not site_match or not date_match or not version_match or not status_match:
         raise RuntimeError(
-            "Could not read site URL, book date, citation version, and edition status"
+            "Could not read site URL, book date, citation version, and HTML edition status"
         )
 
     rolling_date = date.fromisoformat(date_match.group(1))

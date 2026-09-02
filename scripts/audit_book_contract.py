@@ -4,9 +4,11 @@
 from __future__ import annotations
 
 from datetime import date
+import json
 import re
 import sys
 from pathlib import Path
+from urllib.parse import urlsplit
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,6 +22,16 @@ PART_PAGES = {
         "The Pretrained Era: Learning What to Reuse"
     ),
 }
+LECTURE_MANIFEST = ROOT / "data/lectures.yml"
+CHAPTER_TOOLS_FILTER = ROOT / "filters/chapter-tools.lua"
+LECTURE_PLAYLIST_LABEL = "Lecture playlist"
+EXPECTED_FALLBACK_LECTURE_SOURCES = {
+    "index.qmd",
+    "chapters/epilogue.qmd",
+    "chapters/appendices/a4-notation.qmd",
+}
+EXPECTED_SPECIFIC_LECTURE_PAGES = 27
+EXPECTED_CHAPTER_TOOL_PAGES = 30
 EXPECTED_TOP_LEVEL_BOOK_UNITS = [
     "index.qmd",
     "chapters/parts/p1-lines-to-networks.qmd",
@@ -55,6 +67,10 @@ CANONICAL_EDITION_SENTENCE = (
 )
 EDITION_STATUS_RE = re.compile(
     r"^dlbook-edition-status:\s*(stable|rolling)\s*$",
+    re.MULTILINE,
+)
+HTML_EDITION_STATUS_RE = re.compile(
+    r"^dlbook-html-edition-status:\s*(stable|rolling)\s*$",
     re.MULTILINE,
 )
 SUPPORT_URL = "https://buymeacoffee.com/hshakeri"
@@ -95,6 +111,12 @@ DOWNLOAD_RESOURCE_CONFIG = (
 PRINT_PDF_NAME = "Deep-Learning--Making-It-Learnable.pdf"
 CONTINUOUS_PDF_NAME = "Deep-Learning--Making-It-Learnable--Continuous.pdf"
 SIDEBAR_COLLAPSE_CONFIG = "    collapse-level: 1"
+HTML_SOURCE_TOOL_CONFIG = (
+    "    code-tools:\n"
+    "      source: repo\n"
+    "      toggle: false\n"
+    '      caption: "Source"'
+)
 ABOUT_COLLAPSE_CONTRACT = (
     '::: {.callout-note collapse="true"}\n## About this edition'
 )
@@ -156,6 +178,82 @@ FIGURE_LABEL_RE = re.compile(r"^#\| label: fig-[A-Za-z0-9_-]+\s*$", re.MULTILINE
 SUBSTANTIVE_VISIBLE_TOKENS = ("print(", "assert ", "raise ", "def ", "class ")
 
 
+def expected_chapter_tool_sources() -> set[str]:
+    """Return the exact non-Part manuscript units that receive HTML tools."""
+    sources = {"index.qmd", "chapters/epilogue.qmd"}
+    sources.update(str(path.relative_to(ROOT)) for path in CHAPTERS)
+    sources.update(
+        str(path.relative_to(ROOT))
+        for path in sorted((ROOT / "chapters/interludes").glob("*.qmd"))
+    )
+    sources.update(
+        str(path.relative_to(ROOT))
+        for path in sorted((ROOT / "chapters/appendices").glob("*.qmd"))
+    )
+    return sources
+
+
+def parse_lecture_manifest(path: Path) -> dict[str, list[dict[str, str]]]:
+    """Parse the deliberately small lectures.yml schema with the stdlib only.
+
+    Keeping this parser narrow turns accidental extra keys or indentation changes
+    into visible contract failures instead of silently accepting an unrendered field.
+    """
+    if not path.is_file():
+        raise ValueError(f"{path.relative_to(ROOT)} is missing")
+
+    manifest: dict[str, list[dict[str, str]]] = {}
+    current_source: str | None = None
+    pending_label: str | None = None
+    saw_root = False
+    source_re = re.compile(r'^  ("(?:[^"\\]|\\.)+"):\s*$')
+    label_re = re.compile(r'^    - label:\s*("(?:[^"\\]|\\.)*")\s*$')
+    url_re = re.compile(r'^      url:\s*("(?:[^"\\]|\\.)*")\s*$')
+
+    for line_number, raw_line in enumerate(
+        path.read_text(encoding="utf-8").splitlines(), start=1
+    ):
+        if not raw_line.strip() or raw_line.lstrip().startswith("#"):
+            continue
+        if raw_line == "lectures:" and not saw_root and not manifest:
+            saw_root = True
+            continue
+        source_match = source_re.fullmatch(raw_line)
+        if source_match:
+            if pending_label is not None:
+                raise ValueError(
+                    f"line {line_number}: previous lecture entry is missing url"
+                )
+            current_source = json.loads(source_match.group(1))
+            if current_source in manifest:
+                raise ValueError(
+                    f"line {line_number}: duplicate source {current_source!r}"
+                )
+            manifest[current_source] = []
+            continue
+        label_match = label_re.fullmatch(raw_line)
+        if label_match and current_source is not None and pending_label is None:
+            pending_label = json.loads(label_match.group(1))
+            continue
+        url_match = url_re.fullmatch(raw_line)
+        if url_match and current_source is not None and pending_label is not None:
+            manifest[current_source].append(
+                {"label": pending_label, "url": json.loads(url_match.group(1))}
+            )
+            pending_label = None
+            continue
+        raise ValueError(
+            f"line {line_number}: expected a quoted source, label, or url in "
+            "the lectures schema"
+        )
+
+    if not saw_root:
+        raise ValueError("top-level 'lectures' map is missing")
+    if pending_label is not None:
+        raise ValueError("final lecture entry is missing url")
+    return manifest
+
+
 def without_html_comments(text: str) -> str:
     return re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
 
@@ -178,6 +276,104 @@ def main() -> None:
             )
     if len(CHAPTERS) != 20:
         fail(errors, f"expected 20 numbered chapters, found {len(CHAPTERS)}")
+
+    expected_lecture_sources = expected_chapter_tool_sources()
+    if len(expected_lecture_sources) != EXPECTED_CHAPTER_TOOL_PAGES:
+        fail(
+            errors,
+            "chapter-tools source inventory: expected "
+            f"{EXPECTED_CHAPTER_TOOL_PAGES} non-Part pages, found "
+            f"{len(expected_lecture_sources)}",
+        )
+    try:
+        lecture_manifest = parse_lecture_manifest(LECTURE_MANIFEST)
+    except (ValueError, json.JSONDecodeError) as error:
+        fail(errors, f"data/lectures.yml: {error}")
+        lecture_manifest = {}
+
+    manifest_sources = set(lecture_manifest)
+    if manifest_sources != expected_lecture_sources:
+        missing = sorted(expected_lecture_sources - manifest_sources)
+        unexpected = sorted(manifest_sources - expected_lecture_sources)
+        fail(
+            errors,
+            "data/lectures.yml: source inventory differs; "
+            f"missing {missing}, unexpected {unexpected}",
+        )
+    included_part_sources = sorted(manifest_sources.intersection(PART_PAGES))
+    if included_part_sources:
+        fail(
+            errors,
+            "data/lectures.yml: Part transition pages must remain quiet: "
+            + ", ".join(included_part_sources),
+        )
+
+    fallback_sources: set[str] = set()
+    specific_sources: set[str] = set()
+    for source, entries in lecture_manifest.items():
+        if not entries:
+            fail(errors, f"data/lectures.yml: {source} has no lecture resources")
+            continue
+        seen_resources: set[tuple[str, str]] = set()
+        for index, entry in enumerate(entries, start=1):
+            label = entry.get("label", "")
+            url = entry.get("url", "")
+            if not label or label != label.strip():
+                fail(
+                    errors,
+                    f"data/lectures.yml: {source} entry {index} has an empty or "
+                    "space-padded label",
+                )
+            parsed_url = urlsplit(url)
+            if (
+                not url
+                or url != url.strip()
+                or parsed_url.scheme != "https"
+                or not parsed_url.netloc
+            ):
+                fail(
+                    errors,
+                    f"data/lectures.yml: {source} entry {index} must use a "
+                    "nonempty HTTPS URL",
+                )
+            resource = (label, url)
+            if resource in seen_resources:
+                fail(
+                    errors,
+                    f"data/lectures.yml: {source} repeats resource {label!r}",
+                )
+            seen_resources.add(resource)
+
+        playlist_entries = [
+            entry for entry in entries if entry.get("label") == LECTURE_PLAYLIST_LABEL
+        ]
+        if playlist_entries:
+            fallback_sources.add(source)
+            if len(entries) != 1:
+                fail(
+                    errors,
+                    f"data/lectures.yml: {source} mixes the playlist fallback "
+                    "with specific resources",
+                )
+        else:
+            specific_sources.add(source)
+
+    if fallback_sources != EXPECTED_FALLBACK_LECTURE_SOURCES:
+        fail(
+            errors,
+            "data/lectures.yml: expected playlist-only fallbacks for "
+            f"{sorted(EXPECTED_FALLBACK_LECTURE_SOURCES)}, found "
+            f"{sorted(fallback_sources)}",
+        )
+    if len(specific_sources) != EXPECTED_SPECIFIC_LECTURE_PAGES:
+        fail(
+            errors,
+            "data/lectures.yml: expected "
+            f"{EXPECTED_SPECIFIC_LECTURE_PAGES} pages with specific lecture "
+            f"resources, found {len(specific_sources)}",
+        )
+    if not CHAPTER_TOOLS_FILTER.is_file():
+        fail(errors, "filters/chapter-tools.lua: HTML chapter-tools filter is missing")
 
     part_paths = {ROOT / relative for relative in PART_PAGES}
     if part_paths.intersection(CHAPTERS):
@@ -347,8 +543,21 @@ def main() -> None:
 
     index_text = (ROOT / "index.qmd").read_text()
     edition_status_match = EDITION_STATUS_RE.search(index_text)
+    html_edition_status_match = HTML_EDITION_STATUS_RE.search(index_text)
     if edition_status_match is None:
-        fail(errors, "index.qmd: stable/rolling edition status is missing")
+        fail(errors, "index.qmd: PDF stable/rolling edition status is missing")
+    if html_edition_status_match is None:
+        fail(errors, "index.qmd: HTML stable/rolling edition status is missing")
+    if (
+        edition_status_match is not None
+        and html_edition_status_match is not None
+        and edition_status_match.group(1) == "rolling"
+        and html_edition_status_match.group(1) == "stable"
+    ):
+        fail(
+            errors,
+            "index.qmd: canonical HTML cannot be stable while its derived PDF is rolling",
+        )
     if index_text.count(CANONICAL_EDITION_SENTENCE) != 1:
         fail(errors, "index.qmd: canonical HTML/PDF sentence must appear exactly once")
     if index_text.count(SUPPORT_URL) != 1:
@@ -451,6 +660,17 @@ def main() -> None:
         fail(errors, "_quarto.yml: download-page resources are missing or duplicated")
     if quarto_text.count(SIDEBAR_COLLAPSE_CONFIG) != 1:
         fail(errors, "_quarto.yml: root chapter groups must default closed")
+    if quarto_text.count(HTML_SOURCE_TOOL_CONFIG) != 1:
+        fail(
+            errors,
+            "_quarto.yml: HTML source tool must use the repository, carry the "
+            "Source caption, and disable the global code toggle",
+        )
+    if quarto_text.count("  - filters/chapter-tools.lua") != 1:
+        fail(
+            errors,
+            "_quarto.yml: HTML chapter-tools filter must be configured exactly once",
+        )
     if quarto_text.count("      - disclosure-interactions.html") != 1:
         fail(errors, "_quarto.yml: disclosure interaction include is missing")
     if not DISCLOSURE_SCRIPT.is_file():
@@ -672,7 +892,7 @@ def main() -> None:
         "figure/table namespaces, the epilogue namespace and source contract, the Part III "
         "learnability callback, the complete temperature arc, and canonical-edition "
         "metadata, cover, free-PDF landing, optional-support, and collapsed-disclosure "
-        "contracts"
+        "contracts; 30 non-Part HTML tool manifests (27 specific, 3 playlist-only)"
     )
 
 

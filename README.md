@@ -17,7 +17,8 @@ continued corrections, figures, and open releases are welcome at
 [Buy Me a Coffee](https://buymeacoffee.com/hshakeri).
 
 **Stable release:** [v1.3 (September 2, 2026)](https://github.com/Shakeri-Lab/dl-book/releases/tag/v1.3).
-The live site currently matches this release.
+This is the fixed edition to cite and pitch. The live canonical HTML is a rolling
+post-v1.3 build; the released PDFs remain fixed.
 
 ## The idea
 

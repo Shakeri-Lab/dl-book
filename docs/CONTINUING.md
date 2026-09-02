@@ -13,12 +13,15 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > ## Current state — 2026-09-02 (read this first)
 >
 > The manuscript is **complete and released**: tag **v1.3** carries the stable
-> course-arc PDFs. The live manuscript currently matches v1.3, with chapters
+> course-arc PDFs and is the fixed edition to cite and pitch. The live canonical
+> HTML is a rolling post-v1.3 build, with chapters
 > 1–20, three interludes, five appendices, and an epilogue. The July 28
 > comprehensive audit is complete: verified glyph losses are repaired, chapter
 > retrieval/source contracts are uniform, exercise modes are canonical, and
-> attention-as-test-time-regression is now its own interlude. **Nothing is
-> mid-flight.** Every open item is a decision waiting on the author — see **§9**,
+> attention-as-test-time-regression is now its own interlude. Phase D adds only
+> HTML-native Source and lecture-resource affordances; the two released v1.3 PDFs
+> remain fixed. **Nothing is mid-flight.** Every open item is a decision waiting on
+> the author — see **§9**,
 > which supersedes any older status text below it.
 >
 > The universal code pass covers all 194 learner-visible Python surfaces; 95
@@ -162,6 +165,13 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > existing Part bookmarks move to those openers rather than duplicating, so each
 > derived PDF retains 390 audited outline entries. File-backed Parts repaginate the
 > release to 548 print pages and 519 continuous-screen pages.
+> Phase D gives all 35 QMD-backed HTML pages one direct GitHub Source control and
+> adds an accessible chapter-tools strip to the exact 30 non-Part reading pages.
+> Twenty-seven pages link specific public DS 6050 videos, slide decks, or course
+> segments; the Preface, Epilogue, and notation appendix use the complete playlist,
+> as recorded in `docs/lectures-unresolved.md`. A non-linking Notebook placeholder
+> reserves Phase F's slot. The five Part transitions remain quiet, and Quarto's
+> global show/hide code toggle stays disabled so it cannot fight Plan → Code.
 >
 > Chapter 14 now closes with the Transformer and hands off to the
 > **Attention as Test-Time Regression** interlude. Chapter 15 separates
@@ -1163,6 +1173,7 @@ experiment, and verification contract:
 | `docs/compatibility.md` | living note: tested environment + version-fragile engineering |
 | `docs/test-time-memory-control-exercise-bank.md` | D7 maintainer/course bank + concise solution sketches; intentionally outside book navigation |
 | `docs/dl-course-code.md` | how to use his Manim repo (module spines, scenes) |
+| `docs/lectures-unresolved.md` | honest playlist fallbacks for the HTML chapter-tools manifest |
 | `docs/enhancement-proposal.md` (in dl-course-site repo) | course-site history |
 
 *After every shipped chapter or appendix, update §1's table, the arc-seeds ledger,
