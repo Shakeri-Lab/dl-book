@@ -49,8 +49,8 @@ SKIP_LINK_RE = re.compile(
 BODY_OPEN_RE = re.compile(r"<body\b[^>]*>", re.IGNORECASE)
 
 
-def source_metadata() -> tuple[str, str, str]:
-    """Read the site URL, rolling date, and stable version from source files."""
+def source_metadata() -> tuple[str, str, str, str]:
+    """Read the site URL, edition date, stable version, and publication state."""
     config = (ROOT / "_quarto.yml").read_text(encoding="utf-8")
     index = (ROOT / "index.qmd").read_text(encoding="utf-8")
 
@@ -65,14 +65,26 @@ def source_metadata() -> tuple[str, str, str]:
         index,
         re.MULTILINE,
     )
-    if not site_match or not date_match or not version_match:
-        raise RuntimeError("Could not read site URL, book date, and citation version")
+    status_match = re.search(
+        r"^dlbook-edition-status:\s*(stable|rolling)\s*$",
+        index,
+        re.MULTILINE,
+    )
+    if not site_match or not date_match or not version_match or not status_match:
+        raise RuntimeError(
+            "Could not read site URL, book date, citation version, and edition status"
+        )
 
     rolling_date = date.fromisoformat(date_match.group(1))
     display_date = (
         f"{rolling_date.strftime('%B')} {rolling_date.day}, {rolling_date.year}"
     )
-    return site_match.group(1).rstrip("/") + "/", display_date, version_match.group(1)
+    return (
+        site_match.group(1).rstrip("/") + "/",
+        display_date,
+        version_match.group(1),
+        status_match.group(1),
+    )
 
 
 def source_figure_alts() -> dict[str, str]:
@@ -118,13 +130,21 @@ def canonical_for(page: Path, site_url: str) -> str:
     return urljoin(site_url, quote(relative, safe="/"))
 
 
-def edition_stamp(display_date: str, version: str, site_url: str) -> str:
+def edition_stamp(
+    display_date: str, version: str, status: str, site_url: str
+) -> str:
     revision_url = urljoin(site_url, "#revision-notes")
+    if status == "stable":
+        label = f"Stable edition v{version} · released {display_date}"
+    else:
+        label = (
+            f"Rolling manuscript · content updated {display_date} · "
+            f"stable edition v{version}"
+        )
     return (
         "<!-- dlbook-edition-stamp:start -->\n"
         '<p class="edition-stamp">'
-        f"Rolling manuscript · content updated {display_date} · "
-        f"stable edition v{version} · "
+        f"{label} · "
         f'<a href="{revision_url}">Revision notes</a>'
         "</p>\n"
         "<!-- dlbook-edition-stamp:end -->"
@@ -223,8 +243,8 @@ def main() -> int:
         print("postrender HTML metadata: no _book directory; nothing to do")
         return 0
 
-    site_url, display_date, version = source_metadata()
-    stamp = edition_stamp(display_date, version, site_url)
+    site_url, display_date, version, status = source_metadata()
+    stamp = edition_stamp(display_date, version, status, site_url)
     figure_alts = source_figure_alts()
     pages = sorted(
         page
@@ -236,7 +256,7 @@ def main() -> int:
     )
     print(
         f"postrender HTML metadata: updated {changed} of {len(pages)} page(s) "
-        f"for rolling {display_date}, stable v{version}"
+        f"for {status} v{version}, {display_date}"
     )
     return 0
 

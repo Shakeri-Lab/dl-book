@@ -16,8 +16,8 @@ repository. The examples are written directly in Python and PyTorch and are CPU-
 continued corrections, figures, and open releases are welcome at
 [Buy Me a Coffee](https://buymeacoffee.com/hshakeri).
 
-**Stable release:** [v1.2.1 (August 2, 2026)](https://github.com/Shakeri-Lab/dl-book/releases/tag/v1.2.1).
-The live site is a rolling post-v1.2.1 build.
+**Stable release:** [v1.3 (September 2, 2026)](https://github.com/Shakeri-Lab/dl-book/releases/tag/v1.3).
+The live site currently matches this release.
 
 ## The idea
 
@@ -31,12 +31,12 @@ self-contained voice.
 
 - **Part I · From Lines to Networks** — linear/logistic regression, MLPs, training,
   backprop, and the signature chapter: *generalization failure in pictures → inductive bias*.
-- **Part II · Vision** — filters → learnable filters (CNNs) → modern CNNs & transfer.
+- **Part II · Vision: Learning the Filters** — filters → learnable filters (CNNs) → modern CNNs & transfer.
 - **Interludes** — experimentation as a method; PCA → learnable linear and nonlinear
   autoencoders; attention as test-time regression and a spectrum of memory solvers.
-- **Part III · Sequences** — RNNs, encoder–decoder.
-- **Part IV · Attention** — kernel regression → attention → self-attention → BERT → ViT/scaling.
-- **Part V · The Pretrained Era** — PEFT/quantization, alignment, generative models,
+- **Part III · Sequences: Learning the Summary** — RNNs, encoder–decoder.
+- **Part IV · Attention: Learning the Similarity** — kernel regression → attention → self-attention → BERT → ViT/scaling.
+- **Part V · The Pretrained Era: Learning What to Reuse** — PEFT/quantization, alignment, generative models,
   and multimodal contrastive learning, followed by an epilogue that hands the book's
   question to the reader.
 
@@ -75,7 +75,7 @@ memory and are updated after every shipped chapter.
 ## Citation
 
 Suggested citation: Shakeri, Heman. 2026. *Deep Learning: Making It Learnable*.
-Version 1.2.1. <https://shakeri-lab.github.io/dl-book/>. The repository also provides
+Version 1.3. <https://shakeri-lab.github.io/dl-book/>. The repository also provides
 machine-readable metadata in [CITATION.cff](CITATION.cff).
 
 ## License

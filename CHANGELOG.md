@@ -1,4 +1,28 @@
 
+# v1.3 — course-arc part pages and stable publication contract (September 2, 2026)
+
+Five short transition pages now make the book's argument visible at Part scale. Each
+names the fixed object entering the Part, the move that becomes learnable, the
+structure deliberately built in, and the failure handed forward. Part III is now
+**Sequences: Learning the Summary** and Part V is now **The Pretrained Era: Learning
+What to Reuse**; the canonical HTML, sidebar, route table, PDF openers, contents, and
+outline agree.
+
+The stable release gathers the post-v1.2.1 front-door and publication work into one
+fixed target. The HTML edition is canonical and exposes five linked Part pages among
+37 rendered pages. Its two derived 0.85-inch PDFs contain 548 print pages and 519
+continuous-screen pages. The 390 existing outline entries all resolve to their
+rendered headings; the five Part bookmarks moved to the new openers rather than being
+duplicated. The outline fixpoint now accepts wrapped multi-block titles without
+weakening its page-level destination check.
+
+The weekly execution workflow retains every download-page semantic check while
+explicitly exempting only the two generated PDF files that its HTML-only job does not
+build. Both execution and publication now pin Quarto 1.10.18. All 133 frozen stdout
+blocks remain unchanged, and the complete structural, source, HTML, public-anchor,
+cross-reference, glyph, text-layer, geometry, accessibility, and PDF-outline gates
+pass for the release artifacts.
+
 # Rolling post-v1.2.1 — independent front door and exact PDF navigation (September 2, 2026)
 
 The Preface now states the book's self-contained scope, distinguishes its executable

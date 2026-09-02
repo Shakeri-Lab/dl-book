@@ -76,10 +76,10 @@ chapter stub's draft-sources; revisit during the planned outline session with th
   regression tests; do not combine it with a dependency bump.
 - **PDF hardening completed (2026-09-02):** visible Python has an 88-column
   audit, code/stdout wrap in the derived PDF, media-box geometry, a three-pass
-  LaTeX minimum, and an exact all-outline fixpoint for both profiles. The rolling
-  post-v1.2.1 build uses a uniform 0.85-inch margin: the two-sided print conversion
-  is 538 pages and the one-sided continuous-screen conversion is 514 pages after
-  the September 2 front-door pass, both with no off-paper text. Final page counts
+  LaTeX minimum, and an exact all-outline fixpoint for both profiles. Stable v1.3
+  uses a uniform 0.85-inch margin: the two-sided print conversion is 548 pages and
+  the one-sided continuous-screen conversion is 519 pages after the September 2
+  Part-page release, both with no off-paper text. Final page counts
   are recorded in the current build ledger after each repagination. The remaining index
   and tagged-PDF items below are editorial/print-era choices, not repairs to this gate.
 

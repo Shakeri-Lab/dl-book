@@ -19,8 +19,8 @@ rest of my 6050 material; the virtualenv is deliberately outside it). Remote `ht
 `https://shakeri-lab.github.io/dl-book/Deep-Learning--Making-It-Learnable.pdf`, and
 continuous-screen PDF at
 `https://shakeri-lab.github.io/dl-book/Deep-Learning--Making-It-Learnable--Continuous.pdf`.
-Current stable release **v1.2.1** is the reciprocal-companion point release. The live
-`main` revision is a rolling post-v1.2.1 build after the universal Plan → Code pass,
+Current stable release **v1.3** is the course-arc and publication-contract release.
+The live `main` revision currently matches v1.3 after the universal Plan → Code pass,
 two Chapter 1 revisions,
 the pacing/visual/full-scale experiment pass, the July 28 comprehensive book audit,
 and the Chapter 15 editorial/figure pass. It contains chapters 1–20 plus three
@@ -37,8 +37,8 @@ unnumbers the epilogue equations, and pins the final PDF text-layer regression.
 The August 2 print-hardening pass adds an 88-column learner-visible Python guard,
 print-side wrapping for code and frozen stdout, media-box geometry and PDF-outline
 audits, a three-pass LaTeX minimum, and a copyright/title verso. The current derived
-PDFs use a uniform 0.85-inch margin: the two-sided print edition is 538 pages and
-the one-sided, open-any continuous-screen edition is 514 pages. Both contain no
+PDFs use a uniform 0.85-inch margin: the two-sided print edition is 548 pages and
+the one-sided, open-any continuous-screen edition is 519 pages. Both contain no
 off-paper text or missing glyphs; all 133 frozen stdout blocks remain byte-identical.
 The August 6 coherence pass adds Appendix E as an optional statistical-contract
 retrieval layer, replaces Chapter 1's bias--variance cartoon with a seeded
@@ -72,6 +72,12 @@ with a skip link, and a narrow post-render shim restores only source-authored fi
 alternatives that Quarto omits. Both PDFs render through a bounded build loop that
 requires every outline destination to land exactly on its heading; the experiment
 interlude's full estimand derivation remains present in the print flow.
+The September 2 Phase C release adds five file-backed Part transition pages and
+retargets the route table to them. Part III is **Sequences: Learning the Summary**;
+Part V is **The Pretrained Era: Learning What to Reuse**. The HTML sidebar, Part
+pages, PDF openers, and route labels now state the same five-part arc. The release
+keeps 20 numbered chapters, 37 rendered HTML pages, and 390 nonduplicated PDF outline
+entries.
 Nothing is mid-flight.
 
 **Read before doing anything, in this order:**

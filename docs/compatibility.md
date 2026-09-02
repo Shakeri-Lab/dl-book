@@ -4,7 +4,7 @@ The book's PDF and HTML print **stable semantics**: shapes, masks, reductions,
 train/eval mode, and numerical-stability choices. Everything **version-fragile**
 lives here, where it can be updated without reprinting a chapter.
 
-## Tested environment (last verified: September 2026, rolling post-v1.2.1)
+## Tested environment (last verified: September 2026, stable v1.3)
 
 | Component | Version | Where it matters |
 |---|---|---|

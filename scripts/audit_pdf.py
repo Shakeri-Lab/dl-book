@@ -20,6 +20,24 @@ SUPPORT_URL = "buymeacoffee.com/hshakeri"
 EXPECTED_OUTLINE_ENTRIES = 390
 
 
+def source_edition() -> tuple[str, str]:
+    """Read the stable version and stable/rolling state from canonical source."""
+    index = (ROOT / "index.qmd").read_text()
+    version = re.search(
+        r"^\s{2}version:\s*[\"']?([^\s\"']+)[\"']?\s*$",
+        index,
+        re.MULTILINE,
+    )
+    status = re.search(
+        r"^dlbook-edition-status:\s*(stable|rolling)\s*$",
+        index,
+        re.MULTILINE,
+    )
+    if version is None or status is None:
+        raise ValueError("Could not read PDF edition version and publication state")
+    return version.group(1), status.group(1)
+
+
 def configured_text_right_edge() -> float:
     """Read the shared uniform PDF margin from the Quarto configuration."""
     config = (ROOT / "_quarto.yml").read_text()
@@ -45,7 +63,7 @@ def source_unit_titles() -> list[str]:
     """Read public unit titles without adding a YAML dependency to the audit."""
     config = (ROOT / "_quarto.yml").read_text()
     paths = re.findall(
-        r"^\s*-\s+((?:index|chapters/[^\s]+)\.qmd)\s*$",
+        r"^\s*-\s+(?:part:\s+)?((?:index|chapters/[^\s]+)\.qmd)\s*$",
         config,
         re.MULTILINE,
     )
@@ -70,6 +88,23 @@ def heading_pages(
 ) -> list[int]:
     """Find a rendered heading near its outline destination, ignoring running heads."""
     target = normalized_heading(title)
+
+    def matches_heading(candidate: str) -> bool:
+        """Accept only the exact heading, optionally with an explicit unit prefix."""
+        numbered_target = re.fullmatch(
+            rf"(?:[0-9]+|[a-e])(?:\s+(?:[0-9]+|[a-e]))*\s+{re.escape(target)}",
+            candidate,
+        )
+        part_target = re.fullmatch(
+            rf"part\s+[ivxlcdm]+\s+{re.escape(target)}",
+            candidate,
+        )
+        return (
+            candidate == target
+            or numbered_target is not None
+            or part_target is not None
+        )
+
     pages: list[int] = []
     start = max(1, destination - 6)
     stop = min(len(document), destination + 6)
@@ -93,12 +128,22 @@ def heading_pages(
         for size, candidate in blocks:
             if size < minimum_size:
                 continue
-            numbered_target = re.fullmatch(
-                rf"(?:[0-9]+|[a-e])(?:\s+(?:[0-9]+|[a-e]))*\s+{re.escape(target)}",
-                candidate,
-            )
-            if target == candidate or numbered_target:
+            if matches_heading(candidate):
                 pages.append(page_number)
+        # A long part or chapter title can wrap into adjacent PDF text blocks.
+        # Match only within uninterrupted runs of heading-sized blocks so body
+        # prose cannot manufacture a false destination.
+        heading_run: list[str] = []
+        for size, candidate in [*blocks, (0.0, "")]:
+            if size >= minimum_size:
+                heading_run.append(candidate)
+                continue
+            for start_index in range(len(heading_run)):
+                for stop_index in range(start_index + 1, len(heading_run) + 1):
+                    joined = " ".join(heading_run[start_index:stop_index])
+                    if matches_heading(joined):
+                        pages.append(page_number)
+            heading_run = []
     return sorted(set(pages))
 
 
@@ -297,6 +342,12 @@ def main() -> None:
     text = extracted.decode("utf-8")
     normalized_text = unicodedata.normalize("NFKC", text)
     errors: list[str] = []
+
+    version, edition_status = source_edition()
+    if edition_status == "stable" and f"Version {version}" not in normalized_text:
+        errors.append(f"stable Version {version} is missing from the PDF text layer")
+    if edition_status == "stable" and "Rolling post-" in normalized_text:
+        errors.append("stable PDF still identifies itself as a rolling manuscript")
 
     document = fitz.open(args.pdf)
     audit_cover(document, errors)

@@ -182,7 +182,33 @@ PRINT_PDF_NAME = "Deep-Learning--Making-It-Learnable.pdf"
 CONTINUOUS_PDF_NAME = "Deep-Learning--Making-It-Learnable--Continuous.pdf"
 DOWNLOAD_PAGE_NAME = "download.html"
 SUPPORT_URL = "https://buymeacoffee.com/hshakeri"
-EXPECTED_HTML_PAGES = 32
+EXPECTED_HTML_PAGES = 37
+EXPECTED_PART_PAGES = {
+    "chapters/parts/p1-lines-to-networks.html": "From Lines to Networks",
+    "chapters/parts/p2-vision.html": "Vision: Learning the Filters",
+    "chapters/parts/p3-sequences.html": "Sequences: Learning the Summary",
+    "chapters/parts/p4-attention.html": "Attention: Learning the Similarity",
+    "chapters/parts/p5-pretrained-era.html": (
+        "The Pretrained Era: Learning What to Reuse"
+    ),
+}
+EXPECTED_FIRST_CHAPTER_PART_LINKS = {
+    "chapters/part1/01-linear-regression.html": (
+        "../../chapters/parts/p1-lines-to-networks.html"
+    ),
+    "chapters/part2/07-filters-convolution.html": (
+        "../../chapters/parts/p2-vision.html"
+    ),
+    "chapters/part3/10-sequences-rnn.html": (
+        "../../chapters/parts/p3-sequences.html"
+    ),
+    "chapters/part4/12-kernel-regression.html": (
+        "../../chapters/parts/p4-attention.html"
+    ),
+    "chapters/part5/17-peft-quantization.html": (
+        "../../chapters/parts/p5-pretrained-era.html"
+    ),
+}
 ROOT = Path(__file__).resolve().parents[1]
 MAIN_TEXT_EXCLUDED_TAGS = {"script", "style", "pre", "code"}
 MAIN_TEXT_BREAK_TAGS = {
@@ -228,7 +254,7 @@ CROSS_VOLUME_DEPENDENCY_CUES = (
 )
 
 
-def source_edition_metadata() -> tuple[str, str, str]:
+def source_edition_metadata() -> tuple[str, str, str, str]:
     """Read expected publication metadata independently from rendered HTML."""
     config = (ROOT / "_quarto.yml").read_text(encoding="utf-8")
     index = (ROOT / "index.qmd").read_text(encoding="utf-8")
@@ -243,13 +269,25 @@ def source_edition_metadata() -> tuple[str, str, str]:
         index,
         re.MULTILINE,
     )
-    if not site_match or not date_match or not version_match:
-        raise ValueError("Could not read site URL, book date, and citation version")
+    status_match = re.search(
+        r"^dlbook-edition-status:\s*(stable|rolling)\s*$",
+        index,
+        re.MULTILINE,
+    )
+    if not site_match or not date_match or not version_match or not status_match:
+        raise ValueError(
+            "Could not read site URL, book date, citation version, and edition status"
+        )
     rolling_date = date.fromisoformat(date_match.group(1))
     display_date = (
         f"{rolling_date.strftime('%B')} {rolling_date.day}, {rolling_date.year}"
     )
-    return site_match.group(1).rstrip("/") + "/", display_date, version_match.group(1)
+    return (
+        site_match.group(1).rstrip("/") + "/",
+        display_date,
+        version_match.group(1),
+        status_match.group(1),
+    )
 
 
 def expected_canonical(page: Path, root: Path, site_url: str) -> str:
@@ -316,11 +354,24 @@ def main() -> int:
         type=Path,
         help="rendered HTML root (default: _book)",
     )
+    parser.add_argument(
+        "--allow-missing-generated-pdfs",
+        action="store_true",
+        help=(
+            "Allow an HTML-only execution audit to omit generated PDF files while "
+            "still checking both download links and every other landing-page contract"
+        ),
+    )
     args = parser.parse_args()
     root = args.root.resolve()
-    site_url, display_date, stable_version = source_edition_metadata()
+    site_url, display_date, stable_version, edition_status = (
+        source_edition_metadata()
+    )
     expected_stamp = (
-        f"Rolling manuscript · content updated {display_date} · "
+        f"Stable edition v{stable_version} · released {display_date} · "
+        "Revision notes"
+        if edition_status == "stable"
+        else f"Rolling manuscript · content updated {display_date} · "
         f"stable edition v{stable_version} · Revision notes"
     )
     revision_url = urljoin(site_url, "#revision-notes")
@@ -336,6 +387,15 @@ def main() -> int:
         print(
             f"FAILED: expected {EXPECTED_HTML_PAGES} rendered HTML pages, "
             f"found {len(pages)}"
+        )
+        return 1
+
+    page_names = {str(page.relative_to(root)) for page in pages}
+    missing_part_pages = sorted(set(EXPECTED_PART_PAGES) - page_names)
+    if missing_part_pages:
+        print(
+            "FAILED: missing rendered part page(s): "
+            + ", ".join(missing_part_pages)
         )
         return 1
 
@@ -361,6 +421,30 @@ def main() -> int:
                 missing.setdefault((kind, resolved), []).append(page.relative_to(root))
 
         page_name = str(page.relative_to(root))
+        if page_name in EXPECTED_PART_PAGES:
+            title = EXPECTED_PART_PAGES[page_name]
+            if page_text.count(f'<h1 class="title">{title}</h1>') != 1:
+                navigation_errors.append(
+                    f"{page_name}: expected one part-page title {title!r}"
+                )
+            prose = " ".join(html_parser.main_text.split())
+            if len(prose) < len(title) + 240:
+                rendered_content_errors.append(
+                    f"{page_name}: part-page transition prose is unexpectedly short"
+                )
+
+        if page_name in EXPECTED_FIRST_CHAPTER_PART_LINKS:
+            target = EXPECTED_FIRST_CHAPTER_PART_LINKS[page_name]
+            previous = re.search(
+                r'<div class="nav-page nav-page-previous">\s*'
+                r'<a[^>]+href="([^"]+)"',
+                page_text,
+            )
+            if previous is None or previous.group(1) != target:
+                navigation_errors.append(
+                    f"{page_name}: previous-page navigation must return to "
+                    f"its part page {target}"
+                )
         canonical = expected_canonical(page, root, site_url)
         if html_parser.canonical_urls != [canonical]:
             publication_errors.append(
@@ -422,9 +506,12 @@ def main() -> int:
                     f"{', '.join(absent_citation)}"
                 )
         if page.name not in {"404.html", DOWNLOAD_PAGE_NAME}:
-            if html_parser.mathjax_urls != [PINNED_MATHJAX_URL]:
+            expected_mathjax = (
+                [] if page_name in EXPECTED_PART_PAGES else [PINNED_MATHJAX_URL]
+            )
+            if html_parser.mathjax_urls != expected_mathjax:
                 metadata_errors.append(
-                    f"{page_name}: expected exact MathJax pin {PINNED_MATHJAX_URL}, "
+                    f"{page_name}: expected MathJax URLs {expected_mathjax}, "
                     f"found {html_parser.mathjax_urls}"
                 )
             if len(html_parser.download_pages) != 1:
@@ -462,7 +549,10 @@ def main() -> int:
                 )
             for raw_pdf, is_download in html_parser.direct_pdf_links:
                 target = local_asset(page, root, raw_pdf)
-                if target is None or not target.resolve().is_file():
+                if (
+                    (target is None or not target.resolve().is_file())
+                    and not args.allow_missing_generated_pdfs
+                ):
                     navigation_errors.append(
                         f"{page_name}: direct PDF target does not exist: {raw_pdf}"
                     )
@@ -529,17 +619,30 @@ def main() -> int:
                     f"{len(depth_one_groups)} group(s) and {len(open_groups)} open"
                 )
 
-            sidebar_titles = re.findall(
+            title_toggle_groups = re.findall(
                 r'<a class="sidebar-item-text[^\"]*" '
                 r'data-bs-toggle="collapse"[^>]*>\s*'
                 r'<span class="menu-text">([^<]+)</span>',
                 page_text,
             )
-            if len(sidebar_titles) != 6:
+            if title_toggle_groups != ["Appendices"]:
                 navigation_errors.append(
-                    "index.html: expected six primary chapter-group controls, found "
-                    f"{len(sidebar_titles)}"
+                    "index.html: only Appendices should use its title as the "
+                    f"chapter-group control, found {title_toggle_groups}"
                 )
+
+            for part_path, title in EXPECTED_PART_PAGES.items():
+                sidebar_href = "./" + part_path
+                pattern = re.compile(
+                    rf'<a\b(?=[^>]*\bclass="sidebar-item-text sidebar-link")'
+                    rf'(?=[^>]*\bhref="{re.escape(sidebar_href)}")[^>]*>\s*'
+                    rf'<span class="menu-text">{re.escape(title)}</span></a>'
+                )
+                if len(pattern.findall(page_text)) != 1:
+                    navigation_errors.append(
+                        f"index.html: expected one linked sidebar part {title!r} "
+                        f"at {sidebar_href}"
+                    )
 
             for label in ("About this edition", "Revision notes"):
                 label_at = page_text.find(label, page_text.find("<main"))
@@ -560,6 +663,9 @@ def main() -> int:
                         'header.querySelector(":scope > .callout-title-container")',
                         'copy.querySelectorAll(".screen-reader-only")',
                         'document.querySelectorAll(sidebarToggleSelector)',
+                        'document.querySelectorAll(sidebarChevronSelector)',
+                        'chevron.setAttribute("role", "button")',
+                        '`Toggle chapters in ${title}`',
                         'chevron.setAttribute("aria-hidden", "true")',
                         'chevron.setAttribute("tabindex", "-1")',
                     )

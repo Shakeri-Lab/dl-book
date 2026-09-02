@@ -11,6 +11,33 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CHAPTERS = sorted((ROOT / "chapters").glob("part[1-5]/*.qmd"))
+PART_PAGES = {
+    "chapters/parts/p1-lines-to-networks.qmd": "From Lines to Networks",
+    "chapters/parts/p2-vision.qmd": "Vision: Learning the Filters",
+    "chapters/parts/p3-sequences.qmd": "Sequences: Learning the Summary",
+    "chapters/parts/p4-attention.qmd": "Attention: Learning the Similarity",
+    "chapters/parts/p5-pretrained-era.qmd": (
+        "The Pretrained Era: Learning What to Reuse"
+    ),
+}
+EXPECTED_TOP_LEVEL_BOOK_UNITS = [
+    "index.qmd",
+    "chapters/parts/p1-lines-to-networks.qmd",
+    "chapters/interludes/learning-by-experiment.qmd",
+    "chapters/parts/p2-vision.qmd",
+    "chapters/interludes/making-pca-learnable.qmd",
+    "chapters/parts/p3-sequences.qmd",
+    "chapters/parts/p4-attention.qmd",
+    "chapters/parts/p5-pretrained-era.qmd",
+    "chapters/epilogue.qmd",
+]
+OLD_ROUTE_TARGETS = {
+    "chapters/part1/01-linear-regression.qmd",
+    "chapters/part2/07-filters-convolution.qmd",
+    "chapters/part3/10-sequences-rnn.qmd",
+    "chapters/part4/12-kernel-regression.qmd",
+    "chapters/part5/17-peft-quantization.qmd",
+}
 INTERLUDES = {
     "exfig": ROOT / "chapters/interludes/learning-by-experiment.qmd",
     "aefig": ROOT / "chapters/interludes/making-pca-learnable.qmd",
@@ -26,6 +53,10 @@ RMSPROP_PROVENANCE = (
 CANONICAL_EDITION_SENTENCE = (
     "The HTML edition is canonical; the PDF is a derived print conversion."
 )
+EDITION_STATUS_RE = re.compile(
+    r"^dlbook-edition-status:\s*(stable|rolling)\s*$",
+    re.MULTILINE,
+)
 SUPPORT_URL = "https://buymeacoffee.com/hshakeri"
 SUPPORT_FREE_CONTRACT = (
     "This book is free to read and download at **$0**, and no contribution unlocks\n"
@@ -40,6 +71,7 @@ COVER_PATH = ROOT / "figures/cover.png"
 PDF_ASSET_MATERIALIZER = ROOT / "scripts/materialize_frozen_pdf_assets.py"
 PDF_FIXPOINT_RENDERER = ROOT / "scripts/render_pdf_profiles.py"
 PUBLISH_WORKFLOW = ROOT / ".github/workflows/publish.yml"
+EXECUTION_WORKFLOW = ROOT / ".github/workflows/execute-audit.yml"
 DISCLOSURE_SCRIPT = ROOT / "disclosure-interactions.html"
 RESPONSIVE_SCRIPT = ROOT / "responsive-figures.html"
 BOOK_STYLES = ROOT / "dlbook.scss"
@@ -146,6 +178,31 @@ def main() -> None:
             )
     if len(CHAPTERS) != 20:
         fail(errors, f"expected 20 numbered chapters, found {len(CHAPTERS)}")
+
+    part_paths = {ROOT / relative for relative in PART_PAGES}
+    if part_paths.intersection(CHAPTERS):
+        fail(errors, "part transition pages must remain outside the numbered chapters")
+    for relative, title in PART_PAGES.items():
+        path = ROOT / relative
+        if not path.is_file():
+            fail(errors, f"{relative}: part transition page is missing")
+            continue
+        text = path.read_text()
+        headings = re.findall(r"^(#+)\s+(.+)$", text, re.MULTILINE)
+        if headings != [("#", title)]:
+            fail(errors, f"{relative}: expected one level-1 title {title!r}")
+        body = re.sub(r"^#\s+.+$", "", text, count=1, flags=re.MULTILINE).strip()
+        sentence_count = len(re.findall(r"[.!?](?=\s|$)", body))
+        if not 4 <= sentence_count <= 6:
+            fail(
+                errors,
+                f"{relative}: expected 4–6 transition sentences, found "
+                f"{sentence_count}",
+            )
+        if "learnable" not in body.casefold():
+            fail(errors, f"{relative}: part page must name its learnable move")
+        if any(token in body for token in ("```", "![", "#|", "|---")):
+            fail(errors, f"{relative}: part page must contain prose only")
 
     for path in CHAPTERS:
         text = path.read_text()
@@ -289,6 +346,9 @@ def main() -> None:
         )
 
     index_text = (ROOT / "index.qmd").read_text()
+    edition_status_match = EDITION_STATUS_RE.search(index_text)
+    if edition_status_match is None:
+        fail(errors, "index.qmd: stable/rolling edition status is missing")
     if index_text.count(CANONICAL_EDITION_SENTENCE) != 1:
         fail(errors, "index.qmd: canonical HTML/PDF sentence must appear exactly once")
     if index_text.count(SUPPORT_URL) != 1:
@@ -318,7 +378,71 @@ def main() -> None:
     if not PDF_FIXPOINT_RENDERER.is_file():
         fail(errors, "scripts/render_pdf_profiles.py: fixpoint helper is missing")
     workflow_text = PUBLISH_WORKFLOW.read_text()
+    execution_workflow_text = EXECUTION_WORKFLOW.read_text()
     quarto_text = (ROOT / "_quarto.yml").read_text()
+    chapter_block_match = re.search(
+        r"^  chapters:\n(?P<body>.*?)^  appendices:\n",
+        quarto_text,
+        re.MULTILINE | re.DOTALL,
+    )
+    if chapter_block_match is None:
+        fail(errors, "_quarto.yml: could not read the book chapter structure")
+    else:
+        chapter_block = chapter_block_match.group("body")
+        top_level_units = [
+            match.group(1).strip()
+            for match in re.finditer(
+                r"^ {4}- (?:part:\s+)?([^\n]+)$",
+                chapter_block,
+                re.MULTILINE,
+            )
+        ]
+        if top_level_units != EXPECTED_TOP_LEVEL_BOOK_UNITS:
+            fail(
+                errors,
+                "_quarto.yml: part pages or interludes are out of reading order",
+            )
+        for relative in PART_PAGES:
+            if chapter_block.count(f"- part: {relative}") != 1:
+                fail(
+                    errors,
+                    f"_quarto.yml: {relative} must configure exactly one file-backed part",
+                )
+        part4_start = chapter_block.find(
+            "- part: chapters/parts/p4-attention.qmd"
+        )
+        part5_start = chapter_block.find(
+            "- part: chapters/parts/p5-pretrained-era.qmd"
+        )
+        part4_block = chapter_block[part4_start:part5_start]
+        if part4_block.count(
+            "chapters/interludes/attention-as-test-time-regression.qmd"
+        ) != 1:
+            fail(errors, "_quarto.yml: test-time-regression interlude left Part IV")
+
+    route_match = re.search(
+        r"^### The route at a glance[^\n]*\n(?P<body>.*?)"
+        r"^### Course route and dependencies",
+        index_text,
+        re.MULTILINE | re.DOTALL,
+    )
+    if route_match is None:
+        fail(errors, "index.qmd: could not read the five-part route table")
+    else:
+        route_table = route_match.group("body")
+        for relative, title in PART_PAGES.items():
+            if route_table.count(f"]({relative})") != 1 or title not in route_table:
+                fail(
+                    errors,
+                    f"index.qmd: route table must link once to {relative} with "
+                    f"the synchronized title",
+                )
+        for target in OLD_ROUTE_TARGETS:
+            if target in route_table:
+                fail(
+                    errors,
+                    f"index.qmd: route table still bypasses its part page: {target}",
+                )
     if "downloads: [pdf]" in quarto_text:
         fail(errors, "_quarto.yml: direct native PDF action bypasses the landing page")
     if quarto_text.count(DOWNLOAD_TOOL_CONFIG) != 1:
@@ -342,6 +466,9 @@ def main() -> None:
             'event.key !== "Enter" && event.key !== " "',
             '"#quarto-sidebar .sidebar-item-section > .sidebar-item-container > "',
             'document.querySelectorAll(sidebarToggleSelector)',
+            'document.querySelectorAll(sidebarChevronSelector)',
+            'chevron.setAttribute("role", "button")',
+            '`Toggle chapters in ${title}`',
             'chevron.setAttribute("aria-hidden", "true")',
             'chevron.setAttribute("tabindex", "-1")',
             'window.addEventListener("hashchange", revealHashTarget)',
@@ -432,6 +559,22 @@ def main() -> None:
             errors,
             f"publish workflow must pin the validated Quarto {QUARTO_VERSION}",
         )
+    if execution_workflow_text.count(quarto_pin) != 1:
+        fail(
+            errors,
+            f"execution audit must pin the validated Quarto {QUARTO_VERSION}",
+        )
+    html_only_flag = "--allow-missing-generated-pdfs"
+    if execution_workflow_text.count(html_only_flag) != 1:
+        fail(
+            errors,
+            "execution audit must declare its HTML-only generated-PDF exemption",
+        )
+    if html_only_flag in workflow_text:
+        fail(
+            errors,
+            "publish workflow must require both generated PDF download targets",
+        )
     if PDF_FIXPOINT_RENDERER.is_file():
         renderer_text = PDF_FIXPOINT_RENDERER.read_text()
         for required in (
@@ -470,7 +613,26 @@ def main() -> None:
         display_date = (
             f"{content_date.strftime('%B')} {content_date.day}, {content_date.year}"
         )
-        if f"content updated {display_date}" not in " ".join(tex_macros.split()):
+        version_match = re.search(
+            r"^\s{2}version:\s*[\"']?([^\s\"']+)[\"']?\s*$",
+            index_text,
+            re.MULTILINE,
+        )
+        compact_macros = " ".join(tex_macros.split())
+        if edition_status_match is None or version_match is None:
+            pass
+        elif edition_status_match.group(1) == "stable":
+            expected_date = (
+                f"Version {version_match.group(1)} "
+                f"\\textperiodcentered{{}} {display_date}"
+            )
+            if expected_date not in compact_macros:
+                fail(
+                    errors,
+                    "tex/macros.tex: stable PDF edition/date is out of sync with "
+                    "index.qmd and _quarto.yml",
+                )
+        elif f"content updated {display_date}" not in compact_macros:
             fail(
                 errors,
                 "tex/macros.tex: PDF content-revision date is out of sync with "
@@ -505,7 +667,8 @@ def main() -> None:
         raise SystemExit(1)
     print(
         "PASS: 20 chapter retrieval/source contracts, canonical exercise tags, "
-        "book voice and splice hygiene, hidden display-only figures, interlude "
+        "book voice and splice hygiene, five prose-only part transitions, hidden "
+        "display-only figures, interlude "
         "figure/table namespaces, the epilogue namespace and source contract, the Part III "
         "learnability callback, the complete temperature arc, and canonical-edition "
         "metadata, cover, free-PDF landing, optional-support, and collapsed-disclosure "

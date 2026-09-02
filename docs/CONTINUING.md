@@ -12,8 +12,8 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 
 > ## Current state — 2026-09-02 (read this first)
 >
-> The manuscript is **complete and released**: tag **v1.2.1** carries the stable
-> point-release PDF. The live manuscript is a rolling post-v1.2.1 build with chapters
+> The manuscript is **complete and released**: tag **v1.3** carries the stable
+> course-arc PDFs. The live manuscript currently matches v1.3, with chapters
 > 1–20, three interludes, five appendices, and an epilogue. The July 28
 > comprehensive audit is complete: verified glyph losses are repaired, chapter
 > retrieval/source contracts are uniform, exercise modes are canonical, and
@@ -88,7 +88,7 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > substitutes for correcting internal diagram geometry. The aspect-ratio classifier
 > and accessible narrow-screen frame live in `responsive-figures.html`. The repaired
 > figure, Chapter 1 equation, web-identity, cover, open-support, and front-door passes
-> leave the derived PDFs at 538 print pages and 514 continuous-screen pages; both full conversions pass the PDF geometry,
+> culminate in the v1.3 derived PDFs at 548 print pages and 519 continuous-screen pages; both full conversions pass the PDF geometry,
 > text-layer, and glyph audit.
 > Chapter 1's Figure 1.9 now preserves the output axis from its repeated-fit panel
 > into a literal $x_0=0.65$ slice. Seeded KDE profiles replace cosmetic jitter, and
@@ -154,6 +154,14 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > letter-wide columns. The visible edition stamp means **content-revision date**,
 > not CI wall-clock date: `_quarto.yml` changes only when the rolling manuscript or
 > its public presentation changes, so rebuilding the same commit is deterministic.
+> Phase C gives each of the five Parts a file-backed transition page. Those pages
+> state the entering object, learnable move, built-in structure, and failure handed
+> forward without turning into syllabus summaries. Part III is now **Sequences:
+> Learning the Summary** and Part V is **The Pretrained Era: Learning What to Reuse**;
+> the route table, sidebar, HTML pages, PDF openers, and contents agree. The five
+> existing Part bookmarks move to those openers rather than duplicating, so each
+> derived PDF retains 390 audited outline entries. File-backed Parts repaginate the
+> release to 548 print pages and 519 continuous-screen pages.
 >
 > Chapter 14 now closes with the Transformer and hands off to the
 > **Attention as Test-Time Regression** interlude. Chapter 15 separates
@@ -256,10 +264,10 @@ edition. Resolve disagreements in the shared Quarto source or conversion layer.
 | Part | Chapters | Status |
 |---|---|---|
 | I · From Lines to Networks | 1–6 | **Shipped; repair pass complete and verified** (July 11, 2026) |
-| II · Vision | 7–9 | **Shipped; repair pass complete and verified** (July 11, 2026) |
-| III · Sequences | 10–11 | **Shipped; repair pass complete and verified** (July 11, 2026) |
-| IV · Attention | 12–16 | **Shipped; Transformer revision verified** (July 28, 2026) |
-| V · Pretrained Era | 17–20 | **Shipped and two-format verified** (July 15, 2026; ch. 19 revised, ch. 20 added) |
+| II · Vision: Learning the Filters | 7–9 | **Shipped; repair pass complete and verified** (July 11, 2026) |
+| III · Sequences: Learning the Summary | 10–11 | **Shipped; repair pass complete and verified** (July 11, 2026) |
+| IV · Attention: Learning the Similarity | 12–16 | **Shipped; Transformer revision verified** (July 28, 2026) |
+| V · The Pretrained Era: Learning What to Reuse | 17–20 | **Shipped and two-format verified** (July 15, 2026; ch. 19 revised, ch. 20 added) |
 | Unnumbered bridges | Experimentation/HPO after ch. 6; PCA/autoencoders after ch. 9; attention as test-time regression after ch. 14 | **Shipped and two-format verified** (July 28, 2026) |
 | Epilogue | The Question Is Yours | **Shipped; memory-to-planning frontier verified** (July 15, 2026) |
 | Appendices | A–E | **Shipped and verified** (Appendix E statistical-learning contracts complete August 6, 2026) |

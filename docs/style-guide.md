@@ -293,6 +293,11 @@ three things to code no human wrote.
   what was *Inherited*, what *Changed*, what was *Built in*, what was *Earned*
   (evidence), and what *Remaining debt* is carried forward. The questions govern
   content, not format — keep the numbered-narrative voice; do not use five headings.
+- **Part transitions carry the arc.** Each Part is a file-backed, prose-only page
+  of four to six sentences. It names the object that enters fixed, the move made
+  learnable, the structure deliberately built in, and the failure handed to the
+  next Part. Use the same full title in the Part page, route table, sidebar, PDF
+  contents, and outline; do not turn the transition into a syllabus summary.
 - **Internals are visualized only under three conditions**: a predeclared claim,
   a falsifying control, and a caption that states what the figure does *not*
   establish. (Founding instance: the Ch. 10 forget-gate diagnostic.)
@@ -516,8 +521,10 @@ misdiagnosis deserves to be made explicit.
   warnings that require visual review.
 - The title page identifies rolling versus stable status. The title verso records
   copyright, licenses, the canonical HTML URL, stable citation guidance, and
-  institutional affiliation. A rolling build must not imply that an uncut release
-  tag exists.
+  institutional affiliation. `dlbook-edition-status` in `index.qmd` is `stable`
+  only on a tagged release commit; the first later content or presentation change
+  switches it to `rolling` while the citation version continues to name the latest
+  stable tag. A rolling build must not imply that an uncut release tag exists.
 - A PDF cover is a presentation layer before the ordinary title page; it does not
   replace the searchable title, title verso, or canonical HTML landing page. Any
   support invitation states that the complete book remains available at $0, unlocks
