@@ -85,6 +85,10 @@ chapter stub's draft-sources; revisit during the planned outline session with th
 
 - Run `scripts/fetch_notebooks.py` for the remaining Colab notebooks (m02-03 fetched
   2026-07-07; others pending) — provenance for later chapters' code.
+- **Phase F notebook surface:** the HTML chapter-tools strip reserves a non-linking
+  **Notebook** slot. Activate it only after each exported notebook is self-contained,
+  license-clean, reproducible from a pinned environment, and mapped by source path;
+  never replace the placeholder with a dead or private link.
 - Course-site `bookChapters` mappings through Chapter 20 were completed in the July 15
   course-alignment pass, alongside the syllabus's native-PyTorch wording repair.
 - Modules 8/9 research-lens readings and the Module 10 test-time regression/control

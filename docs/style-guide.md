@@ -521,10 +521,13 @@ misdiagnosis deserves to be made explicit.
   warnings that require visual review.
 - The title page identifies rolling versus stable status. The title verso records
   copyright, licenses, the canonical HTML URL, stable citation guidance, and
-  institutional affiliation. `dlbook-edition-status` in `index.qmd` is `stable`
-  only on a tagged release commit; the first later content or presentation change
-  switches it to `rolling` while the citation version continues to name the latest
-  stable tag. A rolling build must not imply that an uncut release tag exists.
+  institutional affiliation. `dlbook-edition-status` controls the derived PDF,
+  while `dlbook-html-edition-status` controls the canonical website. Both are
+  `stable` on a tagged release commit. An HTML-only affordance may move the site to
+  `rolling` while the released PDF remains fixed and `stable`; the first later
+  print-affecting content or presentation change moves the PDF status to `rolling`
+  too. In either case, the citation version continues to name the latest stable tag,
+  and a rolling build must not imply that an uncut release tag exists.
 - A PDF cover is a presentation layer before the ordinary title page; it does not
   replace the searchable title, title verso, or canonical HTML landing page. Any
   support invitation states that the complete book remains available at $0, unlocks
@@ -543,6 +546,15 @@ misdiagnosis deserves to be made explicit.
   chapter groups follow the same keyboard and state contract. Narrative
   tips, traps, derivations, and retrieval checks stay open unless a specific teaching
   reason says otherwise; momentum is not served by hiding the lesson itself.
+- Every QMD-backed HTML page carries Quarto's direct repository **Source** control,
+  with its global code toggle disabled; Plan → Code remains the only controller of
+  learner-visible code regions. The exact 30 non-Part reading pages also carry one
+  compact `chapter-tools` aside immediately below the page title. Lecture resources
+  are supplemental routes, never off-page dependencies. Maintain their source-path
+  mapping in `data/lectures.yml`, record honest playlist-only fallbacks in
+  `docs/lectures-unresolved.md`, and never invent a one-to-one lecture match. The five
+  Part transition pages remain quiet. Until Phase F supplies notebooks, **Notebook**
+  is a visibly unavailable, non-linking placeholder rather than a dead link.
 
 ### Reading loop
 

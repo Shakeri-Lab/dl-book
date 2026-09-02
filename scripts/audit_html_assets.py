@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 from datetime import date
 from html.parser import HTMLParser
+import json
 import re
 from pathlib import Path
 from urllib.parse import quote, unquote, urljoin, urlsplit
@@ -46,6 +47,19 @@ class SupportAssetParser(HTMLParser):
         self._edition_stamp_depth = 0
         self._edition_stamp_parts: list[str] = []
         self._edition_stamp_links: list[str] = []
+        self.source_controls: list[dict[str, str | None]] = []
+        self.source_control_texts: list[str] = []
+        self.global_code_toggle_ids: list[str] = []
+        self._source_control_depth = 0
+        self._source_control_parts: list[str] = []
+        self.chapter_tools: list[dict[str, str | None]] = []
+        self.chapter_tool_links: list[dict[str, str | None]] = []
+        self.chapter_tool_placeholders: list[dict[str, str | None]] = []
+        self._chapter_tools_depth = 0
+        self._chapter_tool_link_depth = 0
+        self._chapter_tool_link_parts: list[str] = []
+        self._chapter_tool_placeholder_depth = 0
+        self._chapter_tool_placeholder_parts: list[str] = []
         self.main_depth = 0
         self.main_suppressed_depth = 0
         self.main_text_parts: list[str] = []
@@ -56,6 +70,57 @@ class SupportAssetParser(HTMLParser):
     ) -> None:
         values = dict(attrs)
         classes = (values.get("class") or "").split()
+        if tag == "aside" and "chapter-tools" in classes:
+            self.chapter_tools.append(
+                {"tag": tag, "aria_label": values.get("aria-label")}
+            )
+            self._chapter_tools_depth = 1
+        elif self._chapter_tools_depth:
+            self._chapter_tools_depth += 1
+            if tag == "a":
+                self.chapter_tool_links.append(
+                    {
+                        "class": values.get("class"),
+                        "href": values.get("href"),
+                        "data_kind": values.get("data-kind"),
+                        "text": None,
+                    }
+                )
+                self._chapter_tool_link_depth = 1
+                self._chapter_tool_link_parts = []
+            if "chapter-tools__placeholder" in classes:
+                self.chapter_tool_placeholders.append(
+                    {
+                        "tag": tag,
+                        "class": values.get("class"),
+                        "aria_disabled": values.get("aria-disabled"),
+                        "href": values.get("href"),
+                        "text": None,
+                    }
+                )
+                self._chapter_tool_placeholder_depth = 1
+                self._chapter_tool_placeholder_parts = []
+            elif self._chapter_tool_placeholder_depth:
+                self._chapter_tool_placeholder_depth += 1
+            if self._chapter_tool_link_depth and tag != "a":
+                self._chapter_tool_link_depth += 1
+        identifier = values.get("id")
+        if identifier in GLOBAL_CODE_TOGGLE_IDS:
+            self.global_code_toggle_ids.append(identifier or "")
+        if identifier == SOURCE_CONTROL_ID:
+            self.source_controls.append(
+                {
+                    "tag": tag,
+                    "type": values.get("type"),
+                    "class": values.get("class"),
+                    "source_url": values.get("data-quarto-source-url"),
+                    "data_bs_toggle": values.get("data-bs-toggle"),
+                }
+            )
+            self._source_control_depth = 1
+            self._source_control_parts = []
+        elif self._source_control_depth:
+            self._source_control_depth += 1
         if self._edition_stamp_depth:
             self._edition_stamp_depth += 1
             if tag == "a" and values.get("href"):
@@ -129,6 +194,28 @@ class SupportAssetParser(HTMLParser):
             self.coffee_icons.append(values.get("aria-hidden"))
 
     def handle_endtag(self, tag: str) -> None:
+        if self._chapter_tool_link_depth:
+            self._chapter_tool_link_depth -= 1
+            if self._chapter_tool_link_depth == 0:
+                self.chapter_tool_links[-1]["text"] = " ".join(
+                    "".join(self._chapter_tool_link_parts).split()
+                )
+        if self._chapter_tool_placeholder_depth:
+            self._chapter_tool_placeholder_depth -= 1
+            if self._chapter_tool_placeholder_depth == 0:
+                self.chapter_tool_placeholders[-1]["text"] = " ".join(
+                    "".join(self._chapter_tool_placeholder_parts).split()
+                )
+        if self._chapter_tools_depth:
+            self._chapter_tools_depth -= 1
+
+        if self._source_control_depth:
+            self._source_control_depth -= 1
+            if self._source_control_depth == 0:
+                self.source_control_texts.append(
+                    " ".join("".join(self._source_control_parts).split())
+                )
+
         if self._edition_stamp_depth:
             self._edition_stamp_depth -= 1
             if self._edition_stamp_depth == 0:
@@ -150,6 +237,12 @@ class SupportAssetParser(HTMLParser):
             self.body_depth = max(0, self.body_depth - 1)
 
     def handle_data(self, data: str) -> None:
+        if self._chapter_tool_link_depth:
+            self._chapter_tool_link_parts.append(data)
+        if self._chapter_tool_placeholder_depth:
+            self._chapter_tool_placeholder_parts.append(data)
+        if self._source_control_depth:
+            self._source_control_parts.append(data)
         if self._edition_stamp_depth:
             self._edition_stamp_parts.append(data)
         if self.main_depth and self.main_suppressed_depth == 0:
@@ -182,6 +275,21 @@ PRINT_PDF_NAME = "Deep-Learning--Making-It-Learnable.pdf"
 CONTINUOUS_PDF_NAME = "Deep-Learning--Making-It-Learnable--Continuous.pdf"
 DOWNLOAD_PAGE_NAME = "download.html"
 SUPPORT_URL = "https://buymeacoffee.com/hshakeri"
+EXPECTED_REPO_URL = "https://github.com/Shakeri-Lab/dl-book"
+EXPECTED_REPO_BRANCH = "main"
+LECTURE_MANIFEST = Path(__file__).resolve().parents[1] / "data/lectures.yml"
+LECTURE_PLAYLIST_LABEL = "Lecture playlist"
+SOURCE_CONTROL_ID = "quarto-code-tools-source"
+GLOBAL_CODE_TOGGLE_IDS = {
+    "quarto-code-tools-menu",
+    "quarto-show-all-code",
+    "quarto-hide-all-code",
+}
+EXPECTED_SOURCE_PAGE_COUNT = 35
+EXPECTED_CHAPTER_TOOL_PAGE_COUNT = 30
+MINIMUM_SPECIFIC_LECTURE_PAGES = 20
+EXPECTED_SPECIFIC_LECTURE_PAGES = 27
+EXPECTED_FALLBACK_LECTURE_PAGES = 3
 EXPECTED_HTML_PAGES = 37
 EXPECTED_PART_PAGES = {
     "chapters/parts/p1-lines-to-networks.html": "From Lines to Networks",
@@ -270,13 +378,13 @@ def source_edition_metadata() -> tuple[str, str, str, str]:
         re.MULTILINE,
     )
     status_match = re.search(
-        r"^dlbook-edition-status:\s*(stable|rolling)\s*$",
+        r"^dlbook-html-edition-status:\s*(stable|rolling)\s*$",
         index,
         re.MULTILINE,
     )
     if not site_match or not date_match or not version_match or not status_match:
         raise ValueError(
-            "Could not read site URL, book date, citation version, and edition status"
+            "Could not read site URL, book date, citation version, and HTML edition status"
         )
     rolling_date = date.fromisoformat(date_match.group(1))
     display_date = (
@@ -288,6 +396,205 @@ def source_edition_metadata() -> tuple[str, str, str, str]:
         version_match.group(1),
         status_match.group(1),
     )
+
+
+def source_page_contract() -> dict[str, str]:
+    """Map each configured Quarto input to its exact GitHub source URL."""
+    config = (ROOT / "_quarto.yml").read_text(encoding="utf-8")
+    repo_match = re.search(r"^\s{2}repo-url:\s*(\S+)\s*$", config, re.MULTILINE)
+    branch_match = re.search(
+        r"^\s{2}repo-branch:\s*(\S+)\s*$", config, re.MULTILINE
+    )
+    if repo_match is None:
+        raise ValueError("Could not read the repository URL from _quarto.yml")
+    source_paths = re.findall(
+        r"^\s*-\s+(?:part:\s+)?([^\s#]+\.qmd)\s*$",
+        config,
+        re.MULTILINE,
+    )
+    if len(source_paths) != EXPECTED_SOURCE_PAGE_COUNT:
+        raise ValueError(
+            f"Expected {EXPECTED_SOURCE_PAGE_COUNT} configured QMD inputs, "
+            f"found {len(source_paths)}"
+        )
+    repo_url = repo_match.group(1).rstrip("/")
+    branch = branch_match.group(1) if branch_match else "main"
+    if repo_url != EXPECTED_REPO_URL or branch != EXPECTED_REPO_BRANCH:
+        raise ValueError(
+            "Source links must target "
+            f"{EXPECTED_REPO_URL}/blob/{EXPECTED_REPO_BRANCH}/"
+        )
+    if len(set(source_paths)) != len(source_paths):
+        raise ValueError("Configured QMD inputs must be unique")
+    return {
+        str(Path(source).with_suffix(".html")): (
+            f"{repo_url}/blob/{branch}/{source}"
+        )
+        for source in source_paths
+    }
+
+
+def parse_lecture_manifest(path: Path) -> dict[str, list[dict[str, str]]]:
+    """Parse the intentionally narrow lectures.yml schema without PyYAML."""
+    if not path.is_file():
+        raise ValueError(f"Missing lecture manifest: {path}")
+
+    manifest: dict[str, list[dict[str, str]]] = {}
+    current_source: str | None = None
+    pending_label: str | None = None
+    saw_root = False
+    source_re = re.compile(r'^  ("(?:[^"\\]|\\.)+"):\s*$')
+    label_re = re.compile(r'^    - label:\s*("(?:[^"\\]|\\.)*")\s*$')
+    url_re = re.compile(r'^      url:\s*("(?:[^"\\]|\\.)*")\s*$')
+
+    for line_number, raw_line in enumerate(
+        path.read_text(encoding="utf-8").splitlines(), start=1
+    ):
+        if not raw_line.strip() or raw_line.lstrip().startswith("#"):
+            continue
+        if raw_line == "lectures:" and not saw_root and not manifest:
+            saw_root = True
+            continue
+        source_match = source_re.fullmatch(raw_line)
+        if source_match:
+            if pending_label is not None:
+                raise ValueError(
+                    f"data/lectures.yml line {line_number}: previous entry lacks url"
+                )
+            current_source = json.loads(source_match.group(1))
+            if current_source in manifest:
+                raise ValueError(
+                    f"data/lectures.yml line {line_number}: duplicate source "
+                    f"{current_source!r}"
+                )
+            manifest[current_source] = []
+            continue
+        label_match = label_re.fullmatch(raw_line)
+        if label_match and current_source is not None and pending_label is None:
+            pending_label = json.loads(label_match.group(1))
+            continue
+        url_match = url_re.fullmatch(raw_line)
+        if url_match and current_source is not None and pending_label is not None:
+            label = pending_label
+            manifest[current_source].append(
+                {
+                    "label": label,
+                    "url": json.loads(url_match.group(1)),
+                    "kind": (
+                        "fallback" if label == LECTURE_PLAYLIST_LABEL else "specific"
+                    ),
+                }
+            )
+            pending_label = None
+            continue
+        raise ValueError(
+            f"data/lectures.yml line {line_number}: invalid lectures schema"
+        )
+
+    if not saw_root:
+        raise ValueError("data/lectures.yml: top-level 'lectures' map is missing")
+    if pending_label is not None:
+        raise ValueError("data/lectures.yml: final lecture entry lacks url")
+    if any(not entries for entries in manifest.values()):
+        empty = sorted(source for source, entries in manifest.items() if not entries)
+        raise ValueError(f"data/lectures.yml: empty resource lists for {empty}")
+    return manifest
+
+
+def chapter_tools_page_contract(
+    expected_source_pages: dict[str, str],
+) -> tuple[dict[str, list[dict[str, str]]], int, int]:
+    """Map manifest entries to rendered pages and count specific/fallback pages."""
+    manifest = parse_lecture_manifest(LECTURE_MANIFEST)
+    expected_pages = set(expected_source_pages) - set(EXPECTED_PART_PAGES)
+    rendered_manifest = {
+        str(Path(source).with_suffix(".html")): entries
+        for source, entries in manifest.items()
+    }
+    if set(rendered_manifest) != expected_pages:
+        missing = sorted(expected_pages - set(rendered_manifest))
+        unexpected = sorted(set(rendered_manifest) - expected_pages)
+        raise ValueError(
+            "Chapter-tools manifest differs from the configured non-Part pages; "
+            f"missing {missing}, unexpected {unexpected}"
+        )
+    if len(rendered_manifest) != EXPECTED_CHAPTER_TOOL_PAGE_COUNT:
+        raise ValueError(
+            f"Expected {EXPECTED_CHAPTER_TOOL_PAGE_COUNT} chapter-tools pages, "
+            f"found {len(rendered_manifest)}"
+        )
+
+    for page_name, entries in rendered_manifest.items():
+        seen_resources: set[tuple[str, str]] = set()
+        for entry in entries:
+            label = entry["label"]
+            url = entry["url"]
+            parsed = urlsplit(url)
+            if not label or label != label.strip():
+                raise ValueError(
+                    f"{page_name}: lecture labels must be nonempty and unpadded"
+                )
+            if (
+                not url
+                or url != url.strip()
+                or parsed.scheme != "https"
+                or not parsed.netloc
+            ):
+                raise ValueError(
+                    f"{page_name}: lecture resources must use nonempty HTTPS URLs"
+                )
+            resource = (label, url)
+            if resource in seen_resources:
+                raise ValueError(
+                    f"{page_name}: duplicate lecture resource {label!r}"
+                )
+            seen_resources.add(resource)
+        if any(entry["kind"] == "fallback" for entry in entries) and len(entries) != 1:
+            raise ValueError(
+                f"{page_name}: playlist fallback cannot be mixed with specific links"
+            )
+
+    specific_pages = sum(
+        any(entry["kind"] == "specific" for entry in entries)
+        for entries in rendered_manifest.values()
+    )
+    fallback_only_pages = sum(
+        all(entry["kind"] == "fallback" for entry in entries)
+        for entries in rendered_manifest.values()
+    )
+    return rendered_manifest, specific_pages, fallback_only_pages
+
+
+def chapter_tools_follows_title(page_name: str, page_text: str) -> bool:
+    """Require the tool strip to be the next element after Quarto's title header."""
+    if page_name == "index.html":
+        title_endings = list(
+            re.finditer(
+                r'<h1\b[^>]*\bclass="[^"]*\bunnumbered\b[^"]*"[^>]*>'
+                r"\s*Preface\s*</h1>",
+                page_text,
+                re.DOTALL,
+            )
+        )
+    else:
+        title_endings = list(
+            re.finditer(
+                r'<header\b(?=[^>]*\bid="title-block-header")[^>]*>.*?</header>',
+                page_text,
+                re.DOTALL,
+            )
+        )
+    asides = list(
+        re.finditer(
+            r'<aside\b(?=[^>]*\bclass="[^"]*\bchapter-tools\b[^"]*")[^>]*>',
+            page_text,
+        )
+    )
+    if len(title_endings) != 1 or len(asides) != 1:
+        return False
+    between = page_text[title_endings[0].end() : asides[0].start()]
+    between = re.sub(r"<!--.*?-->", "", between, flags=re.DOTALL)
+    return not between.strip()
 
 
 def expected_canonical(page: Path, root: Path, site_url: str) -> str:
@@ -364,6 +671,31 @@ def main() -> int:
     )
     args = parser.parse_args()
     root = args.root.resolve()
+    expected_source_pages = source_page_contract()
+    try:
+        expected_chapter_tools, specific_lecture_pages, fallback_lecture_pages = (
+            chapter_tools_page_contract(expected_source_pages)
+        )
+    except (ValueError, json.JSONDecodeError) as error:
+        print(f"FAILED: {error}")
+        return 1
+    if specific_lecture_pages < MINIMUM_SPECIFIC_LECTURE_PAGES:
+        print(
+            "WARNING: only "
+            f"{specific_lecture_pages} chapter-tools pages have specific lecture "
+            f"resources; expected at least {MINIMUM_SPECIFIC_LECTURE_PAGES}"
+        )
+    if (
+        specific_lecture_pages != EXPECTED_SPECIFIC_LECTURE_PAGES
+        or fallback_lecture_pages != EXPECTED_FALLBACK_LECTURE_PAGES
+    ):
+        print(
+            "FAILED: expected chapter-tools coverage of "
+            f"{EXPECTED_SPECIFIC_LECTURE_PAGES} specific-resource pages and "
+            f"{EXPECTED_FALLBACK_LECTURE_PAGES} fallback-only pages; found "
+            f"{specific_lecture_pages} and {fallback_lecture_pages}"
+        )
+        return 1
     site_url, display_date, stable_version, edition_status = (
         source_edition_metadata()
     )
@@ -391,6 +723,17 @@ def main() -> int:
         return 1
 
     page_names = {str(page.relative_to(root)) for page in pages}
+    expected_standalone_pages = {"404.html", DOWNLOAD_PAGE_NAME}
+    if set(expected_source_pages) != page_names - expected_standalone_pages:
+        missing_source_pages = sorted(set(expected_source_pages) - page_names)
+        unexpected_pages = sorted(
+            page_names - set(expected_source_pages) - expected_standalone_pages
+        )
+        print(
+            "FAILED: rendered QMD/source-page contract differs; missing "
+            f"{missing_source_pages}, unexpected {unexpected_pages}"
+        )
+        return 1
     missing_part_pages = sorted(set(EXPECTED_PART_PAGES) - page_names)
     if missing_part_pages:
         print(
@@ -421,6 +764,92 @@ def main() -> int:
                 missing.setdefault((kind, resolved), []).append(page.relative_to(root))
 
         page_name = str(page.relative_to(root))
+        expected_source_url = expected_source_pages.get(page_name)
+        if expected_source_url is not None:
+            expected_source_control = {
+                "tag": "button",
+                "type": "button",
+                "class": "btn code-tools-button",
+                "source_url": expected_source_url,
+                "data_bs_toggle": None,
+            }
+            if html_parser.source_controls != [expected_source_control]:
+                navigation_errors.append(
+                    f"{page_name}: expected one direct Source control for "
+                    f"{expected_source_url}, found {html_parser.source_controls}"
+                )
+            if html_parser.source_control_texts != ["Source"]:
+                navigation_errors.append(
+                    f"{page_name}: source-control caption must be exactly 'Source', "
+                    f"found {html_parser.source_control_texts}"
+                )
+            if html_parser.global_code_toggle_ids:
+                navigation_errors.append(
+                    f"{page_name}: global code toggle must stay disabled, found "
+                    f"{html_parser.global_code_toggle_ids}"
+                )
+        elif html_parser.source_controls or html_parser.global_code_toggle_ids:
+            navigation_errors.append(
+                f"{page_name}: standalone support page unexpectedly carries "
+                "a Quarto code tool"
+            )
+
+        expected_lecture_entries = expected_chapter_tools.get(page_name)
+        if expected_lecture_entries is not None:
+            expected_aside = {"tag": "aside", "aria_label": "Chapter tools"}
+            if html_parser.chapter_tools != [expected_aside]:
+                navigation_errors.append(
+                    f"{page_name}: expected one accessible chapter-tools aside, "
+                    f"found {html_parser.chapter_tools}"
+                )
+            expected_links = [
+                {
+                    "class": "chapter-tools__link",
+                    "href": entry["url"],
+                    "data_kind": entry["kind"],
+                    "text": entry["label"],
+                }
+                for entry in expected_lecture_entries
+            ]
+            if html_parser.chapter_tool_links != expected_links:
+                navigation_errors.append(
+                    f"{page_name}: rendered lecture links differ from manifest; "
+                    f"expected {expected_links}, found {html_parser.chapter_tool_links}"
+                )
+            expected_placeholder = {
+                "tag": "span",
+                "class": "chapter-tools__placeholder",
+                "aria_disabled": "true",
+                "href": None,
+                "text": "Notebook (coming soon)",
+            }
+            if html_parser.chapter_tool_placeholders != [expected_placeholder]:
+                accessibility_errors.append(
+                    f"{page_name}: Notebook must be one non-linking unavailable "
+                    f"placeholder, found {html_parser.chapter_tool_placeholders}"
+                )
+            if any(
+                (link.get("text") or "").casefold().startswith("notebook")
+                for link in html_parser.chapter_tool_links
+            ):
+                accessibility_errors.append(
+                    f"{page_name}: unavailable Notebook placeholder must not be a link"
+                )
+            if not chapter_tools_follows_title(page_name, page_text):
+                navigation_errors.append(
+                    f"{page_name}: chapter-tools aside must immediately follow the "
+                    "title header"
+                )
+        elif (
+            html_parser.chapter_tools
+            or html_parser.chapter_tool_links
+            or html_parser.chapter_tool_placeholders
+        ):
+            navigation_errors.append(
+                f"{page_name}: Part or standalone page unexpectedly carries "
+                "chapter tools"
+            )
+
         if page_name in EXPECTED_PART_PAGES:
             title = EXPECTED_PART_PAGES[page_name]
             if page_text.count(f'<h1 class="title">{title}</h1>') != 1:
@@ -733,6 +1162,9 @@ def main() -> int:
     print(
         f"HTML support assets and metadata: pass ({len(pages)} pages, "
         f"{len(checked)} unique local stylesheets/scripts/icons, exact MathJax pin, "
+        f"{len(expected_source_pages)} direct source links with no global code "
+        f"toggle, {len(expected_chapter_tools)} accessible chapter-tools strips "
+        f"({specific_lecture_pages} specific, {fallback_lecture_pages} fallback), "
         "canonical URLs, edition stamps, skip links, image alternatives, "
         f"and leak-free rendered content; {len(advisories)} cross-volume "
         "advisory warning(s))"

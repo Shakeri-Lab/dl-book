@@ -1,4 +1,17 @@
 
+# Rolling post-v1.3 — HTML source and lecture tools (September 2, 2026)
+
+The canonical HTML now exposes one direct repository Source control on all 35 QMD
+pages while leaving the book's stepwise Plan → Code interaction in sole control of
+code visibility. Thirty non-Part reading pages also receive a compact chapter-tools
+strip with public DS 6050 lecture resources and a reserved notebook slot. Twenty-seven
+pages have a specific video, slide deck, or course segment; the Preface, Epilogue, and
+notation appendix use the complete-course playlist rather than a false one-to-one
+match. The five Part transitions remain quiet.
+
+This is an HTML-only rolling build after v1.3. The tagged v1.3 edition remains the
+fixed citation and outreach target, and both released PDF files remain unchanged.
+
 # v1.3 — course-arc part pages and stable publication contract (September 2, 2026)
 
 Five short transition pages now make the book's argument visible at Part scale. Each
