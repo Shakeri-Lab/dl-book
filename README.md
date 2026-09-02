@@ -44,13 +44,17 @@ self-contained voice.
 
 ```bash
 python3.12 -m venv ~/.venvs/dl-book && ~/.venvs/dl-book/bin/pip install -r requirements.txt
-QUARTO_PYTHON=$HOME/.venvs/dl-book/bin/python quarto render  # HTML + print PDF
-QUARTO_PYTHON=$HOME/.venvs/dl-book/bin/python quarto render \
-  --profile screen --to pdf --no-clean                       # continuous PDF
+export QUARTO_PYTHON="$HOME/.venvs/dl-book/bin/python"
+"$QUARTO_PYTHON" scripts/render_pdf_profiles.py
+quarto render --to html --no-clean
 ```
 
-Execution uses Quarto **freeze** — CI never runs cells; refresh a chapter's cache with
-`QUARTO_PYTHON=$HOME/.venvs/dl-book/bin/python quarto render chapters/part1/01-linear-regression.qmd --execute`
+The helper renders both derived PDF profiles until every outline destination lands
+on its heading. HTML is rendered last because it is the canonical edition.
+
+Execution uses Quarto **freeze** — CI never runs cells; after exporting
+`QUARTO_PYTHON`, refresh a chapter's cache with
+`quarto render chapters/part1/01-linear-regression.qmd --execute`
 before committing.
 
 ## Authoring pipeline

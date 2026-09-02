@@ -123,7 +123,8 @@ def edition_stamp(display_date: str, version: str, site_url: str) -> str:
     return (
         "<!-- dlbook-edition-stamp:start -->\n"
         '<p class="edition-stamp">'
-        f"Rolling build · {display_date} · stable edition v{version} · "
+        f"Rolling manuscript · content updated {display_date} · "
+        f"stable edition v{version} · "
         f'<a href="{revision_url}">Revision notes</a>'
         "</p>\n"
         "<!-- dlbook-edition-stamp:end -->"

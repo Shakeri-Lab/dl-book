@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 import re
 import sys
 from pathlib import Path
@@ -37,10 +38,15 @@ SUPPORT_INVITATION = (
 )
 COVER_PATH = ROOT / "figures/cover.png"
 PDF_ASSET_MATERIALIZER = ROOT / "scripts/materialize_frozen_pdf_assets.py"
+PDF_FIXPOINT_RENDERER = ROOT / "scripts/render_pdf_profiles.py"
 PUBLISH_WORKFLOW = ROOT / ".github/workflows/publish.yml"
 DISCLOSURE_SCRIPT = ROOT / "disclosure-interactions.html"
+RESPONSIVE_SCRIPT = ROOT / "responsive-figures.html"
+BOOK_STYLES = ROOT / "dlbook.scss"
 DOWNLOAD_PAGE = ROOT / "download.html"
 DOWNLOAD_STYLES = ROOT / "download.css"
+NOT_FOUND_PAGE = ROOT / "404.html"
+QUARTO_VERSION = "1.10.18"
 DOWNLOAD_TOOL_CONFIG = (
     '    tools:\n'
     '      - icon: file-pdf\n'
@@ -128,6 +134,16 @@ def fail(errors: list[str], message: str) -> None:
 
 def main() -> None:
     errors: list[str] = []
+
+    author_review_files = [ROOT / "index.qmd"]
+    author_review_files.extend(sorted((ROOT / "chapters").rglob("*.qmd")))
+    author_review_files.extend(sorted((ROOT / "_freeze").rglob("*.json")))
+    for path in author_review_files:
+        if path.is_file() and "AUTHOR REVIEW" in path.read_text():
+            fail(
+                errors,
+                f"{path.relative_to(ROOT)}: accepted AUTHOR REVIEW marker remains",
+            )
     if len(CHAPTERS) != 20:
         fail(errors, f"expected 20 numbered chapters, found {len(CHAPTERS)}")
 
@@ -287,10 +303,20 @@ def main() -> None:
         fail(errors, "index.qmd: Revision notes must default closed in HTML")
     if index_text.count(COFFEE_ICON_CONTRACT) != 1:
         fail(errors, "index.qmd: the decorative support coffee icon is missing")
+    for contract in (
+        "This book is complete on its own terms.",
+        "### Why this book {.unnumbered}",
+        "### The route at a glance {.unnumbered}",
+        "The failure that opens the next part",
+    ):
+        if index_text.count(contract) != 1:
+            fail(errors, f"index.qmd: Phase B front-door contract missing: {contract}")
     if not COVER_PATH.is_file():
         fail(errors, "figures/cover.png: PDF cover asset is missing")
     if not PDF_ASSET_MATERIALIZER.is_file():
         fail(errors, "scripts/materialize_frozen_pdf_assets.py: helper is missing")
+    if not PDF_FIXPOINT_RENDERER.is_file():
+        fail(errors, "scripts/render_pdf_profiles.py: fixpoint helper is missing")
     workflow_text = PUBLISH_WORKFLOW.read_text()
     quarto_text = (ROOT / "_quarto.yml").read_text()
     if "downloads: [pdf]" in quarto_text:
@@ -326,6 +352,24 @@ def main() -> None:
                     "disclosure-interactions.html: keyboard/hash contract is incomplete",
                 )
                 break
+    if not RESPONSIVE_SCRIPT.is_file():
+        fail(errors, "responsive-figures.html: responsive helper is missing")
+    else:
+        responsive_text = RESPONSIVE_SCRIPT.read_text()
+        for required in (
+            '#the-route-at-a-glance > table',
+            'responsive-route-table-frame',
+            'Five-part route table. Scroll horizontally to inspect.',
+        ):
+            if required not in responsive_text:
+                fail(
+                    errors,
+                    "responsive-figures.html: front-door route-table contract is "
+                    "incomplete",
+                )
+                break
+    if "responsive-route-table-frame" not in BOOK_STYLES.read_text():
+        fail(errors, "dlbook.scss: responsive front-door route style is missing")
     if not DOWNLOAD_PAGE.is_file():
         fail(errors, "download.html: cover-led PDF landing page is missing")
     else:
@@ -367,9 +411,44 @@ def main() -> None:
         fail(errors, "download.css: PDF landing-page styles are missing")
     elif ".contribution-picker" in DOWNLOAD_STYLES.read_text():
         fail(errors, "download.css: removed contribution-picker styles remain")
-    materializer_call = "python scripts/materialize_frozen_pdf_assets.py"
-    if workflow_text.count(materializer_call) != 2:
-        fail(errors, "publish workflow must restore frozen figures before both PDFs")
+    if not NOT_FOUND_PAGE.is_file():
+        fail(errors, "404.html: branded not-found page is missing")
+    else:
+        not_found_text = NOT_FOUND_PAGE.read_text()
+        skip_link = (
+            '<a class="visually-hidden-focusable" '
+            'href="#quarto-document-content">Skip to main content</a>'
+        )
+        if not_found_text.count(skip_link) != 1:
+            fail(errors, "404.html: expected one first-focusable skip link")
+        if '<main id="quarto-document-content">' not in not_found_text:
+            fail(errors, "404.html: skip-link target is missing")
+    fixpoint_call = "python scripts/render_pdf_profiles.py"
+    if workflow_text.count(fixpoint_call) != 1:
+        fail(errors, "publish workflow must use the bounded PDF outline fixpoint")
+    quarto_pin = f'version: "{QUARTO_VERSION}"'
+    if workflow_text.count(quarto_pin) != 1:
+        fail(
+            errors,
+            f"publish workflow must pin the validated Quarto {QUARTO_VERSION}",
+        )
+    if PDF_FIXPOINT_RENDERER.is_file():
+        renderer_text = PDF_FIXPOINT_RENDERER.read_text()
+        for required in (
+            "scripts/materialize_frozen_pdf_assets.py",
+            '"--outline-only"',
+            "max_attempts",
+            "previous_signature",
+            "st_mtime_ns",
+            "toc_checksum",
+            '"print"',
+            '"continuous"',
+        ):
+            if required not in renderer_text:
+                fail(
+                    errors,
+                    f"scripts/render_pdf_profiles.py: missing contract {required}",
+                )
     if workflow_text.count("render: false") != 1:
         fail(errors, "publish workflow must deploy the audited bundle without re-rendering")
     if "chapters/ index.qmd download.html README.md" not in workflow_text:
@@ -379,6 +458,24 @@ def main() -> None:
         fail(errors, "tex/macros.tex: KOMA PDF cover hook is missing or duplicated")
     if tex_macros.count("figures/cover.png") != 1:
         fail(errors, "tex/macros.tex: PDF cover asset reference must appear once")
+    date_match = re.search(
+        r'^\s{2}date:\s*["\']?([0-9]{4}-[0-9]{2}-[0-9]{2})["\']?\s*$',
+        quarto_text,
+        re.MULTILINE,
+    )
+    if date_match is None:
+        fail(errors, "_quarto.yml: deterministic content-revision date is missing")
+    else:
+        content_date = date.fromisoformat(date_match.group(1))
+        display_date = (
+            f"{content_date.strftime('%B')} {content_date.day}, {content_date.year}"
+        )
+        if f"content updated {display_date}" not in " ".join(tex_macros.split()):
+            fail(
+                errors,
+                "tex/macros.tex: PDF content-revision date is out of sync with "
+                "_quarto.yml",
+            )
     chapter4_text = (ROOT / "chapters/part1/04-training-loss-sgd.qmd").read_text()
     if chapter4_text.count(RMSPROP_PROVENANCE) != 1:
         fail(errors, "Chapter 4: RMSProp provenance must appear exactly once")

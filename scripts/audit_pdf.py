@@ -10,13 +10,14 @@ import sys
 import unicodedata
 from pathlib import Path
 
-import fitz
+import pymupdf as fitz
 
 
 TEXT_EDGE_WARNING = 4.0
 MEDIA_BOX_TOLERANCE = 0.5
 ROOT = Path(__file__).resolve().parents[1]
 SUPPORT_URL = "buymeacoffee.com/hshakeri"
+EXPECTED_OUTLINE_ENTRIES = 390
 
 
 def configured_text_right_edge() -> float:
@@ -29,7 +30,14 @@ def configured_text_right_edge() -> float:
 
 
 def normalized_heading(text: str) -> str:
+    text = unicodedata.normalize("NFKC", text)
     text = text.casefold().replace("–", "-").replace("—", "-")
+    # PDF outline strings can retain TeX commands while the page text contains
+    # their rendered symbols. Compare their spoken payload, not the markup.
+    text = re.sub(r"\\sqrt\s*\{([^{}]*)\}", r" \1 ", text)
+    text = text.replace("_", "")
+    text = text.replace("√", " ").replace("\\times", " ").replace("×", " ")
+    text = re.sub(r"\\[a-zA-Z]+", " ", text)
     return re.sub(r"[^0-9a-z]+", " ", text).strip()
 
 
@@ -58,6 +66,7 @@ def heading_pages(
     destination: int,
     *,
     minimum_size: float,
+    block_index: dict[int, list[tuple[float, str]]] | None = None,
 ) -> list[int]:
     """Find a rendered heading near its outline destination, ignoring running heads."""
     target = normalized_heading(title)
@@ -65,25 +74,65 @@ def heading_pages(
     start = max(1, destination - 6)
     stop = min(len(document), destination + 6)
     for page_number in range(start, stop + 1):
-        page = document[page_number - 1]
+        if block_index is None:
+            blocks: list[tuple[float, str]] = []
+            for block in document[page_number - 1].get_text("dict")["blocks"]:
+                lines = block.get("lines", [])
+                spans = [span for line in lines for span in line.get("spans", [])]
+                if not spans:
+                    continue
+                block_text = " ".join(
+                    "".join(span["text"] for span in line.get("spans", []))
+                    for line in lines
+                )
+                blocks.append(
+                    (max(span["size"] for span in spans), normalized_heading(block_text))
+                )
+        else:
+            blocks = block_index[page_number]
+        for size, candidate in blocks:
+            if size < minimum_size:
+                continue
+            numbered_target = re.fullmatch(
+                rf"(?:[0-9]+|[a-e])(?:\s+(?:[0-9]+|[a-e]))*\s+{re.escape(target)}",
+                candidate,
+            )
+            if target == candidate or numbered_target:
+                pages.append(page_number)
+    return sorted(set(pages))
+
+
+def indexed_page_blocks(
+    document: fitz.Document,
+) -> dict[int, list[tuple[float, str]]]:
+    """Index normalized text blocks once for the complete outline audit."""
+    index: dict[int, list[tuple[float, str]]] = {}
+    for page_number, page in enumerate(document, start=1):
+        page_blocks: list[tuple[float, str]] = []
         for block in page.get_text("dict")["blocks"]:
             lines = block.get("lines", [])
             spans = [span for line in lines for span in line.get("spans", [])]
-            if not spans or max(span["size"] for span in spans) < minimum_size:
+            if not spans:
                 continue
             block_text = " ".join(
                 "".join(span["text"] for span in line.get("spans", []))
                 for line in lines
             )
-            candidate = normalized_heading(block_text)
-            if target == candidate or target in candidate:
-                pages.append(page_number)
-    return sorted(set(pages))
+            page_blocks.append(
+                (max(span["size"] for span in spans), normalized_heading(block_text))
+            )
+        index[page_number] = page_blocks
+    return index
+
+
+OUTLINE_HEADING_MINIMUM_SIZE = {1: 18.0, 2: 13.0, 3: 11.5, 4: 11.5}
+OUTLINE_STRUCTURAL_BOOKMARKS = {"Appendices"}
 
 
 def audit_outline(document: fitz.Document, errors: list[str]) -> None:
-    """Protect unit bookmarks and the late-book pagination regression sentinels."""
+    """Require every heading bookmark to land on its rendered heading page."""
     outline = document.get_toc()
+    block_index = indexed_page_blocks(document)
     by_title: dict[str, list[tuple[int, int, str]]] = {}
     for index, (_, title, destination) in enumerate(outline):
         by_title.setdefault(title, []).append((index, destination, title))
@@ -97,65 +146,48 @@ def audit_outline(document: fitz.Document, errors: list[str]) -> None:
             )
             continue
         _, destination, _ = matches[0]
-        pages = heading_pages(
-            document, title, destination, minimum_size=18.0
-        )
-        if not pages or min(abs(page - destination) for page in pages) > 1:
-            errors.append(
-                f"PDF outline: unit {title!r} points to page {destination}, "
-                f"rendered heading pages near it are {pages or 'none'}"
-            )
 
-    chapter_20 = next(
-        index for index, entry in enumerate(outline)
-        if entry[1] == "Multimodal Learning: One Space, Two Views"
-    )
-    epilogue = next(
-        index for index, entry in enumerate(outline)
-        if entry[1] == "Epilogue: The Question Is Yours"
-    )
-    appendices = next(
-        index for index, entry in enumerate(outline)
-        if entry[1] == "Appendices"
-    )
-    sentinel_ranges = [
-        (
-            chapter_20,
-            epilogue,
-            {
-                "Okay, so — two towers learn a comparison, not a world model",
-                "Sources and further reading",
-                "Exercises",
-            },
-        ),
-        (
-            epilogue,
-            appendices,
-            {
-                "The ladder we climbed",
-                "The choices no architecture makes for you",
-                "Learning about learning",
-                "From fitting the past to evaluating futures",
-                "Roads this book did not take",
-                "Sources and further reading",
-                "One question, now with better follow-ups",
-            },
-        ),
-    ]
-    for start, stop, titles in sentinel_ranges:
-        entries = [entry for entry in outline[start:stop] if entry[1] in titles]
-        found = {entry[1] for entry in entries}
-        for missing in sorted(titles - found):
-            errors.append(f"PDF outline: missing pagination sentinel {missing!r}")
-        for _, title, destination in entries:
-            pages = heading_pages(
-                document, title, destination, minimum_size=13.0
-            )
-            if not pages or min(abs(page - destination) for page in pages) > 1:
+    checked = 0
+    for outline_index, (level, title, destination) in enumerate(outline):
+        # KOMA's synthetic Appendices node groups the real appendix chapters but
+        # has no printed heading of its own. Its contract is to share the first
+        # appendix heading's destination. Every other outline node is a
+        # reader-visible heading and must resolve exactly.
+        if title.strip() in OUTLINE_STRUCTURAL_BOOKMARKS:
+            if outline_index + 1 >= len(outline):
                 errors.append(
-                    f"PDF outline: {title!r} points to page {destination}, "
-                    f"rendered heading pages near it are {pages or 'none'}"
+                    f"PDF outline: structural bookmark {title!r} has no child"
                 )
+            else:
+                child_level, child_title, child_destination = outline[outline_index + 1]
+                if child_level <= level or destination != child_destination:
+                    errors.append(
+                        f"PDF outline: structural bookmark {title!r} points to page "
+                        f"{destination}, but its first child {child_title!r} points "
+                        f"to page {child_destination}"
+                    )
+            checked += 1
+            continue
+        minimum_size = OUTLINE_HEADING_MINIMUM_SIZE.get(level, 9.0)
+        pages = heading_pages(
+            document,
+            title,
+            destination,
+            minimum_size=minimum_size,
+            block_index=block_index,
+        )
+        checked += 1
+        if destination not in pages:
+            errors.append(
+                f"PDF outline: level-{level} heading {title!r} points to page "
+                f"{destination}, rendered heading pages near it are "
+                f"{pages or 'none'}"
+            )
+    if checked != EXPECTED_OUTLINE_ENTRIES:
+        errors.append(
+            f"PDF outline: expected {EXPECTED_OUTLINE_ENTRIES} maintained entries, "
+            f"checked {checked}"
+        )
 
 
 def audit_geometry(pdf: Path, errors: list[str]) -> None:
@@ -235,10 +267,28 @@ def main() -> None:
         type=Path,
         help="Recursively scan retained LaTeX logs beneath this directory.",
     )
+    parser.add_argument(
+        "--outline-only",
+        action="store_true",
+        help="Run only the exact full-outline destination invariant.",
+    )
     args = parser.parse_args()
 
     if not args.pdf.is_file():
         raise SystemExit(f"PDF not found: {args.pdf}")
+    if args.outline_only:
+        errors: list[str] = []
+        document = fitz.open(args.pdf)
+        audit_outline(document, errors)
+        if errors:
+            print("\n".join(errors), file=sys.stderr)
+            print(
+                f"FAILED: {len(errors)} PDF outline violation(s)", file=sys.stderr
+            )
+            raise SystemExit(1)
+        print("PASS: every reader-visible PDF outline entry lands on its heading")
+        return
+
     extracted = subprocess.run(
         ["pdftotext", "-enc", "UTF-8", str(args.pdf), "-"],
         check=True,

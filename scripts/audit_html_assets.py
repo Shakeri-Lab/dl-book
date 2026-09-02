@@ -215,6 +215,17 @@ RENDERED_LEAK_PATTERNS = {
         r"(?<![/\w])@(fig|sec|eq|tbl|lst|exfig|aefig|ttrfig|epfig)-[\w-]+"
     ),
 }
+CROSS_VOLUME_NAMES = ("making it trainable", "companion volume")
+CROSS_VOLUME_DEPENDENCY_CUES = (
+    "defer",
+    "relies on",
+    "requires",
+    "assumes",
+    "does not repeat",
+    "instead of",
+    "prerequisite",
+    "see the companion for the full",
+)
 
 
 def source_edition_metadata() -> tuple[str, str, str]:
@@ -269,6 +280,21 @@ def main_image_alt_errors(
     ]
 
 
+def cross_volume_advisories(page_name: str, main_text: str) -> list[str]:
+    """Warn when a sibling-book pointer sounds like a prerequisite."""
+    prose = " ".join(main_text.split())
+    sentences = re.split(r"(?<=[.!?])\s+", prose)
+    advisories: list[str] = []
+    for sentence in sentences:
+        folded = sentence.casefold()
+        if not any(name in folded for name in CROSS_VOLUME_NAMES):
+            continue
+        if not any(cue in folded for cue in CROSS_VOLUME_DEPENDENCY_CUES):
+            continue
+        advisories.append(f"ADVISORY: {page_name}: {sentence}")
+    return advisories
+
+
 def local_asset(page: Path, root: Path, raw_url: str) -> Path | None:
     parsed = urlsplit(raw_url)
     if parsed.scheme or parsed.netloc or raw_url.startswith(("//", "data:")):
@@ -294,8 +320,8 @@ def main() -> int:
     root = args.root.resolve()
     site_url, display_date, stable_version = source_edition_metadata()
     expected_stamp = (
-        f"Rolling build · {display_date} · stable edition v{stable_version} · "
-        "Revision notes"
+        f"Rolling manuscript · content updated {display_date} · "
+        f"stable edition v{stable_version} · Revision notes"
     )
     revision_url = urljoin(site_url, "#revision-notes")
     pages = sorted(
@@ -320,6 +346,7 @@ def main() -> int:
     rendered_content_errors: list[str] = []
     accessibility_errors: list[str] = []
     publication_errors: list[str] = []
+    advisories: list[str] = []
     for page in pages:
         page_text = page.read_text(encoding="utf-8")
         html_parser = SupportAssetParser()
@@ -350,7 +377,7 @@ def main() -> int:
                 f"{page_name}: edition stamp must link once to {revision_url}"
             )
 
-        if page.name not in {"404.html", DOWNLOAD_PAGE_NAME}:
+        if page.name != DOWNLOAD_PAGE_NAME:
             first = html_parser.first_focusable
             if (
                 first is None
@@ -375,6 +402,7 @@ def main() -> int:
         rendered_content_errors.extend(
             rendered_leak_errors(page_name, html_parser.main_text)
         )
+        advisories.extend(cross_volume_advisories(page_name, html_parser.main_text))
         accessibility_errors.extend(
             main_image_alt_errors(page_name, html_parser.main_images)
         )
@@ -550,6 +578,9 @@ def main() -> int:
                     "index.html: support coffee icons must be hidden from assistive text"
                 )
 
+    for advisory in advisories:
+        print(advisory)
+
     if (
         missing
         or metadata_errors
@@ -597,7 +628,8 @@ def main() -> int:
         f"HTML support assets and metadata: pass ({len(pages)} pages, "
         f"{len(checked)} unique local stylesheets/scripts/icons, exact MathJax pin, "
         "canonical URLs, edition stamps, skip links, image alternatives, "
-        "and leak-free rendered content)"
+        f"and leak-free rendered content; {len(advisories)} cross-volume "
+        "advisory warning(s))"
     )
     return 0
 

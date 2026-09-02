@@ -443,6 +443,12 @@ threshold. Ordinary plots keep scaling without a pan region. The derived PDF rem
 a fixed-page conversion and uses the authored figure width; a LaTeX
 `resizebox`-style transform is not a substitute for sound internal geometry.
 
+The Preface's four-column route table uses the same local-inspection rule on phone
+widths: preserve useful column widths, keep horizontal movement inside the table,
+and expose the region to keyboard readers with an explicit accessible name. Do not
+let a wide table make the whole reading page pan or collapse words into letter-wide
+columns.
+
 The PDF conversion enables breakable verbatim code and stdout as a final safety
 net. Do not rely on that conversion to repair confusing source: rewrap authored
 code first, then let the print layer protect generated output that cannot be
@@ -492,11 +498,19 @@ misdiagnosis deserves to be made explicit.
   Twitter-card metadata, and stable citation metadata. Social identity uses a
   restrained UVA palette and must not trigger a theme redesign. Pin third-party math
   rendering to an exact tested version so the canonical edition cannot change under a
-  floating dependency.
+  floating dependency. The rolling stamp reports the source-controlled content-revision
+  date, never a render-time clock; rebuilding one commit must reproduce the same stamp.
+- Source-authored `fig-alt` is authoritative. A post-render compatibility shim may fill
+  an empty rendered alternative when a frozen/custom-float path drops that metadata,
+  but it must never overwrite non-empty renderer output and never excuses a missing
+  source alternative.
 - Decorative callout icons carry empty replacement text in PDF extraction. Meaning
   lives in the callout title and prose, never in the icon.
-- A release PDF must reach the LaTeX reference fixpoint: use at least three passes,
-  then audit outline destinations against the pages containing their headings.
+- A release PDF must reach the LaTeX reference fixpoint. Use the configured minimum
+  of three passes, then require every reader-visible outline destination to land
+  exactly on the page containing its heading. `scripts/render_pdf_profiles.py`
+  retries each profile to a bounded fixpoint and fails rather than publishing a
+  stale outline; do not replace the complete invariant with late-book sentinels.
   Scan geometry with a capture rectangle larger than the media box; any text beyond
   the physical page is a hard failure, while smaller text-block intrusions are soft
   warnings that require visual review.

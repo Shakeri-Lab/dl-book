@@ -47,7 +47,7 @@ export PATH="$HOME/.local/bin:$HOME/Library/TinyTeX/bin/universal-darwin:/opt/ho
 
 | Tool | Where | Notes |
 |---|---|---|
-| quarto 1.9 | `~/.local/bin/quarto` | user-land tarball (brew cask needs sudo — unavailable) |
+| quarto 1.10.18 | `~/.local/bin/quarto` | user-land tarball (brew cask needs sudo — unavailable) |
 | pandoc | bundled: `quarto pandoc` | |
 | TinyTeX | `~/Library/TinyTeX` | for PDF + TikZ; `tlmgr update --self` before `tlmgr install <pkg>` |
 | Python venv | `~/.venvs/dl-book` (python3.12, torch, matplotlib, sklearn) — **outside Box on purpose** | always render with `QUARTO_PYTHON=$HOME/.venvs/dl-book/bin/python` |
@@ -118,16 +118,19 @@ compositions for figures. Full guide: `docs/dl-course-code.md`.
    implementation or evidence.
 7. **Execute + render** (this refreshes the committed freeze cache — CI never executes):
    ```bash
-   QUARTO_PYTHON=$HOME/.venvs/dl-book/bin/python quarto render chapters/partN/XX-*.qmd  # NO --to flag!
-   QUARTO_PYTHON=$HOME/.venvs/dl-book/bin/python quarto render        # HTML + print PDF
-   QUARTO_PYTHON=$HOME/.venvs/dl-book/bin/python quarto render \
-     --profile screen --to pdf --no-clean                            # continuous PDF
+   export QUARTO_PYTHON="$HOME/.venvs/dl-book/bin/python"
+   quarto render chapters/partN/XX-*.qmd  # NO --to flag!
+   "$QUARTO_PYTHON" scripts/render_pdf_profiles.py
+   quarto render --to html --no-clean  # canonical HTML last
    ```
    An `--to html` single-file render leaves the PDF freeze (`tex.json`) stale → the
    book PDF ships without your changes. Any later prose edit invalidates the freeze
    and re-executes the whole chapter — batch fixes before re-rendering.
+   The PDF helper renders both profiles through the three-pass LaTeX floor, audits
+   every outline destination exactly, and retries to a bounded fixpoint. Do not replace
+   it with ad hoc profile commands in a publication build.
 8. **Verify before pushing**: grep the built HTML for the cells' printed numbers and
-   confirm they support the prose; check the PDF built; skim for unrendered math.
+   confirm they support the prose; check both PDFs; skim for unrendered math.
 9. **Commit `_freeze/` together with the chapter.** Push; then confirm CI:
    `gh run list -R Shakeri-Lab/dl-book -L 1` and spot-check the live URL (mind CDN
    cache, ~1 min).

@@ -10,7 +10,7 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 
 ---
 
-> ## Current state — 2026-08-20 (read this first)
+> ## Current state — 2026-09-02 (read this first)
 >
 > The manuscript is **complete and released**: tag **v1.2.1** carries the stable
 > point-release PDF. The live manuscript is a rolling post-v1.2.1 build with chapters
@@ -87,15 +87,15 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > the caption and page continue to reflow. Responsive presentation never
 > substitutes for correcting internal diagram geometry. The aspect-ratio classifier
 > and accessible narrow-screen frame live in `responsive-figures.html`. The repaired
-> figure, Chapter 1 equation, web-identity, cover, and open-support passes leave the
-> derived PDFs at 536 print pages and 513 continuous-screen pages; both full conversions pass the PDF geometry,
+> figure, Chapter 1 equation, web-identity, cover, open-support, and front-door passes
+> leave the derived PDFs at 538 print pages and 514 continuous-screen pages; both full conversions pass the PDF geometry,
 > text-layer, and glyph audit.
 > Chapter 1's Figure 1.9 now preserves the output axis from its repeated-fit panel
 > into a literal $x_0=0.65$ slice. Seeded KDE profiles replace cosmetic jitter, and
 > separate dimension arrows distinguish bias, prediction variance, and irreducible
 > noise without changing the decomposition or any printed numerical output.
 >
-> The current audit parses 285 executable cells, four transclusions, and thirteen
+> The current audit parses 285 executable cells, four transclusions, and sixteen
 > included modules/scripts. The build now checks Plan → Code structure, exercise
 > tags, chapter checks and sources, book voice, interlude namespaces, frozen
 > stdout parity, LaTeX missing-character diagnostics, PDF replacement glyphs,
@@ -131,6 +131,29 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > behavior for collapsed callouts and keyboard access to collapsed chapter groups;
 > narrative tips, traps, and retrieval checks remain open under the momentum-first
 > contract.
+>
+> The September 1 web audit makes those surfaces mechanically complete: every
+> rendered figure has a source-authored text alternative, Chapter 14's Sources
+> heading renders as a real section, every page carries one canonical URL and one
+> deterministic edition stamp, and raw authoring syntax cannot leak into public
+> prose. `scripts/postrender_html.py` contains a deliberately narrow alt-text
+> compatibility shim: it reads `#| fig-alt:` from labeled manuscript cells,
+> including custom `exfig`, `aefig`, `ttrfig`, and `epfig` wrappers, and fills only
+> a missing or empty rendered `<img alt>` attribute. It never overwrites a non-empty
+> alternative emitted by Quarto. Keep the manuscript `fig-alt` authoritative and
+> retain the all-main-images audit until frozen/custom-float metadata preserves
+> those alternatives reliably. The branded 404 page now starts with the same
+> keyboard-first skip path as the book.
+>
+> The September 2 Phase B pass makes the front door state the book's independent
+> scope, locate its distinctive reading loop among standard references, and map the
+> five-part learnability route before the detailed course table. Cross-volume links
+> are optional further routes; a warning-only rendered-prose audit surfaces future
+> dependency language. On phone widths, the four-column route stays legible inside
+> a local keyboard-accessible inspection region rather than compressing words into
+> letter-wide columns. The visible edition stamp means **content-revision date**,
+> not CI wall-clock date: `_quarto.yml` changes only when the rolling manuscript or
+> its public presentation changes, so rebuilding the same commit is deterministic.
 >
 > Chapter 14 now closes with the Transformer and hands off to the
 > **Attention as Test-Time Regression** interlude. Chapter 15 separates
@@ -183,8 +206,12 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > byte and every HTML/TeX stdout pair matches. Learner-visible Python is guarded
 > at 88 columns; `fvextra` wraps code and frozen stdout as a print-side safety
 > net; and the PDF audit now fails on media-box loss while reporting smaller
-> text-block intrusions for visual review. Three LaTeX passes plus an outline
-> destination audit protect the late Chapter 20 and epilogue pagination. The
+> text-block intrusions for visual review. Three LaTeX passes are the floor; the
+> bounded PDF build loop then requires every outline destination to land exactly on
+> its rendered heading in both profiles. Starred headings create their anchors only
+> after page-breaking, and the experiment tables stay in place so their intervening
+> derivation cannot disappear. CI pins Quarto 1.10.18, the version under which this
+> full-outline contract was verified. The
 > title page identifies the rolling build and the title verso records copyright,
 > licensing, the canonical HTML edition, stable citation guidance, and UVA.
 > The August 5 presentation-only pass reduces the shared PDF margin from 1.1 to
@@ -543,8 +570,11 @@ failed their first design (see §5 case law). The loop that works:
 7. **Fix prose to match outputs** (never the reverse unless the experiment is
    wrong). Batch all fixes, then re-render once — *any* qmd edit invalidates the
    freeze and forces full re-execution (5–15 min for training-heavy chapters).
-8. **Full book render** (`quarto render`), then verify the PDF picked up the
-   chapter (`pdftotext … | grep <distinctive phrase>`).
+8. **Full book render**: export
+   `QUARTO_PYTHON="$HOME/.venvs/dl-book/bin/python"`, run
+   `"$QUARTO_PYTHON" scripts/render_pdf_profiles.py`, then render the canonical
+   HTML last with `quarto render --to html --no-clean`. Verify that both PDFs picked
+   up the chapter (`pdftotext … | grep <distinctive phrase>`).
 9. **Commit** chapter + `_freeze/<chapter>/` + any new `sources/` snapshot
    together. Push; watch CI (`gh run list`); confirm the live URL (CDN caches —
    use a `?v=N` query to bust; if Pages serves stale content for >10 min, check

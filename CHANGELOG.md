@@ -1,4 +1,30 @@
 
+# Rolling post-v1.2.1 — independent front door and exact PDF navigation (September 2, 2026)
+
+The Preface now states the book's self-contained scope, distinguishes its executable
+read–predict–run–audit loop from several standard references, and gives readers a
+compact five-part map of what becomes learnable and which failure opens the next part.
+Cross-volume pointers are optional further routes rather than dependencies, with a
+warning-only HTML advisory guarding that boundary. At phone widths, the route table
+keeps readable columns inside a local keyboard-operable inspection region.
+
+The web publication contract now requires source-authored alternatives for every main
+figure, canonical metadata and a deterministic content-revision stamp on every page,
+and a keyboard-first skip path on the branded 404 page. A narrow post-render shim fills
+only alternatives that Quarto drops on frozen custom-float paths; it never overwrites
+non-empty renderer output. Temporary review markers have been removed from both source
+and sanctioned frozen artifacts.
+
+Both PDFs now pass a general navigation invariant: every one of 390 outline entries
+must land on the page containing its rendered heading. Starred headings create their
+anchors after page breaking, and a bounded helper requires two consecutive renders
+with identical page count, outline, and printed-ToC state while also rejecting stale
+outputs. CI pins the validated Quarto 1.10.18 renderer so that this navigation contract
+cannot drift under a silent toolchain update. The experiment interlude's two `EX.` tables remain in place without suppressing
+the estimand derivation between them. The resulting 0.85-inch editions are 538 print
+pages and 514 continuous-screen pages. All 133 frozen stdout blocks remain identical
+to the pre-pass snapshot, and every HTML/TeX pair agrees.
+
 # Rolling post-v1.2.1 — quieter navigation and a free-PDF landing page (August 20, 2026)
 
 The canonical HTML now starts ancillary surfaces closed: **About this edition**,

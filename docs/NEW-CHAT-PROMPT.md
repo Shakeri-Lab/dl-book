@@ -37,8 +37,8 @@ unnumbers the epilogue equations, and pins the final PDF text-layer regression.
 The August 2 print-hardening pass adds an 88-column learner-visible Python guard,
 print-side wrapping for code and frozen stdout, media-box geometry and PDF-outline
 audits, a three-pass LaTeX minimum, and a copyright/title verso. The current derived
-PDFs use a uniform 0.85-inch margin: the two-sided print edition is 536 pages and
-the one-sided, open-any continuous-screen edition is 513 pages. Both contain no
+PDFs use a uniform 0.85-inch margin: the two-sided print edition is 538 pages and
+the one-sided, open-any continuous-screen edition is 514 pages. Both contain no
 off-paper text or missing glyphs; all 133 frozen stdout blocks remain byte-identical.
 The August 6 coherence pass adds Appendix E as an optional statistical-contract
 retrieval layer, replaces Chapter 1's bias--variance cartoon with a seeded
@@ -64,6 +64,14 @@ page with direct free links to both editions, a $0 minimum, a suggested $20 opti
 contribution linked directly to Buy Me a Coffee, and no local amount picker that cannot
 transfer its choice. Download access is never gated. Narrative teaching callouts
 remain open.
+The September 1–2 publication pass completes the front door and its invariants. The
+Preface states the book's independent scope, positions its reading loop among standard
+references, and maps the five-part learnability route. Cross-volume pointers remain
+optional. The HTML stamp is a deterministic content-revision date, the 404 page begins
+with a skip link, and a narrow post-render shim restores only source-authored figure
+alternatives that Quarto omits. Both PDFs render through a bounded build loop that
+requires every outline destination to land exactly on its heading; the experiment
+interlude's full estimand derivation remains present in the print flow.
 Nothing is mid-flight.
 
 **Read before doing anything, in this order:**
@@ -114,11 +122,15 @@ answer.**
 - **PDF glyph hygiene is enforced.** Greek and relation symbols belong in math mode;
   code elisions are ASCII; the publish job audits LaTeX missing-character warnings,
   NUL/U+FFFD extraction, and decorative icon text.
-- **Print geometry is enforced.** Learner-visible Python is at most 88 columns.
+- **Print geometry and navigation are enforced.** Learner-visible Python is at most 88 columns.
   Print-side wrapping is a safety net, not permission for unreadable source. The PDF
   audit fails if text leaves the media box, reports text-block intrusions for visual
-  review, and verifies late-book outline destinations after at least three LaTeX
-  passes.
+  review. Three LaTeX passes are the minimum; `scripts/render_pdf_profiles.py`
+  retries each profile to a bounded fixpoint and requires every reader-visible
+  outline destination to land exactly on its heading.
+- **Edition dates are content dates.** `_quarto.yml` records the most recent change
+  to the rolling manuscript or public presentation, never the CI/render wall clock.
+  Rebuilding an unchanged commit must leave the visible stamp unchanged.
 - **Semantic colour is a contract.** Blue is input/design data, orange is
   learnable parameters, purple is observed targets, green is predictions, and
   wine is residuals/errors. Carry a colour into nearby prose when it clarifies

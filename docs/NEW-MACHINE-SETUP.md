@@ -76,7 +76,7 @@ The old machine had no sudo, so Quarto was installed user-land at
 
 ```bash
 brew install --cask quarto        # or: download the tarball into ~/.local
-quarto --version                  # expect 1.9.x — 1.9.38 built the current book
+quarto --version                  # expect 1.10.18 — the version pinned in CI
 ```
 
 Then the LaTeX stack (LuaLaTeX is what renders the PDF):
@@ -163,13 +163,17 @@ few minutes rather than forty:
 ```bash
 cd ~/Library/CloudStorage/Box-Box/Teaching/6050/dl-book
 export QUARTO_PYTHON="$HOME/.venvs/dl-book/bin/python"
-quarto render
+"$QUARTO_PYTHON" scripts/render_pdf_profiles.py
 ls -la _book/Deep-Learning--Making-It-Learnable.pdf     # expect ~5 MB
-pdfinfo _book/Deep-Learning--Making-It-Learnable.pdf | grep Pages   # 530 on current main
-QUARTO_PYTHON=$HOME/.venvs/dl-book/bin/python quarto render \
-  --profile screen --to pdf --no-clean
-pdfinfo _book/Deep-Learning--Making-It-Learnable--Continuous.pdf | grep Pages  # 508
+pdfinfo _book/Deep-Learning--Making-It-Learnable.pdf | grep Pages
+pdfinfo _book/Deep-Learning--Making-It-Learnable--Continuous.pdf | grep Pages
+quarto render --to html --no-clean
 ```
+
+The PDF helper materializes frozen figures, renders each profile with the configured
+three-pass LaTeX floor, and retries to a bounded fixpoint until every outline entry
+lands exactly on its rendered heading. The final command restores the canonical HTML
+bundle after both PDF profiles.
 
 **B. Execute one chapter and check it reproduces.** This is the real test of the
 Python side — it re-runs a chapter's cells and compares the printed output against
