@@ -1,4 +1,22 @@
 
+# Rolling post-v1.3 — executable notebook path (September 2, 2026)
+
+Twenty-six chapter, interlude, and foundational-appendix pages now offer both a
+downloadable notebook and an Open in Colab route. The notebooks are generated from
+the canonical manuscript at publication time: they retain the 193 learner-visible
+Plan → Code surfaces, omit 93 hidden plotting and layout harnesses, and add one
+commit-pinned bootstrap that installs exact runtime versions and verifies every
+downloaded data or module artifact by SHA-256. The one intentionally partial API
+listing remains a non-executable listing rather than being silently repaired.
+
+Publication now executes the notebooks from clean temporary directories in six
+checked shards and compares their visible stdout with the committed HTML freeze
+records. Only the unexecuted source notebooks that passed those checks enter the
+`gh-pages` bundle. The Preface, Epilogue, and two non-executable appendices retain an
+honest unavailable placeholder; the five Part transitions remain quiet. This is an
+HTML-only delivery change, so the fixed v1.3 PDFs remain unchanged at 548 and 519
+pages.
+
 # Rolling post-v1.3 — searchable code and deferred web assets (September 2, 2026)
 
 Collapsed Plan → Code panels now participate in native Find-in-page. A match inside

@@ -570,8 +570,25 @@ misdiagnosis deserves to be made explicit.
   are supplemental routes, never off-page dependencies. Maintain their source-path
   mapping in `data/lectures.yml`, record honest playlist-only fallbacks in
   `docs/lectures-unresolved.md`, and never invent a one-to-one lecture match. The five
-  Part transition pages remain quiet. Until Phase F supplies notebooks, **Notebook**
-  is a visibly unavailable, non-linking placeholder rather than a dead link.
+  Part transition pages remain quiet. The exact 26 executable chapter, interlude, and
+  foundational-appendix pages in `scripts/notebook_manifest.json` provide both
+  **Download notebook** and **Open in Colab**. The Preface, Epilogue, notation
+  appendix, and statistical-learning appendix retain a visibly unavailable,
+  non-linking notebook placeholder rather than a dead link.
+- Public notebooks are generated artifacts, not a second manuscript. Preserve the
+  learner-visible Plan text and Python in source order, strip Quarto directives and
+  hidden plotting/layout harnesses, and add only one generated bootstrap cell. That
+  bootstrap must name a full source commit, install exact runtime pins, fetch only the
+  manifest-declared assets from that commit, verify every asset by SHA-256, and remain
+  silent. If a hidden cell mixes required imports or deterministic setup with plotting,
+  delimit only the necessary support using `# notebook-support-start` and
+  `# notebook-support-end`; never use those markers to smuggle an explanation,
+  computation, metric, or learner-facing check out of the visible code.
+- Publish a source notebook only after a separately executed clean copy preserves its
+  cells and matches the corresponding frozen HTML stdout blocks exactly. Executed
+  notebooks are evidence for the gate, not public artifacts. A deliberately partial
+  or non-executable listing stays visibly marked as such; the exporter must not invent
+  missing implementation.
 
 ### Reading loop
 

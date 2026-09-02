@@ -18,9 +18,10 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > 1–20, three interludes, five appendices, and an epilogue. The July 28
 > comprehensive audit is complete: verified glyph losses are repaired, chapter
 > retrieval/source contracts are uniform, exercise modes are canonical, and
-> attention-as-test-time-regression is now its own interlude. Phase D adds only
-> HTML-native Source and lecture-resource affordances; the two released v1.3 PDFs
-> remain fixed. **Nothing is mid-flight.** Every open item is a decision waiting on
+> attention-as-test-time-regression is now its own interlude. Phases D–F add only
+> HTML-native source, lecture-resource, deferred-loading, and executable-notebook
+> affordances; the two released v1.3 PDFs remain fixed. **Nothing is mid-flight.**
+> Every open item is a decision waiting on
 > the author — see **§9**,
 > which supersedes any older status text below it.
 >
@@ -169,8 +170,8 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > adds an accessible chapter-tools strip to the exact 30 non-Part reading pages.
 > Twenty-seven pages link specific public DS 6050 videos, slide decks, or course
 > segments; the Preface, Epilogue, and notation appendix use the complete playlist,
-> as recorded in `docs/lectures-unresolved.md`. A non-linking Notebook placeholder
-> reserves Phase F's slot. The five Part transitions remain quiet, and Quarto's
+> as recorded in `docs/lectures-unresolved.md`. The five Part transitions remain
+> quiet, and Quarto's
 > global show/hide code toggle stays disabled so it cannot fight Plan → Code.
 > Phase E closes the four remaining web-reading polish items without touching print.
 > Native Find-in-page can reveal a collapsed code token and activate its owning plan
@@ -179,8 +180,12 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > loading and asynchronous decoding; and the PDF landing page prefers a 230,262-byte
 > WebP cover with the original PNG fallback. The HTML audit pins all four source and
 > rendered contracts, while browser checks protect equation numbers, equation links,
-> Show all, and the native-find interaction. Phase F is now only the notebook export,
-> execution, comparison, and publication pipeline: its visible slot already exists.
+> Show all, and the native-find interaction. Phase F publishes 26 generated source
+> notebooks from the canonical manuscript: 193 learner-visible Plan → Code surfaces,
+> one commit-pinned and checksum-verified bootstrap per unit, six clean execution
+> shards, and exact comparison against frozen HTML stdout. The Preface, Epilogue,
+> and two non-executable appendices retain honest unavailable placeholders; executed
+> copies remain CI evidence rather than public downloads.
 > The next print-affecting cut must pair byte-reproducible PDF builds with the five
 > KOMA-Script `\setpartpreamble` Part openers, then accept their repagination and outline
 > changes as one audited change.

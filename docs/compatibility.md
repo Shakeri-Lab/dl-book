@@ -93,6 +93,15 @@ real changes.
   eager and all later images carry `loading="lazy"` plus `decoding="async"`. The static
   PDF landing page serves `figures/cover.webp` first and keeps `cover.png` as its
   fallback and as the derived-PDF cover source.
+- **Public notebook pipeline:** `scripts/notebook_manifest.json` is the sole map for
+  the 26 exported units and their required assets. The generated bootstrap pins Python
+  3.12's numerical stack through `scripts/notebook_requirements.txt`, embeds a full Git
+  commit, fetches assets only from that immutable revision, and rejects a SHA-256
+  mismatch. Export tooling is pinned separately in
+  `scripts/notebook_ci_requirements.txt`. CI generates source notebooks once, executes
+  clean copies in six fixed shards, compares learner-visible stdout with the canonical
+  HTML freeze records, and publishes only the unexecuted sources that passed. This
+  route deliberately omits hidden plotting harnesses and does not alter either PDF.
 
 When a version bump changes any printed number or figure, the fix is: update the
 pinned environment here, re-run the Execution Audit, refresh freeze caches

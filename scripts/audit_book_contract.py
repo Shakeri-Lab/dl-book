@@ -774,10 +774,11 @@ def main() -> None:
     if workflow_text.count(fixpoint_call) != 1:
         fail(errors, "publish workflow must use the bounded PDF outline fixpoint")
     quarto_pin = f'version: "{QUARTO_VERSION}"'
-    if workflow_text.count(quarto_pin) != 1:
+    if workflow_text.count(quarto_pin) != 2:
         fail(
             errors,
-            f"publish workflow must pin the validated Quarto {QUARTO_VERSION}",
+            "publish workflow must pin the validated Quarto "
+            f"{QUARTO_VERSION} once for notebook export and once for publication",
         )
     if execution_workflow_text.count(quarto_pin) != 1:
         fail(
@@ -785,6 +786,7 @@ def main() -> None:
             f"execution audit must pin the validated Quarto {QUARTO_VERSION}",
         )
     html_only_flag = "--allow-missing-generated-pdfs"
+    notebook_html_only_flag = "--allow-missing-generated-notebooks"
     if execution_workflow_text.count(html_only_flag) != 1:
         fail(
             errors,
@@ -795,6 +797,26 @@ def main() -> None:
             errors,
             "publish workflow must require both generated PDF download targets",
         )
+    if execution_workflow_text.count(notebook_html_only_flag) != 1:
+        fail(
+            errors,
+            "execution audit must declare its HTML-only generated-notebook exemption",
+        )
+    if notebook_html_only_flag in workflow_text:
+        fail(
+            errors,
+            "publish workflow must require all generated notebook download targets",
+        )
+    for required in (
+        "pull_request:",
+        "python scripts/export_notebooks.py",
+        "python scripts/audit_notebook_exports.py",
+        "validated-notebooks-",
+        "_book/notebooks",
+        "github.event_name != 'pull_request'",
+    ):
+        if required not in workflow_text:
+            fail(errors, f"publish workflow is missing notebook contract {required!r}")
     if PDF_FIXPOINT_RENDERER.is_file():
         renderer_text = PDF_FIXPOINT_RENDERER.read_text()
         for required in (

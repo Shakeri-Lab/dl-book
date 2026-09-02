@@ -84,16 +84,20 @@ pages and an accessible chapter-tools strip to 30 non-Part reading pages. Twenty
 have specific public DS 6050 lecture resources; `index.qmd`, the Epilogue, and the
 notation appendix use the complete playlist, with reasons recorded in
 `docs/lectures-unresolved.md`. The five Part transition pages remain quiet. The
-Notebook slot is deliberately a non-linking placeholder until Phase F, and the global
-Quarto show/hide code toggle remains disabled so Plan → Code owns code visibility.
+global Quarto show/hide code toggle remains disabled so Plan → Code owns code
+visibility.
 Phase E completes the four web-reading polish items: native Find-in-page reveals the
 matching collapsed code step, MathJax 4.1.3 typesets inline and unnumbered mathematics
 lazily while keeping numbered equation targets eager, all content images after the
 first load and decode lazily, and the PDF landing page prefers a 230,262-byte WebP
-cover while retaining the PNG fallback. The tagged v1.3 PDFs remain unchanged. Phase F
-therefore begins at the export/execute/compare/publish notebook pipeline; its reader-facing
-slot is already reserved. The next PDF cut must combine byte-reproducible builds with
-the five KOMA-Script `\setpartpreamble` Part openers and audit their repagination as one
+cover while retaining the PNG fallback. Phase F completes the notebook route for the
+exact 26 executable chapters, interludes, and foundational appendices. Its generated
+source notebooks retain the 193 learner-visible Plan → Code surfaces, use a
+commit-pinned and checksum-verified bootstrap, execute cleanly in six CI shards, and
+must reproduce the frozen HTML stdout before publication. The Preface, Epilogue, and
+two non-executable appendices retain honest unavailable placeholders. The tagged v1.3
+PDFs remain unchanged. The next PDF cut must combine byte-reproducible builds with the
+five KOMA-Script `\setpartpreamble` Part openers and audit their repagination as one
 print change.
 Nothing is mid-flight.
 
