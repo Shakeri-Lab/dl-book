@@ -86,6 +86,15 @@ notation appendix use the complete playlist, with reasons recorded in
 `docs/lectures-unresolved.md`. The five Part transition pages remain quiet. The
 Notebook slot is deliberately a non-linking placeholder until Phase F, and the global
 Quarto show/hide code toggle remains disabled so Plan → Code owns code visibility.
+Phase E completes the four web-reading polish items: native Find-in-page reveals the
+matching collapsed code step, MathJax 4.1.3 typesets inline and unnumbered mathematics
+lazily while keeping numbered equation targets eager, all content images after the
+first load and decode lazily, and the PDF landing page prefers a 230,262-byte WebP
+cover while retaining the PNG fallback. The tagged v1.3 PDFs remain unchanged. Phase F
+therefore begins at the export/execute/compare/publish notebook pipeline; its reader-facing
+slot is already reserved. The next PDF cut must combine byte-reproducible builds with
+the five KOMA-Script `\setpartpreamble` Part openers and audit their repagination as one
+print change.
 Nothing is mid-flight.
 
 **Read before doing anything, in this order:**

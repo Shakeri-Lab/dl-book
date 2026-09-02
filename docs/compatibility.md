@@ -42,7 +42,15 @@ real changes.
 - **MathJax renderer pin:** canonical HTML loads
   `https://cdn.jsdelivr.net/npm/mathjax@4.1.3/tex-chtml.js`; a floating major or minor
   is not allowed because it could change line breaking or glyph layout without a book
-  revision. The three authored `.responsive-long-equation` displays remain the
+  revision. Its `ui/lazy` component defers off-screen inline and unnumbered output while
+  numbered `span[id^="eq-"]` containers are always typeset on the first pass. That
+  exception keeps authored equation tags in sequence and makes cold `@eq-*` links land
+  on fully laid-out targets. The math-free `head` selector is the required sentinel for
+  chapters with no numbered equations; removing it leaves MathJax's container list
+  empty and aborts lazy processing. The release guard still compares the displayed equation
+  sequence and exercises representative direct links and complete-scroll behavior on
+  Chapters 14, 17, 19, and Appendix D. The three authored
+  `.responsive-long-equation` displays remain the
   tested wrapping contract. MathJax 4's native `output.linebreaks` is a future
   replacement candidate, but enabling it is a book-wide rendering change and requires
   narrow-screen equation and cross-reference inspection first.
@@ -77,6 +85,14 @@ real changes.
   Enter/Space activation, and hash-target opening that this renderer does not emit for
   collapsible callout headers and chapter-group controls. Recheck those contracts when
   Quarto changes its sidebar or callout markup.
+- **Searchable code and deferred images:** collapsed Plan → Code lines use the browser's
+  `hidden="until-found"`/`beforematch` path so native search can activate the owning
+  numbered step. A scoped layout override is necessary because Bootstrap otherwise
+  applies `display: none !important` to hidden content; browsers without `beforematch`
+  retain the ordinary collapsed panel. The first content image in each document stays
+  eager and all later images carry `loading="lazy"` plus `decoding="async"`. The static
+  PDF landing page serves `figures/cover.webp` first and keeps `cover.png` as its
+  fallback and as the derived-PDF cover source.
 
 When a version bump changes any printed number or figure, the fix is: update the
 pinned environment here, re-run the Execution Audit, refresh freeze caches

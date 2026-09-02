@@ -411,8 +411,15 @@ Rules:
   or pressing Escape, clears the state and closes the Code region. A per-panel
   **Show all code** control opens the complete executed surface without applying a
   step highlight and toggles back to the closed state. The number, focus state, and
-  inset rule carry the interaction independently of colour. PDF keeps the same
-  static numbered mapping without browser-only controls.
+  inset rule carry the interaction independently of colour. Collapsed source remains
+  available to native Find-in-page: a match opens the panel, selects the plan step
+  whose bracket marker owns the matching line, and leaves output-only matches in the
+  explicit **Show all code** state. Implement searchable lines and outputs with
+  `hidden="until-found"` and `beforematch`, without `aria-hidden` on those searchable
+  nodes. Temporarily remove the enclosing source block and copy control from the focus
+  and accessibility trees while the panel is closed, then restore them on reveal.
+  Browsers without `beforematch` keep the ordinary closed disclosure. PDF keeps the
+  same static numbered mapping without browser-only controls.
 - **Fusion is a teaching moment.** When one line implements two plan steps
   (`# [2][5]`), say so in the prose beneath: the gap between a sequential plan
   and a vectorised kernel is where tensor bugs live.
@@ -505,6 +512,16 @@ misdiagnosis deserves to be made explicit.
   rendering to an exact tested version so the canonical edition cannot change under a
   floating dependency. The rolling stamp reports the source-controlled content-revision
   date, never a render-time clock; rebuilding one commit must reproduce the same stamp.
+- HTML performance hints must preserve the reading contract. The pinned MathJax build
+  loads `ui/lazy`; numbered `span[id^="eq-"]` containers remain eager so direct links
+  land on stable targets, while inline and unnumbered mathematics may be deferred. Keep
+  an always-present, math-free container in `lazyAlwaysTypeset`, because the handler
+  does not accept an empty match set on chapters without numbered equations. Any
+  change to that configuration must preserve authored equation numbers and Quarto
+  equation links after a complete scroll on Chapters 14, 17, 19, and Appendix D. In
+  each document the first content image stays eager; later images use
+  `loading="lazy"` and `decoding="async"`. The PDF-download page prefers a lightweight
+  WebP cover while retaining the original PNG as the PDF source and browser fallback.
 - Source-authored `fig-alt` is authoritative. A post-render compatibility shim may fill
   an empty rendered alternative when a frozen/custom-float path drops that metadata,
   but it must never overwrite non-empty renderer output and never excuses a missing

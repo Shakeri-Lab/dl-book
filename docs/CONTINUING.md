@@ -172,6 +172,18 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > as recorded in `docs/lectures-unresolved.md`. A non-linking Notebook placeholder
 > reserves Phase F's slot. The five Part transitions remain quiet, and Quarto's
 > global show/hide code toggle stays disabled so it cannot fight Plan → Code.
+> Phase E closes the four remaining web-reading polish items without touching print.
+> Native Find-in-page can reveal a collapsed code token and activate its owning plan
+> step; MathJax 4.1.3 typesets inline and unnumbered mathematics lazily while keeping
+> numbered equation targets eager; every content image after the first uses lazy
+> loading and asynchronous decoding; and the PDF landing page prefers a 230,262-byte
+> WebP cover with the original PNG fallback. The HTML audit pins all four source and
+> rendered contracts, while browser checks protect equation numbers, equation links,
+> Show all, and the native-find interaction. Phase F is now only the notebook export,
+> execution, comparison, and publication pipeline: its visible slot already exists.
+> The next print-affecting cut must pair byte-reproducible PDF builds with the five
+> KOMA-Script `\setpartpreamble` Part openers, then accept their repagination and outline
+> changes as one audited change.
 >
 > Chapter 14 now closes with the Transformer and hands off to the
 > **Attention as Test-Time Regression** interlude. Chapter 15 separates

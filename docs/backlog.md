@@ -83,6 +83,15 @@ chapter stub's draft-sources; revisit during the planned outline session with th
   are recorded in the current build ledger after each repagination. The remaining index
   and tagged-PDF items below are editorial/print-era choices, not repairs to this gate.
 
+- **Next PDF cut: one reproducibility-and-Part-opener pass.** Do not pull either change
+  into HTML-only Phase E or notebook-only Phase F. In the next print-affecting cut,
+  make both PDF profiles byte-reproducible from one commit and pinned toolchain
+  (including timestamps, trailer IDs, metadata, compression, and bundled assets), then
+  adopt KOMA-Script's `\setpartpreamble` for the five Part transitions so their short
+  learnability arguments belong to the opener layout rather than ordinary chapter
+  flow. Rebuild both profiles together, require identical hashes across two clean
+  builds, rerun the full outline fixpoint, and record the resulting repagination.
+
 - Run `scripts/fetch_notebooks.py` for the remaining Colab notebooks (m02-03 fetched
   2026-07-07; others pending) — provenance for later chapters' code.
 - **Phase F notebook surface:** the HTML chapter-tools strip reserves a non-linking

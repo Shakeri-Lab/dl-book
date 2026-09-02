@@ -1,4 +1,21 @@
 
+# Rolling post-v1.3 — searchable code and deferred web assets (September 2, 2026)
+
+Collapsed Plan → Code panels now participate in native Find-in-page. A match inside
+source code opens the owning panel and activates the plan step whose bracket marker
+owns that line; matches in an output open the complete panel. The explicit Show-all,
+Escape, keyboard, and no-JavaScript paths remain available, and browsers without
+`hidden="until-found"` support retain the earlier collapsed behavior.
+
+The exact MathJax 4.1.3 build now uses its lazy-typesetting component for inline and
+unnumbered mathematics. Numbered equation containers remain eager so cold Quarto
+cross-reference targets stay fully laid out; the heaviest mathematical pages guard
+both the numbering sequence and complete-scroll behavior.
+The first content image on each page remains eager while later images load and decode
+lazily. The free-PDF landing page prefers a 230,262-byte WebP cover and keeps the
+original PNG as both browser fallback and PDF source. This pass changes only the
+canonical HTML; the fixed v1.3 PDFs remain unchanged at 548 and 519 pages.
+
 # Rolling post-v1.3 — HTML source and lecture tools (September 2, 2026)
 
 The canonical HTML now exposes one direct repository Source control on all 35 QMD
