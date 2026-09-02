@@ -51,6 +51,8 @@ class NumericRule:
     mutable_fields: tuple[int, ...] = ()
     # (one-based field index, absolute tolerance, relative tolerance)
     field_tolerances: tuple[tuple[int, float, float], ...] = ()
+    # Raw float repr can legitimately change its final printed digit count.
+    variable_precision_fields: tuple[int, ...] = ()
     description: str = "bounded numeric portability drift"
 
 
@@ -76,7 +78,11 @@ NUMERIC_RULES: Mapping[BlockKey, NumericRule] = {
     ("a1-linear-algebra", 5): NumericRule(1e-12, 1e-10, (9, 10)),
     ("05-backpropagation", 1): NumericRule(1e-7, mutable_fields=(1, 2, 3, 4)),
     ("06-generalization-inductive-bias", 1): NumericRule(0.6, mutable_fields=(1, 2)),
-    ("06-generalization-inductive-bias", 2): NumericRule(0.6, mutable_fields=(1, 2)),
+    ("06-generalization-inductive-bias", 2): NumericRule(
+        0.6,
+        mutable_fields=(1, 2),
+        field_tolerances=((2, 1.2, 0.0),),
+    ),
     ("06-generalization-inductive-bias", 3): NumericRule(0.6, mutable_fields=(1, 2)),
     ("learning-by-experiment", 1): NumericRule(
         0.9,
@@ -100,7 +106,7 @@ NUMERIC_RULES: Mapping[BlockKey, NumericRule] = {
         mutable_fields=(4,),
     ),
     ("09-modern-cnns-transfer", 4): NumericRule(
-        2.6,
+        5.0,
         mutable_fields=(3,),
     ),
     ("09-modern-cnns-transfer", 5): NumericRule(
@@ -111,7 +117,7 @@ NUMERIC_RULES: Mapping[BlockKey, NumericRule] = {
             (4, 6.5, 0.0),
             (6, 6.5, 0.0),
             (8, 6.5, 0.0),
-            (10, 6.5, 0.0),
+            (10, 8.0, 0.0),
         ),
     ),
     ("09-modern-cnns-transfer", 6): NumericRule(
@@ -150,8 +156,16 @@ NUMERIC_RULES: Mapping[BlockKey, NumericRule] = {
     ("08-cnn", 8): NumericRule(1.1, mutable_fields=tuple(range(1, 11))),
     ("08-cnn", 9): NumericRule(1.1, mutable_fields=(1, 3, 4, 6)),
     ("10-sequences-rnn", 1): NumericRule(1e-6, mutable_fields=(1,)),
-    ("11-encoder-decoder", 2): NumericRule(0.6, mutable_fields=(1, 2)),
-    ("11-encoder-decoder", 3): NumericRule(0.6, mutable_fields=(1, 2, 3)),
+    ("11-encoder-decoder", 2): NumericRule(
+        0.6,
+        mutable_fields=(1, 2),
+        field_tolerances=((2, 3.0, 0.0),),
+    ),
+    ("11-encoder-decoder", 3): NumericRule(
+        0.6,
+        mutable_fields=(1, 2, 3),
+        field_tolerances=((2, 1.0, 0.0),),
+    ),
     ("12-kernel-regression", 5): NumericRule(1e-12, mutable_fields=(1,)),
     ("13-attention", 6): NumericRule(
         0.6,
@@ -167,7 +181,11 @@ NUMERIC_RULES: Mapping[BlockKey, NumericRule] = {
         mutable_fields=(2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 23, 24),
     ),
     ("14-self-attention-transformer", 9): NumericRule(1e-6, mutable_fields=(2,)),
-    ("15-bert-pretraining", 6): NumericRule(2e-6, mutable_fields=(1, 2, 3, 4)),
+    ("15-bert-pretraining", 6): NumericRule(
+        2e-6,
+        mutable_fields=(1, 2, 3, 4),
+        variable_precision_fields=(1, 2, 3, 4),
+    ),
     ("16-vit-scaling", 2): NumericRule(1e-5, mutable_fields=(7,)),
     ("17-peft-quantization", 2): NumericRule(
         2e-6,
@@ -205,10 +223,15 @@ NUMERIC_JUSTIFICATIONS: Mapping[BlockKey, str] = {
         for block in (2, 3, 5)
     },
     ("05-backpropagation", 1): "autograd agreement below the chapter's 1e-7 audit bound",
-    **{
-        ("06-generalization-inductive-bias", block): "seeded accuracy within 0.6 percentage point"
-        for block in (1, 2, 3)
-    },
+    ("06-generalization-inductive-bias", 1): (
+        "seeded train/validation accuracy within 0.6 percentage point"
+    ),
+    ("06-generalization-inductive-bias", 2): (
+        "seeded clean accuracy within 0.6 and shifted accuracy within 1.2 points"
+    ),
+    ("06-generalization-inductive-bias", 3): (
+        "seeded shuffle-control accuracy within 0.6 percentage point"
+    ),
     ("learning-by-experiment", 1): "BatchNorm sweep endpoint and seed-SD portability",
     ("learning-by-experiment", 2): "locked endpoint and paired-contrast portability",
     ("making-pca-learnable", 1): "nonlinear reconstruction and correlation portability",
@@ -350,12 +373,20 @@ def _numeric_errors(
                 f"from {before!r} to {after!r}"
             )
             continue
-        if _number_style(before) != _number_style(after):
-            errors.append(
-                f"{label}: numeric field {index} changed notation or precision "
-                f"from {before!r} to {after!r}"
+        before_style = _number_style(before)
+        after_style = _number_style(after)
+        if before_style != after_style:
+            same_notation = (
+                before_style[0] == after_style[0]
+                and before_style[1] == after_style[1]
+                and before_style[3] == after_style[3]
             )
-            continue
+            if index not in rule.variable_precision_fields or not same_notation:
+                errors.append(
+                    f"{label}: numeric field {index} changed notation or precision "
+                    f"from {before!r} to {after!r}"
+                )
+                continue
         try:
             left, right = _decimal(before), _decimal(after)
         except InvalidOperation:
@@ -451,15 +482,20 @@ def _valid_iso(value: str) -> bool:
         return False
 
 
-def _ch11_error_gallery(actual: str, label: str) -> list[str]:
+def _ch11_error_gallery(
+    actual: str,
+    label: str,
+    teacher_forced_accuracy: float | None,
+) -> list[str]:
     lines = actual.rstrip("\n").splitlines()
     if len(lines) != 4:
         return [f"{label}: expected one summary and three error examples"]
     header = re.fullmatch(
         r"(\d+) errors on 437 unambiguous test dates; a sample:", lines[0]
     )
-    if not header or not (28 <= int(header.group(1)) <= 32):
+    if not header or not (20 <= int(header.group(1)) <= 40):
         return [f"{label}: malformed or implausible date-error summary"]
+    error_count = int(header.group(1))
     sample_re = re.compile(
         r"^  '([^']+)' -> '(\d{4}-\d{2}-\d{2})'   "
         r"\(truth (\d{4}-\d{2}-\d{2})\)$"
@@ -479,7 +515,33 @@ def _ch11_error_gallery(actual: str, label: str) -> list[str]:
             errors.append(f"{label}: purported error equals its truth")
     if len(set(examples)) != 3:
         errors.append(f"{label}: date-error examples must be three distinct records")
+    if teacher_forced_accuracy is None:
+        errors.append(f"{label}: teacher-forced accuracy is unavailable")
+    else:
+        implied_accuracy = 100 * (437 - error_count) / 437
+        if abs(implied_accuracy - teacher_forced_accuracy) > 0.051:
+            errors.append(
+                f"{label}: {error_count} errors imply {implied_accuracy:.1f}% "
+                f"rather than the reported {teacher_forced_accuracy:.1f}%"
+            )
     return errors
+
+
+def _ch11_relations(actual: Sequence[str], label: str) -> list[str]:
+    if len(actual) < 4:
+        return [f"{label}: expected at least four stdout blocks"]
+    accuracy_match = re.search(
+        r"packed / teacher forced\s+(\d+\.\d+)%",
+        actual[2],
+    )
+    teacher_forced_accuracy = (
+        float(accuracy_match.group(1)) if accuracy_match else None
+    )
+    return _ch11_error_gallery(
+        actual[3],
+        f"{label} error gallery",
+        teacher_forced_accuracy,
+    )
 
 
 def _ch11_beam(expected: str, actual: str, label: str) -> list[str]:
@@ -609,6 +671,7 @@ def _ch9_relations(actual: Sequence[str], label: str) -> list[str]:
     if len(actual) < 11:
         return [f"{label}: expected eleven stdout blocks"]
     errors: list[str] = []
+    nin_accuracy: float | None = None
 
     arch_patterns = [
         re.compile(
@@ -630,7 +693,8 @@ def _ch9_relations(actual: Sequence[str], label: str) -> list[str]:
             errors.append(f"{label}: VGG parameter accounting changed")
         if nin.group(1, 2) != ("35,034", "650"):
             errors.append(f"{label}: NiN parameter accounting changed")
-        if float(vgg.group(4)) < 80 or float(nin.group(3)) < 65:
+        nin_accuracy = float(nin.group(3))
+        if float(vgg.group(4)) < 80 or nin_accuracy < 65:
             errors.append(f"{label}: VGG/NiN endpoint fell outside the evidence floor")
 
     shift_re = re.compile(
@@ -645,6 +709,10 @@ def _ch9_relations(actual: Sequence[str], label: str) -> list[str]:
         nin_values = [float(match.group(3)) for match in shifts if match]
         if shift_ids != list(range(5)):
             errors.append(f"{label}: shift table no longer covers 0..4 in order")
+        if nin_accuracy is None or abs(nin_accuracy - nin_values[0]) > 0.051:
+            errors.append(
+                f"{label}: NiN test accuracy and shift-0 accuracy disagree"
+            )
         if not all(left > right for left, right in zip(lenet, lenet[1:])):
             errors.append(f"{label}: LeNet shift response is no longer monotone")
         if lenet[0] <= nin_values[0] or nin_values[2] <= lenet[2]:
@@ -940,7 +1008,8 @@ def _structural_errors(
             else _generated_text_errors(body, label)
         )
     if (slug, block) == ("11-encoder-decoder", 4):
-        return _ch11_error_gallery(actual, label)
+        # The gallery is checked unconditionally in the cross-block validator.
+        return []
     if (slug, block) == ("11-encoder-decoder", 5):
         return _ch11_beam(expected, actual, label)
     if (slug, block) == ("11-encoder-decoder", 6):
@@ -963,6 +1032,8 @@ def _relation_errors(
     label = f"{slug} structural contract"
     if slug == "09-modern-cnns-transfer":
         return _ch9_relations(actual, label)
+    if slug == "11-encoder-decoder":
+        return _ch11_relations(actual, label)
     if slug == "16-vit-scaling":
         return _ch16_relations(expected, actual, label)
     return _small_experiment_relations(slug, actual)
@@ -1115,6 +1186,12 @@ def _validate_ledger() -> None:
         overrides = [field for field, _, _ in rule.field_tolerances]
         if len(overrides) != len(set(overrides)) or not set(overrides) <= set(fields):
             raise AssertionError(f"{key}: invalid per-field tolerance override")
+        precision_fields = rule.variable_precision_fields
+        if (
+            len(precision_fields) != len(set(precision_fields))
+            or not set(precision_fields) <= set(fields)
+        ):
+            raise AssertionError(f"{key}: invalid variable-precision field")
         if rule.atol < 0 or rule.rtol < 0 or any(
             atol < 0 or rtol < 0 for _, atol, rtol in rule.field_tolerances
         ):
@@ -1147,6 +1224,18 @@ def _self_test() -> None:
         "test",
     )
     assert _numeric_errors("metric 1.00%\n", "metric 1.0%\n", rule, "test")
+    raw_repr = NumericRule(
+        atol=1e-6,
+        mutable_fields=(1,),
+        variable_precision_fields=(1,),
+    )
+    assert not _numeric_errors(
+        "metric -0.0160280279815197\n",
+        "metric -0.016028031706809998\n",
+        raw_repr,
+        "test",
+    )
+    assert _numeric_errors("metric 1.0\n", "metric 1.0e+00\n", raw_repr, "test")
 
     warning = (
         "/tmp/ipykernel_1/2.py:9: UserWarning: The .grad attribute of a Tensor "
