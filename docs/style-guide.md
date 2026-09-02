@@ -593,9 +593,10 @@ misdiagnosis deserves to be made explicit.
   book-wide tolerance. The Appendix A1 and Chapter 18 validation pairs use and record a
   one-thread numerical-library environment to remove process-level LAPACK reduction drift
   without perturbing seeded training elsewhere. Chapter 18's hidden setup keeps its
-  six-thread manuscript default while honoring and asserting the validation-only PyTorch
-  override. A heavy chapter may explicitly choose its own PyTorch thread count; the output
-  gates remain the proof rather than the thread setting.
+  six-thread manuscript default while honoring and asserting the CI-only PyTorch override
+  during notebook validation and the weekly full-manuscript execution audit. A heavy
+  chapter may explicitly choose its own PyTorch thread count; the output gates remain the
+  proof rather than the thread setting.
   Executed notebooks are evidence for the gate, not public artifacts. A deliberately
   partial or non-executable listing stays visibly marked as such; the exporter must not
   invent missing implementation.

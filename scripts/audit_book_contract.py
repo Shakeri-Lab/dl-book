@@ -865,8 +865,23 @@ def main() -> None:
             errors,
             "publish workflow must apply the PyTorch thread override to Chapter 18 once",
         )
-    if NOTEBOOK_TORCH_THREAD_OVERRIDE in execution_workflow_text:
-        fail(errors, "execution audit must not globally pin the PyTorch thread override")
+    if workflow_text.count(NOTEBOOK_TORCH_THREAD_OVERRIDE) != 1:
+        fail(
+            errors,
+            "PyTorch thread override must appear only in notebook validation",
+        )
+    execution_job = workflow_job(execution_workflow_text, "execute-all")
+    execution_thread_block = (
+        "    env:\n"
+        + f'      {NOTEBOOK_TORCH_THREAD_OVERRIDE}: "1"\n'
+    )
+    if execution_job.count(execution_thread_block) != 1:
+        fail(
+            errors,
+            "execution audit must apply the Chapter 18 PyTorch thread override once",
+        )
+    if execution_workflow_text.count(NOTEBOOK_TORCH_THREAD_OVERRIDE) != 1:
+        fail(errors, "execution audit must declare the PyTorch thread override once")
     alignment_source = (ROOT / "chapters/part5/18-alignment.qmd").read_text()
     alignment_thread_contract = (
         '_alignment_thread_count = int(os.environ.get("'
@@ -877,6 +892,16 @@ def main() -> None:
     )
     if alignment_source.count("import os\n") != 1:
         fail(errors, "Chapter 18 hidden setup must import os exactly once")
+    thread_override_consumers = [
+        path.relative_to(ROOT).as_posix()
+        for path in sorted(ROOT.rglob("*.qmd"))
+        if NOTEBOOK_TORCH_THREAD_OVERRIDE in path.read_text()
+    ]
+    if thread_override_consumers != ["chapters/part5/18-alignment.qmd"]:
+        fail(
+            errors,
+            "only Chapter 18 may consume the CI-only PyTorch thread override",
+        )
     if alignment_thread_contract not in alignment_source:
         fail(
             errors,

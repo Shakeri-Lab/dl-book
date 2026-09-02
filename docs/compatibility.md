@@ -29,8 +29,8 @@ scheduling-dependent LAPACK reduction drift without changing the seeded training
 trajectories elsewhere. This setting reduces one source of variation but is not itself a
 blanket determinism guarantee—the output comparisons remain the proof. Chapter 18's
 hidden setup defaults to six threads in manuscript builds and honors an asserted
-validation-only PyTorch override inside the notebook kernel. The weekly
-full-manuscript audit overlays the same exact numerical-runtime pins on the broader
+CI-only PyTorch override in notebook validation and the weekly full-manuscript audit.
+That weekly audit overlays the same exact numerical-runtime pins on the broader
 rendering requirements before it regenerates the freeze. Reproduction policy: generated
 notebook and full manuscript reference output is byte-identical within that one runtime;
 committed HTML/TeX freeze records are byte-identical to each other. Across CPU backends,
@@ -68,7 +68,8 @@ real changes.
 - **Thread pinning:** the Appendix A1 and Chapter 18 notebook-validation pairs use one
   numerical thread because separate multithreaded LAPACK processes can differ in their
   final residual bits or the sign attached to a rounded zero. Chapter 18 explicitly reads
-  and asserts the validation override after importing PyTorch.
+  and asserts the CI override after importing PyTorch; the weekly execution audit uses the
+  same override when it regenerates the canonical transcript.
   Selected heavy chapters independently use `torch.set_num_threads(...)` for predictable
   runtime on shared machines. Thread counts are machine choices, not semantic ones, and
   exact/typed output gates still decide whether a run is acceptable.

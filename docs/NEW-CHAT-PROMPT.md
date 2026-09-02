@@ -100,7 +100,8 @@ stdout; every unlisted surface remains exact. The Appendix A1 and Chapter 18
 public/reference pairs use a recorded one-thread numerical-library environment to remove
 process-level LAPACK reduction drift without perturbing seeded training elsewhere.
 Chapter 18's hidden setup keeps its six-thread manuscript default, but honors and asserts
-the validation-only PyTorch override inside each notebook kernel. Heavy chapter cells may
+the CI-only PyTorch override inside notebook validation and the weekly full-manuscript
+execution audit. Heavy chapter cells may
 explicitly choose their own PyTorch thread count; the output gates remain authoritative.
 The Preface, Epilogue, and two non-executable appendices retain honest unavailable
 placeholders. The tagged v1.3 PDFs remain unchanged. The next PDF cut must combine

@@ -190,7 +190,8 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > public/reference pairs use a recorded one-thread numerical-library environment to
 > remove process-level LAPACK reduction drift without perturbing seeded training
 > elsewhere. Chapter 18's hidden setup keeps its six-thread manuscript default, but
-> honors and asserts the validation-only PyTorch override inside each notebook kernel.
+> honors and asserts the CI-only PyTorch override inside notebook validation and the
+> weekly full-manuscript execution audit.
 > Deliberately heavier chapter cells may still choose their own PyTorch thread count, and
 > the output gates remain authoritative. The Preface, Epilogue, and two non-executable
 > appendices retain honest unavailable placeholders; executed copies remain CI evidence
