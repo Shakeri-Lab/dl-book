@@ -69,7 +69,7 @@ real changes.
   numerical thread because separate multithreaded LAPACK processes can differ in their
   final residual bits or the sign attached to a rounded zero. Chapter 18 explicitly reads
   and asserts the CI override after importing PyTorch; the weekly execution audit uses the
-  same override when it regenerates the canonical transcript.
+  same override when it regenerates the manuscript transcript for comparison.
   Selected heavy chapters independently use `torch.set_num_threads(...)` for predictable
   runtime on shared machines. Thread counts are machine choices, not semantic ones, and
   exact/typed output gates still decide whether a run is acceptable.
