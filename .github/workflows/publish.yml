@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   export_notebooks:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -27,7 +27,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.12.14"
           cache: pip
           cache-dependency-path: scripts/notebook_ci_requirements.txt
 
@@ -38,10 +38,13 @@ jobs:
         run: >-
           python scripts/export_notebooks.py
           --output-dir build/notebooks/source
+          --reference-output-dir build/notebooks/reference-source
           --revision "$GITHUB_SHA"
 
       - name: Audit exported notebook structure
-        run: python scripts/audit_notebook_exports.py build/notebooks/source
+        run: >-
+          python scripts/audit_notebook_exports.py build/notebooks/source
+          --reference-source-dir build/notebooks/reference-source
 
       - name: Preserve notebook sources for clean execution
         uses: actions/upload-artifact@v4
@@ -51,9 +54,17 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+      - name: Preserve canonical notebook references for validation
+        uses: actions/upload-artifact@v4
+        with:
+          name: notebook-reference-sources
+          path: build/notebooks/reference-source/*.ipynb
+          if-no-files-found: error
+          retention-days: 7
+
   validate_notebooks:
     needs: export_notebooks
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 180
     strategy:
       fail-fast: false
@@ -64,10 +75,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up Quarto
+        uses: quarto-dev/quarto-actions/setup@v2
+        with:
+          version: "1.10.18"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.12.14"
           cache: pip
           cache-dependency-path: |
             scripts/notebook_requirements.txt
@@ -79,11 +98,66 @@ jobs:
           -r scripts/notebook_requirements.txt
           -r scripts/notebook_ci_requirements.txt
 
+      - name: Record notebook runtime provenance
+        env:
+          NOTEBOOK_SHARD: ${{ matrix.shard }}
+        run: |
+          mkdir -p build/notebooks/evidence
+          {
+            echo "git_sha=$GITHUB_SHA"
+            echo "run_id=$GITHUB_RUN_ID"
+            echo "run_attempt=$GITHUB_RUN_ATTEMPT"
+            echo "shard=$NOTEBOOK_SHARD"
+            echo "runner_os=$RUNNER_OS"
+            echo "runner_arch=$RUNNER_ARCH"
+            echo "runner_image_os=${ImageOS:-unknown}"
+            echo "runner_image_version=${ImageVersion:-unknown}"
+            echo "runner_image_release=${ImageRelease:-unknown}"
+            uname -a
+            lscpu | sed -n '/Architecture/p;/Model name/p;/Vendor ID/p;/CPU family/p'
+            python -VV 2>&1
+            python - <<'PY'
+          import json
+          import platform
+          import sys
+
+          import matplotlib
+          import nbclient
+          import nbconvert
+          import nbformat
+          import numpy
+          import torch
+          import torchvision
+
+          print(json.dumps({
+              "machine": platform.machine(),
+              "matplotlib": matplotlib.__version__,
+              "nbclient": nbclient.__version__,
+              "nbconvert": nbconvert.__version__,
+              "nbformat": nbformat.__version__,
+              "numpy": numpy.__version__,
+              "platform": platform.platform(),
+              "python": sys.version,
+              "torch": torch.__version__,
+              "torch_num_threads": torch.get_num_threads(),
+              "torchvision": torchvision.__version__,
+          }, sort_keys=True))
+          print(torch.__config__.show())
+          PY
+            python -m pip freeze --all
+          } > build/notebooks/evidence/environment.txt
+
       - name: Download exported notebook sources
         uses: actions/download-artifact@v4
         with:
           name: notebook-sources
           path: build/notebooks/source
+
+      - name: Download canonical notebook references
+        uses: actions/download-artifact@v4
+        with:
+          name: notebook-reference-sources
+          path: build/notebooks/reference-source
 
       - name: Execute and audit notebook shard
         env:
@@ -97,32 +171,74 @@ jobs:
               --shard-count "$NOTEBOOK_SHARD_COUNT"
           )
           test "${#notebook_slugs[@]}" -gt 0
-          mkdir -p build/notebooks/executed build/notebooks/validated
+          mkdir -p \
+            build/notebooks/executed \
+            build/notebooks/reference-executed \
+            build/notebooks/validated \
+            build/notebooks/evidence
           audit_args=()
           for notebook_slug in "${notebook_slugs[@]}"; do
-            clean_notebook_dir=$(mktemp -d)
-            cp "build/notebooks/source/${notebook_slug}.ipynb" "$clean_notebook_dir/"
-            DLBOOK_NOTEBOOK_ROOT="$clean_notebook_dir/runtime" jupyter nbconvert \
-              --to notebook \
-              --execute "$clean_notebook_dir/${notebook_slug}.ipynb" \
-              --output "${notebook_slug}.ipynb" \
-              --output-dir "$GITHUB_WORKSPACE/build/notebooks/executed" \
-              --ExecutePreprocessor.timeout=3600
+            public_dir=$(mktemp -d)
+            reference_dir=$(mktemp -d)
+            runtime_dir=$(mktemp -d)
+            cp "build/notebooks/source/${notebook_slug}.ipynb" "$public_dir/"
+            cp \
+              "build/notebooks/reference-source/${notebook_slug}.ipynb" \
+              "$reference_dir/"
+            for notebook_form in public reference; do
+              if [[ "$notebook_form" == public ]]; then
+                input_dir="$public_dir"
+                output_dir="$GITHUB_WORKSPACE/build/notebooks/executed"
+              else
+                input_dir="$reference_dir"
+                output_dir="$GITHUB_WORKSPACE/build/notebooks/reference-executed"
+              fi
+              full_log=$(mktemp)
+              if ! DLBOOK_NOTEBOOK_ROOT="$runtime_dir/$notebook_form" jupyter nbconvert \
+                --to notebook \
+                --execute "$input_dir/${notebook_slug}.ipynb" \
+                --output "${notebook_slug}.ipynb" \
+                --output-dir "$output_dir" \
+                --ExecutePreprocessor.timeout=3600 \
+                >"$full_log" 2>&1; then
+                evidence_log="build/notebooks/evidence/${notebook_slug}-${notebook_form}.log"
+                tail -c 65536 "$full_log" > "$evidence_log"
+                cat "$evidence_log"
+                exit 1
+              fi
+              rm -f "$full_log"
+            done
             cp \
               "build/notebooks/source/${notebook_slug}.ipynb" \
               build/notebooks/validated/
             audit_args+=(--slug "$notebook_slug")
           done
           python scripts/audit_notebook_exports.py build/notebooks/source \
+            --reference-source-dir build/notebooks/reference-source \
             --executed-dir build/notebooks/executed \
+            --executed-reference-dir build/notebooks/reference-executed \
+            --freeze-policy portable \
+            --failure-report \
+              "build/notebooks/evidence/shard-${NOTEBOOK_SHARD}.txt" \
             "${audit_args[@]}"
+
+      - name: Preserve notebook validation provenance
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: notebook-validation-evidence-${{ matrix.shard }}-${{ github.run_attempt }}
+          path: |
+            build/notebooks/evidence/environment.txt
+            build/notebooks/evidence/shard-*.txt
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Preserve failed execution evidence
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: failed-executed-notebooks-${{ matrix.shard }}-${{ github.run_attempt }}
-          path: build/notebooks/executed/*.ipynb
+          name: notebook-failure-evidence-${{ matrix.shard }}-${{ github.run_attempt }}
+          path: build/notebooks/evidence/*
           if-no-files-found: warn
           retention-days: 3
 

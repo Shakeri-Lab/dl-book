@@ -3,8 +3,8 @@ name: Execution Audit
 # The book's covenant: every printed snippet is the executed artifact.
 # This job enforces it mechanically — a full from-scratch re-execution of every
 # notebook cell (freeze caches deleted), independent of the publish pipeline.
-# Publishing still uses committed freeze results; this audit catches drift
-# between source and results before it can mislead a reader.
+# Publishing still uses committed freeze results; the regenerated transcript
+# must satisfy the exact-by-default portability ledger against that evidence.
 
 on:
   workflow_dispatch:
@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   execute-all:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 300
     steps:
       - name: Checkout
@@ -33,11 +33,17 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.12.14"
           cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            scripts/notebook_requirements.txt
 
       - name: Install Python deps
-        run: pip install -r requirements.txt
+        run: >-
+          python -m pip install
+          -r requirements.txt
+          -r scripts/notebook_requirements.txt
 
       - name: Audit manuscript contracts
         run: |
@@ -51,6 +57,12 @@ jobs:
           rm -rf _freeze
           quarto render --to html
 
+      - name: Compare regenerated stdout with the committed evidence
+        run: >-
+          python scripts/audit_frozen_stdout.py
+          --base "$GITHUB_SHA"
+          --policy portable
+
       - name: Audit rendered HTML support assets
         run: >-
           python scripts/audit_html_assets.py _book
@@ -62,4 +74,5 @@ jobs:
 
       - name: Report
         if: success()
-        run: echo "All notebook cells executed cleanly from scratch."
+        run: >-
+          echo "All cells executed cleanly and satisfied the reviewed stdout contracts."

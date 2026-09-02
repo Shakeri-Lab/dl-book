@@ -8,11 +8,11 @@ lives here, where it can be updated without reprinting a chapter.
 
 | Component | Version | Where it matters |
 |---|---|---|
-| Python | 3.12 | all executable cells |
+| Python | 3.12.14 in notebook CI; 3.12 locally | all executable cells |
 | PyTorch | 2.12.1 (CPU) — **2.13.0 verified equivalent**, see below | all executable cells |
 | Quarto | 1.10.18 | rendering only |
 | MathJax | 4.1.3 (exact jsDelivr pin) | canonical HTML mathematics |
-| OS | macOS 15 (arm64) / ubuntu-latest (CI) | render + Execution Audit |
+| OS | macOS 15 (arm64) / Ubuntu 24.04 x64 (notebook CI) | render + Execution Audit |
 
 Working tree location: `~/Library/CloudStorage/Box-Box/Teaching/6050/dl-book` (in
 Box, by the author's choice). The virtualenv is deliberately **outside** Box at
@@ -20,11 +20,16 @@ Box, by the author's choice). The virtualenv is deliberately **outside** Box at
 GitHub is the source of truth — if Box ever corrupts git objects, re-clone rather
 than repair in place.
 
-The **Execution Audit** workflow re-executes every cell from scratch weekly on
-`ubuntu-latest`; a green run is the current compatibility statement. Reproduction
-policy: on this pinned environment, rendered outputs are expected byte-stable;
-across versions and platforms, expect agreement within each figure's declared
-invariants, not bitwise identity (see PyTorch's reproducibility notes).
+The **Execution Audit** workflow re-executes every cell from scratch weekly. The public
+notebook gate runs on the explicit `ubuntu-24.04` label with Python 3.12.14 and records
+the resolved runner image, CPU, numerical libraries, and full package set. A green run
+is the current compatibility statement. The weekly full-manuscript audit overlays the
+same exact numerical-runtime pins on the broader rendering requirements before it
+regenerates the freeze. Reproduction policy: generated notebook and full manuscript
+reference output is byte-identical within that one runtime; committed HTML/TeX freeze
+records are byte-identical to each other. Across CPU backends, outputs must instead
+satisfy the narrow, surface-specific portability ledger—every unlisted surface remains
+byte-exact (see PyTorch's reproducibility notes).
 
 ### Verified version equivalence
 
@@ -98,9 +103,12 @@ real changes.
   3.12's numerical stack through `scripts/notebook_requirements.txt`, embeds a full Git
   commit, fetches assets only from that immutable revision, and rejects a SHA-256
   mismatch. Export tooling is pinned separately in
-  `scripts/notebook_ci_requirements.txt`. CI generates source notebooks once, executes
-  clean copies in six fixed shards, compares learner-visible stdout with the canonical
-  HTML freeze records, and publishes only the unexecuted sources that passed. This
+  `scripts/notebook_ci_requirements.txt`. CI generates the public source and a full
+  Quarto-derived reference once, then executes both cleanly in six fixed shards. Their
+  learner-visible stdout must match byte for byte on the same runner. A separate
+  reviewed portability contract compares that evidence with the canonical HTML freeze;
+  exact comparison is the default, and accepted deviations remain visible in the CI
+  report. Only the unexecuted public source that passed both gates is published. This
   route deliberately omits hidden plotting harnesses and does not alter either PDF.
 
 When a version bump changes any printed number or figure, the fix is: update the

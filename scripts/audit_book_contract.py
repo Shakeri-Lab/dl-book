@@ -262,6 +262,16 @@ def fail(errors: list[str], message: str) -> None:
     errors.append(message)
 
 
+def workflow_job(text: str, name: str) -> str:
+    """Return one top-level GitHub Actions job block from workflow source."""
+
+    match = re.search(
+        rf"(?ms)^  {re.escape(name)}:\n.*?(?=^  [A-Za-z0-9_-]+:\n|\Z)",
+        text,
+    )
+    return match.group(0) if match else ""
+
+
 def main() -> None:
     errors: list[str] = []
 
@@ -774,11 +784,15 @@ def main() -> None:
     if workflow_text.count(fixpoint_call) != 1:
         fail(errors, "publish workflow must use the bounded PDF outline fixpoint")
     quarto_pin = f'version: "{QUARTO_VERSION}"'
-    if workflow_text.count(quarto_pin) != 2:
+    quarto_jobs = ("export_notebooks", "validate_notebooks", "build-deploy")
+    if workflow_text.count(quarto_pin) != len(quarto_jobs) or any(
+        workflow_job(workflow_text, job).count(quarto_pin) != 1
+        for job in quarto_jobs
+    ):
         fail(
             errors,
             "publish workflow must pin the validated Quarto "
-            f"{QUARTO_VERSION} once for notebook export and once for publication",
+            f"{QUARTO_VERSION} once in export, validation, and publication",
         )
     if execution_workflow_text.count(quarto_pin) != 1:
         fail(

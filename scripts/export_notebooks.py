@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
-"""Export compact, self-contained public notebooks from the book's QMD sources.
+"""Export public notebooks and full internal execution references from QMD.
 
 The HTML book remains canonical.  Each notebook contains the same Plan text and
 learner-visible Python as one manuscript unit, plus one generated bootstrap cell
 that pins the execution environment and fetches only the commit-pinned artifacts
-needed by that unit.  Plot-only ``echo: false`` harnesses are deliberately absent.
+needed by that unit.  Plot-only ``echo: false`` harnesses are deliberately absent
+from the public artifact.  An optional internal reference retains every
+Quarto-converted cell in source order so CI can execute both forms in the same
+pinned environment.
 """
 
 from __future__ import annotations
@@ -70,6 +73,7 @@ class Surface:
     label: str | None
     include: str | None
     executable: bool
+    native_ordinal: int | None
 
 
 @dataclass(frozen=True)
@@ -240,6 +244,7 @@ def parse_document(source_path: str | Path) -> ParsedDocument:
                             label=options.get("label"),
                             include=None,
                             executable=True,
+                            native_ordinal=native_ordinal,
                         )
                     )
             elif is_include:
@@ -258,6 +263,7 @@ def parse_document(source_path: str | Path) -> ParsedDocument:
                         label=None,
                         include=include,
                         executable=_compiles(code),
+                        native_ordinal=None,
                     )
                 )
             index = close + 1
@@ -387,6 +393,7 @@ def _bootstrap_source(
     assets: tuple[dict[str, str], ...],
     support: str,
     repository: str,
+    reference: bool = False,
 ) -> str:
     requirements = json.dumps(list(PINNED_REQUIREMENTS), indent=4)
     asset_json = json.dumps(list(assets), indent=4)
@@ -458,8 +465,16 @@ def _bootstrap_source(
         "_bootstrap_sys.path.insert(0, str(_BOOK_ROOT / 'code'))",
         "_bootstrap_os.chdir(_BOOK_ROOT / " + repr(source_dir) + ")",
         "",
-        "# Hidden manuscript support required by later learner-visible cells.",
-        "# Plot-only harnesses are not exported.",
+        (
+            "# Canonical hidden cells follow in source order in this internal reference."
+            if reference
+            else "# Hidden manuscript support required by later learner-visible cells."
+        ),
+        (
+            "# They are retained here as the execution control for the compact artifact."
+            if reference
+            else "# Plot-only harnesses are not exported."
+        ),
         "import torch",
         "from torch import nn",
     ]
@@ -469,7 +484,9 @@ def _bootstrap_source(
     return "\n".join(lines)
 
 
-def _validate_quarto_conversion(document: ParsedDocument) -> None:
+def _quarto_conversion(document: ParsedDocument) -> Any:
+    """Return Quarto's notebook conversion after checking native Python parity."""
+
     with tempfile.TemporaryDirectory(prefix="dlbook-quarto-convert-") as directory:
         output = Path(directory) / (document.source.stem + ".ipynb")
         subprocess.run(
@@ -491,6 +508,7 @@ def _validate_quarto_conversion(document: ParsedDocument) -> None:
             raise ValueError(
                 f"quarto convert changed Python at {document.source}:{native.source_line}"
             )
+    return raw
 
 
 def _surface_metadata(surface: Surface) -> dict[str, Any]:
@@ -500,6 +518,7 @@ def _surface_metadata(surface: Surface) -> dict[str, Any]:
         "label": surface.label,
         "include": surface.include,
         "executable": surface.executable,
+        "native_ordinal": surface.native_ordinal,
     }
 
 
@@ -524,11 +543,14 @@ def _build_notebook(
     revision: str,
     *,
     repository: str = REPOSITORY,
+    document: ParsedDocument | None = None,
+    converted: Any | None = None,
 ) -> Any:
     """Build one unexecuted notebook from an already-resolved revision."""
 
-    document = parse_document(unit.source)
-    _validate_quarto_conversion(document)
+    document = document or parse_document(unit.source)
+    if converted is None:
+        _quarto_conversion(document)
     support = _support_code(document, unit.support)
     support_metadata = _support_metadata(unit, support)
     assets = _asset_records(unit, revision)
@@ -609,6 +631,110 @@ def _build_notebook(
     return notebook
 
 
+def _build_reference_notebook(
+    unit: NotebookUnit,
+    revision: str,
+    *,
+    repository: str = REPOSITORY,
+    document: ParsedDocument | None = None,
+    converted: Any | None = None,
+) -> Any:
+    """Build the deterministic, non-public full Quarto execution reference."""
+
+    document = document or parse_document(unit.source)
+    if converted is None:
+        converted = _quarto_conversion(document)
+    assets = _asset_records(unit, revision)
+    source_url = f"https://github.com/{repository}/blob/{revision}/{unit.source}"
+    metadata = {
+        "kernelspec": {
+            "display_name": "Python 3",
+            "language": "python",
+            "name": "python3",
+        },
+        "language_info": {"name": "python", "version": "3.12"},
+        "dlbook": {
+            "kind": "canonical-quarto-reference",
+            "source": unit.source,
+            "slug": unit.slug,
+            "revision": revision,
+            "source_url": source_url,
+            "requirements": list(PINNED_REQUIREMENTS),
+            "assets": list(assets),
+            "native_cells": len(document.native_cells),
+            "learner_visible_native_cells": sum(
+                not cell.hidden for cell in document.native_cells
+            ),
+            "learner_visible_surfaces": len(document.surfaces),
+        },
+    }
+    bootstrap_source = _bootstrap_source(
+        document=document,
+        unit=unit,
+        revision=revision,
+        assets=assets,
+        support="",
+        repository=repository,
+        reference=True,
+    )
+    if not _compiles(bootstrap_source):
+        raise SyntaxError(f"Reference bootstrap does not compile: {unit.source}")
+    bootstrap = nbformat.v4.new_code_cell(
+        bootstrap_source,
+        metadata={
+            "tags": ["dlbook-reference-bootstrap"],
+            "dlbook": {"learner_visible": False, "reference": True},
+        },
+    )
+    bootstrap["id"] = "reference-bootstrap"
+    bootstrap.execution_count = None
+    bootstrap.outputs = []
+
+    cells = [bootstrap]
+    surface_by_native = {
+        surface.native_ordinal: surface.ordinal
+        for surface in document.surfaces
+        if surface.native_ordinal is not None
+    }
+    native_index = 0
+    for converted_index, raw_cell in enumerate(converted.cells, start=1):
+        cell = nbformat.from_dict(json.loads(json.dumps(raw_cell)))
+        cell["id"] = f"reference-{converted_index:04d}"
+        raw_metadata = dict(cell.get("metadata", {}))
+        if cell.cell_type == "code":
+            native = document.native_cells[native_index]
+            native_index += 1
+            visibility_tag = (
+                "dlbook-reference-hidden"
+                if native.hidden
+                else "dlbook-reference-visible"
+            )
+            raw_metadata["tags"] = ["dlbook-reference", visibility_tag]
+            raw_metadata["dlbook"] = {
+                "native_ordinal": native.ordinal,
+                "surface_ordinal": surface_by_native.get(native.ordinal),
+                "source_line": native.source_line,
+                "label": native.label,
+                "learner_visible": not native.hidden,
+            }
+            cell.execution_count = None
+            cell.outputs = []
+        else:
+            raw_metadata["tags"] = ["dlbook-reference-narrative"]
+            raw_metadata["dlbook"] = {"learner_visible": False, "reference": True}
+        cell["metadata"] = raw_metadata
+        cells.append(cell)
+
+    if native_index != len(document.native_cells):
+        raise ValueError(
+            f"Reference retained {native_index} native cells for {unit.source}; "
+            f"expected {len(document.native_cells)}"
+        )
+    notebook = nbformat.v4.new_notebook(cells=cells, metadata=metadata)
+    notebook["nbformat_minor"] = 5
+    return notebook
+
+
 def build_notebook(
     unit: NotebookUnit,
     revision: str,
@@ -618,6 +744,21 @@ def build_notebook(
     """Build one unexecuted notebook node from a manifest unit."""
 
     return _build_notebook(
+        unit,
+        resolve_revision(revision),
+        repository=repository,
+    )
+
+
+def build_reference_notebook(
+    unit: NotebookUnit,
+    revision: str,
+    *,
+    repository: str = REPOSITORY,
+) -> Any:
+    """Build one unexecuted full reference notebook from a manifest unit."""
+
+    return _build_reference_notebook(
         unit,
         resolve_revision(revision),
         repository=repository,
@@ -657,6 +798,7 @@ def export_notebooks(
     slugs: Iterable[str] | None = None,
     *,
     repository: str = REPOSITORY,
+    reference_output_dir: str | Path | None = None,
 ) -> tuple[Path, ...]:
     """Export selected source notebooks without outputs or execution counts."""
 
@@ -673,10 +815,23 @@ def export_notebooks(
 
     destination = Path(output_dir)
     destination.mkdir(parents=True, exist_ok=True)
+    reference_destination = (
+        Path(reference_output_dir) if reference_output_dir is not None else None
+    )
+    if reference_destination is not None:
+        reference_destination.mkdir(parents=True, exist_ok=True)
     written = []
     for slug in selected_slugs:
         unit = UNITS_BY_SLUG[slug]
-        notebook = _build_notebook(unit, resolved, repository=repository)
+        document = parse_document(unit.source)
+        converted = _quarto_conversion(document)
+        notebook = _build_notebook(
+            unit,
+            resolved,
+            repository=repository,
+            document=document,
+            converted=converted,
+        )
         path = destination / f"{unit.slug}.ipynb"
         temporary = path.with_suffix(".ipynb.tmp")
         nbformat.write(notebook, temporary)
@@ -686,6 +841,22 @@ def export_notebooks(
             f"exported {unit.slug}: "
             f"{notebook.metadata['dlbook']['learner_visible_surfaces']} surfaces"
         )
+        if reference_destination is not None:
+            reference = _build_reference_notebook(
+                unit,
+                resolved,
+                repository=repository,
+                document=document,
+                converted=converted,
+            )
+            reference_path = reference_destination / f"{unit.slug}.ipynb"
+            reference_temporary = reference_path.with_suffix(".ipynb.tmp")
+            nbformat.write(reference, reference_temporary)
+            reference_temporary.replace(reference_path)
+            print(
+                f"exported {unit.slug} reference: "
+                f"{reference.metadata['dlbook']['native_cells']} native cells"
+            )
     return tuple(written)
 
 
@@ -700,6 +871,13 @@ def main() -> int:
         "--revision",
         default="HEAD",
         help="Git revision embedded in source and asset URLs (default: HEAD)",
+    )
+    parser.add_argument(
+        "--reference-output-dir",
+        help=(
+            "Optional directory for full Quarto-converted internal execution "
+            "references"
+        ),
     )
     parser.add_argument(
         "--slug",
@@ -722,6 +900,7 @@ def main() -> int:
         args.revision,
         args.slug,
         repository=args.repository,
+        reference_output_dir=args.reference_output_dir,
     )
     return 0
 

@@ -9,13 +9,15 @@ commit-pinned bootstrap that installs exact runtime versions and verifies every
 downloaded data or module artifact by SHA-256. The one intentionally partial API
 listing remains a non-executable listing rather than being silently repaired.
 
-Publication now executes the notebooks from clean temporary directories in six
-checked shards and compares their visible stdout with the committed HTML freeze
-records. Only the unexecuted source notebooks that passed those checks enter the
-`gh-pages` bundle. The Preface, Epilogue, and two non-executable appendices retain an
-honest unavailable placeholder; the five Part transitions remain quiet. This is an
-HTML-only delivery change, so the fixed v1.3 PDFs remain unchanged at 548 and 519
-pages.
+Publication now executes both the compact notebook and a full Quarto-derived reference
+from clean temporary directories in six checked shards. Their learner-visible stdout
+must agree byte for byte on the same runner. A second, explicit portability ledger
+compares that output with the committed HTML freeze: exact is the default, while only
+reviewed numerical or structural differences may pass. Only the unexecuted source
+notebooks that passed both checks enter the `gh-pages` bundle. The Preface, Epilogue,
+and two non-executable appendices retain an honest unavailable placeholder; the five
+Part transitions remain quiet. This is an HTML-only delivery change, so the fixed v1.3
+PDFs remain unchanged at 548 and 519 pages.
 
 # Rolling post-v1.3 — searchable code and deferred web assets (September 2, 2026)
 

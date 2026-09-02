@@ -93,10 +93,12 @@ first load and decode lazily, and the PDF landing page prefers a 230,262-byte We
 cover while retaining the PNG fallback. Phase F completes the notebook route for the
 exact 26 executable chapters, interludes, and foundational appendices. Its generated
 source notebooks retain the 193 learner-visible Plan → Code surfaces, use a
-commit-pinned and checksum-verified bootstrap, execute cleanly in six CI shards, and
-must reproduce the frozen HTML stdout before publication. The Preface, Epilogue, and
-two non-executable appendices retain honest unavailable placeholders. The tagged v1.3
-PDFs remain unchanged. The next PDF cut must combine byte-reproducible builds with the
+commit-pinned and checksum-verified bootstrap, and execute cleanly in six CI shards.
+Each compact notebook must reproduce a full Quarto-derived reference byte for byte on
+the same runner, then satisfy the reviewed portability contract against frozen HTML
+stdout; every unlisted surface remains exact. The Preface, Epilogue, and two
+non-executable appendices retain honest unavailable placeholders. The tagged v1.3 PDFs
+remain unchanged. The next PDF cut must combine byte-reproducible builds with the
 five KOMA-Script `\setpartpreamble` Part openers and audit their repagination as one
 print change.
 Nothing is mid-flight.

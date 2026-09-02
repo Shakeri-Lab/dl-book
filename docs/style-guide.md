@@ -584,11 +584,15 @@ misdiagnosis deserves to be made explicit.
   delimit only the necessary support using `# notebook-support-start` and
   `# notebook-support-end`; never use those markers to smuggle an explanation,
   computation, metric, or learner-facing check out of the visible code.
-- Publish a source notebook only after a separately executed clean copy preserves its
-  cells and matches the corresponding frozen HTML stdout blocks exactly. Executed
-  notebooks are evidence for the gate, not public artifacts. A deliberately partial
-  or non-executable listing stays visibly marked as such; the exporter must not invent
-  missing implementation.
+- Publish a source notebook only after it and a full Quarto-derived reference execute
+  independently on the same runner, preserve their cells, and produce byte-identical
+  learner-visible stdout. Then compare the reference with the corresponding frozen
+  HTML stdout under `scripts/notebook_stdout_contracts.py`: exact is the default, and
+  every exception must name one surface, parse its complete output, bound each mutable
+  quantity, and state the invariant that survives the platform change. Never use a
+  book-wide tolerance. Executed notebooks are evidence for the gate, not public
+  artifacts. A deliberately partial or non-executable listing stays visibly marked as
+  such; the exporter must not invent missing implementation.
 
 ### Reading loop
 

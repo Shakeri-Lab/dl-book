@@ -182,10 +182,13 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > rendered contracts, while browser checks protect equation numbers, equation links,
 > Show all, and the native-find interaction. Phase F publishes 26 generated source
 > notebooks from the canonical manuscript: 193 learner-visible Plan → Code surfaces,
-> one commit-pinned and checksum-verified bootstrap per unit, six clean execution
-> shards, and exact comparison against frozen HTML stdout. The Preface, Epilogue,
-> and two non-executable appendices retain honest unavailable placeholders; executed
-> copies remain CI evidence rather than public downloads.
+> one commit-pinned and checksum-verified bootstrap per unit, and six clean execution
+> shards. Each compact notebook must match a full Quarto-derived reference byte for
+> byte on the same runner. A separate portability ledger compares the result with the
+> frozen HTML stdout: exact is the default, and only narrowly reviewed numerical or
+> structural contracts may differ across platforms. The Preface, Epilogue, and two
+> non-executable appendices retain honest unavailable placeholders; executed copies
+> remain CI evidence rather than public downloads.
 > The next print-affecting cut must pair byte-reproducible PDF builds with the five
 > KOMA-Script `\setpartpreamble` Part openers, then accept their repagination and outline
 > changes as one audited change.
