@@ -590,12 +590,13 @@ misdiagnosis deserves to be made explicit.
   HTML stdout under `scripts/notebook_stdout_contracts.py`: exact is the default, and
   every exception must name one surface, parse its complete output, bound each mutable
   quantity, and state the invariant that survives the platform change. Never use a
-  book-wide tolerance. Notebook CI begins with a recorded one-thread numerical-library
-  default to reduce scheduling-dependent variation; a heavy chapter may explicitly
-  choose another PyTorch thread count, and the output gates remain the proof rather than
-  the thread setting. Executed notebooks are evidence for the gate, not public artifacts.
-  A deliberately partial or non-executable listing stays visibly marked as such; the
-  exporter must not invent missing implementation.
+  book-wide tolerance. Notebook CI declares a one-thread numerical-library default to
+  reduce scheduling-dependent variation, and the publication gate records and verifies
+  its initial state. A heavy chapter may explicitly choose another PyTorch thread count;
+  the output gates remain the proof rather than the thread setting. Executed notebooks
+  are evidence for the gate, not public artifacts. A deliberately partial or
+  non-executable listing stays visibly marked as such; the exporter must not invent
+  missing implementation.
 
 ### Reading loop
 

@@ -96,13 +96,14 @@ source notebooks retain the 193 learner-visible Plan → Code surfaces, use a
 commit-pinned and checksum-verified bootstrap, and execute cleanly in six CI shards.
 Each compact notebook must reproduce a full Quarto-derived reference byte for byte on
 the same runner, then satisfy the reviewed portability contract against frozen HTML
-stdout; every unlisted surface remains exact. Notebook CI begins with a recorded
-one-thread numerical-library default to reduce scheduling-dependent drift, while heavy
-chapter cells may explicitly choose a different PyTorch thread count. The output gates
-remain authoritative. The Preface, Epilogue, and two non-executable appendices retain
-honest unavailable placeholders. The tagged v1.3 PDFs remain unchanged. The next PDF
-cut must combine byte-reproducible builds with the five KOMA-Script `\setpartpreamble`
-Part openers and audit their repagination as one print change.
+stdout; every unlisted surface remains exact. Notebook CI declares a one-thread
+numerical-library default to reduce scheduling-dependent drift; the publication gate
+records and verifies its initial state, while heavy chapter cells may explicitly choose
+a different PyTorch thread count. The output gates remain authoritative. The Preface,
+Epilogue, and two non-executable appendices retain honest unavailable placeholders. The
+tagged v1.3 PDFs remain unchanged. The next PDF cut must combine byte-reproducible builds
+with the five KOMA-Script `\setpartpreamble` Part openers and audit their repagination as
+one print change.
 Nothing is mid-flight.
 
 **Read before doing anything, in this order:**

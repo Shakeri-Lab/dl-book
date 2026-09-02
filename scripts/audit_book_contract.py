@@ -811,13 +811,15 @@ def main() -> None:
         ("execution audit", "execute-all", execution_workflow_text),
     ):
         job_source = workflow_job(workflow_source, job_name)
-        for variable in NOTEBOOK_THREAD_DEFAULTS:
-            pin = rf'(?m)^      {re.escape(variable)}: "1"$'
-            if len(re.findall(pin, job_source)) != 1:
-                fail(
-                    errors,
-                    f"{workflow_name} {job_name} job must set {variable}=1 once",
-                )
+        thread_env_block = "    env:\n" + "".join(
+            f'      {variable}: "1"\n' for variable in NOTEBOOK_THREAD_DEFAULTS
+        )
+        if job_source.count(thread_env_block) != 1:
+            fail(
+                errors,
+                f"{workflow_name} {job_name} job must declare the complete "
+                "one-thread numerical-library env block once",
+            )
     validation_job = workflow_job(workflow_text, "validate_notebooks")
     for required in (
         "torch.get_num_threads() != 1",
