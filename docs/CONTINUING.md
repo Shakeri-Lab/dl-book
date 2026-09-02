@@ -186,9 +186,11 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > shards. Each compact notebook must match a full Quarto-derived reference byte for
 > byte on the same runner. A separate portability ledger compares the result with the
 > frozen HTML stdout: exact is the default, and only narrowly reviewed numerical or
-> structural contracts may differ across platforms. The Appendix A1 public/reference
-> pair alone uses a recorded one-thread numerical-library environment to remove
-> process-level LAPACK reduction drift without perturbing seeded training elsewhere.
+> structural contracts may differ across platforms. The Appendix A1 and Chapter 18
+> public/reference pairs use a recorded one-thread numerical-library environment to
+> remove process-level LAPACK reduction drift without perturbing seeded training
+> elsewhere. Chapter 18's hidden setup keeps its six-thread manuscript default, but
+> honors and asserts the validation-only PyTorch override inside each notebook kernel.
 > Deliberately heavier chapter cells may still choose their own PyTorch thread count, and
 > the output gates remain authoritative. The Preface, Epilogue, and two non-executable
 > appendices retain honest unavailable placeholders; executed copies remain CI evidence

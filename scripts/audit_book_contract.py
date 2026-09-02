@@ -102,6 +102,11 @@ NOTEBOOK_THREAD_DEFAULTS = (
     "VECLIB_MAXIMUM_THREADS",
     "NUMEXPR_NUM_THREADS",
 )
+NOTEBOOK_SINGLE_THREAD_SLUGS = (
+    "a1-linear-algebra",
+    "18-alignment",
+)
+NOTEBOOK_TORCH_THREAD_OVERRIDE = "DLBOOK_TORCH_NUM_THREADS"
 DOWNLOAD_TOOL_CONFIG = (
     '    tools:\n'
     '      - icon: file-pdf\n'
@@ -807,29 +812,40 @@ def main() -> None:
             f"execution audit must pin the validated Quarto {QUARTO_VERSION}",
         )
     validation_job = workflow_job(workflow_text, "validate_notebooks")
-    a1_thread_block = (
+    scoped_thread_block = (
         "            notebook_thread_env=()\n"
-        + '            if [[ "$notebook_slug" == "a1-linear-algebra" ]]; then\n'
-        "              notebook_thread_env=(\n"
+        + '            case "$notebook_slug" in\n'
+        + "              "
+        + "|".join(NOTEBOOK_SINGLE_THREAD_SLUGS)
+        + ")\n"
+        + "                notebook_thread_env=(\n"
         + "".join(
-            f"                {variable}=1\n"
+            f"                  {variable}=1\n"
             for variable in NOTEBOOK_THREAD_DEFAULTS
         )
-        + "              )\n"
+        + "                )\n"
+        + "                ;;\n"
+        + "            esac\n"
+        + '            if [[ "$notebook_slug" == "18-alignment" ]]; then\n'
+        + "              notebook_thread_env+=("
+        + NOTEBOOK_TORCH_THREAD_OVERRIDE
+        + "=1)\n"
+        + "            fi\n"
+        + '            if [[ "${#notebook_thread_env[@]}" -gt 0 ]]; then\n'
         + "              printf 'notebook=%s numerical_thread_env=%s\\n' \\\n"
         + '                "$notebook_slug" "${notebook_thread_env[*]}" \\\n'
         + "                >> build/notebooks/evidence/environment.txt\n"
         + "            fi\n"
     )
     for required in (
-        a1_thread_block,
+        scoped_thread_block,
         'if ! env "${notebook_thread_env[@]}" \\',
         '"torch_num_interop_threads": torch.get_num_interop_threads()',
     ):
         if required not in validation_job:
             fail(
                 errors,
-                "publish workflow does not scope and record the complete A1 "
+                "publish workflow does not scope and record the complete "
                 "one-thread numerical-library override",
             )
             break
@@ -837,13 +853,36 @@ def main() -> None:
         if workflow_text.count(variable) != 1:
             fail(
                 errors,
-                f"publish workflow must scope {variable} to A1 exactly once",
+                f"publish workflow must scope {variable} exactly once",
             )
         if variable in execution_workflow_text:
             fail(
                 errors,
                 f"execution audit must not globally pin {variable}",
             )
+    if validation_job.count(NOTEBOOK_TORCH_THREAD_OVERRIDE) != 1:
+        fail(
+            errors,
+            "publish workflow must apply the PyTorch thread override to Chapter 18 once",
+        )
+    if NOTEBOOK_TORCH_THREAD_OVERRIDE in execution_workflow_text:
+        fail(errors, "execution audit must not globally pin the PyTorch thread override")
+    alignment_source = (ROOT / "chapters/part5/18-alignment.qmd").read_text()
+    alignment_thread_contract = (
+        '_alignment_thread_count = int(os.environ.get("'
+        + NOTEBOOK_TORCH_THREAD_OVERRIDE
+        + '", "6"))\n'
+        + "torch.set_num_threads(_alignment_thread_count)\n"
+        + "assert torch.get_num_threads() == _alignment_thread_count"
+    )
+    if alignment_source.count("import os\n") != 1:
+        fail(errors, "Chapter 18 hidden setup must import os exactly once")
+    if alignment_thread_contract not in alignment_source:
+        fail(
+            errors,
+            "Chapter 18 hidden setup must default to six threads and assert the "
+            "notebook-validation override",
+        )
     html_only_flag = "--allow-missing-generated-pdfs"
     notebook_html_only_flag = "--allow-missing-generated-notebooks"
     if execution_workflow_text.count(html_only_flag) != 1:

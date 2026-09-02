@@ -96,9 +96,11 @@ source notebooks retain the 193 learner-visible Plan → Code surfaces, use a
 commit-pinned and checksum-verified bootstrap, and execute cleanly in six CI shards.
 Each compact notebook must reproduce a full Quarto-derived reference byte for byte on
 the same runner, then satisfy the reviewed portability contract against frozen HTML
-stdout; every unlisted surface remains exact. The Appendix A1 public/reference pair alone
-uses a recorded one-thread numerical-library environment to remove process-level LAPACK
-reduction drift without perturbing seeded training elsewhere. Heavy chapter cells may
+stdout; every unlisted surface remains exact. The Appendix A1 and Chapter 18
+public/reference pairs use a recorded one-thread numerical-library environment to remove
+process-level LAPACK reduction drift without perturbing seeded training elsewhere.
+Chapter 18's hidden setup keeps its six-thread manuscript default, but honors and asserts
+the validation-only PyTorch override inside each notebook kernel. Heavy chapter cells may
 explicitly choose their own PyTorch thread count; the output gates remain authoritative.
 The Preface, Epilogue, and two non-executable appendices retain honest unavailable
 placeholders. The tagged v1.3 PDFs remain unchanged. The next PDF cut must combine

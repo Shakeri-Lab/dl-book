@@ -23,11 +23,13 @@ than repair in place.
 The **Execution Audit** workflow re-executes every cell from scratch weekly. The public
 notebook gate runs on the explicit `ubuntu-24.04` label with Python 3.12.14 and records
 the resolved runner image, CPU, numerical libraries, and full package set. A green run
-is the current compatibility statement. The Appendix A1 public/reference pair alone is
-launched with a recorded one-thread numerical-library environment; that removes
+is the current compatibility statement. The Appendix A1 and Chapter 18 public/reference
+pairs are launched with a recorded one-thread numerical-library environment; that removes
 scheduling-dependent LAPACK reduction drift without changing the seeded training
 trajectories elsewhere. This setting reduces one source of variation but is not itself a
-blanket determinism guarantee—the output comparisons remain the proof. The weekly
+blanket determinism guarantee—the output comparisons remain the proof. Chapter 18's
+hidden setup defaults to six threads in manuscript builds and honors an asserted
+validation-only PyTorch override inside the notebook kernel. The weekly
 full-manuscript audit overlays the same exact numerical-runtime pins on the broader
 rendering requirements before it regenerates the freeze. Reproduction policy: generated
 notebook and full manuscript reference output is byte-identical within that one runtime;
@@ -63,8 +65,10 @@ real changes.
   tested wrapping contract. MathJax 4's native `output.linebreaks` is a future
   replacement candidate, but enabling it is a book-wide rendering change and requires
   narrow-screen equation and cross-reference inspection first.
-- **Thread pinning:** the Appendix A1 notebook-validation pair uses one numerical thread
-  because separate multithreaded LAPACK processes can differ in their final residual bits.
+- **Thread pinning:** the Appendix A1 and Chapter 18 notebook-validation pairs use one
+  numerical thread because separate multithreaded LAPACK processes can differ in their
+  final residual bits or the sign attached to a rounded zero. Chapter 18 explicitly reads
+  and asserts the validation override after importing PyTorch.
   Selected heavy chapters independently use `torch.set_num_threads(...)` for predictable
   runtime on shared machines. Thread counts are machine choices, not semantic ones, and
   exact/typed output gates still decide whether a run is acceptable.
