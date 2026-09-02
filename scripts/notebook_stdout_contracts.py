@@ -132,7 +132,8 @@ NUMERIC_RULES: Mapping[BlockKey, NumericRule] = {
     ),
     ("09-modern-cnns-transfer", 8): NumericRule(
         0.02,
-        mutable_fields=(5,),
+        mutable_fields=(5, 6),
+        field_tolerances=((6, 0.0, 0.08),),
     ),
     ("09-modern-cnns-transfer", 9): NumericRule(
         1.7,
@@ -187,6 +188,10 @@ NUMERIC_RULES: Mapping[BlockKey, NumericRule] = {
         variable_precision_fields=(1, 2, 3, 4),
     ),
     ("16-vit-scaling", 2): NumericRule(1e-5, mutable_fields=(7,)),
+    ("17-peft-quantization", 1): NumericRule(
+        0.003,
+        mutable_fields=(3, 4, 7, 8, 11, 12),
+    ),
     ("17-peft-quantization", 2): NumericRule(
         2e-6,
         mutable_fields=(1, 2, 3, 7, 8, 11, 12, 15, 16, 25),
@@ -242,6 +247,9 @@ NUMERIC_JUSTIFICATIONS: Mapping[BlockKey, str] = {
         )
         for block in range(3, 11)
     },
+    ("09-modern-cnns-transfer", 8): (
+        "depth-gradient diagnostic within its reviewed CPU-backend scale"
+    ),
     **{
         ("08-cnn", block): "seeded clean/shift accuracy within 1.1 percentage points"
         for block in (7, 8, 9)
@@ -258,6 +266,10 @@ NUMERIC_JUSTIFICATIONS: Mapping[BlockKey, str] = {
     ("14-self-attention-transformer", 9): "masked-attention row-sum roundoff",
     ("15-bert-pretraining", 6): "MLM embedding-geometry roundoff",
     ("16-vit-scaling", 2): "patch projection equivalence roundoff",
+    ("17-peft-quantization", 1): (
+        "five-seed frozen-context endpoint portability; parameter accounting, "
+        "information ceilings, and the unchanged-weight audit remain exact"
+    ),
     ("17-peft-quantization", 2): "LoRA solver and merge-roundoff portability",
     **{
         ("18-alignment", block): "reward-shift and analytic/DPO equivalence roundoff"
@@ -776,6 +788,44 @@ def _ch9_relations(actual: Sequence[str], label: str) -> list[str]:
     return errors
 
 
+def _ch17_relations(actual: Sequence[str], label: str) -> list[str]:
+    """Protect the analytic ceiling and probability semantics of the ICL study."""
+
+    if len(actual) < 3:
+        return [f"{label}: expected three stdout blocks"]
+    lines = actual[0].rstrip("\n").splitlines()
+    if len(lines) != 8:
+        return [f"{label}: frozen-context report schema changed"]
+    errors: list[str] = []
+    if lines[0] != "model parameters: 39,268":
+        errors.append(f"{label}: frozen-context parameter accounting changed")
+    if lines[1] != "k  mean accuracy  seed sd  information ceiling":
+        errors.append(f"{label}: frozen-context table heading changed")
+    if lines[-1] != "all evaluation passes left weights unchanged: True":
+        errors.append(f"{label}: frozen-weight audit no longer passes")
+
+    row_re = re.compile(
+        r"^(\d)\s+(\d+\.\d{3})\s+(\d+\.\d{3})\s+(\d+\.\d{2})$"
+    )
+    rows = [row_re.fullmatch(line) for line in lines[2:7]]
+    if len(rows) != 5 or not all(rows):
+        return [*errors, f"{label}: frozen-context metric rows changed schema"]
+    ceilings = (0.25, 0.50, 0.75, 1.00, 1.00)
+    for expected_k, (match, ceiling) in enumerate(zip(rows, ceilings)):
+        assert match
+        k = int(match.group(1))
+        mean = float(match.group(2))
+        seed_sd = float(match.group(3))
+        reported_ceiling = float(match.group(4))
+        if k != expected_k or reported_ceiling != ceiling:
+            errors.append(f"{label}: information-ceiling protocol changed at k={expected_k}")
+        if not 0.0 <= mean <= 1.0 or abs(mean - ceiling) > 0.01:
+            errors.append(f"{label}: accuracy no longer tracks the ceiling at k={expected_k}")
+        if not 0.0 <= seed_sd <= 0.02:
+            errors.append(f"{label}: seed SD left its declared scale at k={expected_k}")
+    return errors
+
+
 def _ch16_relations(
     expected: Sequence[str], actual: Sequence[str], label: str
 ) -> list[str]:
@@ -1036,6 +1086,8 @@ def _relation_errors(
         return _ch11_relations(actual, label)
     if slug == "16-vit-scaling":
         return _ch16_relations(expected, actual, label)
+    if slug == "17-peft-quantization":
+        return _ch17_relations(actual, label)
     return _small_experiment_relations(slug, actual)
 
 
@@ -1236,6 +1288,68 @@ def _self_test() -> None:
         "test",
     )
     assert _numeric_errors("metric 1.0\n", "metric 1.0e+00\n", raw_repr, "test")
+
+    ch9_gradient = (
+        "plain, no BN  : 9.0e-06   3.3e-13   2.2e-23\n"
+        "plain + BN    : 7.6e-02   5.0e-01   8.3e+01\n"
+        "residual + BN : 1.6e-01   4.9e-01   5.0e-01\n"
+        "48-layer no-BN check: max |component| 5.2e-24; nonzero 108/108; "
+        "float64 norm 2.2e-23\n"
+    )
+    ch9_linux = ch9_gradient.replace("5.0e-01   8.3e+01", "5.1e-01   8.8e+01")
+    ch9_rule = NUMERIC_RULES[("09-modern-cnns-transfer", 8)]
+    assert not _numeric_errors(ch9_gradient, ch9_linux, ch9_rule, "test")
+    assert _numeric_errors(
+        ch9_gradient,
+        ch9_gradient.replace("8.3e+01", "9.0e+01"),
+        ch9_rule,
+        "test",
+    )
+
+    ch17_context = (
+        "model parameters: 39,268\n"
+        "k  mean accuracy  seed sd  information ceiling\n"
+        "0      0.252       0.003          0.25\n"
+        "1      0.500       0.005          0.50\n"
+        "2      0.749       0.002          0.75\n"
+        "3      1.000       0.000          1.00\n"
+        "4      1.000       0.000          1.00\n"
+        "all evaluation passes left weights unchanged: True\n"
+    )
+    ch17_linux = ch17_context.replace(
+        "1      0.500       0.005", "1      0.501       0.004"
+    )
+    ch17_rule = NUMERIC_RULES[("17-peft-quantization", 1)]
+    assert not _numeric_errors(ch17_context, ch17_linux, ch17_rule, "test")
+    assert _numeric_errors(
+        ch17_context,
+        ch17_context.replace("1      0.500", "1      0.504"),
+        ch17_rule,
+        "test",
+    )
+    assert _numeric_errors(
+        ch17_context,
+        ch17_context.replace("39,268", "39,269"),
+        ch17_rule,
+        "test",
+    )
+    assert _numeric_errors(
+        ch17_context,
+        ch17_context.replace("0.50\n", "0.51\n"),
+        ch17_rule,
+        "test",
+    )
+    assert _numeric_errors(
+        ch17_context,
+        ch17_context.replace("unchanged: True", "unchanged: False"),
+        ch17_rule,
+        "test",
+    )
+    negative_sd = ch17_context.replace(
+        "2      0.749       0.002", "2      0.749       -0.001"
+    )
+    assert not _numeric_errors(ch17_context, negative_sd, ch17_rule, "test")
+    assert _ch17_relations([negative_sd, "", ""], "test")
 
     warning = (
         "/tmp/ipykernel_1/2.py:9: UserWarning: The .grad attribute of a Tensor "

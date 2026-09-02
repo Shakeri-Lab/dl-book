@@ -95,6 +95,13 @@ DOWNLOAD_PAGE = ROOT / "download.html"
 DOWNLOAD_STYLES = ROOT / "download.css"
 NOT_FOUND_PAGE = ROOT / "404.html"
 QUARTO_VERSION = "1.10.18"
+NOTEBOOK_THREAD_DEFAULTS = (
+    "OMP_NUM_THREADS",
+    "OPENBLAS_NUM_THREADS",
+    "MKL_NUM_THREADS",
+    "VECLIB_MAXIMUM_THREADS",
+    "NUMEXPR_NUM_THREADS",
+)
 DOWNLOAD_TOOL_CONFIG = (
     '    tools:\n'
     '      - icon: file-pdf\n'
@@ -799,6 +806,31 @@ def main() -> None:
             errors,
             f"execution audit must pin the validated Quarto {QUARTO_VERSION}",
         )
+    for workflow_name, job_name, workflow_source in (
+        ("publish workflow", "validate_notebooks", workflow_text),
+        ("execution audit", "execute-all", execution_workflow_text),
+    ):
+        job_source = workflow_job(workflow_source, job_name)
+        for variable in NOTEBOOK_THREAD_DEFAULTS:
+            pin = rf'(?m)^      {re.escape(variable)}: "1"$'
+            if len(re.findall(pin, job_source)) != 1:
+                fail(
+                    errors,
+                    f"{workflow_name} {job_name} job must set {variable}=1 once",
+                )
+    validation_job = workflow_job(workflow_text, "validate_notebooks")
+    for required in (
+        "torch.get_num_threads() != 1",
+        '"torch_num_interop_threads": torch.get_num_interop_threads()',
+        '"thread_env": thread_env',
+    ):
+        if required not in validation_job:
+            fail(
+                errors,
+                "publish workflow notebook provenance does not verify and record "
+                "its thread defaults",
+            )
+            break
     html_only_flag = "--allow-missing-generated-pdfs"
     notebook_html_only_flag = "--allow-missing-generated-notebooks"
     if execution_workflow_text.count(html_only_flag) != 1:

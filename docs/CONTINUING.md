@@ -186,9 +186,12 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > shards. Each compact notebook must match a full Quarto-derived reference byte for
 > byte on the same runner. A separate portability ledger compares the result with the
 > frozen HTML stdout: exact is the default, and only narrowly reviewed numerical or
-> structural contracts may differ across platforms. The Preface, Epilogue, and two
-> non-executable appendices retain honest unavailable placeholders; executed copies
-> remain CI evidence rather than public downloads.
+> structural contracts may differ across platforms. Both notebook workflows begin with
+> a recorded one-thread numerical-library default to reduce scheduling-dependent drift;
+> deliberately heavier chapter cells may still choose their own PyTorch thread count,
+> and the output gates remain authoritative. The Preface, Epilogue, and two non-executable
+> appendices retain honest unavailable placeholders; executed copies remain CI evidence
+> rather than public downloads.
 > The next print-affecting cut must pair byte-reproducible PDF builds with the five
 > KOMA-Script `\setpartpreamble` Part openers, then accept their repagination and outline
 > changes as one audited change.
