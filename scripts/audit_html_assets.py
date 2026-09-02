@@ -4,10 +4,25 @@
 from __future__ import annotations
 
 import argparse
+from datetime import date
 from html.parser import HTMLParser
 import re
 from pathlib import Path
-from urllib.parse import unquote, urlsplit
+from urllib.parse import quote, unquote, urljoin, urlsplit
+
+
+def is_focusable(tag: str, values: dict[str, str | None]) -> bool:
+    """Recognize the native and tabindex-based controls relevant to page order."""
+    if "disabled" in values or values.get("tabindex") == "-1":
+        return False
+    if tag in {"a", "area"}:
+        return bool(values.get("href"))
+    if tag == "input":
+        return values.get("type") != "hidden"
+    if tag in {"button", "select", "summary", "textarea"}:
+        return True
+    tabindex = values.get("tabindex")
+    return bool(tabindex and tabindex.lstrip("+").isdigit())
 
 
 class SupportAssetParser(HTMLParser):
@@ -21,13 +36,66 @@ class SupportAssetParser(HTMLParser):
         self.support_links: list[str] = []
         self.cover_alts: list[str] = []
         self.coffee_icons: list[str | None] = []
+        self.canonical_urls: list[str] = []
+        self.body_depth = 0
+        self.body_ids: set[str] = set()
+        self.first_focusable: tuple[str, str | None, str] | None = None
+        self.skip_links: list[str] = []
+        self.edition_stamps: list[str] = []
+        self.edition_stamp_links: list[list[str]] = []
+        self._edition_stamp_depth = 0
+        self._edition_stamp_parts: list[str] = []
+        self._edition_stamp_links: list[str] = []
+        self.main_depth = 0
+        self.main_suppressed_depth = 0
+        self.main_text_parts: list[str] = []
+        self.main_images: list[tuple[str, str | None]] = []
 
     def handle_starttag(
         self, tag: str, attrs: list[tuple[str, str | None]]
     ) -> None:
         values = dict(attrs)
+        classes = (values.get("class") or "").split()
+        if self._edition_stamp_depth:
+            self._edition_stamp_depth += 1
+            if tag == "a" and values.get("href"):
+                self._edition_stamp_links.append(values["href"] or "")
+        elif "edition-stamp" in classes:
+            self._edition_stamp_depth = 1
+            self._edition_stamp_parts = []
+            self._edition_stamp_links = []
+
+        if tag == "body":
+            self.body_depth += 1
+        elif self.body_depth:
+            if identifier := values.get("id"):
+                self.body_ids.add(identifier)
+            if self.first_focusable is None and is_focusable(tag, values):
+                self.first_focusable = (
+                    tag,
+                    values.get("href"),
+                    values.get("class") or "",
+                )
+            if tag == "a" and "visually-hidden-focusable" in classes:
+                self.skip_links.append(values.get("href") or "")
+
+        if tag == "main":
+            self.main_depth += 1
+        elif self.main_depth:
+            if tag in MAIN_TEXT_EXCLUDED_TAGS:
+                self.main_suppressed_depth += 1
+            elif self.main_suppressed_depth == 0 and tag in MAIN_TEXT_BREAK_TAGS:
+                self.main_text_parts.append("\n")
+
+            if tag == "img" and self.main_suppressed_depth == 0:
+                self.main_images.append(
+                    (values.get("src") or "<image without src>", values.get("alt"))
+                )
+
         if tag == "link":
             relations = (values.get("rel") or "").split()
+            if "canonical" in relations and (href := values.get("href")):
+                self.canonical_urls.append(href)
             if "stylesheet" in relations and (href := values.get("href")):
                 self.assets.append(("stylesheet", href))
             if "icon" in relations and (href := values.get("href")):
@@ -60,6 +128,37 @@ class SupportAssetParser(HTMLParser):
         ):
             self.coffee_icons.append(values.get("aria-hidden"))
 
+    def handle_endtag(self, tag: str) -> None:
+        if self._edition_stamp_depth:
+            self._edition_stamp_depth -= 1
+            if self._edition_stamp_depth == 0:
+                self.edition_stamps.append(
+                    " ".join("".join(self._edition_stamp_parts).split())
+                )
+                self.edition_stamp_links.append(self._edition_stamp_links.copy())
+
+        if tag == "main":
+            self.main_depth = max(0, self.main_depth - 1)
+        elif self.main_depth:
+            if tag in MAIN_TEXT_EXCLUDED_TAGS:
+                self.main_suppressed_depth = max(
+                    0, self.main_suppressed_depth - 1
+                )
+            elif self.main_suppressed_depth == 0 and tag in MAIN_TEXT_BREAK_TAGS:
+                self.main_text_parts.append("\n")
+        if tag == "body":
+            self.body_depth = max(0, self.body_depth - 1)
+
+    def handle_data(self, data: str) -> None:
+        if self._edition_stamp_depth:
+            self._edition_stamp_parts.append(data)
+        if self.main_depth and self.main_suppressed_depth == 0:
+            self.main_text_parts.append(data)
+
+    @property
+    def main_text(self) -> str:
+        return "".join(self.main_text_parts)
+
 
 REQUIRED_SOCIAL_METADATA = {
     "description",
@@ -84,6 +183,90 @@ CONTINUOUS_PDF_NAME = "Deep-Learning--Making-It-Learnable--Continuous.pdf"
 DOWNLOAD_PAGE_NAME = "download.html"
 SUPPORT_URL = "https://buymeacoffee.com/hshakeri"
 EXPECTED_HTML_PAGES = 32
+ROOT = Path(__file__).resolve().parents[1]
+MAIN_TEXT_EXCLUDED_TAGS = {"script", "style", "pre", "code"}
+MAIN_TEXT_BREAK_TAGS = {
+    "address",
+    "article",
+    "aside",
+    "blockquote",
+    "br",
+    "div",
+    "figcaption",
+    "figure",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "li",
+    "p",
+    "section",
+    "td",
+    "th",
+    "tr",
+}
+RENDERED_LEAK_PATTERNS = {
+    "raw {.unnumbered} attribute": re.compile(r"\{\.unnumbered\}"),
+    "raw {#id} attribute": re.compile(r"\{#[A-Za-z]"),
+    "raw Markdown heading": re.compile(r"(?m)^[ \t]*#{2,}[ \t]+\S"),
+    "unresolved cross-reference": re.compile(
+        r"(?<![/\w])@(fig|sec|eq|tbl|lst|exfig|aefig|ttrfig|epfig)-[\w-]+"
+    ),
+}
+
+
+def source_edition_metadata() -> tuple[str, str, str]:
+    """Read expected publication metadata independently from rendered HTML."""
+    config = (ROOT / "_quarto.yml").read_text(encoding="utf-8")
+    index = (ROOT / "index.qmd").read_text(encoding="utf-8")
+    site_match = re.search(r"^\s{2}site-url:\s*(\S+)\s*$", config, re.MULTILINE)
+    date_match = re.search(
+        r"^\s{2}date:\s*[\"']?([0-9]{4}-[0-9]{2}-[0-9]{2})[\"']?\s*$",
+        config,
+        re.MULTILINE,
+    )
+    version_match = re.search(
+        r"^\s{2}version:\s*[\"']?([^\s\"']+)[\"']?\s*$",
+        index,
+        re.MULTILINE,
+    )
+    if not site_match or not date_match or not version_match:
+        raise ValueError("Could not read site URL, book date, and citation version")
+    rolling_date = date.fromisoformat(date_match.group(1))
+    display_date = (
+        f"{rolling_date.strftime('%B')} {rolling_date.day}, {rolling_date.year}"
+    )
+    return site_match.group(1).rstrip("/") + "/", display_date, version_match.group(1)
+
+
+def expected_canonical(page: Path, root: Path, site_url: str) -> str:
+    relative = page.relative_to(root).as_posix()
+    if relative == "index.html":
+        return site_url
+    return urljoin(site_url, quote(relative, safe="/"))
+
+
+def rendered_leak_errors(page_name: str, main_text: str) -> list[str]:
+    """Report raw authoring syntax that escaped into reader-visible main text."""
+    errors: list[str] = []
+    for label, pattern in RENDERED_LEAK_PATTERNS.items():
+        for match in pattern.finditer(main_text):
+            compact = " ".join(match.group(0).split())
+            errors.append(f"{page_name}: {label}: {compact}")
+    return errors
+
+
+def main_image_alt_errors(
+    page_name: str, images: list[tuple[str, str | None]]
+) -> list[str]:
+    """Require a non-empty text alternative for every image in main content."""
+    return [
+        f"{page_name}: main image has empty alt text: {source}"
+        for source, alt in images
+        if not alt or not alt.strip()
+    ]
 
 
 def local_asset(page: Path, root: Path, raw_url: str) -> Path | None:
@@ -109,7 +292,17 @@ def main() -> int:
     )
     args = parser.parse_args()
     root = args.root.resolve()
-    pages = sorted(root.rglob("*.html"))
+    site_url, display_date, stable_version = source_edition_metadata()
+    expected_stamp = (
+        f"Rolling build · {display_date} · stable edition v{stable_version} · "
+        "Revision notes"
+    )
+    revision_url = urljoin(site_url, "#revision-notes")
+    pages = sorted(
+        page
+        for page in root.rglob("*.html")
+        if "site_libs" not in page.relative_to(root).parts
+    )
     if not pages:
         print(f"FAILED: no rendered HTML pages under {root}")
         return 1
@@ -124,6 +317,9 @@ def main() -> int:
     missing: dict[tuple[str, Path], list[Path]] = {}
     metadata_errors: list[str] = []
     navigation_errors: list[str] = []
+    rendered_content_errors: list[str] = []
+    accessibility_errors: list[str] = []
+    publication_errors: list[str] = []
     for page in pages:
         page_text = page.read_text(encoding="utf-8")
         html_parser = SupportAssetParser()
@@ -138,6 +334,51 @@ def main() -> int:
                 missing.setdefault((kind, resolved), []).append(page.relative_to(root))
 
         page_name = str(page.relative_to(root))
+        canonical = expected_canonical(page, root, site_url)
+        if html_parser.canonical_urls != [canonical]:
+            publication_errors.append(
+                f"{page_name}: expected one canonical URL {canonical}, "
+                f"found {html_parser.canonical_urls}"
+            )
+        if html_parser.edition_stamps != [expected_stamp]:
+            publication_errors.append(
+                f"{page_name}: expected one source-derived edition stamp, "
+                f"found {html_parser.edition_stamps}"
+            )
+        if html_parser.edition_stamp_links != [[revision_url]]:
+            publication_errors.append(
+                f"{page_name}: edition stamp must link once to {revision_url}"
+            )
+
+        if page.name not in {"404.html", DOWNLOAD_PAGE_NAME}:
+            first = html_parser.first_focusable
+            if (
+                first is None
+                or first[0] != "a"
+                or first[1] != "#quarto-document-content"
+                or "visually-hidden-focusable" not in first[2].split()
+            ):
+                publication_errors.append(
+                    f"{page_name}: first focusable element is not the main-content "
+                    f"skip link: {first}"
+                )
+            if html_parser.skip_links != ["#quarto-document-content"]:
+                publication_errors.append(
+                    f"{page_name}: expected one main-content skip link, "
+                    f"found {html_parser.skip_links}"
+                )
+            if "quarto-document-content" not in html_parser.body_ids:
+                publication_errors.append(
+                    f"{page_name}: skip-link target #quarto-document-content is missing"
+                )
+
+        rendered_content_errors.extend(
+            rendered_leak_errors(page_name, html_parser.main_text)
+        )
+        accessibility_errors.extend(
+            main_image_alt_errors(page_name, html_parser.main_images)
+        )
+
         absent_social = sorted(REQUIRED_SOCIAL_METADATA - html_parser.metadata.keys())
         if absent_social:
             metadata_errors.append(
@@ -309,7 +550,14 @@ def main() -> int:
                     "index.html: support coffee icons must be hidden from assistive text"
                 )
 
-    if missing or metadata_errors or navigation_errors:
+    if (
+        missing
+        or metadata_errors
+        or navigation_errors
+        or rendered_content_errors
+        or accessibility_errors
+        or publication_errors
+    ):
         for (kind, asset), affected_pages in sorted(
             missing.items(), key=lambda item: str(item[0][1])
         ):
@@ -328,10 +576,19 @@ def main() -> int:
             print(error)
         for error in navigation_errors:
             print(error)
+        for error in rendered_content_errors:
+            print(error)
+        for error in accessibility_errors:
+            print(error)
+        for error in publication_errors:
+            print(error)
         print(
             f"FAILED: {len(missing)} missing unique HTML support asset(s) and "
             f"{len(metadata_errors)} metadata/renderer violation(s), "
-            f"{len(navigation_errors)} navigation/disclosure violation(s) across "
+            f"{len(navigation_errors)} navigation/disclosure violation(s), "
+            f"{len(rendered_content_errors)} rendered-content leak(s), and "
+            f"{len(accessibility_errors)} image-alt violation(s), and "
+            f"{len(publication_errors)} canonical/stamp/skip-link violation(s) across "
             f"{len(pages)} page(s)"
         )
         return 1
@@ -339,7 +596,8 @@ def main() -> int:
     print(
         f"HTML support assets and metadata: pass ({len(pages)} pages, "
         f"{len(checked)} unique local stylesheets/scripts/icons, exact MathJax pin, "
-        "cover-led free-PDF landing links and collapsed ancillary disclosures)"
+        "canonical URLs, edition stamps, skip links, image alternatives, "
+        "and leak-free rendered content)"
     )
     return 0
 
