@@ -11,6 +11,7 @@ stdout with the corresponding Quarto freeze record in source order.
 from __future__ import annotations
 
 import argparse
+import difflib
 import fnmatch
 import hashlib
 import json
@@ -500,7 +501,14 @@ def visible_stdout(
             elif kind == "stream" and output.get("name") == "stdout":
                 stdout += output_text(output)
             elif kind == "stream" and output.get("name") == "stderr":
-                errors.append(f"{label}: visible cell {index} emitted stderr")
+                stderr = output_text(output).strip()
+                excerpt = stderr[:800]
+                if len(stderr) > len(excerpt):
+                    excerpt += "\n... stderr truncated ..."
+                errors.append(
+                    f"{label}: visible cell {index} emitted stderr"
+                    + (f"\n{excerpt}" if excerpt else "")
+                )
         if stdout:
             blocks.append(stdout)
     return blocks
@@ -551,9 +559,34 @@ def audit_executed_copy(
     expected = stdout_blocks(freeze_path.read_text(encoding="utf-8"))
     actual = visible_stdout(executed, label, errors)
     if actual != expected:
+        expected_lines: list[str] = []
+        actual_lines: list[str] = []
+        for index, block in enumerate(expected, start=1):
+            expected_lines.append(f"<<< stdout block {index} >>>\n")
+            expected_lines.extend(block.splitlines(keepends=True))
+        for index, block in enumerate(actual, start=1):
+            actual_lines.append(f"<<< stdout block {index} >>>\n")
+            actual_lines.extend(block.splitlines(keepends=True))
+        diff_lines = list(
+            difflib.unified_diff(
+                expected_lines,
+                actual_lines,
+                fromfile="frozen HTML stdout",
+                tofile="executed notebook stdout",
+                n=2,
+            )
+        )
+        max_diff_lines = 160
+        if len(diff_lines) > max_diff_lines:
+            diff_lines = [
+                *diff_lines[:max_diff_lines],
+                f"... diff truncated; {len(diff_lines) - max_diff_lines} "
+                "line(s) omitted ...\n",
+            ]
         errors.append(
             f"{label}: visible stdout differs from frozen HTML "
-            f"({len(actual)} notebook block(s), {len(expected)} frozen block(s))"
+            f"({len(actual)} notebook block(s), {len(expected)} frozen block(s))\n"
+            + "".join(diff_lines)
         )
 
 
