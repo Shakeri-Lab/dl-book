@@ -154,7 +154,11 @@ NUMERIC_RULES: Mapping[BlockKey, NumericRule] = {
         ),
     ),
     ("08-cnn", 7): NumericRule(1.1, mutable_fields=(1, 2, 3, 4)),
-    ("08-cnn", 8): NumericRule(1.1, mutable_fields=tuple(range(1, 11))),
+    ("08-cnn", 8): NumericRule(
+        1.1,
+        mutable_fields=tuple(range(1, 11)),
+        field_tolerances=((3, 1.6, 0.0),),
+    ),
     ("08-cnn", 9): NumericRule(1.1, mutable_fields=(1, 3, 4, 6)),
     ("10-sequences-rnn", 1): NumericRule(1e-6, mutable_fields=(1,)),
     ("11-encoder-decoder", 2): NumericRule(
@@ -252,8 +256,12 @@ NUMERIC_JUSTIFICATIONS: Mapping[BlockKey, str] = {
     ),
     **{
         ("08-cnn", block): "seeded clean/shift accuracy within 1.1 percentage points"
-        for block in (7, 8, 9)
+        for block in (7, 9)
     },
+    ("08-cnn", 8): (
+        "seeded shift accuracy within 1.1 percentage points, except the three-example "
+        "shift-1 MLP field within 1.6 points"
+    ),
     ("10-sequences-rnn", 1): "manual/unrolled recurrence roundoff",
     ("11-encoder-decoder", 2): "padding-control validation accuracy portability",
     ("11-encoder-decoder", 3): "sealed sequence audit accuracy portability",
@@ -290,6 +298,9 @@ STRUCTURAL_RULES: Mapping[BlockKey, str] = {
     ("11-encoder-decoder", 4): "date-error gallery",
     ("11-encoder-decoder", 5): "beam-search date sample",
     ("11-encoder-decoder", 6): "beam-versus-greedy count",
+    ("13-attention", 1): (
+        "fixed float32 scaled-dot arithmetic under NumPy array-format variation"
+    ),
     ("14-self-attention-transformer", 5): "protocol with backend digest",
     ("14-self-attention-transformer", 8): "position-rematch relations",
     ("14-self-attention-transformer", 10): "paired 300-character samples",
@@ -554,6 +565,135 @@ def _ch11_relations(actual: Sequence[str], label: str) -> list[str]:
         f"{label} error gallery",
         teacher_forced_accuracy,
     )
+
+
+def _ch13_scaled_dot_walk(actual: str, label: str) -> list[str]:
+    """Check the fixed float32 walk without depending on NumPy's spacing."""
+
+    if not actual.endswith("\n") or actual.endswith("\n\n"):
+        return [f"{label}: expected exactly one terminal newline"]
+    lines = actual[:-1].split("\n")
+    if len(lines) != 3:
+        return [f"{label}: expected raw, scaled, and weight rows"]
+
+    decimal_token = r"[+-]?\d+\.\d+"
+    parsed: dict[str, list[float]] = {}
+    for name, line in zip(("raw scores", "scaled scores"), lines[:2]):
+        match = re.fullmatch(
+            rf"{re.escape(name)}: \[ *({decimal_token}) +({decimal_token}) "
+            rf"+({decimal_token}) *\]",
+            line,
+        )
+        if not match:
+            return [f"{label}: malformed {name} row"]
+        values = [float(token) for token in match.groups()]
+        if len(values) != 3 or not all(math.isfinite(value) for value in values):
+            return [f"{label}: {name} must contain three finite values"]
+        parsed[name] = values
+
+    weight_match = re.fullmatch(
+        rf"weights: \[ *({decimal_token}) +({decimal_token}) +({decimal_token}) "
+        rf"*\] sum: ({decimal_token})",
+        lines[2],
+    )
+    if not weight_match:
+        return [f"{label}: malformed weight row"]
+    weights = [float(token) for token in weight_match.groups()[:3]]
+    reported_sum = float(weight_match.group(4))
+    if (
+        len(weights) != 3
+        or not all(math.isfinite(value) and 0 < value <= 1 for value in weights)
+        or not math.isfinite(reported_sum)
+    ):
+        return [f"{label}: weights must be three finite positive values"]
+
+    raw = parsed["raw scores"]
+    scaled = parsed["scaled scores"]
+    expected_raw = (1.1, -0.6, 0.15)
+    shift = max(scaled)
+    exponentials = [math.exp(value - shift) for value in scaled]
+    expected_weights = [value / sum(exponentials) for value in exponentials]
+    errors: list[str] = []
+    if any(abs(left - right) > 2e-7 for left, right in zip(raw, expected_raw)):
+        errors.append(f"{label}: raw dot products changed")
+    if any(abs(value - source / 2) > 2e-7 for value, source in zip(scaled, raw)):
+        errors.append(f"{label}: scaling is no longer division by square root of four")
+    if any(
+        abs(value - expected) > 2e-7
+        for value, expected in zip(weights, expected_weights)
+    ):
+        errors.append(f"{label}: weights no longer equal softmax of scaled scores")
+    if abs(sum(weights) - reported_sum) > 2e-7 or abs(reported_sum - 1) > 2e-7:
+        errors.append(f"{label}: attention weights no longer normalize to one")
+    return errors
+
+
+def _ch13_relations(actual: Sequence[str], label: str) -> list[str]:
+    """Protect the protocol and conclusions of the attention comparison."""
+
+    if len(actual) < 6:
+        return [f"{label}: expected six stdout blocks"]
+    split = re.fullmatch(
+        r"fixed validation (\d+); final test (\d+)\n",
+        actual[4],
+    )
+    if not split:
+        return [f"{label}: validation/test split report schema changed"]
+    fixed_validation, final_test = map(int, split.groups())
+    expected_fixed_validation = 400
+    errors: list[str] = []
+    if (fixed_validation, final_test) != (expected_fixed_validation, 437):
+        errors.append(f"{label}: fixed validation/test counts changed")
+
+    tokens = _NUMBER_RE.findall(actual[5])
+    if len(tokens) != 41:
+        return [*errors, f"{label}: training/audit report must contain 41 numeric fields"]
+    try:
+        values = [_decimal(token) for token in tokens]
+    except InvalidOperation:
+        return [*errors, f"{label}: training/audit report contains a nonnumeric field"]
+    if not all(value.is_finite() for value in values):
+        return [*errors, f"{label}: training/audit fields must be finite"]
+
+    baseline_parameters, attention_parameters = values[24], values[25]
+    reported_growth = values[26]
+    expected_baseline_parameters = Decimal(169_326)
+    expected_attention_parameters = Decimal(269_550)
+    expected_growth = (
+        Decimal(100)
+        * (expected_attention_parameters - expected_baseline_parameters)
+        / expected_baseline_parameters
+    )
+    if (
+        baseline_parameters != expected_baseline_parameters
+        or attention_parameters != expected_attention_parameters
+        or abs(reported_growth - expected_growth) > Decimal("0.051")
+    ):
+        errors.append(f"{label}: parameter accounting changed or is inconsistent")
+
+    epoch_six_baseline, epoch_six_attention = values[7], values[8]
+    if epoch_six_attention - epoch_six_baseline < Decimal(30):
+        errors.append(f"{label}: the epoch-6 attention lead is no longer material")
+
+    year_region_mass, top_key_mass, row_sum_error = values[35:38]
+    if year_region_mass < Decimal(95) or top_key_mass < Decimal(95):
+        errors.append(f"{label}: learned year-region alignment weakened materially")
+    if not Decimal(0) <= row_sum_error <= Decimal("1e-6"):
+        errors.append(f"{label}: validation attention rows no longer normalize")
+
+    possible_top_key_reports = {
+        f"{hits / (4 * expected_fixed_validation):.3%}"
+        for hits in range(4 * expected_fixed_validation + 1)
+    }
+    if tokens[36] not in possible_top_key_reports:
+        errors.append(f"{label}: top-key percentage is not on its audit-count grid")
+
+    audited_test, baseline_final, attention_final = values[38:41]
+    if audited_test != final_test:
+        errors.append(f"{label}: final audit count disagrees with the declared test split")
+    if attention_final < Decimal(99) or attention_final - baseline_final < Decimal(5):
+        errors.append(f"{label}: final attention advantage changed materially")
+    return errors
 
 
 def _ch11_beam(expected: str, actual: str, label: str) -> list[str]:
@@ -1014,17 +1154,25 @@ def _small_experiment_relations(slug: str, actual: Sequence[str]) -> list[str]:
     if slug == "08-cnn":
         if len(actual) < 9:
             return [f"{label}: expected nine stdout blocks"]
+        endpoints = _float_tokens(actual[6])
         shifted = _float_tokens(actual[7])
         summary = _float_tokens(actual[8])
-        if len(shifted) != 10 or len(summary) != 6:
+        if len(endpoints) != 4 or len(shifted) != 10 or len(summary) != 6:
             return [f"{label}: CNN shift report schema changed"]
         mlp = shifted[0::2]
         lenet = shifted[1::2]
         errors = []
-        if mlp[0] <= lenet[0] or not all(
-            right > left for left, right in zip(mlp[1:], lenet[1:])
+        if (
+            abs(endpoints[1] - mlp[0]) > 0.051
+            or abs(endpoints[3] - lenet[0]) > 0.051
         ):
-            errors.append(f"{label}: clean/shift model ordering changed")
+            errors.append(f"{label}: validation endpoints disagree with shift zero")
+        if abs(mlp[0] - lenet[0]) > 3:
+            errors.append(f"{label}: clean validation accuracies are no longer comparable")
+        mlp_two_pixel_drop = mlp[0] - mlp[2]
+        lenet_two_pixel_drop = lenet[0] - lenet[2]
+        if mlp_two_pixel_drop - lenet_two_pixel_drop < 10:
+            errors.append(f"{label}: two-pixel convolutional robustness gain weakened")
         if mlp[0] - mlp[-1] <= 0 or lenet[0] - lenet[-1] <= 0:
             errors.append(f"{label}: clean-to-shift degradation disappeared")
         mlp_clean, mlp_shift, lenet_clean, lenet_shift = (
@@ -1064,6 +1212,8 @@ def _structural_errors(
         return _ch11_beam(expected, actual, label)
     if (slug, block) == ("11-encoder-decoder", 6):
         return _ch11_beam_count(actual, label)
+    if (slug, block) == ("13-attention", 1):
+        return _ch13_scaled_dot_walk(actual, label)
     if (slug, block) == ("14-self-attention-transformer", 5):
         return _ch14_protocol(expected, actual, label)
     if (slug, block) == ("14-self-attention-transformer", 8):
@@ -1084,6 +1234,8 @@ def _relation_errors(
         return _ch9_relations(actual, label)
     if slug == "11-encoder-decoder":
         return _ch11_relations(actual, label)
+    if slug == "13-attention":
+        return _ch13_relations(actual, label)
     if slug == "16-vit-scaling":
         return _ch16_relations(expected, actual, label)
     if slug == "17-peft-quantization":
@@ -1305,6 +1457,120 @@ def _self_test() -> None:
         ch9_rule,
         "test",
     )
+
+    ch8_frozen_shift = (
+        "shift 0px:   MLP 75.5%   LeNet 74.5%\n"
+        "shift 1px:   MLP 64.0%   LeNet 66.0%\n"
+        "shift 2px:   MLP 42.0%   LeNet 57.5%\n"
+        "shift 3px:   MLP 27.0%   LeNet 42.0%\n"
+        "shift 4px:   MLP 18.5%   LeNet 23.0%\n"
+    )
+    ch8_linux_shift = (
+        "shift 0px:   MLP 75.5%   LeNet 75.5%\n"
+        "shift 1px:   MLP 65.5%   LeNet 65.5%\n"
+        "shift 2px:   MLP 42.0%   LeNet 57.0%\n"
+        "shift 3px:   MLP 27.0%   LeNet 43.0%\n"
+        "shift 4px:   MLP 18.5%   LeNet 22.5%\n"
+    )
+    ch8_rule = NUMERIC_RULES[("08-cnn", 8)]
+    assert not _numeric_errors(ch8_frozen_shift, ch8_linux_shift, ch8_rule, "test")
+    assert _numeric_errors(
+        ch8_frozen_shift,
+        ch8_linux_shift.replace("MLP 65.5%", "MLP 66.0%"),
+        ch8_rule,
+        "test",
+    )
+    ch8_blocks = [
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        (
+            "MLP    train 100.0%   validation 75.5%\n"
+            "LeNet  train 99.5%   validation 75.5%\n"
+        ),
+        ch8_linux_shift,
+        (
+            "MLP    clean 82.3%   shift-2 41.7%\n"
+            "LeNet  clean 81.5%   shift-2 62.0%\n"
+        ),
+    ]
+    assert not _small_experiment_relations("08-cnn", ch8_blocks)
+    mismatched_endpoint = list(ch8_blocks)
+    mismatched_endpoint[6] = mismatched_endpoint[6].replace(
+        "validation 75.5%", "validation 74.5%", 1
+    )
+    assert _small_experiment_relations("08-cnn", mismatched_endpoint)
+    collapsed_gain = list(ch8_blocks)
+    collapsed_gain[7] = collapsed_gain[7].replace("LeNet 57.0%", "LeNet 45.0%")
+    assert _small_experiment_relations("08-cnn", collapsed_gain)
+
+    ch13_walk = (
+        "raw scores: [ 1.1  -0.6   0.15]\n"
+        "scaled scores: [ 0.55  -0.3    0.075]\n"
+        "weights: [0.4879715  0.20856631 0.3034622 ] sum: 1.0\n"
+    )
+    assert not _ch13_scaled_dot_walk(ch13_walk, "test")
+    for broken_walk in (
+        ch13_walk.replace("raw scores", "raw logits"),
+        ch13_walk.replace("1.1  -0.6   0.15", "1.1  -0.6"),
+        ch13_walk.replace("1.1  -0.6", "1.1003  -0.6"),
+        ch13_walk.replace("0.55  -0.3", "0.56  -0.3"),
+        ch13_walk.replace("0.4879715", "0.4000000"),
+        ch13_walk.replace("sum: 1.0", "sum: 0.99"),
+        ch13_walk.replace("raw scores: [", "raw scores:  ["),
+        ch13_walk.replace("1.1  -0.6", "1.1e0  -0.6"),
+        ch13_walk[:-1],
+        ch13_walk + "\n",
+    ):
+        assert _ch13_scaled_dot_walk(broken_walk, "test")
+
+    ch13_report = (
+        "epoch   fixed-state   attention\n"
+        " 2        0.25%        9.50%\n"
+        " 4       14.75%       74.50%\n"
+        " 6       53.75%       93.25%\n"
+        " 8       75.75%       99.00%\n"
+        "12       95.00%       99.75%\n"
+        "16       95.00%       99.75%\n"
+        "20       99.50%       99.75%\n"
+        "25       95.75%       99.75%\n"
+        "parameters: baseline 169,326; attention 269,550 (+59.2%)\n"
+        "validation example: 'may 17, 1971' -> '1971-05-17' "
+        "(truth 1971-05-17)\n"
+        "validation year-region mass: 96.966%; top key in region: 99.188%\n"
+        "maximum validation row-sum error: 2.98e-07\n"
+        "one final test audit (437 sources): baseline 93.1%; attention 100.0%\n"
+    )
+    ch13_blocks = ["", "", "", "", "fixed validation 400; final test 437\n", ch13_report]
+    assert not _ch13_relations(ch13_blocks, "test")
+    ch13_frozen_report = (
+        ch13_report.replace("96.966%", "97.469%")
+        .replace("99.188%", "99.688%")
+        .replace("2.98e-07", "2.38e-07")
+    )
+    ch13_rule = NUMERIC_RULES[("13-attention", 6)]
+    assert not _numeric_errors(ch13_frozen_report, ch13_report, ch13_rule, "test")
+    assert _numeric_errors(
+        ch13_frozen_report,
+        ch13_report.replace("96.966%", "96.800%"),
+        ch13_rule,
+        "test",
+    )
+    for broken_report in (
+        ch13_report.replace("2.98e-07", "1.10e-06"),
+        ch13_report.replace("99.188%", "99.200%"),
+        ch13_report.replace("93.25%", "80.00%", 1),
+        ch13_report.replace("attention 100.0%", "attention 97.0%"),
+        ch13_report.replace("baseline 169,326", "baseline 0"),
+    ):
+        changed_blocks = [*ch13_blocks[:5], broken_report]
+        assert _ch13_relations(changed_blocks, "test")
+    zero_count = [*ch13_blocks]
+    zero_count[4] = "fixed validation 0; final test 437\n"
+    assert _ch13_relations(zero_count, "test")
 
     ch17_context = (
         "model parameters: 39,268\n"
