@@ -95,6 +95,18 @@ DOWNLOAD_PAGE = ROOT / "download.html"
 DOWNLOAD_STYLES = ROOT / "download.css"
 NOT_FOUND_PAGE = ROOT / "404.html"
 QUARTO_VERSION = "1.10.18"
+NOTEBOOK_THREAD_DEFAULTS = (
+    "OMP_NUM_THREADS",
+    "OPENBLAS_NUM_THREADS",
+    "MKL_NUM_THREADS",
+    "VECLIB_MAXIMUM_THREADS",
+    "NUMEXPR_NUM_THREADS",
+)
+NOTEBOOK_SINGLE_THREAD_SLUGS = (
+    "a1-linear-algebra",
+    "18-alignment",
+)
+NOTEBOOK_TORCH_THREAD_OVERRIDE = "DLBOOK_TORCH_NUM_THREADS"
 DOWNLOAD_TOOL_CONFIG = (
     '    tools:\n'
     '      - icon: file-pdf\n'
@@ -260,6 +272,16 @@ def without_html_comments(text: str) -> str:
 
 def fail(errors: list[str], message: str) -> None:
     errors.append(message)
+
+
+def workflow_job(text: str, name: str) -> str:
+    """Return one top-level GitHub Actions job block from workflow source."""
+
+    match = re.search(
+        rf"(?ms)^  {re.escape(name)}:\n.*?(?=^  [A-Za-z0-9_-]+:\n|\Z)",
+        text,
+    )
+    return match.group(0) if match else ""
 
 
 def main() -> None:
@@ -774,17 +796,120 @@ def main() -> None:
     if workflow_text.count(fixpoint_call) != 1:
         fail(errors, "publish workflow must use the bounded PDF outline fixpoint")
     quarto_pin = f'version: "{QUARTO_VERSION}"'
-    if workflow_text.count(quarto_pin) != 1:
+    quarto_jobs = ("export_notebooks", "validate_notebooks", "build-deploy")
+    if workflow_text.count(quarto_pin) != len(quarto_jobs) or any(
+        workflow_job(workflow_text, job).count(quarto_pin) != 1
+        for job in quarto_jobs
+    ):
         fail(
             errors,
-            f"publish workflow must pin the validated Quarto {QUARTO_VERSION}",
+            "publish workflow must pin the validated Quarto "
+            f"{QUARTO_VERSION} once in export, validation, and publication",
         )
     if execution_workflow_text.count(quarto_pin) != 1:
         fail(
             errors,
             f"execution audit must pin the validated Quarto {QUARTO_VERSION}",
         )
+    validation_job = workflow_job(workflow_text, "validate_notebooks")
+    scoped_thread_block = (
+        "            notebook_thread_env=()\n"
+        + '            case "$notebook_slug" in\n'
+        + "              "
+        + "|".join(NOTEBOOK_SINGLE_THREAD_SLUGS)
+        + ")\n"
+        + "                notebook_thread_env=(\n"
+        + "".join(
+            f"                  {variable}=1\n"
+            for variable in NOTEBOOK_THREAD_DEFAULTS
+        )
+        + "                )\n"
+        + "                ;;\n"
+        + "            esac\n"
+        + '            if [[ "$notebook_slug" == "18-alignment" ]]; then\n'
+        + "              notebook_thread_env+=("
+        + NOTEBOOK_TORCH_THREAD_OVERRIDE
+        + "=1)\n"
+        + "            fi\n"
+        + '            if [[ "${#notebook_thread_env[@]}" -gt 0 ]]; then\n'
+        + "              printf 'notebook=%s numerical_thread_env=%s\\n' \\\n"
+        + '                "$notebook_slug" "${notebook_thread_env[*]}" \\\n'
+        + "                >> build/notebooks/evidence/environment.txt\n"
+        + "            fi\n"
+    )
+    for required in (
+        scoped_thread_block,
+        'if ! env "${notebook_thread_env[@]}" \\',
+        '"torch_num_interop_threads": torch.get_num_interop_threads()',
+    ):
+        if required not in validation_job:
+            fail(
+                errors,
+                "publish workflow does not scope and record the complete "
+                "one-thread numerical-library override",
+            )
+            break
+    for variable in NOTEBOOK_THREAD_DEFAULTS:
+        if workflow_text.count(variable) != 1:
+            fail(
+                errors,
+                f"publish workflow must scope {variable} exactly once",
+            )
+        if variable in execution_workflow_text:
+            fail(
+                errors,
+                f"execution audit must not globally pin {variable}",
+            )
+    if validation_job.count(NOTEBOOK_TORCH_THREAD_OVERRIDE) != 1:
+        fail(
+            errors,
+            "publish workflow must apply the PyTorch thread override to Chapter 18 once",
+        )
+    if workflow_text.count(NOTEBOOK_TORCH_THREAD_OVERRIDE) != 1:
+        fail(
+            errors,
+            "PyTorch thread override must appear only in notebook validation",
+        )
+    execution_job = workflow_job(execution_workflow_text, "execute-all")
+    execution_thread_block = (
+        "    env:\n"
+        + f'      {NOTEBOOK_TORCH_THREAD_OVERRIDE}: "1"\n'
+    )
+    if execution_job.count(execution_thread_block) != 1:
+        fail(
+            errors,
+            "execution audit must apply the Chapter 18 PyTorch thread override once",
+        )
+    if execution_workflow_text.count(NOTEBOOK_TORCH_THREAD_OVERRIDE) != 1:
+        fail(errors, "execution audit must declare the PyTorch thread override once")
+    alignment_source = (ROOT / "chapters/part5/18-alignment.qmd").read_text()
+    alignment_thread_contract = (
+        '_alignment_thread_count = int(os.environ.get("'
+        + NOTEBOOK_TORCH_THREAD_OVERRIDE
+        + '", "6"))\n'
+        + "torch.set_num_threads(_alignment_thread_count)\n"
+        + "assert torch.get_num_threads() == _alignment_thread_count"
+    )
+    if alignment_source.count("import os\n") != 1:
+        fail(errors, "Chapter 18 hidden setup must import os exactly once")
+    thread_override_consumers = [
+        path.relative_to(ROOT).as_posix()
+        for path in sorted(ROOT.rglob("*.qmd"))
+        if NOTEBOOK_TORCH_THREAD_OVERRIDE in path.read_text()
+    ]
+    if thread_override_consumers != ["chapters/part5/18-alignment.qmd"]:
+        fail(
+            errors,
+            "only Chapter 18 may consume the CI-only PyTorch thread override",
+        )
+    if alignment_thread_contract not in alignment_source:
+        fail(
+            errors,
+            "Chapter 18 hidden setup must default to six threads and assert the "
+            "notebook-validation override",
+        )
     html_only_flag = "--allow-missing-generated-pdfs"
+    notebook_html_only_flag = "--allow-missing-generated-notebooks"
     if execution_workflow_text.count(html_only_flag) != 1:
         fail(
             errors,
@@ -795,6 +920,26 @@ def main() -> None:
             errors,
             "publish workflow must require both generated PDF download targets",
         )
+    if execution_workflow_text.count(notebook_html_only_flag) != 1:
+        fail(
+            errors,
+            "execution audit must declare its HTML-only generated-notebook exemption",
+        )
+    if notebook_html_only_flag in workflow_text:
+        fail(
+            errors,
+            "publish workflow must require all generated notebook download targets",
+        )
+    for required in (
+        "pull_request:",
+        "python scripts/export_notebooks.py",
+        "python scripts/audit_notebook_exports.py",
+        "validated-notebooks-",
+        "_book/notebooks",
+        "github.event_name != 'pull_request'",
+    ):
+        if required not in workflow_text:
+            fail(errors, f"publish workflow is missing notebook contract {required!r}")
     if PDF_FIXPOINT_RENDERER.is_file():
         renderer_text = PDF_FIXPOINT_RENDERER.read_text()
         for required in (

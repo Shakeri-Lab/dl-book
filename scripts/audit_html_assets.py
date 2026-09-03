@@ -7,6 +7,7 @@ import argparse
 from datetime import date
 from html.parser import HTMLParser
 import json
+import posixpath
 import re
 from pathlib import Path
 from urllib.parse import quote, unquote, urljoin, urlsplit
@@ -36,6 +37,7 @@ class SupportAssetParser(HTMLParser):
         self.direct_pdf_links: list[tuple[str, bool]] = []
         self.support_links: list[str] = []
         self.cover_alts: list[str] = []
+        self.picture_sources: list[dict[str, str | None]] = []
         self.coffee_icons: list[str | None] = []
         self.canonical_urls: list[str] = []
         self.body_depth = 0
@@ -64,6 +66,7 @@ class SupportAssetParser(HTMLParser):
         self.main_suppressed_depth = 0
         self.main_text_parts: list[str] = []
         self.main_images: list[tuple[str, str | None]] = []
+        self.main_image_loading: list[dict[str, str | None]] = []
 
     def handle_starttag(
         self, tag: str, attrs: list[tuple[str, str | None]]
@@ -83,6 +86,10 @@ class SupportAssetParser(HTMLParser):
                         "class": values.get("class"),
                         "href": values.get("href"),
                         "data_kind": values.get("data-kind"),
+                        "download": values.get("download"),
+                        "has_download": "download" in values,
+                        "target": values.get("target"),
+                        "rel": values.get("rel"),
                         "text": None,
                     }
                 )
@@ -156,6 +163,13 @@ class SupportAssetParser(HTMLParser):
                 self.main_images.append(
                     (values.get("src") or "<image without src>", values.get("alt"))
                 )
+                self.main_image_loading.append(
+                    {
+                        "src": values.get("src") or "<image without src>",
+                        "loading": values.get("loading"),
+                        "decoding": values.get("decoding"),
+                    }
+                )
 
         if tag == "link":
             relations = (values.get("rel") or "").split()
@@ -173,6 +187,15 @@ class SupportAssetParser(HTMLParser):
             self.assets.append(("image", src))
             if Path(urlsplit(src).path).name == "cover.png":
                 self.cover_alts.append(values.get("alt") or "")
+        elif tag == "source" and (srcset := values.get("srcset")):
+            source = srcset.split(",", 1)[0].strip().split(" ", 1)[0]
+            self.assets.append(("image source", source))
+            self.picture_sources.append(
+                {
+                    "srcset": srcset,
+                    "type": values.get("type"),
+                }
+            )
         elif tag == "meta" and (key := values.get("name") or values.get("property")):
             self.metadata.setdefault(key, []).append(values.get("content") or "")
 
@@ -274,11 +297,18 @@ PINNED_MATHJAX_URL = "https://cdn.jsdelivr.net/npm/mathjax@4.1.3/tex-chtml.js"
 PRINT_PDF_NAME = "Deep-Learning--Making-It-Learnable.pdf"
 CONTINUOUS_PDF_NAME = "Deep-Learning--Making-It-Learnable--Continuous.pdf"
 DOWNLOAD_PAGE_NAME = "download.html"
+DOWNLOAD_COVER_WEBP = "figures/cover.webp"
+MAX_DOWNLOAD_COVER_BYTES = 250 * 1024
 SUPPORT_URL = "https://buymeacoffee.com/hshakeri"
 EXPECTED_REPO_URL = "https://github.com/Shakeri-Lab/dl-book"
 EXPECTED_REPO_BRANCH = "main"
 LECTURE_MANIFEST = Path(__file__).resolve().parents[1] / "data/lectures.yml"
+NOTEBOOK_MANIFEST = Path(__file__).resolve().parent / "notebook_manifest.json"
 LECTURE_PLAYLIST_LABEL = "Lecture playlist"
+COLAB_NOTEBOOK_PREFIX = (
+    "https://colab.research.google.com/github/Shakeri-Lab/dl-book/blob/"
+    "gh-pages/notebooks/"
+)
 SOURCE_CONTROL_ID = "quarto-code-tools-source"
 GLOBAL_CODE_TOGGLE_IDS = {
     "quarto-code-tools-menu",
@@ -287,6 +317,8 @@ GLOBAL_CODE_TOGGLE_IDS = {
 }
 EXPECTED_SOURCE_PAGE_COUNT = 35
 EXPECTED_CHAPTER_TOOL_PAGE_COUNT = 30
+EXPECTED_NOTEBOOK_PAGE_COUNT = 26
+EXPECTED_NOTEBOOK_PLACEHOLDER_COUNT = 4
 MINIMUM_SPECIFIC_LECTURE_PAGES = 20
 EXPECTED_SPECIFIC_LECTURE_PAGES = 27
 EXPECTED_FALLBACK_LECTURE_PAGES = 3
@@ -501,6 +533,67 @@ def parse_lecture_manifest(path: Path) -> dict[str, list[dict[str, str]]]:
     return manifest
 
 
+def notebook_page_contract(
+    expected_source_pages: dict[str, str],
+) -> dict[str, str]:
+    """Map the exact public notebook manifest onto rendered HTML pages."""
+    if not NOTEBOOK_MANIFEST.is_file():
+        raise ValueError(f"Missing notebook manifest: {NOTEBOOK_MANIFEST}")
+    document = json.loads(NOTEBOOK_MANIFEST.read_text(encoding="utf-8"))
+    if not isinstance(document, dict) or document.get("schema_version") != 1:
+        raise ValueError("scripts/notebook_manifest.json must use schema version 1")
+    entries = document.get("notebooks")
+    if not isinstance(entries, list) or len(entries) != EXPECTED_NOTEBOOK_PAGE_COUNT:
+        found = len(entries) if isinstance(entries, list) else "a non-list value"
+        raise ValueError(
+            f"Expected {EXPECTED_NOTEBOOK_PAGE_COUNT} notebook entries, found {found}"
+        )
+
+    rendered: dict[str, str] = {}
+    slugs: set[str] = set()
+    for index, entry in enumerate(entries, start=1):
+        if not isinstance(entry, dict):
+            raise ValueError(f"Notebook manifest entry {index} must be an object")
+        source = entry.get("source")
+        slug = entry.get("slug")
+        if not isinstance(source, str) or not isinstance(slug, str):
+            raise ValueError(
+                f"Notebook manifest entry {index} needs string source and slug fields"
+            )
+        if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", slug):
+            raise ValueError(f"Notebook manifest entry {index} has invalid slug {slug!r}")
+        page = str(Path(source).with_suffix(".html"))
+        if page not in expected_source_pages:
+            raise ValueError(f"Notebook source is not a configured book page: {source}")
+        if page in EXPECTED_PART_PAGES:
+            raise ValueError(f"Part page must not publish a notebook: {source}")
+        if page in rendered:
+            raise ValueError(f"Duplicate notebook source in manifest: {source}")
+        if slug in slugs:
+            raise ValueError(f"Duplicate notebook slug in manifest: {slug}")
+        rendered[page] = slug
+        slugs.add(slug)
+
+    non_part_pages = set(expected_source_pages) - set(EXPECTED_PART_PAGES)
+    if not set(rendered) < non_part_pages:
+        raise ValueError("Notebook pages must be a proper subset of non-Part pages")
+    unavailable = non_part_pages - set(rendered)
+    if len(unavailable) != EXPECTED_NOTEBOOK_PLACEHOLDER_COUNT:
+        raise ValueError(
+            f"Expected {EXPECTED_NOTEBOOK_PLACEHOLDER_COUNT} explicit unavailable "
+            f"notebook pages, found {len(unavailable)}: {sorted(unavailable)}"
+        )
+    return rendered
+
+
+def notebook_download_href(page_name: str, slug: str) -> str:
+    """Return the browser-relative public notebook URL for one rendered page."""
+    parent = str(Path(page_name).parent).replace("\\", "/")
+    if parent == ".":
+        parent = ""
+    return posixpath.relpath(f"notebooks/{slug}.ipynb", start=parent or ".")
+
+
 def chapter_tools_page_contract(
     expected_source_pages: dict[str, str],
 ) -> tuple[dict[str, list[dict[str, str]]], int, int]:
@@ -625,6 +718,116 @@ def main_image_alt_errors(
     ]
 
 
+def main_image_loading_errors(
+    page_name: str, images: list[dict[str, str | None]]
+) -> list[str]:
+    """Require an eager first image and lazy, asynchronous later images."""
+    errors: list[str] = []
+    if not images:
+        return errors
+
+    first = images[0]
+    if first["loading"] is not None or first["decoding"] is not None:
+        errors.append(
+            f"{page_name}: first content image must remain eager, found "
+            f"loading={first['loading']!r}, decoding={first['decoding']!r} "
+            f"for {first['src']}"
+        )
+
+    for index, image in enumerate(images[1:], start=2):
+        if image["loading"] != "lazy" or image["decoding"] != "async":
+            errors.append(
+                f"{page_name}: content image {index} must use loading='lazy' "
+                f"and decoding='async', found loading={image['loading']!r}, "
+                f"decoding={image['decoding']!r} for {image['src']}"
+            )
+    return errors
+
+
+def html_source_errors() -> list[str]:
+    """Pin the source-side contracts behind Phase E and F HTML behavior."""
+    errors: list[str] = []
+    plan_script = (ROOT / "plan-code-interactions.html").read_text(encoding="utf-8")
+    mathjax_config = (ROOT / "mathjax-config.html").read_text(encoding="utf-8")
+    lazy_filter = ROOT / "filters/lazy-images.lua"
+    chapter_tools = (ROOT / "filters/chapter-tools.lua").read_text(encoding="utf-8")
+    quarto_config = (ROOT / "_quarto.yml").read_text(encoding="utf-8")
+
+    if re.search(r"\bregion\.hidden\s*=", plan_script):
+        errors.append(
+            "plan-code-interactions.html: step regions must not collapse with "
+            "region.hidden assignment"
+        )
+    for contract in (
+        'setAttribute("hidden", "until-found")',
+        'addEventListener("beforematch"',
+        'setAttribute(\n          "aria-controls"',
+        "collapseFocusTargets(mapping)",
+        "openFocusTargets(mapping)",
+        'querySelectorAll("pre.sourceCode, .code-copy-button")',
+    ):
+        if contract not in plan_script:
+            errors.append(
+                "plan-code-interactions.html: missing searchable-collapse contract "
+                f"{contract!r}"
+            )
+
+    if not re.search(
+        r"loader\s*:\s*\{\s*load\s*:\s*\[\s*[\"']ui/lazy[\"']\s*\]",
+        mathjax_config,
+        re.DOTALL,
+    ):
+        errors.append(
+            "mathjax-config.html: pinned MathJax must load the ui/lazy extension"
+        )
+    if not re.search(
+        r"lazyAlwaysTypeset\s*:\s*\[\s*['\"]head['\"]\s*,\s*"
+        r"['\"]span\[id\^=['\"]eq-['\"]\]['\"]\s*\]",
+        mathjax_config,
+    ):
+        errors.append(
+            "mathjax-config.html: numbered equation containers must remain eager "
+            "under lazy MathJax"
+        )
+
+    if not lazy_filter.is_file():
+        errors.append("filters/lazy-images.lua: HTML lazy-image filter is missing")
+    else:
+        filter_text = lazy_filter.read_text(encoding="utf-8")
+        for contract in (
+            'FORMAT:match("^html")',
+            'image.attributes.loading = "lazy"',
+            'image.attributes.decoding = "async"',
+        ):
+            if contract not in filter_text:
+                errors.append(
+                    "filters/lazy-images.lua: missing image-loading contract "
+                    f"{contract!r}"
+                )
+
+    for contract in (
+        "- filters/lazy-images.lua",
+        "- figures/cover.webp",
+    ):
+        if contract not in quarto_config:
+            errors.append(f"_quarto.yml: missing Phase E contract {contract!r}")
+
+    for contract in (
+        'scripts", "notebook_manifest.json"',
+        'data-kind="notebook-download"',
+        'data-kind="colab"',
+        'Notebook <span class="visually-hidden">(not available for this page)</span>',
+        "gh-pages/notebooks/",
+    ):
+        if contract not in chapter_tools:
+            errors.append(
+                "filters/chapter-tools.lua: missing Phase F notebook contract "
+                f"{contract!r}"
+            )
+
+    return errors
+
+
 def cross_volume_advisories(page_name: str, main_text: str) -> list[str]:
     """Warn when a sibling-book pointer sounds like a prerequisite."""
     prose = " ".join(main_text.split())
@@ -669,13 +872,23 @@ def main() -> int:
             "still checking both download links and every other landing-page contract"
         ),
     )
+    parser.add_argument(
+        "--allow-missing-generated-notebooks",
+        action="store_true",
+        help=(
+            "Allow an HTML-only audit to omit generated notebook files while still "
+            "checking all 26 routes and every rendered chapter-tools contract"
+        ),
+    )
     args = parser.parse_args()
     root = args.root.resolve()
+    source_contract_errors = html_source_errors()
     expected_source_pages = source_page_contract()
     try:
         expected_chapter_tools, specific_lecture_pages, fallback_lecture_pages = (
             chapter_tools_page_contract(expected_source_pages)
         )
+        expected_notebooks = notebook_page_contract(expected_source_pages)
     except (ValueError, json.JSONDecodeError) as error:
         print(f"FAILED: {error}")
         return 1
@@ -750,6 +963,18 @@ def main() -> int:
     accessibility_errors: list[str] = []
     publication_errors: list[str] = []
     advisories: list[str] = []
+    missing_notebooks = [
+        root / "notebooks" / f"{slug}.ipynb"
+        for slug in expected_notebooks.values()
+        if not (root / "notebooks" / f"{slug}.ipynb").is_file()
+    ]
+    if missing_notebooks and not args.allow_missing_generated_notebooks:
+        publication_errors.extend(
+            f"missing published notebook {path.relative_to(root)}"
+            for path in missing_notebooks
+        )
+    notebook_linked_pages = 0
+    notebook_placeholder_pages = 0
     for page in pages:
         page_text = page.read_text(encoding="utf-8")
         html_parser = SupportAssetParser()
@@ -807,34 +1032,68 @@ def main() -> int:
                     "class": "chapter-tools__link",
                     "href": entry["url"],
                     "data_kind": entry["kind"],
+                    "download": None,
+                    "has_download": False,
+                    "target": None,
+                    "rel": None,
                     "text": entry["label"],
                 }
                 for entry in expected_lecture_entries
             ]
+            notebook_slug = expected_notebooks.get(page_name)
+            if notebook_slug is not None:
+                notebook_linked_pages += 1
+                expected_links.extend(
+                    [
+                        {
+                            "class": "chapter-tools__link",
+                            "href": notebook_download_href(page_name, notebook_slug),
+                            "data_kind": "notebook-download",
+                            "download": "",
+                            "has_download": True,
+                            "target": None,
+                            "rel": None,
+                            "text": "Download notebook",
+                        },
+                        {
+                            "class": "chapter-tools__link",
+                            "href": COLAB_NOTEBOOK_PREFIX
+                            + f"{notebook_slug}.ipynb",
+                            "data_kind": "colab",
+                            "download": None,
+                            "has_download": False,
+                            "target": "_blank",
+                            "rel": "noopener",
+                            "text": "Open in Colab (opens in a new tab)",
+                        },
+                    ]
+                )
             if html_parser.chapter_tool_links != expected_links:
                 navigation_errors.append(
-                    f"{page_name}: rendered lecture links differ from manifest; "
+                    f"{page_name}: rendered chapter-tool links differ from manifests; "
                     f"expected {expected_links}, found {html_parser.chapter_tool_links}"
                 )
-            expected_placeholder = {
-                "tag": "span",
-                "class": "chapter-tools__placeholder",
-                "aria_disabled": "true",
-                "href": None,
-                "text": "Notebook (coming soon)",
-            }
-            if html_parser.chapter_tool_placeholders != [expected_placeholder]:
-                accessibility_errors.append(
-                    f"{page_name}: Notebook must be one non-linking unavailable "
-                    f"placeholder, found {html_parser.chapter_tool_placeholders}"
-                )
-            if any(
-                (link.get("text") or "").casefold().startswith("notebook")
-                for link in html_parser.chapter_tool_links
-            ):
-                accessibility_errors.append(
-                    f"{page_name}: unavailable Notebook placeholder must not be a link"
-                )
+            if notebook_slug is not None:
+                if html_parser.chapter_tool_placeholders:
+                    accessibility_errors.append(
+                        f"{page_name}: notebook-enabled page must not retain an "
+                        f"unavailable placeholder: {html_parser.chapter_tool_placeholders}"
+                    )
+            else:
+                notebook_placeholder_pages += 1
+                expected_placeholder = {
+                    "tag": "span",
+                    "class": "chapter-tools__placeholder",
+                    "aria_disabled": "true",
+                    "href": None,
+                    "text": "Notebook (not available for this page)",
+                }
+                if html_parser.chapter_tool_placeholders != [expected_placeholder]:
+                    accessibility_errors.append(
+                        f"{page_name}: Notebook must be one honest, non-linking "
+                        f"unavailable placeholder, found "
+                        f"{html_parser.chapter_tool_placeholders}"
+                    )
             if not chapter_tools_follows_title(page_name, page_text):
                 navigation_errors.append(
                     f"{page_name}: chapter-tools aside must immediately follow the "
@@ -919,6 +1178,12 @@ def main() -> int:
         accessibility_errors.extend(
             main_image_alt_errors(page_name, html_parser.main_images)
         )
+        if page_name in expected_source_pages:
+            accessibility_errors.extend(
+                main_image_loading_errors(
+                    page_name, html_parser.main_image_loading
+                )
+            )
 
         absent_social = sorted(REQUIRED_SOCIAL_METADATA - html_parser.metadata.keys())
         if absent_social:
@@ -998,6 +1263,22 @@ def main() -> int:
             ]:
                 navigation_errors.append(
                     f"{page_name}: cover must have one specific accessible description"
+                )
+            if html_parser.picture_sources != [
+                {"srcset": DOWNLOAD_COVER_WEBP, "type": "image/webp"}
+            ]:
+                navigation_errors.append(
+                    f"{page_name}: cover picture must prefer one WebP source, found "
+                    f"{html_parser.picture_sources}"
+                )
+            cover_webp = root / DOWNLOAD_COVER_WEBP
+            if (
+                cover_webp.is_file()
+                and cover_webp.stat().st_size > MAX_DOWNLOAD_COVER_BYTES
+            ):
+                navigation_errors.append(
+                    f"{page_name}: WebP cover is {cover_webp.stat().st_size:,} bytes; "
+                    f"limit is {MAX_DOWNLOAD_COVER_BYTES:,}"
                 )
             for contract in (
                 "$0 · Free",
@@ -1113,17 +1394,31 @@ def main() -> int:
                     "index.html: support coffee icons must be hidden from assistive text"
                 )
 
+    if notebook_linked_pages != EXPECTED_NOTEBOOK_PAGE_COUNT:
+        navigation_errors.append(
+            f"expected {EXPECTED_NOTEBOOK_PAGE_COUNT} notebook-linked pages, found "
+            f"{notebook_linked_pages}"
+        )
+    if notebook_placeholder_pages != EXPECTED_NOTEBOOK_PLACEHOLDER_COUNT:
+        navigation_errors.append(
+            f"expected {EXPECTED_NOTEBOOK_PLACEHOLDER_COUNT} honest unavailable "
+            f"notebook placeholders, found {notebook_placeholder_pages}"
+        )
+
     for advisory in advisories:
         print(advisory)
 
     if (
-        missing
+        source_contract_errors
+        or missing
         or metadata_errors
         or navigation_errors
         or rendered_content_errors
         or accessibility_errors
         or publication_errors
     ):
+        for error in source_contract_errors:
+            print(error)
         for (kind, asset), affected_pages in sorted(
             missing.items(), key=lambda item: str(item[0][1])
         ):
@@ -1149,7 +1444,8 @@ def main() -> int:
         for error in publication_errors:
             print(error)
         print(
-            f"FAILED: {len(missing)} missing unique HTML support asset(s) and "
+            f"FAILED: {len(source_contract_errors)} Phase E/F source violation(s), "
+            f"{len(missing)} missing unique HTML support asset(s), "
             f"{len(metadata_errors)} metadata/renderer violation(s), "
             f"{len(navigation_errors)} navigation/disclosure violation(s), "
             f"{len(rendered_content_errors)} rendered-content leak(s), and "
@@ -1162,9 +1458,12 @@ def main() -> int:
     print(
         f"HTML support assets and metadata: pass ({len(pages)} pages, "
         f"{len(checked)} unique local stylesheets/scripts/icons, exact MathJax pin, "
+        "searchable Plan-to-Code collapse, lazy math and non-first images, "
         f"{len(expected_source_pages)} direct source links with no global code "
         f"toggle, {len(expected_chapter_tools)} accessible chapter-tools strips "
         f"({specific_lecture_pages} specific, {fallback_lecture_pages} fallback), "
+        f"{notebook_linked_pages} published notebook routes with "
+        f"{notebook_placeholder_pages} honest unavailable placeholders, "
         "canonical URLs, edition stamps, skip links, image alternatives, "
         f"and leak-free rendered content; {len(advisories)} cross-volume "
         "advisory warning(s))"

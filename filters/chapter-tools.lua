@@ -1,5 +1,5 @@
 --- chapter-tools.lua --- HTML-only links from each manuscript page to its
---- companion lecture resources, plus a reserved (non-link) notebook slot.
+--- companion lecture resources and validated, downloadable notebooks.
 ---
 --- Lecture links are data, not prose: keep them in data/lectures.yml so the
 --- mapping can be audited without editing thirty source pages. The filter is
@@ -29,6 +29,35 @@ local function load_lectures()
     error("data/lectures.yml must contain a top-level 'lectures' map")
   end
   return lectures
+end
+
+local function load_notebooks()
+  local project_dir = quarto.project.directory or "."
+  local path = pandoc.path.join({project_dir, "scripts", "notebook_manifest.json"})
+  local parsed = pandoc.json.decode(read_file(path))
+  if parsed.schema_version ~= 1 or type(parsed.notebooks) ~= "table" then
+    error("scripts/notebook_manifest.json must use schema version 1")
+  end
+
+  local notebooks = {}
+  local slugs = {}
+  for _, entry in ipairs(parsed.notebooks) do
+    local source = entry.source
+    local slug = entry.slug
+    if type(source) ~= "string" or type(slug) ~= "string" then
+      error("Every notebook manifest entry needs string source and slug fields")
+    end
+    source = source:gsub("\\", "/"):gsub("^%./", "")
+    if notebooks[source] ~= nil then
+      error("Duplicate notebook source in manifest: " .. source)
+    end
+    if slugs[slug] ~= nil then
+      error("Duplicate notebook slug in manifest: " .. slug)
+    end
+    notebooks[source] = entry
+    slugs[slug] = true
+  end
+  return notebooks
 end
 
 local function source_path()
@@ -67,6 +96,34 @@ end
 
 local function tool_separator()
   return '<span class="chapter-tools__separator" aria-hidden="true">·</span>'
+end
+
+local function notebook_href(source, slug)
+  local _, depth = source:gsub("/", "")
+  return string.rep("../", depth) .. "notebooks/" .. slug .. ".ipynb"
+end
+
+local function notebook_tools(entry, source)
+  if entry == nil then
+    return {
+      '<span class="chapter-tools__placeholder" aria-disabled="true" ' ..
+        'title="No executable notebook is available for this page">' ..
+        'Notebook <span class="visually-hidden">(not available for this page)</span></span>'
+    }
+  end
+
+  local slug = entry.slug
+  local download = notebook_href(source, slug)
+  local colab =
+    "https://colab.research.google.com/github/Shakeri-Lab/dl-book/blob/" ..
+    "gh-pages/notebooks/" .. slug .. ".ipynb"
+  return {
+    '<a class="chapter-tools__link" data-kind="notebook-download" href="' ..
+      escape_html(download) .. '" download>Download notebook</a>',
+    '<a class="chapter-tools__link" data-kind="colab" href="' ..
+      escape_html(colab) .. '" target="_blank" rel="noopener">Open in Colab' ..
+      '<span class="visually-hidden"> (opens in a new tab)</span></a>'
+  }
 end
 
 local function lecture_links(entries, source)
@@ -139,11 +196,9 @@ local function chapter_tools(doc)
   end
 
   local items = lecture_links(entries, source)
-  table.insert(
-    items,
-    '<span class="chapter-tools__placeholder" aria-disabled="true" title="Notebook companion planned">' ..
-      'Notebook <span class="visually-hidden">(coming soon)</span></span>'
-  )
+  for _, item in ipairs(notebook_tools(load_notebooks()[source], source)) do
+    table.insert(items, item)
+  end
 
   local context = optional_context(doc.meta)
   local context_html = ""

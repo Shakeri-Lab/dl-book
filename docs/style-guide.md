@@ -411,8 +411,15 @@ Rules:
   or pressing Escape, clears the state and closes the Code region. A per-panel
   **Show all code** control opens the complete executed surface without applying a
   step highlight and toggles back to the closed state. The number, focus state, and
-  inset rule carry the interaction independently of colour. PDF keeps the same
-  static numbered mapping without browser-only controls.
+  inset rule carry the interaction independently of colour. Collapsed source remains
+  available to native Find-in-page: a match opens the panel, selects the plan step
+  whose bracket marker owns the matching line, and leaves output-only matches in the
+  explicit **Show all code** state. Implement searchable lines and outputs with
+  `hidden="until-found"` and `beforematch`, without `aria-hidden` on those searchable
+  nodes. Temporarily remove the enclosing source block and copy control from the focus
+  and accessibility trees while the panel is closed, then restore them on reveal.
+  Browsers without `beforematch` keep the ordinary closed disclosure. PDF keeps the
+  same static numbered mapping without browser-only controls.
 - **Fusion is a teaching moment.** When one line implements two plan steps
   (`# [2][5]`), say so in the prose beneath: the gap between a sequential plan
   and a vectorised kernel is where tensor bugs live.
@@ -505,6 +512,16 @@ misdiagnosis deserves to be made explicit.
   rendering to an exact tested version so the canonical edition cannot change under a
   floating dependency. The rolling stamp reports the source-controlled content-revision
   date, never a render-time clock; rebuilding one commit must reproduce the same stamp.
+- HTML performance hints must preserve the reading contract. The pinned MathJax build
+  loads `ui/lazy`; numbered `span[id^="eq-"]` containers remain eager so direct links
+  land on stable targets, while inline and unnumbered mathematics may be deferred. Keep
+  an always-present, math-free container in `lazyAlwaysTypeset`, because the handler
+  does not accept an empty match set on chapters without numbered equations. Any
+  change to that configuration must preserve authored equation numbers and Quarto
+  equation links after a complete scroll on Chapters 14, 17, 19, and Appendix D. In
+  each document the first content image stays eager; later images use
+  `loading="lazy"` and `decoding="async"`. The PDF-download page prefers a lightweight
+  WebP cover while retaining the original PNG as the PDF source and browser fallback.
 - Source-authored `fig-alt` is authoritative. A post-render compatibility shim may fill
   an empty rendered alternative when a frozen/custom-float path drops that metadata,
   but it must never overwrite non-empty renderer output and never excuses a missing
@@ -553,8 +570,36 @@ misdiagnosis deserves to be made explicit.
   are supplemental routes, never off-page dependencies. Maintain their source-path
   mapping in `data/lectures.yml`, record honest playlist-only fallbacks in
   `docs/lectures-unresolved.md`, and never invent a one-to-one lecture match. The five
-  Part transition pages remain quiet. Until Phase F supplies notebooks, **Notebook**
-  is a visibly unavailable, non-linking placeholder rather than a dead link.
+  Part transition pages remain quiet. The exact 26 executable chapter, interlude, and
+  foundational-appendix pages in `scripts/notebook_manifest.json` provide both
+  **Download notebook** and **Open in Colab**. The Preface, Epilogue, notation
+  appendix, and statistical-learning appendix retain a visibly unavailable,
+  non-linking notebook placeholder rather than a dead link.
+- Public notebooks are generated artifacts, not a second manuscript. Preserve the
+  learner-visible Plan text and Python in source order, strip Quarto directives and
+  hidden plotting/layout harnesses, and add only one generated bootstrap cell. That
+  bootstrap must name a full source commit, install exact runtime pins, fetch only the
+  manifest-declared assets from that commit, verify every asset by SHA-256, and remain
+  silent. If a hidden cell mixes required imports or deterministic setup with plotting,
+  delimit only the necessary support using `# notebook-support-start` and
+  `# notebook-support-end`; never use those markers to smuggle an explanation,
+  computation, metric, or learner-facing check out of the visible code.
+- Publish a source notebook only after it and a full Quarto-derived reference execute
+  independently on the same runner, preserve their cells, and produce byte-identical
+  learner-visible stdout. Then compare the reference with the corresponding frozen
+  HTML stdout under `scripts/notebook_stdout_contracts.py`: exact is the default, and
+  every exception must name one surface, parse its complete output, bound each mutable
+  quantity, and state the invariant that survives the platform change. Never use a
+  book-wide tolerance. The Appendix A1 and Chapter 18 validation pairs use and record a
+  one-thread numerical-library environment to remove process-level LAPACK reduction drift
+  without perturbing seeded training elsewhere. Chapter 18's hidden setup keeps its
+  six-thread manuscript default while honoring and asserting the CI-only PyTorch override
+  during notebook validation and the weekly full-manuscript execution audit. A heavy
+  chapter may explicitly choose its own PyTorch thread count; the output gates remain the
+  proof rather than the thread setting.
+  Executed notebooks are evidence for the gate, not public artifacts. A deliberately
+  partial or non-executable listing stays visibly marked as such; the exporter must not
+  invent missing implementation.
 
 ### Reading loop
 

@@ -1,4 +1,41 @@
 
+# Rolling post-v1.3 — executable notebook path (September 2, 2026)
+
+Twenty-six chapter, interlude, and foundational-appendix pages now offer both a
+downloadable notebook and an Open in Colab route. The notebooks are generated from
+the canonical manuscript at publication time: they retain the 193 learner-visible
+Plan → Code surfaces, omit 93 hidden plotting and layout harnesses, and add one
+commit-pinned bootstrap that installs exact runtime versions and verifies every
+downloaded data or module artifact by SHA-256. The one intentionally partial API
+listing remains a non-executable listing rather than being silently repaired.
+
+Publication now executes both the compact notebook and a full Quarto-derived reference
+from clean temporary directories in six checked shards. Their learner-visible stdout
+must agree byte for byte on the same runner. A second, explicit portability ledger
+compares that output with the committed HTML freeze: exact is the default, while only
+reviewed numerical or structural differences may pass. Only the unexecuted source
+notebooks that passed both checks enter the `gh-pages` bundle. The Preface, Epilogue,
+and two non-executable appendices retain an honest unavailable placeholder; the five
+Part transitions remain quiet. This is an HTML-only delivery change, so the fixed v1.3
+PDFs remain unchanged at 548 and 519 pages.
+
+# Rolling post-v1.3 — searchable code and deferred web assets (September 2, 2026)
+
+Collapsed Plan → Code panels now participate in native Find-in-page. A match inside
+source code opens the owning panel and activates the plan step whose bracket marker
+owns that line; matches in an output open the complete panel. The explicit Show-all,
+Escape, keyboard, and no-JavaScript paths remain available, and browsers without
+`hidden="until-found"` support retain the earlier collapsed behavior.
+
+The exact MathJax 4.1.3 build now uses its lazy-typesetting component for inline and
+unnumbered mathematics. Numbered equation containers remain eager so cold Quarto
+cross-reference targets stay fully laid out; the heaviest mathematical pages guard
+both the numbering sequence and complete-scroll behavior.
+The first content image on each page remains eager while later images load and decode
+lazily. The free-PDF landing page prefers a 230,262-byte WebP cover and keeps the
+original PNG as both browser fallback and PDF source. This pass changes only the
+canonical HTML; the fixed v1.3 PDFs remain unchanged at 548 and 519 pages.
+
 # Rolling post-v1.3 — HTML source and lecture tools (September 2, 2026)
 
 The canonical HTML now exposes one direct repository Source control on all 35 QMD

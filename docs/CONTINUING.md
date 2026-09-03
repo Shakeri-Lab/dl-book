@@ -18,9 +18,10 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > 1–20, three interludes, five appendices, and an epilogue. The July 28
 > comprehensive audit is complete: verified glyph losses are repaired, chapter
 > retrieval/source contracts are uniform, exercise modes are canonical, and
-> attention-as-test-time-regression is now its own interlude. Phase D adds only
-> HTML-native Source and lecture-resource affordances; the two released v1.3 PDFs
-> remain fixed. **Nothing is mid-flight.** Every open item is a decision waiting on
+> attention-as-test-time-regression is now its own interlude. Phases D–F add only
+> HTML-native source, lecture-resource, deferred-loading, and executable-notebook
+> affordances; the two released v1.3 PDFs remain fixed. **Nothing is mid-flight.**
+> Every open item is a decision waiting on
 > the author — see **§9**,
 > which supersedes any older status text below it.
 >
@@ -169,9 +170,35 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > adds an accessible chapter-tools strip to the exact 30 non-Part reading pages.
 > Twenty-seven pages link specific public DS 6050 videos, slide decks, or course
 > segments; the Preface, Epilogue, and notation appendix use the complete playlist,
-> as recorded in `docs/lectures-unresolved.md`. A non-linking Notebook placeholder
-> reserves Phase F's slot. The five Part transitions remain quiet, and Quarto's
+> as recorded in `docs/lectures-unresolved.md`. The five Part transitions remain
+> quiet, and Quarto's
 > global show/hide code toggle stays disabled so it cannot fight Plan → Code.
+> Phase E closes the four remaining web-reading polish items without touching print.
+> Native Find-in-page can reveal a collapsed code token and activate its owning plan
+> step; MathJax 4.1.3 typesets inline and unnumbered mathematics lazily while keeping
+> numbered equation targets eager; every content image after the first uses lazy
+> loading and asynchronous decoding; and the PDF landing page prefers a 230,262-byte
+> WebP cover with the original PNG fallback. The HTML audit pins all four source and
+> rendered contracts, while browser checks protect equation numbers, equation links,
+> Show all, and the native-find interaction. Phase F publishes 26 generated source
+> notebooks from the canonical manuscript: 193 learner-visible Plan → Code surfaces,
+> one commit-pinned and checksum-verified bootstrap per unit, and six clean execution
+> shards. Each compact notebook must match a full Quarto-derived reference byte for
+> byte on the same runner. A separate portability ledger compares the result with the
+> frozen HTML stdout: exact is the default, and only narrowly reviewed numerical or
+> structural contracts may differ across platforms. The Appendix A1 and Chapter 18
+> public/reference pairs use a recorded one-thread numerical-library environment to
+> remove process-level LAPACK reduction drift without perturbing seeded training
+> elsewhere. Chapter 18's hidden setup keeps its six-thread manuscript default, but
+> honors and asserts the CI-only PyTorch override inside notebook validation and the
+> weekly full-manuscript execution audit.
+> Deliberately heavier chapter cells may still choose their own PyTorch thread count, and
+> the output gates remain authoritative. The Preface, Epilogue, and two non-executable
+> appendices retain honest unavailable placeholders; executed copies remain CI evidence
+> rather than public downloads.
+> The next print-affecting cut must pair byte-reproducible PDF builds with the five
+> KOMA-Script `\setpartpreamble` Part openers, then accept their repagination and outline
+> changes as one audited change.
 >
 > Chapter 14 now closes with the Transformer and hands off to the
 > **Attention as Test-Time Regression** interlude. Chapter 15 separates
