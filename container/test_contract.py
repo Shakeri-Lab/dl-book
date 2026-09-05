@@ -64,6 +64,18 @@ class RecipeTests(unittest.TestCase):
         kernel = json.loads((ROOT / "container/kernel.json").read_text())
         self.assertEqual(kernel["argv"][:2], ["/opt/venv/bin/python", "/opt/dlbook/kernel_start.py"])
 
+    def test_canonical_dispatch_is_consistent_between_manifest_and_image(self):
+        config = json.loads((ROOT / "container/canonical-runtime.json").read_text())
+        dockerfile = (ROOT / "container/Dockerfile").read_text()
+        required = {"MKL_CBWR": "COMPATIBLE", "ATEN_CPU_CAPABILITY": "avx2",
+                    "OPENBLAS_CORETYPE": "Haswell",
+                    "NPY_DISABLE_CPU_FEATURES": "X86_V4,AVX512_ICL,AVX512_SPR",
+                    "ONEDNN_MAX_CPU_ISA": "AVX2"}
+        for key, value in required.items():
+            self.assertEqual(config["environment"][key], value)
+            self.assertIn(f"{key}={value}", dockerfile)
+            self.assertIn(key, PROBE_KEYS)
+
     def test_workflow_preserves_independent_image_and_complete_gate(self):
         text = (ROOT / ".github/workflows/canonical-freeze.yml").read_text()
         for required in ("workflow_call:", "source_revision:", "image_run_id:",

@@ -20,6 +20,7 @@ from test_execution_coverage import SilentCellExecutionTests  # Run in the same 
 from test_stable_cell_identity import RealQuartoStableIdentityTests
 from test_lstsq_sources import RealQuartoAuthoredLstsqTests
 from test_capture_lifecycle import RealCaptureLifecycleTests
+from test_runtime_policy import DispatchPolicyTests  # Reject ignored flags before any book training.
 
 
 @unittest.skipUnless(os.environ.get("QUARTO_BIN") and os.environ.get("QUARTO_PYTHON"),

@@ -27,7 +27,8 @@ ENVIRONMENT_KEYS = (
     "OMP_NUM_THREADS", "OMP_DYNAMIC", "OMP_THREAD_LIMIT", "OMP_PROC_BIND",
     "OMP_PLACES", "MKL_NUM_THREADS", "MKL_DYNAMIC", "MKL_CBWR", "MKL_ENABLE_INSTRUCTIONS",
     "MKL_THREADING_LAYER", "KMP_DETERMINISTIC_REDUCTION", "KMP_AFFINITY",
-    "OPENBLAS_NUM_THREADS", "VECLIB_MAXIMUM_THREADS", "NUMEXPR_NUM_THREADS",
+    "OPENBLAS_NUM_THREADS", "OPENBLAS_CORETYPE", "NPY_DISABLE_CPU_FEATURES",
+    "VECLIB_MAXIMUM_THREADS", "NUMEXPR_NUM_THREADS",
     "ONEDNN_MAX_CPU_ISA", "DNNL_MAX_CPU_ISA", "ATEN_CPU_CAPABILITY",
     "ONEDNN_DEFAULT_FPMATH_MODE", "DNNL_DEFAULT_FPMATH_MODE",
     "DLBOOK_TORCH_NUM_THREADS", "DLBOOK_TORCH_INTEROP_THREADS",
@@ -197,6 +198,15 @@ def runtime_observation() -> dict[str, Any]:
     import numpy  # noqa: F401 -- load the numerical libraries before observing them
     import torch
     from threadpoolctl import threadpool_info
+    from importlib.util import module_from_spec, spec_from_file_location
+
+    # Load the source-bound startup inspector without changing sys.path or
+    # importing a repository-local module into learner notebook code.
+    specification = spec_from_file_location("dlbook_dispatch_observation",
+        Path(__file__).resolve().parents[1] / "container/runtime_policy.py")
+    dispatch_policy = module_from_spec(specification)
+    specification.loader.exec_module(dispatch_policy)
+    dispatch = dispatch_policy.checked_dispatch_observation(torch)
 
     libraries = []
     for library in threadpool_info():
@@ -218,6 +228,7 @@ def runtime_observation() -> dict[str, Any]:
                   "num_interop_threads": torch.get_num_interop_threads()},
         "loaded_libraries": libraries,
         "environment": {key: os.environ.get(key) for key in ENVIRONMENT_KEYS},
+        "dispatch": dispatch,
     }
 
 

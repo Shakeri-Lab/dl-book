@@ -26,6 +26,7 @@ class PortablePolicyTests(unittest.TestCase):
     def environment(self, threads=6):
         return portable.execution_environment(
             {"PATH": "/bin", "HOME": "/keep-home", "MKL_CBWR": "AVX2", "ATEN_CPU_CAPABILITY": "avx2",
+             "OPENBLAS_CORETYPE": "Haswell", "NPY_DISABLE_CPU_FEATURES": "X86_V4,AVX512_ICL,AVX512_SPR",
              "OMP_THREAD_LIMIT": "2", "JUPYTER_PATH": "/old", "DLBOOK_EXECUTION_UNIT": "stale"},
             keys=freeze_provenance.ENVIRONMENT_KEYS, work=self.work, jupyter=self.root / "jupyter",
             python=self.python, probes=self.probes, threads=threads, epoch="1770000000")
@@ -40,7 +41,8 @@ class PortablePolicyTests(unittest.TestCase):
             self.assertEqual(env["PYTHONPATH"], str(self.work / "code"))
             self.assertEqual(env["JUPYTER_PATH"], str(self.root / "jupyter/data"))
             self.assertEqual(env["SOURCE_DATE_EPOCH"], "1770000000")
-            for key in ("MKL_CBWR", "ATEN_CPU_CAPABILITY", "OMP_THREAD_LIMIT", "DLBOOK_EXECUTION_UNIT"):
+            for key in ("MKL_CBWR", "ATEN_CPU_CAPABILITY", "OPENBLAS_CORETYPE", "NPY_DISABLE_CPU_FEATURES",
+                        "OMP_THREAD_LIMIT", "DLBOOK_EXECUTION_UNIT"):
                 self.assertNotIn(key, env)
 
     def test_profile_rejects_other_thread_counts_and_clock_epoch(self):

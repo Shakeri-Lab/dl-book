@@ -13,8 +13,9 @@ Python, wheel hashes, and thread/dispatch environment. Two independent CI runs o
 the same source and exact image must agree byte-for-byte on numerical stdout,
 frozen JSON/figures, and retained raw paired measurements before that candidate
 replaces the publication freeze. Runtime fingerprints will
-travel beside the freeze. The current v1.3 release remains unchanged until the
-new evidence and complete publication audits pass.
+travel beside the freeze. The stable v1.3 release remains fixed. The rolling
+edition may change only after the new evidence and complete publication audits
+pass; a new stable tag requires separate author authorization.
 
 Portability and prose precision have different contracts:
 
@@ -50,11 +51,27 @@ measurement exports are specified in `docs/paired-evidence-plan.json`; these
 small, environment-gated sidecars preserve per-seed evidence without changing
 learner stdout or random-number state.
 
-The dispatch settings `ONEDNN_MAX_CPU_ISA=AVX2` and `MKL_CBWR=AVX2` restrict
-sources of variation but do not guarantee cross-host framework identity. In
-particular, Intel's AVX2 conditional numerical reproducibility guarantee is not a
-universal guarantee for AMD CPUs. Record the actual CPU and loaded libraries, and
-claim only the comparisons the repeat and weekly audits demonstrate.
+**Dispatch-policy candidate, September 5; no accepted new freeze.** The original
+independent Linux runs exposed distinct Torch, OpenBLAS, and NumPy dispatch paths
+despite matching image and input identities. The revised candidate sets
+`MKL_CBWR=COMPATIBLE`, `ATEN_CPU_CAPABILITY=avx2`,
+`OPENBLAS_CORETYPE=Haswell`, and
+`NPY_DISABLE_CPU_FEATURES=X86_V4,AVX512_ICL,AVX512_SPR`, retaining oneDNN AVX2 and
+the one-thread budgets. These control different libraries, not one shared
+dispatcher. In particular, Intel documents that the old `MKL_CBWR=AVX2`
+environment setting can fall back to automatic dispatch on non-Intel processors;
+its cross-vendor CNR recipe is conditional and MKL-specific.
+
+The complete eight-run expanded sample matches all 41 finite output witnesses
+under the combined policy across the observed AMD configurations, including an
+AVX512-capable host. **Expanded-policy Intel execution remains untested:** no
+run in that sample landed on Intel. This is not full training evidence or a
+claim of universal cross-host identity. Keep the original failed bundles and all
+probe conditions, stop host sampling, and require a fresh complete same-image
+pair under the strict whole-freeze/stdout/raw-sidecar gate. See
+`docs/reviews/2026-09-05-cross-host-dispatch.md` for original paths, hashes,
+controlled observations, and primary documentation. Record the actual CPU and
+loaded libraries; do not substitute requested flags for observed behavior.
 
 **Least-squares driver correction, September 5.** The independent Linux repeat
 exposed actual figure-coordinate differences despite identical rounded stdout.

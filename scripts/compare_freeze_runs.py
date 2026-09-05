@@ -36,6 +36,49 @@ def _required(document: dict[str, Any], *keys: str) -> Any:
     return current
 
 
+def dispatch_identity(observation: dict[str, Any]) -> dict[str, Any] | None:
+    """Validate requested effects, comparing selected paths rather than host menus.
+
+    Historical observations did not carry this field. They remain historical
+    evidence; a newly requested dispatch override may never use that exemption.
+    """
+    environment = _required(observation, "environment")
+    dispatch = observation.get("dispatch")
+    requested = any(environment.get(key) for key in (
+        "ATEN_CPU_CAPABILITY", "OPENBLAS_CORETYPE", "NPY_DISABLE_CPU_FEATURES",
+    ))
+    if dispatch is None:
+        if requested:
+            raise ValueError("Requested dispatch policy lacks an actual dispatch observation")
+        return None
+    if not isinstance(dispatch, dict):
+        raise ValueError("Invalid actual dispatch observation")
+    # Import only stdlib policy validation from this checkout, never load or
+    # infer the reviewed runtime from the machine doing the comparison.
+    policy_path = str(Path(__file__).resolve().parents[1] / "container")
+    if policy_path not in sys.path:
+        sys.path.insert(0, policy_path)
+    from runtime_policy import validate_dispatch_policy
+    try:
+        validate_dispatch_policy(dispatch, environment)
+    except RuntimeError as exc:
+        raise ValueError(f"Recorded dispatch policy was not applied: {exc}") from exc
+    selected = {
+        function: {signature: _required(record, "current")
+                   for signature, record in signatures.items()}
+        for function, signatures in _required(dispatch, "numpy_opt_func_info").items()
+    }
+    libraries = [{key: library.get(key) for key in (
+        "internal_api", "version", "architecture", "num_threads", "threading_layer",
+    )} for library in _required(dispatch, "numpy_blas")]
+    return {
+        "torch_cpu_capability": _required(dispatch, "torch_cpu_capability"),
+        "numpy_version": _required(dispatch, "numpy_version"),
+        "numpy_selected_ufunc_targets": selected,
+        "numpy_blas": sorted(libraries, key=json_digest),
+    }
+
+
 def runtime_identity(runtime: dict[str, Any]) -> dict[str, Any]:
     libraries = []
     for item in _required(runtime, "loaded_libraries"):
@@ -50,6 +93,7 @@ def runtime_identity(runtime: dict[str, Any]) -> dict[str, Any]:
         "torch": _required(runtime, "torch"),
         "loaded_libraries": sorted(libraries, key=json_digest),
         "environment": _required(runtime, "environment"),
+        "dispatch": dispatch_identity(runtime),
     }
 
 
@@ -61,6 +105,7 @@ def kernel_identity(observation: dict[str, Any]) -> dict[str, Any]:
         "torch": {key: _required(observation, "torch", key)
                   for key in ("version", "config", "num_threads", "num_interop_threads")},
         "environment": _required(observation, "environment"),
+        "dispatch": dispatch_identity(observation),
     }
 
 

@@ -10,6 +10,34 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 
 ---
 
+> ## Latest execution state — 2026-09-05 (read this first)
+>
+> The dispatch-policy correction is a **candidate pending full independent
+> execution**, not an accepted freeze. The preceding source `95fa50d` completed
+> physical schema-2 capture on the Mac profiles and Linux run `33952532056`;
+> that Linux job failed later on fixture-artifact upload. Preserve that evidence
+> and the earlier rejected `eabfcc9` bundles. The latter pair exposed numerical
+> differences between AMD and Intel despite the same source and image, so the
+> upload repair alone cannot clear publication.
+>
+> The initial four-policy AMD/Intel probe still differed with both ATen and
+> OpenBLAS overrides. All eight later six-policy runs landed on AMD, including
+> one AVX512-capable configuration. Their full 41-output witness agrees under
+> the combined candidate: `MKL_CBWR=COMPATIBLE`, `ATEN_CPU_CAPABILITY=avx2`,
+> `OPENBLAS_CORETYPE=Haswell`, and
+> `NPY_DISABLE_CPU_FEATURES=X86_V4,AVX512_ICL,AVX512_SPR`, retaining oneDNN AVX2
+> and one-thread budgets. The expanded Intel conditions remain **untested**.
+> Stop host sampling and retain every original result. Exact run IDs, report
+> hashes, the separate dispatcher mechanisms, and limits are in
+> `docs/reviews/2026-09-05-cross-host-dispatch.md`.
+>
+> The next source checkpoint and image require complete independent runs before
+> promotion: strict stdout, all frozen bytes, and raw paired sidecars must match.
+> No numerical tolerance or manuscript result was changed to make a gate pass.
+> No stable tag or runtime-archive prerelease is authorized. Do not stage the
+> old dirty Mac `_freeze` as canonical evidence. The dated history below remains
+> useful but does not override this latest execution state.
+
 > ## Current revision — 2026-09-04 (read this first)
 >
 > The learning-loop pass is implementing the accepted HTML review across plans,

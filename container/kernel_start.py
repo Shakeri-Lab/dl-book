@@ -12,7 +12,7 @@ from pathlib import Path
 import platform
 import uuid
 
-from runtime_policy import ENVIRONMENT_KEYS, initialize_torch
+from runtime_policy import ENVIRONMENT_KEYS, checked_dispatch_observation, initialize_torch
 
 
 def main():
@@ -33,6 +33,7 @@ def main():
                       "num_threads": torch.get_num_threads(),
                       "num_interop_threads": torch.get_num_interop_threads()},
             "environment": {key: os.environ.get(key) for key in ENVIRONMENT_KEYS},
+            "dispatch": checked_dispatch_observation(torch),
         }
         (directory / f"kernel-{uuid.uuid4().hex}.json").write_text(
             json.dumps(observation, indent=2, sort_keys=True) + "\n"

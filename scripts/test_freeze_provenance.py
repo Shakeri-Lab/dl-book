@@ -12,7 +12,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from compare_freeze_runs import compare_runs, validate_fingerprint
+from compare_freeze_runs import compare_runs, dispatch_identity, validate_fingerprint
 from audit_frozen_stdout import native_execution_ordinals, stdout_records
 from freeze_provenance import SCHEMA_VERSION, execution_plan, freeze_inventory, json_digest, load_preflight, main, preflight_observation, sha256, source_fingerprint, write_json
 
@@ -165,6 +165,72 @@ class FreezeProvenanceTests(unittest.TestCase):
         report = self.compare()
         self.assertTrue(report["passed"], report)
         self.assertEqual(report["stdout_blocks_checked"], 2)
+
+    def add_dispatch_observations(self):
+        """Synthetic observations test evidence rejection, not numerical behavior."""
+        dispatch = {
+            "machine": "x86_64", "torch_cpu_capability": "AVX2", "numpy_version": "2.5.1",
+            "numpy_blas": [{"internal_api": "openblas", "architecture": "Haswell",
+                            "version": "fixture", "num_threads": 1}],
+            "numpy_cpu_baseline": ["X86_V2"],
+            "numpy_cpu_dispatch": ["X86_V3", "X86_V4", "AVX512_ICL", "AVX512_SPR"],
+            "numpy_cpu_features": {"X86_V3": True, "X86_V4": False,
+                                   "AVX512_ICL": False, "AVX512_SPR": False},
+            "numpy_opt_func_info": {"exp": {"dd": {"current": "X86_V3",
+                                      "available": "X86_V4 X86_V3 baseline(X86_V2)"}}},
+        }
+        for bundle in self.bundles:
+            path = bundle / "provenance/fingerprint.json"
+            document = json.loads(path.read_text())
+            for observation in [document["runtime"],
+                                *(row["observation"] for row in document["execution_probes"])]:
+                observation["environment"] = {**observation["environment"],
+                    "ATEN_CPU_CAPABILITY": "avx2", "OPENBLAS_CORETYPE": "Haswell",
+                    "NPY_DISABLE_CPU_FEATURES": "X86_V4,AVX512_ICL,AVX512_SPR"}
+                observation["dispatch"] = deepcopy(dispatch)
+            bind_preflight(bundle / "_freeze", document)
+            bind_probes(bundle / "_freeze", document)
+            write_json(path, document)
+
+    def test_effective_dispatch_identity_ignores_available_host_menus(self):
+        self.add_dispatch_observations()
+        def change_host_menu(document):
+            for observation in [document["runtime"],
+                                *(row["observation"] for row in document["execution_probes"])]:
+                observation["dispatch"]["numpy_cpu_features"]["EXTRA_HOST_FEATURE"] = True
+                observation["dispatch"]["numpy_opt_func_info"]["exp"]["dd"]["available"] += " EXTRA"
+                observation["dispatch"]["numpy_blas"][0]["filepath"] = "/another/physical/path.so"
+        self.mutate_fingerprint(change_host_menu)
+        self.assertTrue(self.compare()["passed"], self.compare())
+
+    def test_requested_dispatch_observation_cannot_be_omitted(self):
+        self.add_dispatch_observations()
+        self.mutate_fingerprint(lambda document: document["runtime"].pop("dispatch"))
+        self.assertFailure("lacks an actual dispatch observation")
+
+    def test_requested_effect_must_hold_in_every_actual_kernel(self):
+        self.add_dispatch_observations()
+        self.mutate_fingerprint(lambda document: document["execution_probes"][0]["observation"]
+            ["dispatch"].update(torch_cpu_capability="AVX512"))
+        self.assertFailure("Recorded dispatch policy was not applied")
+
+    def test_requested_numpy_disable_cannot_be_recorded_as_enabled(self):
+        self.add_dispatch_observations()
+        self.mutate_fingerprint(lambda document: document["runtime"]["dispatch"]
+            ["numpy_cpu_features"].update(X86_V4=True))
+        self.assertFailure("Recorded dispatch policy was not applied")
+
+    def test_distinct_selected_ufunc_paths_are_not_the_same_runtime(self):
+        self.add_dispatch_observations()
+        def change_selected(document):
+            for observation in [document["runtime"],
+                                *(row["observation"] for row in document["execution_probes"])]:
+                observation["dispatch"]["numpy_opt_func_info"]["exp"]["dd"]["current"] = "X86_V2"
+        self.mutate_fingerprint(change_selected)
+        self.assertFailure("software/thread/dispatch identity differs")
+
+    def test_historical_missing_dispatch_is_not_an_inferred_observation(self):
+        self.assertIsNone(dispatch_identity({"environment": {}}))
 
     def add_paired_manifest(self, bundle):
         provenance = bundle / "provenance"

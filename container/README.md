@@ -59,15 +59,39 @@ directory is the only injected repository import path for native QMD helpers.
 
 The image-owned kernel launcher explicitly sets Torch intra-op and inter-op
 threads to **1/1**, without monkey-patching numerical functions. Authored setup
-cells honor `DLBOOK_TORCH_NUM_THREADS`. OMP/MKL/OpenBLAS/NumExpr budgets are one;
-`ONEDNN_MAX_CPU_ISA=AVX2` and `MKL_CBWR=AVX2` are recorded dispatch policies, not
-proofs of universal bit identity. `SOURCE_DATE_EPOCH` comes from the exact source
+cells honor `DLBOOK_TORCH_NUM_THREADS`. OMP/MKL/OpenBLAS/NumExpr budgets are one.
+The September 5 candidate records these separate dispatch controls:
+
+| Runtime layer | Requested policy |
+|---|---|
+| MKL | `MKL_CBWR=COMPATIBLE` |
+| PyTorch native CPU kernels | `ATEN_CPU_CAPABILITY=avx2` |
+| NumPy's OpenBLAS library | `OPENBLAS_CORETYPE=Haswell` |
+| NumPy's own SIMD dispatcher | `NPY_DISABLE_CPU_FEATURES=X86_V4,AVX512_ICL,AVX512_SPR` |
+| oneDNN | `ONEDNN_MAX_CPU_ISA=AVX2` |
+
+These settings supersede the original MKL AVX2-only policy; they are not a
+framework-wide bit-identity guarantee. The finite saved-image witness agrees on
+all 41 selected outputs under the combined policy across the observed AMD hosts,
+including an AVX512-capable host. None of the eight expanded-policy runs landed
+on Intel, so that comparison remains untested. Preserve actual CPU, numerical
+library, and dispatcher observations alongside the requested environment. The
+original reports, source/image hashes, and limited inference are recorded in
+`docs/reviews/2026-09-05-cross-host-dispatch.md`. This is a candidate policy;
+full independent same-image book runs must still pass before promotion.
+
+`SOURCE_DATE_EPOCH` comes from the exact source
 commit timestamp, including when the image is reused. It fixes supported figure
 metadata clocks without inventing a build date.
 
 Every kernel writes a startup observation bound to its source unit and format.
 These observations report startup state, not a claim to have continuously
-monitored every cell. The portable `kernel_start.py` can also support explicitly
+monitored every cell. Explicit Torch, OpenBLAS, and NumPy SIMD overrides require
+an observed matching effective path before cells run; an ignored or unobservable
+request fails closed. Comparison authenticates those observations and compares
+selected paths, not the host's menu of available CPU features. The pre-training
+fixtures also test rejection and verify that inspection consumes neither Torch
+nor NumPy RNG state. The portable `kernel_start.py` can also support explicitly
 labeled Mac diagnostics with another thread budget; those are not canonical runs.
 
 Each render retains Quarto's actual executed notebook before the next format can
