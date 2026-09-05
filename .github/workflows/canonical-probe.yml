@@ -1,0 +1,137 @@
+name: Saved-image least-squares diagnostic
+
+# Read-only evidence, never a candidate freeze, promotion, or publishing route.
+# The image belongs to image_source_revision; the probe belongs to github.sha.
+on:
+  workflow_dispatch:
+    inputs:
+      image_source_revision:
+        description: Full ORIGINAL source commit of the saved image
+        type: string
+        default: "1da26e860d6fa76ae6b76dede273748b1439128c"
+      image_run_id:
+        description: Original Actions run containing canonical-freeze-image
+        type: string
+        default: "33937390845"
+  workflow_call:
+    inputs:
+      image_source_revision:
+        type: string
+        required: true
+      image_run_id:
+        type: string
+        required: true
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      IMAGE_SOURCE_SHA: ${{ inputs.image_source_revision }}
+      IMAGE_RUN_ID: ${{ inputs.image_run_id }}
+      DIAGNOSTIC_SHA: ${{ github.sha }}
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - name: Validate separate image and diagnostic identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$IMAGE_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$DIAGNOSTIC_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$IMAGE_RUN_ID" =~ ^[0-9]+$ ]]
+
+      - name: Check out diagnostic code at the dispatched commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: diagnostic
+          persist-credentials: false
+
+      - name: Check out the ORIGINAL source associated with the saved image
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.image_source_revision }}
+          path: original-source
+          persist-credentials: false
+
+      - name: Confirm exact clean checkout identities
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C diagnostic rev-parse HEAD)" = "$DIAGNOSTIC_SHA"
+          test "$(git -C original-source rev-parse HEAD)" = "$IMAGE_SOURCE_SHA"
+          test -z "$(git -C diagnostic status --porcelain)"
+          test -z "$(git -C original-source status --porcelain)"
+          echo "epoch=$(git -C original-source show -s --format=%ct HEAD)" >> "$GITHUB_OUTPUT"
+          mkdir -p build/probe-image build/lstsq-probe
+
+      - name: Retrieve the original image artifact without rebuilding it
+        uses: actions/download-artifact@v4
+        with:
+          name: canonical-freeze-image
+          run-id: ${{ inputs.image_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: build/probe-image/
+
+      - name: Verify with the ORIGINAL helper and source, then verify the loaded ID
+        id: image
+        shell: bash
+        run: |
+          set -euo pipefail
+          image_id=$(python original-source/container/image_artifact.py verify \
+            --root original-source --commit "$IMAGE_SOURCE_SHA" \
+            --archive build/probe-image/image.tar.gz --manifest build/probe-image/image.json)
+          docker load --input build/probe-image/image.tar.gz
+          test "$(docker image inspect --format '{{.Id}}' "$image_id")" = "$image_id"
+          test "$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$image_id")" = 'linux/amd64'
+          cp build/probe-image/image.json build/lstsq-probe/original-image.json
+          docker image inspect "$image_id" > build/lstsq-probe/loaded-image.json
+          echo "id=$image_id" >> "$GITHUB_OUTPUT"
+
+      - name: Run only the offline diagnostic, never the image's full-book entrypoint
+        timeout-minutes: 15
+        env:
+          IMAGE_ID: ${{ steps.image.outputs.id }}
+          SOURCE_DATE_EPOCH: ${{ steps.source.outputs.epoch }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm --platform linux/amd64 --network none --read-only \
+            --tmpfs /tmp:rw,nosuid,nodev,size=256m \
+            --entrypoint python \
+            --mount "type=bind,source=$PWD/diagnostic,target=/diagnostic,readonly" \
+            --mount "type=bind,source=$PWD/original-source,target=/original-source,readonly" \
+            --mount "type=bind,source=$PWD/build/probe-image,target=/image-artifact,readonly" \
+            --mount "type=bind,source=$PWD/build/lstsq-probe,target=/output" \
+            --env GITHUB_RUN_ID --env GITHUB_RUN_ATTEMPT --env GITHUB_REPOSITORY \
+            --env SOURCE_DATE_EPOCH \
+            "$IMAGE_ID" /diagnostic/scripts/probe_lstsq_repeatability.py \
+            --original-source-root /original-source --original-source-commit "$IMAGE_SOURCE_SHA" \
+            --image-artifact-dir /image-artifact --image-id "$IMAGE_ID" --image-run-id "$IMAGE_RUN_ID" \
+            --diagnostic-root /diagnostic --diagnostic-commit "$DIAGNOSTIC_SHA" \
+            --processes 8 --repeats 20 --output /output/results \
+            2>&1 | tee build/lstsq-probe/driver.log
+
+      - name: Publish diagnostic summary to this run only
+        if: always()
+        shell: bash
+        run: |
+          if test -f build/lstsq-probe/results/summary.md; then
+            cat build/lstsq-probe/results/summary.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'No completed diagnostic report. Inspect retained setup and driver evidence.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Retain raw observations and original image manifest even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lstsq-repeatability-diagnostic
+          path: build/lstsq-probe/
+          retention-days: 30
+          if-no-files-found: warn
