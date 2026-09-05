@@ -1,4 +1,4 @@
-name: Saved-image least-squares diagnostic
+name: Saved-image CPU-dispatch diagnostic
 
 # Read-only evidence, never a candidate freeze, promotion, or publishing route.
 # The image belongs to image_source_revision; the probe belongs to github.sha.
@@ -68,7 +68,7 @@ jobs:
           test -z "$(git -C diagnostic status --porcelain)"
           test -z "$(git -C original-source status --porcelain)"
           echo "epoch=$(git -C original-source show -s --format=%ct HEAD)" >> "$GITHUB_OUTPUT"
-          mkdir -p build/probe-image build/lstsq-probe
+          mkdir -p build/probe-image build/runtime-probe
 
       - name: Retrieve the original image artifact without rebuilding it
         uses: actions/download-artifact@v4
@@ -89,8 +89,8 @@ jobs:
           docker load --input build/probe-image/image.tar.gz
           test "$(docker image inspect --format '{{.Id}}' "$image_id")" = "$image_id"
           test "$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$image_id")" = 'linux/amd64'
-          cp build/probe-image/image.json build/lstsq-probe/original-image.json
-          docker image inspect "$image_id" > build/lstsq-probe/loaded-image.json
+          cp build/probe-image/image.json build/runtime-probe/original-image.json
+          docker image inspect "$image_id" > build/runtime-probe/loaded-image.json
           echo "id=$image_id" >> "$GITHUB_OUTPUT"
 
       - name: Run only the offline diagnostic, never the image's full-book entrypoint
@@ -107,22 +107,22 @@ jobs:
             --mount "type=bind,source=$PWD/diagnostic,target=/diagnostic,readonly" \
             --mount "type=bind,source=$PWD/original-source,target=/original-source,readonly" \
             --mount "type=bind,source=$PWD/build/probe-image,target=/image-artifact,readonly" \
-            --mount "type=bind,source=$PWD/build/lstsq-probe,target=/output" \
+            --mount "type=bind,source=$PWD/build/runtime-probe,target=/output" \
             --env GITHUB_RUN_ID --env GITHUB_RUN_ATTEMPT --env GITHUB_REPOSITORY \
             --env SOURCE_DATE_EPOCH \
-            "$IMAGE_ID" /diagnostic/scripts/probe_lstsq_repeatability.py \
+            "$IMAGE_ID" /diagnostic/scripts/probe_runtime_dispatch.py \
             --original-source-root /original-source --original-source-commit "$IMAGE_SOURCE_SHA" \
             --image-artifact-dir /image-artifact --image-id "$IMAGE_ID" --image-run-id "$IMAGE_RUN_ID" \
             --diagnostic-root /diagnostic --diagnostic-commit "$DIAGNOSTIC_SHA" \
-            --processes 8 --repeats 20 --output /output/results \
-            2>&1 | tee build/lstsq-probe/driver.log
+            --processes 2 --output /output/results \
+            2>&1 | tee build/runtime-probe/driver.log
 
       - name: Publish diagnostic summary to this run only
         if: always()
         shell: bash
         run: |
-          if test -f build/lstsq-probe/results/summary.md; then
-            cat build/lstsq-probe/results/summary.md >> "$GITHUB_STEP_SUMMARY"
+          if test -f build/runtime-probe/results/summary.md; then
+            cat build/runtime-probe/results/summary.md >> "$GITHUB_STEP_SUMMARY"
           else
             echo 'No completed diagnostic report. Inspect retained setup and driver evidence.' >> "$GITHUB_STEP_SUMMARY"
           fi
@@ -131,7 +131,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: lstsq-repeatability-diagnostic
-          path: build/lstsq-probe/
+          name: runtime-dispatch-diagnostic
+          path: build/runtime-probe/
           retention-days: 30
           if-no-files-found: warn
