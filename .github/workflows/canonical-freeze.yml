@@ -132,6 +132,31 @@ jobs:
             --source-commit "$SOURCE_SHA" --container-digest "$IMAGE_ID" \
             --run-id "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" --output /output
 
+      # Independent executions can overlap after the first image is sealed.
+      # Wait only for comparison, never serialize the expensive study runs.
+      - name: Wait for the first independent run before comparing candidates
+        if: inputs.image_run_id != ''
+        timeout-minutes: 125
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FIRST_RUN_ID: ${{ inputs.image_run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 240); do
+            read -r first_status first_conclusion < <(
+              gh api "repos/$GITHUB_REPOSITORY/actions/runs/$FIRST_RUN_ID" \
+                --jq '[.status, .conclusion] | @tsv'
+            )
+            if [[ "$first_status" == completed ]]; then
+              test "$first_conclusion" = success
+              exit 0
+            fi
+            sleep 30
+          done
+          echo 'First independent run did not complete within the comparison wait.' >&2
+          exit 1
+
       - name: Retrieve the first independently executed candidate
         if: inputs.image_run_id != ''
         uses: actions/download-artifact@v4
