@@ -19,7 +19,10 @@
     style.textContent = `
       html.plan-code-supports-until-found
         .plan-code.plan-code-code-collapsed
-        > .plan-code-until-found-container {
+        > .plan-code-until-found-container,
+      html.plan-code-supports-until-found
+        .plan-code.plan-code-results-collapsed
+        > .plan-code-results {
         display: block !important;
         position: absolute !important;
         width: 1px !important;
@@ -37,7 +40,7 @@
       }
 
       html.plan-code-supports-until-found
-        .plan-code-code-collapsed
+        .plan-code-is-interactive
         .plan-code-until-found-output[hidden="until-found"] {
         display: block !important;
       }
@@ -162,8 +165,34 @@
     });
   }
 
+  function setResultsOpen(mapping, expanded) {
+    if (!mapping?.resultsButton) return;
+
+    mapping.panel.classList.toggle("plan-code-results-collapsed", !expanded);
+    mapping.resultsButton.setAttribute("aria-expanded", String(expanded));
+    mapping.resultsButton.textContent = expanded ? "Hide results" : "Reveal results";
+    if (expanded && mapping.resultsRegion.childElementCount) {
+      mapping.resultsRegion.removeAttribute("aria-hidden");
+    } else {
+      mapping.resultsRegion.setAttribute("aria-hidden", "true");
+    }
+    mapping.resultOutputs.forEach((output) => {
+      if (expanded) {
+        output.removeAttribute("hidden");
+        output.removeAttribute("aria-hidden");
+      } else {
+        setUntilFound(output);
+      }
+    });
+  }
+
   function clearPanel(panel) {
     const mapping = panelMappings.get(panel);
+    // Gather printed evidence only while its source is closed. Opening the code
+    // restores every original position, including stdout before/after a figure.
+    mapping?.resultOutputs?.forEach((output) => {
+      mapping.resultsRegion.appendChild(output);
+    });
     mapping?.lines.forEach((line) => {
       line.classList.remove("plan-code-line-active");
     });
@@ -180,6 +209,7 @@
     }
     collapseSearchRegions(mapping);
     collapseFocusTargets(mapping);
+    setResultsOpen(mapping, false);
     panel.classList.remove("plan-code-has-active-step");
     panel.classList.remove("plan-code-showing-all");
     panel.classList.add("plan-code-code-collapsed");
@@ -188,12 +218,18 @@
   }
 
   function openCodeRegions(mapping) {
+    mapping.resultOrigins?.forEach((placeholder, output) => {
+      placeholder.before(output);
+    });
     mapping.codeRegions.forEach((region) => {
       region.removeAttribute("hidden");
       region.removeAttribute("aria-hidden");
     });
     openSearchRegions(mapping);
     openFocusTargets(mapping);
+    // Keep the existing step/Show all behavior: its printed evidence opens too.
+    // The separate results control can subsequently close it without closing code.
+    setResultsOpen(mapping, true);
   }
 
   function clearAllPanels() {
@@ -269,6 +305,7 @@
     if (!mapping.lines.length || !items.length) return;
 
     const regions = codeRegions(panel);
+    const controlledRegions = [...regions];
     regions.forEach((region, regionIndex) => {
       if (!region.id) region.id = `plan-code-${panelIndex}-${regionIndex}`;
       region.classList.add("plan-code-until-found-container");
@@ -286,6 +323,7 @@
       line.classList.add("plan-code-until-found-line");
     });
 
+    mapping.panel = panel;
     mapping.codeRegions = regions;
     mapping.searchRegions = [...mapping.lines, ...outputs];
     const focusTargets = regions.flatMap((region) => [
@@ -323,6 +361,46 @@
     plan.prepend(toolbar);
     mapping.showAllButton = showAllButton;
 
+    // Move, never clone, plain printed evidence into its own disclosure while
+    // code is closed. Placeholders retain its source-order position for the full
+    // listing; figures and rich displays never move.
+    const resultOutputs = outputs.filter((output) =>
+      !output.querySelector("img, svg, canvas, figure, table, audio, video, iframe") &&
+      (output.matches(".cell-output-stdout, .cell-output-stderr") ||
+       Boolean(output.querySelector("pre")))
+    );
+    if (resultOutputs.length) {
+      const resultRegion = document.createElement("div");
+      resultRegion.className = "plan-code-results";
+      resultRegion.id = `plan-code-${panelIndex}-results`;
+      const resultsButton = document.createElement("button");
+      resultsButton.type = "button";
+      resultsButton.className = "plan-code-reveal-results";
+      resultsButton.id = `plan-code-${panelIndex}-results-toggle`;
+      resultsButton.setAttribute("aria-controls", resultOutputs.map((output) => output.id).join(" "));
+      resultRegion.setAttribute("role", "region");
+      resultRegion.setAttribute("aria-label", "Printed results");
+      mapping.resultOrigins = new Map(resultOutputs.map((output) => {
+        const placeholder = document.createComment("Printed result returns here when code opens.");
+        output.before(placeholder);
+        resultRegion.appendChild(output);
+        return [output, placeholder];
+      }));
+      panel.appendChild(resultRegion);
+      controlledRegions.push(resultRegion, ...resultOutputs);
+      toolbar.appendChild(resultsButton);
+      mapping.resultOutputs = resultOutputs;
+      mapping.resultsRegion = resultRegion;
+      mapping.resultsButton = resultsButton;
+      resultsButton.addEventListener("click", () => {
+        setResultsOpen(mapping, resultsButton.getAttribute("aria-expanded") !== "true");
+      });
+    }
+    showAllButton.setAttribute(
+      "aria-controls",
+      controlledRegions.map((region) => region.id).join(" ")
+    );
+
     items.forEach((item, index) => {
       const step = index + 1;
       if (!mapping.stepLines.has(step)) return;
@@ -341,7 +419,7 @@
       if (regions.length) {
         button.setAttribute(
           "aria-controls",
-          regions.map((region) => region.id).join(" ")
+          controlledRegions.map((region) => region.id).join(" ")
         );
       }
 
@@ -362,7 +440,13 @@
       });
     });
     outputs.forEach((output) => {
-      output.addEventListener("beforematch", () => showAllCode(panel));
+      output.addEventListener("beforematch", () => {
+        if (resultOutputs.includes(output)) {
+          setResultsOpen(mapping, true);
+        } else {
+          showAllCode(panel);
+        }
+      });
     });
 
     clearPanel(panel);

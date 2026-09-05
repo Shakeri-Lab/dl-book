@@ -37,9 +37,13 @@ That move depends on the seed from @sec-14-self-attention-transformer:
 because looking right would reveal its target. A representation model can instead
 let every nonpadding token consult both sides—provided selected targets are
 treated so copying cannot solve the whole task. This chapter separates those
-controls, derives **masked language modeling (MLM)**, and shows how pretraining
-changed the default workflow
-from “initialize and train” to “pretrain, then adapt.”
+controls and derives **masked language modeling (MLM)**, moving from “initialize
+and train” to “pretrain, then adapt.”
+
+Reading routes: the [visibility-and-selection witness](#separate-controls-not-one-mask)
+separates the mechanism's controls; the [full transfer lab](#a-controlled-transfer-lab)
+tests what pretraining makes reusable. For execution, run the notebook from the
+top through the chosen study; the lab reuses earlier setup.
 
 ## Separate controls, not one mask
 
@@ -415,10 +419,10 @@ the result is reproducible.
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
-1. Define the reusable `merge_pair` helper.
-2. Prepare the inputs and fixed settings for the example.
-3. Learn five subword merges from weighted word counts.
-4. Report or visualize the measured result.
+1. Replace one adjacent token pair by a merged symbol.
+2. Assign frequencies to the toy word vocabulary.
+3. Count weighted adjacent pairs and repeatedly merge the most frequent.
+4. Inspect the resulting segmentation of an example word.
 :::
 
 ```{python}
@@ -825,8 +829,9 @@ plt.show()
 
 Read @fig-bert-lab-design from top to bottom. Source exposure is decided before
 the neutral downstream sentence is formed, so the covered test pool measures
-transfer to unseen *types* and the uncovered pool audits what vocabulary
-membership alone can buy.
+transfer to types **seen during MLM but unlabeled during supervised fitting**.
+The uncovered pool was absent from MLM inputs, replacements, and targets; it audits
+what vocabulary membership alone can buy.
 
 The downstream input is always the neutral, previously unseen template
 
@@ -841,13 +846,20 @@ the same neutral sentence. Source and target use the same atomic token granulari
 and similarly short sequences, making “matched scale” explicit rather than
 assuming it from a shared domain.
 
+::: {.notebook-prediction}
+Before running, predict the four outcomes: scratch versus pretrained, each tested
+on covered-but-unlabeled types and on uncovered controls. Both pools lack supervised
+labels, so why might their pretraining gains differ? Decide which comparison would
+distinguish reusable source evidence from merely fitting the few labels.
+:::
+
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Define the reusable helpers: `source_sentences` and `encode`.
-3. Construct the controlled source and target distributions.
-4. Check the claimed identities, shapes, or invariants.
-5. Report or visualize the measured result.
+1. Assign pseudowords to families and separate covered from uncovered words.
+2. Generate noisy cue sentences and encode their tokens.
+3. Build the source corpus and neutral downstream pools.
+4. Assert that uncovered words cannot leak through MLM inputs or replacements.
+5. Report the vocabulary and source/target sample counts.
 :::
 
 ```{python}
@@ -867,7 +879,8 @@ BATCH_SIZE = 64
 LABEL_COUNTS = (1, 2, 4)
 REPLICATE_SEEDS = tuple(range(6050, 6055))
 
-torch.set_num_threads(4)
+import os
+torch.set_num_threads(int(os.environ.get("DLBOOK_TORCH_NUM_THREADS", "4")))
 torch.use_deterministic_algorithms(True)
 
 forms = [
@@ -963,10 +976,12 @@ bidirectional attention to MLM to fine-tuning.
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
-1. Define the reusable helpers: `FullAttention`, `EncoderBlock`, and `TinyBertEncoder`.
-2. Define the reusable helpers: `MaskedLanguageModel` and `corrupt`.
-3. Prepare the inputs and fixed settings for the example.
-4. Define full attention, the encoder, and the MLM head.
+1. Mix token values using full attention over nonpadding keys.
+2. Compose residual attention and feedforward transformations.
+3. Add token and position embeddings before the encoder stack.
+4. Predict vocabulary logits with an untied MLM decoder.
+5. Separate eligible targets, selected supervision, and the corruption branches.
+6. Count the encoder parameters.
 :::
 
 ```{python}
@@ -1000,6 +1015,7 @@ class FullAttention(nn.Module):
         )
         return self.output(mixed)
 
+# [2]
 class EncoderBlock(nn.Module):
     def __init__(self) -> None:
         super().__init__()
@@ -1018,6 +1034,7 @@ class EncoderBlock(nn.Module):
         x = self.norm1(x + self.attention(x, visible))
         return self.norm2(x + self.ff(x))
 
+# [3]
 class TinyBertEncoder(nn.Module):
     def __init__(self) -> None:
         super().__init__()
@@ -1044,7 +1061,7 @@ class TinyBertEncoder(nn.Module):
             hidden = block(hidden, visible)
         return hidden
 
-# [2]
+# [4]
 class MaskedLanguageModel(nn.Module):
     def __init__(self, encoder: TinyBertEncoder) -> None:
         super().__init__()
@@ -1060,6 +1077,7 @@ class MaskedLanguageModel(nn.Module):
         hidden = self.norm(F.gelu(self.dense(hidden)))
         return self.decoder(hidden)
 
+# [5]
 def corrupt(
     ids: torch.Tensor,
     generator: torch.Generator,
@@ -1096,11 +1114,10 @@ def corrupt(
     assert not torch.isin(corrupted, uncovered_ids).any()
     return corrupted, selected, counts
 
-# [3]
+# [6]
 encoder_parameters = sum(
     parameter.numel() for parameter in TinyBertEncoder().parameters()
 )
-# [4]
 print(f"encoder parameters: {encoder_parameters:,}")
 ```
 ::::
@@ -1124,11 +1141,12 @@ fine-tuning—not merely the last classifier fit.
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Define the reusable helpers: `pretrain`, `neutral_sentence`, and `WordClassifier`.
-3. Define the reusable helpers: `fit_classifier` and `classifier_accuracy`.
-4. Pretrain five paired encoders and fine-tune all weights.
-5. Report or visualize the measured result.
+1. Pretrain on selected tokens and verify that control-word embeddings stay unchanged.
+2. Read the target-word representation from the neutral downstream template.
+3. Fit the downstream classifier using the declared label subset.
+4. Measure downstream accuracy without updating the encoder.
+5. Pair fresh and pretrained initializations across seeds and label budgets.
+6. Report the realized masking policy and its denominators.
 :::
 
 ```{python}
@@ -1136,10 +1154,9 @@ fine-tuning—not merely the last classifier fit.
 #| code-summary: "Code: pretrain five paired encoders and fine-tune all weights"
 #| code-fold: false
 
-# [1]
 TensorState = dict[str, torch.Tensor]
 
-# [2]
+# [1]
 def pretrain(
     seed: int,
 ) -> tuple[TensorState, TensorState, torch.Tensor, int]:
@@ -1182,6 +1199,7 @@ def pretrain(
     assert torch.equal(initial_control, final_control)
     return initial, pretrained, branch_counts, eligible_count
 
+# [2]
 def neutral_sentence(word: str) -> torch.Tensor:
     return encode(["we", "found", "the", word, "today"])
 
@@ -1228,6 +1246,7 @@ def fit_classifier(
     )
     return model, train_accuracy
 
+# [4]
 @torch.no_grad()
 def classifier_accuracy(
     model: WordClassifier,
@@ -1258,7 +1277,7 @@ all_branches = torch.zeros(3, dtype=torch.long)
 all_eligible = 0
 first_states: tuple[TensorState, TensorState] | None = None
 
-# [4]
+# [5]
 for replicate_seed in REPLICATE_SEEDS:
     initial_state, pretrained_state, counts, eligible_count = pretrain(
         replicate_seed
@@ -1313,7 +1332,7 @@ for replicate_seed in REPLICATE_SEEDS:
         )
 
 branch_shares = all_branches / all_branches.sum()
-# [5]
+# [6]
 print(
     "selected targets across five runs: "
     f"{all_branches.sum().item():,}"
@@ -1357,8 +1376,8 @@ set? The task, control, and geometry answer different parts.
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
-1. Define the reusable `representation_geometry` helper.
-2. Audit paired transfer, source coverage, and representation geometry.
+1. Measure within-family and between-family representation similarities.
+2. Compare paired transfer gains, uncovered-word controls, and geometry.
 :::
 
 ```{python}
@@ -1509,7 +1528,7 @@ then unit-normalizes each vector and takes a dot product: positive values point 
 similar residual directions, negative values in opposing directions. Pretraining
 has organized neutral-context token states around
 the latent source regularity, and a few labels recover that organization for
-unseen covered types.
+covered types held out of supervised fitting.
 
 This closes Chapter 9's contract at toy scale:
 
@@ -1527,7 +1546,8 @@ Transformer superiority. The limits are concrete—the data generator builds the
 regularity, the pretrained arm receives extra compute, and five toy seeds do not
 estimate natural-language performance. The justified conclusion is narrower: **in this controlled
 construction, MLM organizes covered token representations around a latent
-regularity, and a few labels recover it for unseen covered types.**
+regularity, and a few labels recover it for covered types not labeled during
+supervised fitting.**
 
 <!-- /NOVEL -->
 

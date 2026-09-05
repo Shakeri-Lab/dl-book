@@ -7,6 +7,19 @@ it from editing before you have said what you want done.
 Keep this file current: if a rule changes or the state moves, edit the prompt here
 rather than re-deriving it in chat.
 
+**In-progress exception, September 4:** resume the uncommitted learning-loop pass in
+`/tmp/dl-book-phase-a.XE6WWb/repo`, branch `pedagogy-roundtrip-20260904`, not the stale
+Box tree named in the general bootstrap below. The author approved moving the
+canonical freeze to a pinned Linux/x86-64 container with a fingerprint alongside
+the freeze and two independent CI runs agreeing exactly before promotion. Mac
+one-thread and six-thread runs become explicit portability targets. Gate widths
+come from paired same-seed runtime discrepancies plus a safety factor; seed SD
+governs prose precision. Chapter 11 gains a paired five-seed study and Chapter 13
+recomputes its own baseline. Preserve strict identity gates. Implementation and
+publication validation remain pending; the old Mac refresh is not canonical. Read
+`docs/reviews/2026-09-04-learning-loop.md` before rendering or publishing. No release
+tag has changed, and final PDF page counts are not yet available.
+
 ---
 
 I'm Heman Shakeri (UVA School of Data Science). You're helping me with my
@@ -22,6 +35,8 @@ continuous-screen PDF at
 Current stable release **v1.3** is the course-arc and publication-contract release
 and the fixed edition to cite and pitch. The live canonical HTML is a rolling
 post-v1.3 build; the released v1.3 PDFs remain fixed. It follows the universal Plan → Code pass,
+the September 4 learning-loop pass (verification ledger:
+`docs/reviews/2026-09-04-learning-loop.md`),
 two Chapter 1 revisions,
 the pacing/visual/full-scale experiment pass, the July 28 comprehensive book audit,
 and the Chapter 15 editorial/figure pass. It contains chapters 1–20 plus three
@@ -38,15 +53,17 @@ unnumbers the epilogue equations, and pins the final PDF text-layer regression.
 The August 2 print-hardening pass adds an 88-column learner-visible Python guard,
 print-side wrapping for code and frozen stdout, media-box geometry and PDF-outline
 audits, a three-pass LaTeX minimum, and a copyright/title verso. The current derived
-PDFs use a uniform 0.85-inch margin: the two-sided print edition is 548 pages and
-the one-sided, open-any continuous-screen edition is 519 pages. Both contain no
+PDFs use a uniform 0.85-inch margin. The fixed v1.3 two-sided print edition is 548
+pages and its one-sided, open-any continuous-screen edition is 519 pages; consult
+the current revision ledger for rolling-build counts. Those stable artifacts contain no
 off-paper text or missing glyphs; all 133 frozen stdout blocks remain byte-identical.
 The August 6 coherence pass adds Appendix E as an optional statistical-contract
 retrieval layer, replaces Chapter 1's bias--variance cartoon with a seeded
 show-then-name experiment, separates representation, optimization, and generalization
 evidence in Chapter 6, and bounds Chapter 18 alignment claims within a broader
-sociotechnical audit. The current code contract covers 194 visible surfaces, 95
-execution-only harnesses, and 285 executable cells. The August 8 presentation pass
+sociotechnical audit. The current code contract covers 195 visible surfaces, 95
+execution-only harnesses, and 286 native executable cells plus four transclusions.
+The August 8 presentation pass
 adds interactive Plan → Code mapping, responsive wide-figure inspection, a repaired
 Figure 9.1, and a complete Chapter 1 semantic-colour equation sweep.
 The final August 8 web pass adds an audited favicon, social card, description,
@@ -92,9 +109,13 @@ lazily while keeping numbered equation targets eager, all content images after t
 first load and decode lazily, and the PDF landing page prefers a 230,262-byte WebP
 cover while retaining the PNG fallback. Phase F completes the notebook route for the
 exact 26 executable chapters, interludes, and foundational appendices. Its generated
-source notebooks retain the 193 learner-visible Plan → Code surfaces, use a
-commit-pinned and checksum-verified bootstrap, and execute cleanly in six CI shards.
-Each compact notebook must reproduce a full Quarto-derived reference byte for byte on
+source notebooks retain the 193 learner-visible Plan → Code surfaces and all 93
+canonical hidden setup/figure cells in their original positions, with source
+collapsed. They carry orientation, canonical section backlinks, and copied
+`.notebook-prediction` prompts. A commit-pinned, checksum-verified bootstrap installs
+the runtime and assets without duplicating canonical setup. Six CI shards execute
+them and require actual image outputs for the executable figure inventory.
+Each public notebook must reproduce a full Quarto-derived reference byte for byte on
 the same runner, then satisfy the reviewed portability contract against frozen HTML
 stdout; every unlisted surface remains exact. The Appendix A1 and Chapter 18
 public/reference pairs use a recorded one-thread numerical-library environment to remove
@@ -104,10 +125,11 @@ the CI-only PyTorch override inside notebook validation and the weekly full-manu
 execution audit. Heavy chapter cells may
 explicitly choose their own PyTorch thread count; the output gates remain authoritative.
 The Preface, Epilogue, and two non-executable appendices retain honest unavailable
-placeholders. The tagged v1.3 PDFs remain unchanged. The next PDF cut must combine
-byte-reproducible builds with the five KOMA-Script `\setpartpreamble` Part openers and
-audit their repagination as one print change.
-Nothing is mid-flight.
+placeholders. The tagged v1.3 PDFs remain unchanged. The current pipeline combines
+two-clean-build PDF hash verification with five KOMA-Script `\setpartpreamble`
+openers. This is a same-recorded-toolchain guarantee, not a claim that a future
+unversioned TeX installation reproduces the bytes. See the current verification
+ledger before assuming a revision has completed publication.
 
 **Read before doing anything, in this order:**
 

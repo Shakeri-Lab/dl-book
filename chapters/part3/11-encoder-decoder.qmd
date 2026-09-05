@@ -60,17 +60,17 @@ imaginary writers (the US convention) and `dd/mm/yyyy` by 30%, and nothing in
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Define the reusable `make_date` helper.
-3. Implement the two date languages, generated on the fly.
-4. Report or visualize the measured result.
+1. Define the month vocabulary and valid day ranges.
+2. Generate textual or numeric dates with a declared dialect mixture.
+3. Create disjoint fitting, validation, and test source strings.
+4. Check source overlap and encode both token alphabets.
 :::
 
 ```{python}
 #| label: date-data
 #| code-summary: "Code: the two date languages, generated on the fly"
 #| code-fold: false
-import random, torch
+import hashlib, random, torch
 import torch.nn as nn
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
@@ -152,15 +152,17 @@ and that will be the whole story.
 
 :::: {.plan-code}
 ::: {.plan}
-1. Encoder, decoder, and the handoff.
+1. Register source/target embeddings, recurrent cells, and the output map.
+2. Stop encoding at each source's true length and retain the final state.
+3. Initialize the decoder from that state and score the target tokens.
 :::
 
 ```{python}
 #| label: seq2seq-model
 #| code-summary: "Code: encoder, decoder, and the handoff"
 #| code-fold: false
-# [1]
 class Seq2Seq(nn.Module):
+    # [1]
     def __init__(self, v_src: int, v_tgt: int, embed: int = 32,
                  hidden: int = 128, packed: bool = True):
         super().__init__()
@@ -171,6 +173,7 @@ class Seq2Seq(nn.Module):
         self.decoder = nn.LSTM(embed, hidden, batch_first=True)
         self.out = nn.Linear(hidden, v_tgt)
 
+    # [2]
     def encode(
         self, S: torch.Tensor, lengths: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -181,6 +184,7 @@ class Seq2Seq(nn.Module):
         _, state = self.encoder(e)
         return state                                 # (h, c): the context
 
+    # [3]
     def forward(self, S: torch.Tensor, lengths: torch.Tensor,
                 T_in: torch.Tensor) -> torch.Tensor:  # teacher-forced pass
         o, _ = self.decoder(self.tgt_emb(T_in), self.encode(S, lengths))
@@ -265,11 +269,12 @@ the recurrence only through each sequence's real tokens):
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
-1. Define the reusable helpers: `batchify`, `train_seq2seq`, and `translate`.
-2. Define the reusable helpers: `exact_match` and `unambiguous`.
-3. Prepare the inputs and fixed settings for the example.
-4. Train twice — naive right-padding vs. packed sequences.
-5. Report or visualize the measured result.
+1. Pad source/target batches while preserving true source lengths.
+2. Fit nonpadding token loss with independently seeded batches and record pairing.
+3. Decode greedily using only the source and generated target prefix.
+4. Define exact match and the unambiguous-date evaluation population.
+5. Train naive-padding and packed-sequence variants under the same recipe.
+6. Compare their validation exact-match scores.
 :::
 
 ```{python}
@@ -288,18 +293,25 @@ def batchify(prs: list[tuple[str, str]], idx: list[int]) -> tuple[
     T = nn.utils.rnn.pad_sequence(tgts, batch_first=True, padding_value=PAD)
     return S, lengths, T
 
+# [2]
 def train_seq2seq(mode: str = "tf", packed: bool = True, epochs: int = 25,
                   seed: int = 6050, batch: int = 128,
                   checkpoints: tuple[int, ...] = ()) -> tuple[
-                      Seq2Seq, dict[int, float]
+                      Seq2Seq, dict[int, float], dict[str, str]
                   ]:
+    assert mode in ("tf", "fr")
     torch.manual_seed(seed)
     model = Seq2Seq(V_src, V_tgt, packed=packed)
+    initial = hashlib.sha256(b"".join(
+        p.detach().numpy().tobytes() for p in model.parameters())).hexdigest()
+    schedule = torch.Generator().manual_seed(90_000 + seed)
+    schedule_hash = hashlib.sha256()
     opt = torch.optim.Adam(model.parameters(), lr=1e-3)
     n, curve = len(train_pairs), {}
     for ep in range(1, epochs + 1):
         model.train()
-        perm = torch.randperm(n)
+        perm = torch.randperm(n, generator=schedule)
+        schedule_hash.update(perm.numpy().tobytes())
         for i in range(0, n, batch):
             S, L, T = batchify(train_pairs, perm[i:i + batch].tolist())
             if mode == "tf":                         # gold rail: one fused call
@@ -320,8 +332,10 @@ def train_seq2seq(mode: str = "tf", packed: bool = True, epochs: int = 25,
             opt.step()
         if ep in checkpoints:
             curve[ep] = exact_match(model, valid_unamb[:400])
-    return model, curve
+    return model, curve, {
+        "initialization": initial, "schedule": schedule_hash.hexdigest()}
 
+# [3]
 @torch.no_grad()
 def translate(model: Seq2Seq, src: str, maxlen: int = 12) -> str:
     model.eval()
@@ -336,7 +350,7 @@ def translate(model: Seq2Seq, src: str, maxlen: int = 12) -> str:
         out += tgt_itos.get(tok.item(), "?")
     return out
 
-# [2]
+# [4]
 @torch.no_grad()
 def exact_match(model: Seq2Seq, prs: list[tuple[str, str]]) -> float:
     return sum(translate(model, s) == t for s, t in prs) / len(prs)
@@ -345,27 +359,29 @@ def unambiguous(prs: list[tuple[str, str]]) -> list[tuple[str, str]]:
     return [(s, t) for s, t in prs
             if "/" not in s or int(s[:2]) > 12 or int(s[3:5]) > 12]
 
-# [3]
+# [4]
 valid_unamb = unambiguous(valid_pairs)
 test_unamb = unambiguous(test_pairs)
+assert len(valid_unamb[:400]) == 400 and len(test_unamb) == 437
 
 cps = (2, 4, 6, 8, 12, 16, 20, 25)
-# [4]
-naive, _ = train_seq2seq(packed=False)
-packed, packed_curve = train_seq2seq(packed=True, checkpoints=cps)
 # [5]
+naive, _, naive_protocol = train_seq2seq(packed=False)
+packed, packed_curve, packed_protocol = train_seq2seq(
+    packed=True, checkpoints=cps)
+assert naive_protocol == packed_protocol
+# [6]
 print(f"naive right-padding:   validation exact match "
       f"{exact_match(naive, valid_unamb):.1%}")
 print(f"packed (true lengths): validation exact match "
       f"{exact_match(packed, valid_unamb):.1%}")
 ```
 ::::
-Validation exact match jumps from 37.3% to 95.7%, a 58.4-point gap. Not from a better
-architecture, optimizer, or dataset; from telling the encoder where the sentences
-actually end. Let the gap sink in, because this is the cheapest lesson in the book:
-the two runs are identical except for bookkeeping, and the bookkeeping was worth more
-than every design decision in Part III so far. The sealed test set remains untouched
-until both training-mode designs below are fixed.
+The two validation scores above measure the cost of letting padding alter the
+handoff in this seed. Initialization and every batch permutation match; the encoder's
+length handling is the intervention. This is a mechanism witness, not an average
+effect over training runs. The test set remains unopened in this execution until
+the five-seed training-mode comparison below is fixed.
 
 The mechanism is worth *seeing* once. Take the naive model and one short validation
 source, and watch its encoder state as the input runs past the last real character
@@ -373,8 +389,8 @@ into the padding:
 
 :::: {.plan-code}
 ::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Measure encoder-state drift through the padding tail.
+1. Append padding to the shortest validation source and replay the encoder.
+2. Measure how far its state moves after the real source ends.
 :::
 
 ```{python}
@@ -399,7 +415,7 @@ drift = (states[T - 1:] - states[T - 1]).norm(dim=1)
 #| echo: false
 #| label: fig-padding-drift
 #| fig-alt: "A line plot shows the hidden-state distance from the last real character as right-padding timesteps are processed. The green point marks zero drift at the sentence end; the navy trajectory rises through the orange-shaded padding region, showing that padding continues to move the state."
-#| fig-cap: "Why naive right-padding hurts: the encoder state does not stop when the sentence does. One short validation source is encoded by the naive model; at its last real character (green) the state is exactly what the decoder should receive. A *single* <pad> step already throws the state most of the way to its final drift, and each further step compounds it (navy) — the decoder is handed the endpoint of the shaded excursion, a state the unpadded inference-time encoder never produces. Packing simply stops the clock at the green dot."
+#| fig-cap: "The encoder state need not stop when the sentence does. One short validation source is encoded by seed 6050's naive model; green marks its state at the last real character. The navy trajectory measures what additional padding steps do to that state. The padded training encoder hands over a later state, while single-source inference has no padding tail. Packing stops the clock at the green dot."
 plt.figure(figsize=(6.4, 2.9))
 steps = range(T, T + n_pads + 1)
 plt.plot(steps, drift, "o-", color="#232D4B", lw=2, ms=4)
@@ -433,12 +449,11 @@ where a *causal* mask is what turns a transformer into a language model.
 Look back at the two `mode` branches in the training loop; they are this section.
 When the decoder is trained, what should it see as *its own previous output*?
 
-**Free-running** ("fr") is the honest answer: feed the model's own predictions
-back in, exactly as at inference. But its flaws are structural. Early in training
-those predictions are garbage $\rightarrow$ the decoder learns conditioned on
-garbage $\rightarrow$ every sequence must be generated token-by-token in a Python
-loop, because step $t$'s input does not exist until step $t-1$ is computed. Slow,
-and unstable exactly when training is young.
+**Free-running** ("fr") feeds the model's own predictions back in, as at inference.
+Early in training those predictions can be poor, so the decoder must learn from
+imperfect contexts. Every sequence is generated token-by-token in a Python loop:
+step $t$'s input does not exist until step $t-1$ is computed. That feedback changes
+both the optimization problem and the available implementation.
 
 **Teacher forcing** ("tf") conditions each step on the *ground-truth* previous
 token instead, the gold rail. Every conditioning input is then known in advance
@@ -446,13 +461,29 @@ $\rightarrow$ the whole target can be submitted in **one fused decoder call** (t
 `model(S, L, T[:, :-1])` line), rather than a Python feedback loop. The LSTM still
 processes time recurrently inside that call; teacher forcing does not make its
 timesteps mathematically parallel. Every step nevertheless learns from a sensible
-context from epoch one. Watch both effects:
+context from epoch one. Does that advantage survive repeated initializations?
 
-:::: {.plan-code}
+We fix the data once and train seeds 6050–6054. Within each pair, TF and free-running
+start from identical weights and consume identical batch permutations; the separate
+schedule generator prevents model construction from moving the data order. Every run
+gets 25 epochs, not a validation-selected stopping point. The earlier packed run is
+seed 6050, so we reuse it rather than train it twice. Validation curves use the same
+400 sources, and all ten final models face the same 437 unambiguous test dates.
+This is a reused book benchmark, not a new untouched population sample.
+
+::: {.notebook-prediction}
+Before revealing the results, predict whether an early validation lead must imply
+fewer final test errors. What would a reversal across seeds tell you about trusting
+one learning curve?
+:::
+
+:::: {.plan-code .plan-code-wide}
 ::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Train the free-running comparison.
-3. Audit all three models once on the final test split.
+1. Pair five TF/free-running runs, reusing seed 6050's fitted TF model.
+2. Verify identical initial weights and batch schedules within each pair.
+3. Count final errors on the same 437 dates for every run.
+4. Summarize accuracy and paired differences across seeds, not across dates.
+5. Retain seed 6050 for the later decoding illustrations.
 :::
 
 ```{python}
@@ -460,43 +491,97 @@ context from epoch one. Watch both effects:
 #| code-summary: "Code: teacher forcing versus free-running"
 #| code-fold: false
 # [1]
-tf_model, tf_curve = packed, packed_curve
-# [2]
-fr_model, fr_curve = train_seq2seq("fr", checkpoints=cps)
-# [3]
-print("one final test audit (unambiguous sources):")
-for label, candidate in [("naive padding", naive),
-                         ("packed / teacher forced", tf_model),
-                         ("packed / free-running", fr_model)]:
-    print(f"  {label:25s} {exact_match(candidate, test_unamb):.1%}")
+study_seeds = tuple(range(6050, 6055))
+tf_runs, fr_runs, paired_rows = [], [], []
+error_rows = []
+print("seed   TF errors   FR errors   TF accuracy   FR accuracy   FR-TF pp")
+for seed in study_seeds:
+    tf_run = ((packed, packed_curve, packed_protocol) if seed == 6050 else
+              train_seq2seq("tf", seed=seed, checkpoints=cps))
+    fr_run = train_seq2seq("fr", seed=seed, checkpoints=cps)
+    # [2]
+    assert tf_run[2] == fr_run[2]
+    # [3]
+    errors = [sum(translate(run[0], s) != t for s, t in test_unamb)
+              for run in (tf_run, fr_run)]
+    scores = [1 - error / len(test_unamb) for error in errors]
+    error_rows.append(errors)
+    paired_rows.append(scores)
+    tf_runs.append(tf_run)
+    fr_runs.append(fr_run)
+    print(f"{seed}   {errors[0]:3d}/437     {errors[1]:3d}/437     "
+          f"{scores[0]:9.2%}     {scores[1]:9.2%}   "
+          f"{100 * (scores[1] - scores[0]):+8.3f}")
+
+# [4]
+test_scores = torch.tensor(paired_rows, dtype=torch.float64)
+test_errors = torch.tensor(error_rows, dtype=torch.int64)
+paired_pp = 100 * (test_scores[:, 1] - test_scores[:, 0])
+print("mean / sample SD across five training seeds (errors out of 437):")
+for col, name in enumerate(("TF", "FR")):
+    values = test_scores[:, col]
+    counts = test_errors[:, col].to(torch.float64)
+    print(f"  {name} errors: {counts.mean():.2f} / {counts.std(correction=1):.2f}; "
+          f"accuracy: {values.mean():.3%} / {values.std(correction=1):.3%}")
+print(f"paired FR-TF: {paired_pp.mean():+.3f} pp; "
+      f"sample SD {paired_pp.std(correction=1):.3f} pp")
+print(f"paired initialization and schedule checks: {len(paired_rows)}/5")
+curve_scores = torch.tensor([
+    [[run[1][epoch] for epoch in cps] for run in runs]
+    for runs in (tf_runs, fr_runs)], dtype=torch.float64)
+curve_mean = curve_scores.mean(dim=1)  # average runs, preserving mode and epoch
+curve_sd = curve_scores.std(dim=1, correction=1)
+print("epoch   TF mean +/- SD        FR mean +/- SD (validation)")
+for j, epoch in enumerate(cps):
+    print(f"{epoch:2d}     {curve_mean[0, j]:6.2%} +/- {curve_sd[0, j]:6.2%}"
+          f"     {curve_mean[1, j]:6.2%} +/- {curve_sd[1, j]:6.2%}")
+
+# [5]
+tf_model, tf_curve, _ = tf_runs[0]
+fr_model, fr_curve, _ = fr_runs[0]
+naive_errors = sum(translate(naive, s) != t for s, t in test_unamb)
+print(f"seed 6050 padding witness: naive errors {naive_errors}/437; "
+      f"packed TF errors {test_errors[0, 0].item()}/437")
 ```
 ::::
 
 ```{python}
 #| echo: false
 #| label: fig-tf-vs-fr
-#| fig-alt: "Exact-match accuracy rises with epoch for both training modes. Teacher forcing leads strongly in early and middle epochs, then the free-running curve catches it near the top by epoch twenty."
-#| fig-cap: "Learning curves on a fixed subset of 400 unambiguous validation source strings, disjoint from both training and test. Teacher forcing leads through the early and middle epochs (53.8% vs. 24.5% at epoch 6; 95.0% vs. 82.5% at epoch 12) and uses one fused decoder call per batch where free-running needs a Python token loop. By epoch 20 the validation curves meet; the single final test audit favors free-running."
+#| fig-alt: "Five-seed validation exact-match curves compare teacher-forced and free-running training. Thin lines show individual runs, thick lines their means, and shading one sample standard deviation."
+#| fig-cap: "The same 400 unambiguous validation sources at every checkpoint. Thin lines retain all five runs; thick lines and shading show mean and one sample SD across training seeds. Each TF/free-running pair shares initialization and minibatch order. These are optimization variations on one split, not population confidence intervals. TF uses one fused decoder call per batch; free-running uses a token loop. The final test comparison is reported separately above."
 plt.figure(figsize=(6, 3.2))
-plt.plot(cps, [tf_curve[c] for c in cps], "o-", color="#232D4B", lw=2,
-         label="teacher forcing")
-plt.plot(cps, [fr_curve[c] for c in cps], "s-", color="#E57200", lw=2,
-         label="free-running")
+for mode, name, color in ((0, "teacher forcing", "#232D4B"),
+                           (1, "free-running", "#E57200")):
+    for values in curve_scores[mode]:
+        plt.plot(cps, values, color=color, lw=0.7, alpha=0.25)
+    plt.plot(cps, curve_mean[mode], "o-", color=color, lw=2, label=name)
+    plt.fill_between(cps, (curve_mean[mode] - curve_sd[mode]).clamp(0, 1),
+                     (curve_mean[mode] + curve_sd[mode]).clamp(0, 1),
+                     color=color, alpha=0.12)
 plt.xlabel("epoch"); plt.ylabel("exact match")
 plt.legend(); plt.tight_layout(); plt.show()
 ```
-So teacher forcing is the pragmatic default: fused, stable, and fast out of the
-gate. What it costs has a name. A teacher-forced decoder has *only ever seen
+Read the early checkpoints separately from the final paired differences. Neither
+one favorable seed nor one early lead decides the full comparison. The SD describes
+initialization and optimization variation on this fixed dataset, not uncertainty
+across possible date populations.
+
+Teacher forcing's computational convenience comes with a mismatch. A teacher-forced
+decoder has *only ever seen
 perfect histories*. At inference it must condition on its own imperfect
 predictions — a distribution it never trained on. This mismatch is **exposure
-bias**: the model never learned to recover from its own mistakes, so one early
-slip can send the rest of the sequence somewhere strange. You can see the shape of
-this failure in our model's rare residual errors:
+bias**: training did not explicitly teach recovery from the model's own mistakes,
+so one early slip can change the context for the rest of the sequence. The paired
+training comparison does not isolate that mechanism: it also changes the states
+visited during optimization and the fused versus stepwise execution path. Inspect
+seed 6050's residual errors, if any, with that possibility in mind. This seed is
+fixed for illustration, not selected because its errors favor a story:
 
 :::: {.plan-code}
 ::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Implement the residual errors, up close.
+1. Collect held-out sources whose decoded output differs from the target.
+2. Inspect representative errors beside their intended dates.
 :::
 
 ```{python}
@@ -512,10 +597,11 @@ for s, t, g in errs[:3]:
     print(f"  {s!r} -> {g!r}   (truth {t})")
 ```
 ::::
-The errors are plausible-looking digit substitutions and order slips. The decoder
-has learned a date-shaped language, but no hard mechanism forces each output field to
-copy the corresponding source fact. Off the gold rail, one wrong character can alter
-the context for every character after it. Hold that thought two sections.
+Digit substitutions or order slips, when present, are consistent with exposure
+bias, but imperfect source encoding or copying could produce them too. A targeted
+check would replay the same frozen decoder with
+gold versus generated prefixes and compare its next-token errors. The gallery
+alone does not identify the cause. Hold that distinction two sections.
 
 ::: {.callout-note}
 ## Scheduled sampling: renting the rail
@@ -553,21 +639,25 @@ greedy, nothing like exhaustive.
 
 :::: {.plan-code}
 ::: {.plan}
-1. Beam search, k candidate rails at once.
+1. Encode the source and initialize one empty hypothesis.
+2. Extend unfinished hypotheses with their highest-probability next tokens.
+3. Keep the globally best cumulative scores, preserving completed hypotheses.
+4. Return ranked decoded strings and their joint log scores.
 :::
 
 ```{python}
 #| label: beam-search
 #| code-summary: "Code: beam search, k candidate rails at once"
 #| code-fold: false
-# [1]
 @torch.no_grad()
 def beam_search(model: Seq2Seq, src: str, k: int = 5,
                 maxlen: int = 12) -> list[tuple[str, float]]:
+    # [1]
     model.eval()
     S = torch.tensor([[src_stoi[c] for c in src]])
     state = model.encode(S, torch.tensor([len(src)]))
     beams = [([], 0.0, state, False)]               # (tokens, logp, state, done)
+    # [2]
     for _ in range(maxlen):
         cand = []
         for seq, lp, st, done in beams:
@@ -580,9 +670,11 @@ def beam_search(model: Seq2Seq, src: str, k: int = 5,
             for lg, ix in zip(top.values, top.indices):
                 cand.append((seq + [ix.item()], lp + lg.item(), st2,
                              ix.item() == EOS))
+        # [3]
         beams = sorted(cand, key=lambda b: -b[1])[:k]
         if all(b[3] for b in beams):
             break
+    # [4]
     return [("".join(tgt_itos.get(i, "?") for i in seq if i > 2), lp)
             for seq, lp, _, _ in beams]
 ```
@@ -594,8 +686,8 @@ sequence; beam search shows which complete alternatives the model ranks highly:
 
 :::: {.plan-code}
 ::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Beam search on genuinely ambiguous dates.
+1. Select numeric dates for which both dialect readings are possible.
+2. Compare greedy output with the ranked beam candidates.
 :::
 
 ```{python}
@@ -626,8 +718,8 @@ Honesty requires the other half of the report:
 
 :::: {.plan-code}
 ::: {.plan}
-1. How often beam actually changes the answer.
-2. Report or visualize the measured result.
+1. Count disagreements between greedy and beam-5 on a fixed test sample.
+2. Report the disagreement count with its denominator.
 :::
 
 ```{python}
@@ -642,10 +734,10 @@ n_diff = sum(beam_search(tf_model, s, k=5)[0][0] != translate(tf_model, s)
 print(f"beam-5 disagrees with greedy on {n_diff} of {len(sub)} test dates")
 ```
 ::::
-On this small, well-trained model, beam search changes almost nothing. Beam
-search earns its keep at the margins, but real translation, with vocabularies of
-tens of thousands and long sentences, lives entirely at those margins, which is
-why beam decoding became a standard tool of the seq2seq era.
+The disagreement count says how often search changes this seed's answer, not how
+often it improves it. That second claim would require checking correctness on the
+changed cases. With larger vocabularies and longer outputs the search space grows
+rapidly, which is why beam decoding became a standard tool of the seq2seq era.
 
 ::: {.callout-note}
 ## Length normalization
@@ -696,12 +788,13 @@ Close the book for one minute and reconstruct the sequence pipeline from memory.
    lets it choose its length, embeddings replace one-hots (hard address, learned
    content).
 2. **Padding poisons twice**: the loss (`ignore_index`) and the encoder
-   (`pack_padded_sequence`). On never-seen source strings, the same model and budget
-   score 34.3% naive versus 93.1% packed. Target padding is included for reuse but
+   (`pack_padded_sequence`). The paired witness changes the latter while holding
+   initialization and batches fixed. Target padding is included for reuse but
    not exercised by these fixed-length ISO targets. Audit bookkeeping before architecture.
 3. **Teacher forcing** trains the decoder on the gold rail: one fused call with no
-   Python feedback loop and stable early learning, at the cost of **exposure bias**, the train/inference
-   mismatch that free-running avoids by paying with speed and early instability.
+   Python feedback loop, at the cost of **exposure bias**, the train/inference
+   mismatch. Five paired runs separate early validation progress from final errors;
+   they do not isolate the mismatch as the cause of every error.
    Scheduled sampling anneals between them, flipping per token.
 4. **Decoding is search.** Greedy maximizes steps, not sequences; beam search
    carries $k$ rails for $O(k V T)$ and surfaces high-scoring alternatives. Its
@@ -735,8 +828,8 @@ Close the book for one minute and reconstruct the sequence pipeline from memory.
 3. **(Code.)** Implement scheduled sampling: per token, use the gold input with
    probability $\epsilon$, the model's own prediction otherwise, annealing
    $\epsilon$ linearly $1 \to 0$ over 25 epochs. Compare its learning curve with
-   both curves in @fig-tf-vs-fr. Does it inherit teacher forcing's fast start
-   *and* free-running's finish?
+   both modes in @fig-tf-vs-fr with the same seed panel and batch schedules. Compare
+   early validation progress and final errors; does either trade-off improve?
 4. **(Code.)** Add length normalization ($/L^{\alpha}$) to `beam_search` and
    sweep $\alpha \in \{0, 0.7, 1\}$ on the date task. Explain why correct
    ten-character outputs are unaffected, inspect whether any erroneous beams change,

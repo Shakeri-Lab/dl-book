@@ -53,7 +53,8 @@ from torch import Tensor, nn
 import torch.nn.functional as F
 
 torch.set_default_dtype(torch.float64)
-torch.set_num_threads(6)
+import os
+torch.set_num_threads(int(os.environ.get("DLBOOK_TORCH_NUM_THREADS", "6")))
 torch.manual_seed(6050)
 
 navy, orange, green = "#232D4B", "#E57200", "#2E7D32"
@@ -266,11 +267,12 @@ model has far more adjustable knobs.
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
-1. Define the reusable helpers: `planted_curve` and `principal_projection`.
-2. Define the reusable helpers: `CurveAutoencoder` and `fit_curve`.
-3. Prepare the inputs and fixed settings for the example.
-4. Rematch PCA and linear and nonlinear autoencoders on a planted curve.
-5. Report or visualize the measured result.
+1. Construct a curved data manifold and its centered PCA baseline.
+2. Build a nonlinear encoder and decoder around one latent coordinate.
+3. Fit the tied linear bottleneck and compare its projector with PCA.
+4. Fit the nonlinear bottleneck and measure reconstruction and latent-coordinate recovery.
+5. Repeat the reconstruction comparison across five seeds.
+6. Report reconstruction error, projector agreement, and latent-coordinate correlation.
 :::
 
 ```{python}
@@ -303,6 +305,7 @@ class CurveAutoencoder(nn.Module):
 
 
 def fit_curve(seed: int) -> tuple[float, float, float, float, float, CurveAutoencoder]:
+    # [3]
     torch.manual_seed(seed)
     t_all = torch.linspace(-1.0, 1.0, 513)
     train_t, test_t = t_all[::2], t_all[1::2]
@@ -328,6 +331,7 @@ def fit_curve(seed: int) -> tuple[float, float, float, float, float, CurveAutoen
         tied_weight @ tied_weight.T - basis @ basis.T
     ).item()
 
+    # [4]
     model = CurveAutoencoder()
     optimizer = torch.optim.Adam(model.parameters(), lr=0.012)
     for step in range(4000):
@@ -352,10 +356,9 @@ def fit_curve(seed: int) -> tuple[float, float, float, float, float, CurveAutoen
     return pca_mse, tied_mse, projector_gap, nonlinear_mse, latent_correlation, model
 
 
-# [3]
+# [5]
 curve_rows = []
 curve_models = []
-# [4]
 for curve_seed in range(6050, 6055):
     *curve_metrics, curve_model = fit_curve(curve_seed)
     curve_rows.append(curve_metrics)
@@ -369,7 +372,7 @@ pca_plot = (x_plot - plot_mean) @ plot_basis @ plot_basis.T + plot_mean
 with torch.no_grad():
     nonlinear_plot, z_plot = curve_models[0](x_plot)
 
-# [5]
+# [6]
 print("seed  PCA MSE    tied MSE   projector gap  nonlinear MSE  |corr(z,t)|")
 for seed, row in zip(range(6050, 6055), curve_rows):
     print(seed, *(f"{value:.9f}" for value in row))
@@ -464,8 +467,8 @@ The reconstructions agree on every observed code—yet disagree elsewhere.
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Show why reconstruction alone does not identify latent sampling.
+1. Construct two decoders agreeing at observed codes but differing between them.
+2. Compare observed-code reconstruction with the outputs of latent sampling.
 :::
 
 ```{python}
@@ -603,10 +606,12 @@ not a newly sealed test. Five seeds repeat training. Labels never enter the expe
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Define the reusable helpers: `ConvolutionalAutoencoder`, `reconstruction_mse`, and `fit_convolutional_autoencoder`.
-3. Compare clean and denoising input–target contracts with the same convolutional autoencoder.
-4. Report or visualize the measured result.
+1. Separate fitting, validation, and endpoint images with fixed corruption streams.
+2. Encode through a bottleneck and decode back to the image grid.
+3. Measure reconstruction error without updating the model.
+4. Fit clean targets under either input contract and select the validation checkpoint.
+5. Compare clean-trained and denoising-trained models across paired seeds.
+6. Check the convolution-adjoint identity and report both reconstruction contracts.
 :::
 
 ```{python}
@@ -665,6 +670,7 @@ class ConvolutionalAutoencoder(nn.Module):
         return self.decoder_map(features), z
 
 
+# [3]
 @torch.no_grad()
 def reconstruction_mse(
     model: nn.Module, inputs: Tensor, targets: Tensor
@@ -674,6 +680,7 @@ def reconstruction_mse(
     return F.mse_loss(reconstruction, targets).item()
 
 
+# [4]
 def fit_convolutional_autoencoder(
     seed: int, denoising: bool, epochs: int = 30
 ) -> tuple[float, float, float, ConvolutionalAutoencoder]:
@@ -715,9 +722,9 @@ def fit_convolutional_autoencoder(
     return best_validation, clean_mse, noisy_mse, model
 
 
+# [5]
 conv_rows: dict[bool, Tensor] = {}
 conv_models: dict[bool, list[ConvolutionalAutoencoder]] = {}
-# [3]
 for denoising in (False, True):
     fitted = [
         fit_convolutional_autoencoder(seed, denoising)
@@ -733,7 +740,7 @@ with torch.no_grad():
     plain_noisy_reconstruction, _ = plain_model(noisy_holdout[example_indices])
     denoised_reconstruction, _ = denoising_model(noisy_holdout[example_indices])
 
-# [4]
+# [6]
 # A separate operator check: transposed convolution is the convolution's adjoint.
 probe_x = torch.randn(2, 1, 13, 13, dtype=torch.float64)
 probe_weight = torch.randn(3, 1, 3, 3, dtype=torch.float64)

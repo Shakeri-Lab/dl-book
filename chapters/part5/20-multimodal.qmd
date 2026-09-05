@@ -43,8 +43,12 @@ This is the central move in **multimodal representation learning**. Different
 modalities keep different encoders, while paired observations teach those encoders how
 to become comparable. The learned space can support cross-modal retrieval and, under a
 carefully bounded candidate construction, zero-shot classification. It does not by
-itself create a caption, synthesize an image, or prove that the representation has
-captured every meaning we care about—that boundary will matter throughout the chapter.
+itself supply a caption or image generator, or guarantee semantic understanding.
+
+Reading routes: the [scores-to-weights witness](#chapter-2-returns-scores-become-weights)
+builds the pair loss; the [full paired-versus-shuffled study](#make-the-pair-relation-learnable)
+tests what the correspondence teaches. For execution, run the notebook from the
+top through the chosen study so its imports, helpers, and data are available.
 
 <!-- NOVEL: needs sign-off -->
 
@@ -70,7 +74,8 @@ import torch
 from torch import Tensor, nn
 import torch.nn.functional as F
 
-torch.set_num_threads(6)
+import os
+torch.set_num_threads(int(os.environ.get("DLBOOK_TORCH_NUM_THREADS", "6")))
 torch.set_default_dtype(torch.float32)
 torch.manual_seed(6050)
 
@@ -160,25 +165,27 @@ should select column 2, and so on. We have seen this machine before.
 ## Chapter 2 returns: scores become weights
 
 Let a minibatch contain $B$ declared pairs
-$(x_i^{(I)},x_i^{(T)})$. The image encoder
-$f_\theta:\mathbb{R}^{d_I}\to\mathbb{R}^{d}$ and text encoder
-$g_\phi:\mathbb{R}^{d_T}\to\mathbb{R}^{d}$ may have completely different internal
-architectures. Their interiors may differ completely—their outputs must agree only in
-the last dimension. We normalize each output to unit length:
+$(\featurepart{x_i^{(I)}},\featurepart{x_i^{(T)}})$. The image encoder
+$f_{\parameterpart{\theta}}:\mathbb{R}^{d_I}\to\mathbb{R}^{d}$ and text encoder
+$g_{\parameterpart{\phi}}:\mathbb{R}^{d_T}\to\mathbb{R}^{d}$ may have completely different internal
+architectures; their outputs must agree only in the last dimension. We normalize
+each output to a unit vector in $\mathbb{R}^{d}$:
 
 $$
-u_i=\frac{f_\theta(x_i^{(I)})}{\lVert f_\theta(x_i^{(I)})\rVert_2},
-\qquad
-v_i=\frac{g_\phi(x_i^{(T)})}{\lVert g_\phi(x_i^{(T)})\rVert_2},
-\qquad u_i,v_i\in\mathbb{R}^{d}.
+\begin{aligned}
+\predictionpart{u_i}&=\frac{f_{\parameterpart{\theta}}(\featurepart{x_i^{(I)}})}
+{\lVert f_{\parameterpart{\theta}}(\featurepart{x_i^{(I)}})\rVert_2},\\[4pt]
+\predictionpart{v_i}&=\frac{g_{\parameterpart{\phi}}(\featurepart{x_i^{(T)}})}
+{\lVert g_{\parameterpart{\phi}}(\featurepart{x_i^{(T)}})\rVert_2}.
+\end{aligned}
 $$ {#eq-multimodal-normalize}
 
-Now the dot product is cosine similarity. For every cross-modal pair in the batch, form
+The dot product of the normalized outputs $\predictionpart{u_i}$ and
+$\predictionpart{v_j}$ is now cosine similarity. Score every cross-modal pair in
+the batch to form $\matr{S}\in\mathbb{R}^{B\times B}$:
 
 $$
-S_{ij}=\frac{u_i^\top v_j}{\tau},
-\qquad
-\matr{S}\in\mathbb{R}^{B\times B},
+S_{ij}=\frac{\predictionpart{u_i}^{\top}\predictionpart{v_j}}{\tau},
 $$ {#eq-multimodal-score}
 
 where $\tau>0$ is the **temperature**. Dividing by a small temperature spreads the
@@ -352,15 +359,23 @@ and zero otherwise, then averaged across queries. With 300 unique candidates, ra
 ranking has expected Recall@1 of $1/300=0.0033$ and Recall@5 of
 $5/300=0.0167$.
 
+::: {.notebook-prediction}
+Before running, predict what the fixed wrong-pair relation will do to retrieval
+on new pairs. Could its fitting loss still improve? State which comparison would
+distinguish learning the shared event from memorizing the supplied pairings, then
+check both retrieval directions against chance.
+:::
+
 <!-- NOVEL: needs sign-off -->
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
-1. Define the reusable helpers: `PairedSplit`, `make_paired_data`, `TwoTower`, `symmetric_loss`, and `pair_loss`.
-2. Define the reusable helpers: `retrieval_metrics`, `derangement`, `train_tower`, `report`, and `report_paired_contrast`.
-3. Prepare the inputs and fixed settings for the example.
-4. Run the five-seed paired-versus-shuffled retrieval study.
-5. Report or visualize the measured result.
+1. Generate paired views and standardize using fitting-set statistics only.
+2. Encode both views on the unit sphere and optimize the symmetric pair loss.
+3. Rank every held-out candidate in both retrieval directions.
+4. Break only the fit-pair relation while preserving initialization and batch order.
+5. Train both arms and select checkpoints using the correct validation pairs.
+6. Report full-pool recall, chance rates, and within-seed contrasts.
 :::
 
 ```{python}
@@ -403,6 +418,7 @@ def make_paired_data() -> tuple[PairedSplit, PairedSplit, PairedSplit]:
     )
 
 
+# [2]
 class TwoTower(nn.Module):
     def __init__(
         self, image_dim: int, text_dim: int,
@@ -439,7 +455,7 @@ def pair_loss(model: TwoTower, split: PairedSplit) -> float:
     return float(symmetric_loss(image_embedding, text_embedding))
 
 
-# [2]
+# [3]
 @torch.no_grad()
 def retrieval_metrics(model: TwoTower, split: PairedSplit) -> dict[str, float]:
     model.eval()
@@ -459,6 +475,7 @@ def retrieval_metrics(model: TwoTower, split: PairedSplit) -> dict[str, float]:
     }
 
 
+# [4]
 def derangement(size: int, generator: torch.Generator) -> Tensor:
     target = torch.arange(size)
     while True:
@@ -473,6 +490,7 @@ def train_tower(
     validation_split: PairedSplit,
     shuffled_pairs: bool,
 ) -> TwoTower:
+    # [4]
     torch.manual_seed(seed)
     model = TwoTower(fit_split.image.shape[1], fit_split.text.shape[1])
     optimizer = torch.optim.AdamW(model.parameters(), lr=2e-3, weight_decay=1e-3)
@@ -488,6 +506,7 @@ def train_tower(
         for _ in range(160)
     ]
 
+    # [5]
     best_validation = float("inf")
     best_state: dict[str, Tensor] | None = None
     for epoch, order in enumerate(schedules, start=1):
@@ -512,12 +531,12 @@ def train_tower(
     return model
 
 
-# [3]
+# [1]
 fit_split, validation_split, held_out_split = make_paired_data()
 models: dict[tuple[int, str], TwoTower] = {}
 records: list[dict[str, object]] = []
 
-# [4]
+# [5]
 for seed in range(6050, 6055):
     for condition, shuffled_pairs in (("paired", False), ("shuffled", True)):
         model = train_tower(seed, fit_split, validation_split, shuffled_pairs)
@@ -534,6 +553,7 @@ for record in records:
     record["held_out"] = retrieval_metrics(model, held_out_split)
 
 
+# [6]
 def report(split_name: str, key: str) -> None:
     print(split_name)
     for condition in ("paired", "shuffled"):
@@ -568,7 +588,7 @@ def report_paired_contrast(field: str) -> None:
 
 reference_model = models[(6050, "paired")]
 parameter_count = sum(p.numel() for p in reference_model.parameters())
-# [5]
+# [6]
 split_sizes = (
     len(fit_split.image), len(validation_split.image), len(held_out_split.image)
 )
@@ -617,7 +637,8 @@ or any natural-data model will achieve.
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
-1. Define the reusable helpers: `held_values` and `score_window`.
+1. Collect held-out recall across seeds for one condition.
+2. Compare both modalities' cosine scores on the same subset of pairs.
 :::
 
 ```{python}
@@ -634,6 +655,7 @@ def held_values(condition: str, field: str) -> list[float]:
     ]
 
 
+# [2]
 @torch.no_grad()
 def score_window(model: TwoTower, split: PairedSplit, size: int = 40) -> Tensor:
     model.eval()
@@ -708,8 +730,8 @@ training:
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
-1. Define the reusable `two_dim_view` helper.
-2. Prepare the inputs and fixed settings for the example.
+1. Fit one PCA view to both modalities' embeddings together.
+2. Construct an untrained reference with the same tower shapes.
 :::
 
 ```{python}

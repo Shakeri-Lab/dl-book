@@ -18,11 +18,14 @@ adds one operation after that score; the weighted-sum machinery itself stays int
 
 In regression, $y \in \R$ and the Gaussian noise model handed us the MSE
 (@sec-01-linear-regression). In classification, $y$ is a label from
-$\{0, \dots, K-1\}$. Could we just regress onto the labels with MSE anyway? We could,
-and it fails for a principled reason: **the loss is a noise model, and Gaussian is the
-wrong model for a coin flip.** A binary outcome deviates from its probability like a
-Bernoulli variable, not like additive Gaussian noise $\rightarrow$ maximum likelihood
-demands a different loss. Everything in this chapter falls out of taking that seriously.
+$\{0, \dots, K-1\}$. Regressing directly onto those class numbers would give an
+arbitrary ordering and distance to categories. Instead, we predict probabilities.
+For binary and categorical targets, the maximum-likelihood recipe uses Bernoulli
+and categorical distributions and yields cross-entropy. Squared error on the
+*probabilities* is also a valid loss, known as the Brier score; it gives a different
+gradient, not an invalid classifier.^[For a binary target with true
+probability $q$, $\mathbb{E}[(p-y)^2]=(p-q)^2+q(1-q)$, minimized at $p=q$.
+Exercise 4 compares this probability loss with cross-entropy.]
 
 What we need is two things:
 
@@ -80,7 +83,7 @@ side of it.
 
 ### The loss: cross-entropy from maximum likelihood
 
-Run the maximum-likelihood recipe with the correct noise model. If the label is a coin
+Run the maximum-likelihood recipe with a Bernoulli target model. If the label is a coin
 flip with $P(y{=}1 \mid \vect{x}) = \hat{p}$, the likelihood of the dataset is
 $\prod_i \hat{p}_i^{\,y_i}(1-\hat{p}_i)^{1-y_i}$; taking the negative log gives the
 **binary cross-entropy**:
@@ -284,10 +287,10 @@ $\hat{y} - y$, we can implement it by hand $\rightarrow$ no autograd needed:
 
 :::: {.plan-code}
 ::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Define the reusable `stable_softmax` helper.
+1. Generate three labeled clouds and initialize their linear templates.
+2. Normalize logits after subtracting each row's maximum.
 3. Apply the softmax cross-entropy gradient to all three templates.
-4. Report or visualize the measured result.
+4. Measure classification accuracy on the generated examples.
 :::
 
 ```{python}
@@ -323,8 +326,8 @@ print(f"cross-entropy {ce:.3f}   accuracy {acc:.1%}")
 ::::
 :::: {.plan-code}
 ::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Decision regions with confidence shading.
+1. Evaluate class probabilities across the input plane.
+2. Show the winning class and its confidence at each location.
 :::
 
 ```{python}
@@ -342,12 +345,12 @@ Pg = stable_softmax(grid @ W.T + b)
 cls = Pg.argmax(1).reshape(gx.shape).numpy()
 conf = Pg.max(1).values.reshape(gx.shape).numpy()
 
+# [2]
 plt.figure(figsize=(6, 4.4))
 plt.contourf(gx, gy, cls, levels=[-0.5, 0.5, 1.5, 2.5],
              colors=["#DCE6F2", "#FDE3C8", "#E3EEE3"])
 plt.contourf(gx, gy, 1 - conf, levels=12, cmap="Greys",
              alpha=0.25, antialiased=True)
-# [2]
 for k, color in enumerate(["#232D4B", "#E57200", "#6B8E6B"]):
     plt.scatter(X[y == k, 0], X[y == k, 1], s=8, c=color, label=f"class {k}")
 plt.xlabel("$x_1$"); plt.ylabel("$x_2$"); plt.legend(loc="lower right")
@@ -361,8 +364,8 @@ remain the previews marked in @sec-01-linear-regression until Chapters 4 and 5.
 
 :::: {.plan-code}
 ::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Compare the hand-computed cross-entropy with PyTorch's fused loss.
+1. Select the framework loss that accepts raw logits and class indices.
+2. Compare manual cross-entropy with PyTorch's fused loss.
 :::
 
 ```{python}
@@ -398,18 +401,28 @@ Close the book for one minute and reconstruct the classifier.
 - Why should logits, rather than already normalized probabilities, enter PyTorch's cross-entropy loss?
 :::
 
+::: {.callout-tip collapse="true"}
+## Check your reasoning
+
+Set the binary probability to $p=\tfrac12$: the corresponding logit is zero, so
+the decision boundary is still the original hyperplane. Then inspect
+@eq-bce-grad: the sigmoid and log-loss derivatives cancel to give $p-y$.
+This cancellation belongs to that pairing, not to every probability loss.
+:::
+
 ## Okay, so — classification is regression plus a normalizer
 
 1. **The geometry survived**: logits are still template similarities
    $\vect{w}^\top\vect{x} + b$, boundaries are still hyperplanes. Sigmoid and softmax
    grade confidence; they do not bend anything.
-2. **The loss came from the noise model**, exactly as in @sec-01-linear-regression:
+2. **Our likelihood-derived loss came from the target model**:
    Bernoulli $\rightarrow$ BCE, categorical $\rightarrow$ cross-entropy, both read as
    *surprise at the truth*.
 3. **The gradient is the error**, $\hat{y} - y$, both times — the exponential-family
    pairing at work.
 4. **Softmax is a scores-to-weights machine**, shift-invariant, numerically tamed by
-   log-sum-exp — and it will return, unchanged, as the normalizer of attention.
+   log-sum-exp. Later, the same machine will decide how much stored information
+   each candidate contributes.
 
 Next, we let the templates themselves be built out of other templates:
 @sec-03-nonlinearity-mlp stacks these linear units — and discovers why a bend between
@@ -426,6 +439,9 @@ them is not optional.
 - [Shannon, “A Mathematical Theory of Communication”
   (1948)](https://doi.org/10.1002/j.1538-7305.1948.tb01338.x) is the original source
   behind the entropy and information vocabulary used to read cross-entropy.
+- [Gneiting and Raftery, “Strictly Proper Scoring Rules, Prediction, and Estimation”
+  (2007)](https://doi.org/10.1198/016214506000001437) places log loss and the
+  quadratic (Brier) score in the same framework for assessing probabilities.
 
 ## Exercises {.unnumbered}
 
@@ -438,11 +454,16 @@ them is not optional.
    value ever exponentiated?
 3. **(Code.)** Temperature: replace `logits` with `logits / T` in the softmax figure
    for $T \in \{0.5, 1, 2, 10\}$. Describe what happens to the distribution at both
-   extremes. (Keep this dial in mind — it returns when we scale attention scores in
-   Part IV.)
-4. **(Code.)** Train the blobs classifier with MSE on one-hot targets instead of
-   cross-entropy (same manual loop; the gradient changes). Compare accuracy and the
-   confidence shading near boundaries. What does the wrong noise model cost?
+   extremes. Keep this dial in mind: it will control whether a later weighted
+   lookup blends many candidates or concentrates on a few.
+4. **(Code.)** Train the blobs classifier with squared error between
+   `softmax(logits)` and one-hot targets instead of cross-entropy. Sum squared
+   errors over classes, then average over examples. Use one fixed fit/validation
+   split for both losses, with paired initialization and update budgets; declare
+   whether learning rates are shared or tuned separately on validation data.
+   Compare validation accuracy and confidence shading. Explain
+   any difference using the gradients and their scale, not a claim that one loss
+   is an invalid probability score.
 5. **(Code.)** Move the three blob centers closer together (`0.7 → 1.2` noise, or
    centers at distance 1) and retrain. Where does the confidence shading collapse, and
    what does the cross-entropy value tell you compared to the accuracy?

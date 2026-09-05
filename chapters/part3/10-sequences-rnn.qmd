@@ -115,9 +115,9 @@ Per the book's habit, build the loop by hand, then verify against the framework:
 
 :::: {.plan-code}
 ::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Implement the recurrence, written as the loop it is.
-3. Report or visualize the measured result.
+1. Extract one RNN's shared weights and initialize the running state.
+2. Update that state once per input using the same recurrence.
+3. Compare the complete state sequence with the framework output.
 :::
 
 ```{python}
@@ -236,9 +236,9 @@ depth experiment:
 
 :::: {.plan-code}
 ::: {.plan}
-1. Define the reusable `grad_at_first_input` helper.
-2. Prepare the inputs and fixed settings for the example.
-3. Gradient reaching the first input vs. lag.
+1. Backpropagate from the final state to the first input at each lag.
+2. Fix the recurrence and choose the lag sweep.
+3. Compare the first-input gradient magnitude across lags.
 :::
 
 ```{python}
@@ -436,8 +436,8 @@ Watch what that buys, on the same axes as before:
 
 :::: {.plan-code}
 ::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Measure the LSTM gradient norm across lag.
+1. Initialize an LSTM with a positive forget-gate bias.
+2. Measure its first-input gradient across the same lag sweep.
 :::
 
 ```{python}
@@ -478,14 +478,20 @@ early bit across a long stretch of identical noise. Here is that story as an
 executable task: sequences of 80 random tokens, where the label to predict at the
 end is simply *the first token*. Chance is 25%. Three contenders, three seeds
 each: the vanilla RNN, the LSTM as PyTorch hands it to you, and the LSTM with the
-remember-by-default initialization. Predict the three rows before
-running — in particular, does the *architecture* alone earn its keep?
+remember-by-default initialization.
+
+::: {.notebook-prediction}
+Predict the three rows before running. In particular, does the *architecture*
+alone earn its keep on the first-token memory task, or does its initialization matter?
+:::
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
-1. Define the reusable helpers: `make_recall`, `SeqClassifier`, and `train_recall`.
-2. Prepare the inputs and fixed settings for the example.
-3. Recall-the-first-token at lag 80, three configurations.
+1. Generate random sequences labeled only by their first token.
+2. Choose the recurrent cell and optionally bias its forget gate toward retention.
+3. Train last-state classification under the same data and update recipe.
+4. Fix the lag and architecture/initialization configurations.
+5. Compare recall accuracy across the shared seeds.
 :::
 
 ```{python}
@@ -499,6 +505,7 @@ def make_recall(n: int, T: int, vocab: int = 4,
     X = torch.randint(0, vocab, (n, T), generator=g)
     return F.one_hot(X, vocab).float(), X[:, 0]     # label = first token
 
+# [2]
 class SeqClassifier(nn.Module):
     def __init__(self, cell: str, vocab=4, hidden=32, forget_bias=None):
         super().__init__()
@@ -514,6 +521,7 @@ class SeqClassifier(nn.Module):
         o, _ = self.rec(x)
         return self.out(o[:, -1])                    # read out at the END only
 
+# [3]
 def train_recall(cell: str, T: int, seed: int, forget_bias: float | None = None,
                  epochs: int = 80) -> float:
     torch.manual_seed(seed)
@@ -532,14 +540,14 @@ def train_recall(cell: str, T: int, seed: int, forget_bias: float | None = None,
     with torch.no_grad():
         return (net(X_te).argmax(1) == y_te).float().mean().item(), net
 
-# [2]
+# [4]
 T = 80
 configs = [("vanilla RNN", "rnn", None),
            ("LSTM, default init", "lstm", None),
            ("LSTM, forget bias +1", "lstm", 1.0)]
 probe_nets: dict[str, nn.Module] = {}                # kept for the diagnostic below
 print(f"recall accuracy at lag {T} (chance 25%), seeds 0 / 1 / 6050:")
-# [3]
+# [5]
 for label, cell, fb in configs:
     results = [train_recall(cell, T, s, fb) for s in [0, 1, 6050]]
     accs = [a for a, _ in results]
@@ -547,23 +555,20 @@ for label, cell, fb in configs:
     print(f"  {label:22s} " + "   ".join(f"{a:.0%}" for a in accs))
 ```
 ::::
-Three rows, one lesson each. The vanilla RNN is a *lottery*: two seeds sit at
-chance, one cracks the task. @fig-vanishing-time says the teaching gradient is
-astronomically attenuated, not exactly zero — so once in a while optimization
-stumbles onto a solution anyway, and you cannot build a system on once-in-a-while.
-The default-initialized LSTM loses on *every* seed — worth a long pause, because it
-says the architecture alone is not the cure. A fresh LSTM's forget gates hover
-near $\sigma(0) = \tfrac12$, and $0.5^{80} \approx 10^{-24}$: a half-closed valve,
-compounded eighty times, is as fatal as no valve. The third row flips the single
-bias that opens the valve, and the task is solved outright, every seed. The
-highway was built by the architecture; *initialization opened it* — the same
-lesson Chapter 5 taught about signal scales at birth, now with a memory attached.
+Three rows, one lesson each. Under this training budget, two vanilla-RNN seeds sit
+at chance and one solves the task. Its success rules out an impossibility claim:
+@fig-vanishing-time shows severe attenuation at initialization, not that every
+trained recurrence must forget. The default-initialized LSTM fails on all three
+tested seeds, so the architecture alone is not the cure either. A gate held near
+$\sigma(0) = \tfrac12$ would retain only $0.5^{80} \approx 10^{-24}$ along the
+direct cell path. Changing the forget bias makes the third row solve the task on
+all three seeds. The highway was built by the architecture; *initialization
+opened it*. Chapter 5's signal-scale lesson has returned with a memory attached.
 @sec-a3-precision-performance separates this mathematical attenuation from the later
 question of whether a chosen dtype can still represent the resulting value or update.
-And the deliverable is not raw capability but **reliability**: what the gates buy
-is that memory stops being a lottery. (For shorter stretches the drama disappears:
-at lag 20 all three rows solve the task under this budget. The gates earn their
-keep precisely where @eq-bptt says the vanilla cell must fail.)
+The improvement is in observed **reliability**, not a guarantee across tasks or
+initializations. At lag 20 all three rows solve the task under this budget; the
+longer gap exposes the sensitivity that @eq-bptt helps us diagnose.
 
 
 ### Watching the valves
@@ -578,9 +583,8 @@ failed twin's should sag near $\sigma(0) = \tfrac12$.
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
-1. Define the reusable `forget_gate_trace` helper.
-2. Prepare the inputs and fixed settings for the example.
-3. Replay the trained LSTMs and read their forget gates.
+1. Replay the trained recurrence and verify its states against the framework.
+2. Compare their mean forget-gate trajectories on fresh probe sequences.
 :::
 
 ```{python}
@@ -613,7 +617,6 @@ def forget_gate_trace(net: SeqClassifier, T: int = 80) -> list[float]:
 
 # [2]
 plt.figure(figsize=(6.2, 3.2))
-# [3]
 for label, color in [("LSTM, forget bias +1", "#232D4B"),
                      ("LSTM, default init", "#E57200")]:
     plt.plot(range(1, T + 1), forget_gate_trace(probe_nets[label]),
@@ -696,10 +699,10 @@ the next.
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Run a character-level LSTM trained on Chapters 1–9.
-3. Report or visualize the measured result.
-4. Define the `CharLSTM` module.
+1. Read the pinned corpus instead of mutable chapter prose.
+2. Verify its hash, encode characters, and keep the held-out tail separate.
+3. Report corpus size, vocabulary, and split sizes.
+4. Map one-hot characters through recurrent memory to next-character logits.
 :::
 
 ```{python}
@@ -785,9 +788,9 @@ window boundary, so train and held-out numbers stay comparable across chapters):
 
 :::: {.plan-code}
 ::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Run char lm train run.
-3. Report or visualize the measured result.
+1. Initialize one character model from the fixed seed.
+2. Fit next-token prediction with the shared training protocol.
+3. Measure held-out loss with state reset at each evaluation window.
 :::
 
 ```{python}
@@ -819,8 +822,8 @@ back in, repeat. The hidden state streams; nothing is recomputed.
 
 :::: {.plan-code}
 ::: {.plan}
-1. Define the reusable `sample` helper.
-2. Sample from the model, one character at a time.
+1. Carry recurrent state forward while sampling temperature-scaled next tokens.
+2. Generate a continuation from the chosen character prompt.
 :::
 
 ```{python}
@@ -849,14 +852,12 @@ Read the output honestly, because both halves of the verdict teach. What it *got
 words, spacing, sentence rhythm, markdown furniture (asterisks, pipes, colons),
 and the book's working vocabulary (training, batch, layer, convolution in various
 misspellings), all learned from raw characters by a one-layer recurrence reading
-100-character chunks. What it
-*lacks*: meaning. Clauses trail off; equations open and never close; the prose has
-the book's accent with none of its intent. Some of that is scale (a 150k-character
-corpus and 128 hidden units is a *tiny* language model), and some of it is the
-finite state. By the end of a sentence, the beginning has been squeezed through
-the LSTM's two 128-dimensional states, $(\vect{h}, \vect{c})$: 256 scalars in all.
-Both diagnoses point down the road this part of the book is
-traveling.
+100-character chunks. What it *does not sustain*: coherent meaning. Clauses trail
+off and equations open without closing. A small corpus, limited training context,
+and a finite state are plausible contributors, but this sample does not separate
+them. The state budget is concrete: the LSTM carries two 128-dimensional vectors,
+$(\vect{h}, \vect{c})$, or 256 scalars in all. That suggests a design question to
+test, not a diagnosed cause of every broken sentence.
 
 ## A full-scale rematch: words, layers, and corpus size
 
@@ -938,13 +939,12 @@ an **encoder** reads the source sentence into its final state, a **decoder** spi
 that state back out as words in another language. That architecture, plus its
 training tricks, is @sec-11-encoder-decoder. But notice what the design asks of
 one fixed-size state: the *entire sentence*, compressed into $(\vect{h},\vect{c})$, no
-matter how long the sentence runs. The char-LM's trailing clauses were this
-bottleneck in miniature. The honest fix is not a bigger vector; it is admitting
-that the decoder should be allowed to *look back at all of the encoder's states*,
-not just the last. Choosing where to look, on the fly, is a similarity
-computation you have been prepared for since Chapter 1's dot products. The next
-chapter will first make the fixed-code failure visible in translation. Part IV will
-then build an alternative from that need.
+matter how long the sentence runs. A larger state can help, but another design
+changes what is retained: let the decoder *look back at all of the encoder's
+states*, not just the last. Choosing where to look is a similarity computation
+you have been prepared for since Chapter 1's dot products. The next chapter makes
+the fixed-state handoff concrete in translation; Part IV tests the alternative
+of keeping source-position evidence available.
 
 The fixed-size state is about to face that rematch: the alternative will keep the
 evidence available instead of squeezing all of it through one vector. Much later the

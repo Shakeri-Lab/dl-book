@@ -79,23 +79,20 @@ ax.text(10.85, 3.4, "weighted blend\nof all rows", fontsize=8.5, color=green,
 plt.tight_layout(); plt.show()
 ```
 
-<!-- NOVEL: needs sign-off - opening preview of the seeded date-rematch results. -->
+<!-- NOVEL: needs sign-off - opening task preview for the date rematch. -->
 
-The result is visible in the date task before we name all its parts. For the fixed
-validation source
+The date task makes the lookup's job concrete before we name all its parts. The
+fixed first validation example asks for
 
 ```text
 may 17, 1971  ->  1971-05-17
 ```
 
-the trained decoder emits the year first even though those four characters sit at
-the end of the source. Across the fixed 400-example validation audit, its first four
-attention rows place **97.5%** of their mass on the four contextual encoder states
-indexed by the source-year characters. When the example above emits its second
-character, **9**, the largest weight is 0.856 on the state indexed by the source's
-9; when it emits **7**, the largest weight is 0.985 on the state indexed by the 7
-in the year region. Those weights were not supervised as alignments. The date loss
-taught the model where useful information lived.
+The year must be written first although it appears last in the source. A decoder
+that can look back need not carry every detail through one final summary. Later
+we will inspect its weights on this predeclared example and measure year-region
+weight across 400 validation sources. The date loss supplies target strings, not
+alignment labels, so any useful routing must be learned from that task.
 
 <!-- /NOVEL -->
 
@@ -312,8 +309,8 @@ $(0.55,-0.30,0.075)$, and softmax gives $(0.488,0.209,0.303)$:
 
 :::: {.plan-code}
 ::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Run one query through dot product, scaling, and softmax.
+1. Fix one query and three key vectors.
+2. Turn scaled dot products into normalized key weights.
 :::
 
 ```{python}
@@ -327,36 +324,39 @@ key_walk = torch.tensor([
     [-0.5, 0.9, 0.0, 0.2],
     [0.3, 0.0, 0.6, -0.4],
 ])
+# [2]
 raw_walk = key_walk @ query_walk
 scaled_walk = raw_walk / math.sqrt(query_walk.numel())
 weight_walk = torch.softmax(scaled_walk, dim=0)
-# [2]
 print("raw scores:", raw_walk.numpy())
 print("scaled scores:", scaled_walk.numpy())
 print("weights:", weight_walk.numpy(), "sum:", weight_walk.sum().item())
 ```
 ::::
 Now let raw decoder features
-$\matr{D}\in\mathbb{R}^{B\times m\times d_d}$ and encoder memory
-$\matr{H}\in\mathbb{R}^{B\times n\times d_e}$ enter learned projections:
+$\featurepart{\matr{D}}\in\mathbb{R}^{B\times m\times d_d}$ and encoder memory
+$\featurepart{\matr{H}}\in\mathbb{R}^{B\times n\times d_e}$ enter learned projections:
 
 $$
 \begin{aligned}
-\matr{Q}&=\matr{D}\matr{W}_Q,
-&\matr{W}_Q&\in\mathbb{R}^{d_d\times d_k},\\
-\matr{K}&=\matr{H}\matr{W}_K,
-&\matr{W}_K&\in\mathbb{R}^{d_e\times d_k},\\
-\matr{V}&=\matr{H}\matr{W}_V,
-&\matr{W}_V&\in\mathbb{R}^{d_e\times d_v}.
+\matr{Q}&=\featurepart{\matr{D}}\parameterpart{\matr{W}_Q},\\
+\matr{K}&=\featurepart{\matr{H}}\parameterpart{\matr{W}_K},\\
+\matr{V}&=\featurepart{\matr{H}}\parameterpart{\matr{W}_V}.
 \end{aligned}
 $$
 
+The trainable maps have shapes
+$\parameterpart{\matr{W}_Q}\in\mathbb{R}^{d_d\times d_k}$,
+$\parameterpart{\matr{W}_K}\in\mathbb{R}^{d_e\times d_k}$, and
+$\parameterpart{\matr{W}_V}\in\mathbb{R}^{d_e\times d_v}$.
 The resulting tensors have shapes
 
 $$
-\matr{Q}\in\mathbb{R}^{B\times m\times d_k},\qquad
-\matr{K}\in\mathbb{R}^{B\times n\times d_k},\qquad
-\matr{V}\in\mathbb{R}^{B\times n\times d_v}.
+\begin{aligned}
+\matr{Q}&\in\mathbb{R}^{B\times m\times d_k},\\
+\matr{K}&\in\mathbb{R}^{B\times n\times d_k},\\
+\matr{V}&\in\mathbb{R}^{B\times n\times d_v}.
+\end{aligned}
 $$
 
 Only the projected query and key widths must agree. The raw encoder and decoder
@@ -415,9 +415,9 @@ queries and 16 independent keys per query:
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Audit score variance and softmax concentration versus width.
-3. Report or visualize the measured result.
+1. Choose feature widths and a common distribution of query/key coordinates.
+2. Measure raw and scaled score variance and softmax concentration.
+3. Report how scaling changes the width dependence.
 :::
 
 ```{python}
@@ -503,8 +503,8 @@ keys:
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
-1. Define the reusable `scaled_dot_attention` helper.
-2. Run and audit scaled dot-product attention with a source-padding mask.
+1. Mask unavailable keys before row normalization and form the value mixture.
+2. Check padded-key exclusion and normalized attention rows.
 :::
 
 ```{python}
@@ -603,26 +603,28 @@ keep the experimental contract fixed:
 - the same 8,000/500/500 train/validation/test split;
 - the same embedding width 32 and LSTM hidden width 128;
 - the same Adam learning rate $10^{-3}$, batch size 128, 25 epochs, teacher forcing,
-  gradient clip 5, and seed 6050;
+  gradient clip 5, and training seeds 6050–6054;
+- identical minibatch permutations within each seed pair, driven independently
+  of model initialization;
 - the same first 400 unambiguous validation sources for every learning curve;
-- one final scalar audit on the same 437 unambiguous test sources.
+- one final error count per model on the same 437 unambiguous test sources.
 
 The generator and split below are deliberately byte-for-byte copies of Chapter 11.
 Changing them would end the running benchmark:
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Define the reusable `make_date` helper.
-3. Reconstruct Chapter 11's sealed date benchmark.
-4. Report or visualize the measured result.
+1. Reuse the earlier calendar and token conventions.
+2. Reproduce the same date-generation and dialect rules.
+3. Reconstruct Chapter 11's exact source split.
+4. Verify the rematch sizes and absence of cross-split source overlap.
 :::
 
 ```{python}
 #| label: date-data-rematch
 #| code-summary: "Code: reconstruct Chapter 11's sealed date benchmark"
 #| code-fold: false
-import random, torch
+import hashlib, random, torch
 import torch.nn as nn
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
@@ -681,8 +683,8 @@ print(f"source vocab {V_src}, target vocab {V_tgt}")
 ```
 ::::
 Numeric dates can be ambiguous, so we retain the same unambiguous subsets as Chapter
-11. Design decisions and the heatmap use validation only. The test set remains a
-single number at the end.
+11. Design decisions and the heatmap use validation only. The reused test set is
+reserved for the final paired error ledger, not checkpoint selection.
 
 ### Put the learned read inside the recurrent decoder
 
@@ -717,10 +719,12 @@ For this date model, the shape ledger is concrete:
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
-1. Define the reusable helpers: `batchify`, `unambiguous`, and `LearnedAlignment`.
-2. Prepare the inputs and fixed settings for the example.
-3. Run a masked additive-attention LSTM decoder.
-4. Define the reusable helpers: `AttentiveSeq2Seq`, `greedy_batch`, and `exact_match`.
+1. Pad each batch while retaining its true source lengths.
+2. Fix the same unambiguous evaluation populations as Chapter 11.
+3. Score encoder states against the query and normalize only over real tokens.
+4. Recompute a value mixture for each decoder step.
+5. Decode greedily without access to target tokens.
+6. Measure whole-sequence exact match over the declared source population.
 :::
 
 ```{python}
@@ -747,9 +751,10 @@ def unambiguous(prs: list[tuple[str, str]]) -> list[tuple[str, str]]:
 valid_unamb = unambiguous(valid_pairs)
 test_unamb = unambiguous(test_pairs)
 valid_fixed = valid_unamb[:400]
-# [3]
+assert len(valid_fixed) == 400 and len(test_unamb) == 437
 print(f"fixed validation {len(valid_fixed)}; final test {len(test_unamb)}")
 
+# [3]
 class LearnedAlignment(nn.Module):
     def __init__(self, hidden: int = 128, alignment: int = 128):
         super().__init__()
@@ -822,6 +827,7 @@ class AttentiveSeq2Seq(nn.Module):
             logits.append(logit)
         return torch.stack(logits, dim=1)                 # (B, T_tgt, V_tgt)
 
+# [5]
 @torch.inference_mode()
 def greedy_batch(
     model: AttentiveSeq2Seq,
@@ -858,8 +864,9 @@ def greedy_batch(
             ))
     return outputs
 
+# [6]
 @torch.inference_mode()
-def exact_match(
+def attention_exact_match(
     model: AttentiveSeq2Seq, prs: list[tuple[str, str]],
 ) -> float:
     generated = greedy_batch(model, prs)
@@ -876,20 +883,127 @@ step at a time because its next context depends on its previous state. Teacher f
 still supplies the true previous token, but it no longer permits one fused decoder
 call.
 
-### The matched-schedule rematch
+### Recompute the fixed-state comparison
 
-The full Chapter 11 validation curve below is frozen from a byte-identical
-re-execution of that chapter's published baseline. We do not retrain it here. We
-train the attentive model once and inspect only validation alignments. Chapter 11's
-test endpoint is not globally sealed here because that chapter has already reported
-it; for this rematch it remains decision-inert, and we request one final scalar only
-after the attention choices are fixed:
+A comparison should survive downloading this chapter alone. Here is Chapter 11's
+fixed-state model and greedy decoder, with the same defaults. Its final states are
+the entire handoff; the attention model above retains the full trajectory. We
+retrain both on this execution, rather than pasting an earlier accuracy curve.
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Matched-schedule date rematch and reused-endpoint audit.
-3. Report or visualize the measured result.
+1. Reconstruct Chapter 11's fixed-state encoder–decoder without importing a checkpoint.
+2. Decode from its final state with generated previous tokens only.
+3. Measure exact match on the same source population as the attention model.
+4. Fit either architecture on independently seeded, shared minibatch schedules.
+:::
+
+```{python}
+#| label: fixed-state-rematch
+#| code-summary: "Code: a self-contained baseline and shared training protocol"
+#| code-fold: false
+# [1]
+class Seq2Seq(nn.Module):
+    def __init__(self, v_src: int, v_tgt: int, embed: int = 32,
+                 hidden: int = 128, packed: bool = True):
+        super().__init__()
+        self.packed = packed
+        self.src_emb = nn.Embedding(v_src, embed, padding_idx=PAD)
+        self.tgt_emb = nn.Embedding(v_tgt, embed, padding_idx=PAD)
+        self.encoder = nn.LSTM(embed, hidden, batch_first=True)
+        self.decoder = nn.LSTM(embed, hidden, batch_first=True)
+        self.out = nn.Linear(hidden, v_tgt)
+
+    def encode(
+        self, S: torch.Tensor, lengths: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        e = self.src_emb(S)
+        if self.packed:
+            e = nn.utils.rnn.pack_padded_sequence(
+                e, lengths, batch_first=True, enforce_sorted=False)
+        _, state = self.encoder(e)
+        return state
+
+    def forward(self, S: torch.Tensor, lengths: torch.Tensor,
+                T_in: torch.Tensor) -> torch.Tensor:
+        o, _ = self.decoder(self.tgt_emb(T_in), self.encode(S, lengths))
+        return self.out(o)
+
+# [2]
+@torch.no_grad()
+def translate(model: Seq2Seq, src: str, maxlen: int = 12) -> str:
+    model.eval()
+    S = torch.tensor([[src_stoi[c] for c in src]])
+    state = model.encode(S, torch.tensor([len(src)]))
+    tok, out = torch.tensor([[BOS]]), ""
+    for _ in range(maxlen):
+        o, state = model.decoder(model.tgt_emb(tok), state)
+        tok = model.out(o).argmax(-1)
+        if tok.item() == EOS:
+            break
+        out += tgt_itos.get(tok.item(), "?")
+    return out
+
+# [3]
+@torch.no_grad()
+def exact_match(model: Seq2Seq, prs: list[tuple[str, str]]) -> float:
+    return sum(translate(model, s) == t for s, t in prs) / len(prs)
+
+# [4]
+def train_date_model(model_type, score, seed: int, epochs: int = 25,
+                     batch: int = 128,
+                     checkpoints: tuple[int, ...] = ()) -> tuple[
+                         nn.Module, dict[int, float], dict[str, str]
+                     ]:
+    torch.manual_seed(seed)
+    model = model_type(V_src, V_tgt)
+    initial = hashlib.sha256(b"".join(
+        p.detach().numpy().tobytes() for p in model.parameters())).hexdigest()
+    schedule = torch.Generator().manual_seed(90_000 + seed)
+    schedule_hash = hashlib.sha256()
+    opt = torch.optim.Adam(model.parameters(), lr=1e-3)
+    n, curve = len(train_pairs), {}
+    for ep in range(1, epochs + 1):
+        model.train()
+        perm = torch.randperm(n, generator=schedule)
+        schedule_hash.update(perm.numpy().tobytes())
+        for i in range(0, n, batch):
+            S, L, T = batchify(train_pairs, perm[i:i + batch].tolist())
+            logits = model(S, L, T[:, :-1])
+            loss = F.cross_entropy(logits.reshape(-1, V_tgt),
+                                   T[:, 1:].reshape(-1), ignore_index=PAD)
+            opt.zero_grad(); loss.backward()
+            nn.utils.clip_grad_norm_(model.parameters(), 5.0)
+            opt.step()
+        if ep in checkpoints:
+            curve[ep] = score(model, valid_fixed)
+    return model, curve, {
+        "initialization": initial, "schedule": schedule_hash.hexdigest()}
+```
+::::
+
+### The matched-schedule rematch
+
+Each of the five training seeds now produces a fixed-state model and an attentive
+model. Both get the same epoch permutations, even though constructing their
+different-sized parameter sets consumes different random draws. Their architectures
+and parameter counts do not match. The checkpoint curves summarize repeated training
+on one fixed split, not uncertainty across possible datasets. The endpoint has
+already been opened in Chapter 11; here it remains decision-inert. We retain seed
+6050 for the predeclared validation heatmap, not because it wins the comparison.
+
+::: {.notebook-prediction}
+Predict which part of the result would support useful learned access: an earlier
+validation rise, fewer final errors, or year-directed weights? Which of these,
+alone, could prove that removing the fixed-state bottleneck caused an accuracy gain?
+:::
+
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Retrain five baseline/attention pairs and verify their shared batch schedules.
+2. Count final errors on the same 437 dates and summarize paired accuracy changes.
+3. Summarize validation curves across seeds without selecting a checkpoint.
+4. Audit seed 6050's validation alignments and count both models' parameters.
 :::
 
 ```{python}
@@ -897,44 +1011,60 @@ after the attention choices are fixed:
 #| code-summary: "Code: matched-schedule date rematch and reused-endpoint audit"
 #| code-fold: false
 # [1]
+study_seeds = tuple(range(6050, 6055))
 checkpoints = (2, 4, 6, 8, 12, 16, 20, 25)
-baseline_curve = {
-    2: 0.0025, 4: 0.1475, 6: 0.5375, 8: 0.7575,
-    12: 0.9500, 16: 0.9500, 20: 0.9950, 25: 0.9575,
-}
-
-torch.manual_seed(6050)
-attention_model = AttentiveSeq2Seq(V_src, V_tgt)
-optimizer = torch.optim.Adam(attention_model.parameters(), lr=1e-3)
-attention_curve = {}
+baseline_runs, attention_runs, paired_rows = [], [], []
+error_rows = []
+print("seed   fixed errors   attention errors   fixed acc   attention acc   delta pp")
+for seed in study_seeds:
+    baseline_run = train_date_model(
+        Seq2Seq, exact_match, seed, checkpoints=checkpoints)
+    attention_run = train_date_model(
+        AttentiveSeq2Seq, attention_exact_match, seed, checkpoints=checkpoints)
+    assert baseline_run[2]["schedule"] == attention_run[2]["schedule"]
+    # [2]
+    fixed_errors = sum(translate(baseline_run[0], s) != t for s, t in test_unamb)
+    outputs = greedy_batch(attention_run[0], test_unamb)
+    attention_errors = sum(guess != truth for (_, truth), (_, guess, _)
+                           in zip(test_unamb, outputs))
+    fixed_score = 1 - fixed_errors / len(test_unamb)
+    attention_score = 1 - attention_errors / len(test_unamb)
+    error_rows.append((fixed_errors, attention_errors))
+    paired_rows.append((fixed_score, attention_score))
+    baseline_runs.append(baseline_run)
+    attention_runs.append(attention_run)
+    print(f"{seed}     {fixed_errors:3d}/437          {attention_errors:3d}/437"
+          f"        {fixed_score:7.2%}       {attention_score:7.2%}"
+          f"    {100 * (attention_score - fixed_score):+8.3f}")
 
 # [2]
-for epoch in range(1, 26):
-    attention_model.train()
-    permutation = torch.randperm(len(train_pairs))
-    for start in range(0, len(train_pairs), 128):
-        ids = permutation[start:start + 128].tolist()
-        S, lengths, T = batchify(train_pairs, ids)
-        logits = attention_model(S, lengths, T[:, :-1])
-        loss = F.cross_entropy(
-            logits.reshape(-1, V_tgt),
-            T[:, 1:].reshape(-1),
-            ignore_index=PAD,
-        )
-        optimizer.zero_grad()
-        loss.backward()
-        nn.utils.clip_grad_norm_(attention_model.parameters(), 5.0)
-        optimizer.step()
-    if epoch in checkpoints:
-        attention_curve[epoch] = exact_match(
-            attention_model, valid_fixed)
+test_scores = torch.tensor(paired_rows, dtype=torch.float64)
+test_errors = torch.tensor(error_rows, dtype=torch.int64)
+paired_pp = 100 * (test_scores[:, 1] - test_scores[:, 0])
+print("mean / sample SD across five training seeds (errors out of 437):")
+for col, name in enumerate(("fixed-state", "attention")):
+    values = test_scores[:, col]
+    counts = test_errors[:, col].to(torch.float64)
+    print(f"  {name} errors: {counts.mean():.2f} / {counts.std(correction=1):.2f}; "
+          f"accuracy: {values.mean():.3%} / {values.std(correction=1):.3%}")
+print(f"paired attention-fixed: {paired_pp.mean():+.3f} pp; "
+      f"sample SD {paired_pp.std(correction=1):.3f} pp")
+print(f"paired schedule checks: {len(paired_rows)}/5")
 
 # [3]
-print("epoch   fixed-state   attention")
-for epoch in checkpoints:
-    print(f"{epoch:2d}       {baseline_curve[epoch]:6.2%}       "
-          f"{attention_curve[epoch]:6.2%}")
+curve_scores = torch.tensor([
+    [[run[1][epoch] for epoch in checkpoints] for run in runs]
+    for runs in (baseline_runs, attention_runs)], dtype=torch.float64)
+curve_mean = curve_scores.mean(dim=1)  # average runs, preserving model and epoch
+curve_sd = curve_scores.std(dim=1, correction=1)
+print("epoch   fixed mean +/- SD     attention mean +/- SD (validation)")
+for j, epoch in enumerate(checkpoints):
+    print(f"{epoch:2d}     {curve_mean[0, j]:6.2%} +/- {curve_sd[0, j]:6.2%}"
+          f"     {curve_mean[1, j]:6.2%} +/- {curve_sd[1, j]:6.2%}")
 
+# [4]
+baseline_model, baseline_curve, _ = baseline_runs[0]
+attention_model, attention_curve, _ = attention_runs[0]
 validation_outputs = greedy_batch(attention_model, valid_fixed)
 source_example, truth_example = valid_fixed[0]           # fixed before training
 _, generated_example, alignment_example = validation_outputs[0]
@@ -948,26 +1078,23 @@ for (source, _), (_, _, weights) in zip(valid_fixed, validation_outputs):
     row_errors.append((weights[:10].sum(1) - 1).abs().max().item())
 
 attention_params = sum(p.numel() for p in attention_model.parameters())
-baseline_params = 169_326
+baseline_params = sum(p.numel() for p in baseline_model.parameters())
 print(f"parameters: baseline {baseline_params:,}; "
       f"attention {attention_params:,} "
       f"(+{(attention_params / baseline_params - 1):.1%})")
-print(f"validation example: {source_example!r} -> "
+print(f"seed 6050 validation example: {source_example!r} -> "
       f"{generated_example!r} (truth {truth_example})")
 print(f"validation year-region mass: {np.mean(year_mass):.3%}; "
       f"top key in region: {np.mean(year_top1):.3%}")
 print("maximum validation row-sum error:", f"{max(row_errors):.2e}")
-
-test_exact = exact_match(attention_model, test_unamb)     # one final test audit
-print(f"one final test audit ({len(test_unamb)} sources): "
-      f"baseline 93.1%; attention {test_exact:.1%}")
+assert max(row_errors) < 1e-6
 ```
 ::::
 ```{python}
 #| echo: false
 #| label: fig-attention-rematch
-#| fig-alt: "The left learning curves show the attention model reaching high exact-match accuracy much earlier than the fixed-state baseline. The right character-by-character heatmap concentrates the first four output rows inside a box around the source year positions."
-#| fig-cap: "Left: exact-sequence accuracy on Chapter 11's fixed 400-source validation subset. Both models use the same data, embedding and recurrent hidden widths, optimizer, top-level seed, and epoch schedule; attention adds parameters and a stepwise decoder, so this is not a parameter- or compute-matched ablation. Right: the predeclared first validation example. Rows are emitted ISO characters, columns are contextual encoder states indexed by source character, and the orange box marks the source year. The first four rows concentrate there."
+#| fig-alt: "Left, five-seed validation exact-match curves compare freshly trained fixed-state and attention models, with mean lines and sample-SD bands. Right, seed 6050's first validation example shows an output-by-source attention map with the source-year region outlined."
+#| fig-cap: "Left: exact-sequence accuracy on Chapter 11's fixed 400-source validation subset. Thin lines show all five runs; thick lines and bands show mean and sample SD across seeds, not population confidence intervals. Each pair shares the data and batch schedule, but attention adds parameters and a stepwise decoder. Right: seed 6050 and the first validation example, both fixed before training. Rows are emitted ISO characters; columns are contextual encoder states indexed by source character. The orange box marks the year region, not supervised alignment or a causal explanation."
 from matplotlib.patches import Rectangle
 
 fig, axes = plt.subplots(
@@ -975,14 +1102,15 @@ fig, axes = plt.subplots(
     gridspec_kw={"width_ratios": [1.0, 1.35]},
     constrained_layout=True,
 )
-axes[0].plot(
-    checkpoints, [baseline_curve[c] for c in checkpoints],
-    "o-", color="#8D99AE", lw=2, label="fixed-state baseline",
-)
-axes[0].plot(
-    checkpoints, [attention_curve[c] for c in checkpoints],
-    "s-", color="#E57200", lw=2, label="learned attention",
-)
+for kind, name, color in ((0, "fixed-state baseline", "#5379AA"),
+                           (1, "learned attention", "#E57200")):
+    for values in curve_scores[kind]:
+        axes[0].plot(checkpoints, values, color=color, lw=0.7, alpha=0.25)
+    axes[0].plot(checkpoints, curve_mean[kind], "o-", color=color, lw=2,
+                 label=name)
+    axes[0].fill_between(
+        checkpoints, (curve_mean[kind] - curve_sd[kind]).clamp(0, 1),
+        (curve_mean[kind] + curve_sd[kind]).clamp(0, 1), color=color, alpha=0.12)
 axes[0].set(
     xlabel="epoch", ylabel="validation exact match",
     ylim=(-0.02, 1.03), title="Same schedule, learned access",
@@ -1011,31 +1139,31 @@ fig.colorbar(
 )
 plt.show()
 ```
-At epoch 6, the fixed-state baseline is at $53.8\%$ and the attentive model is at
-$93.25\%$, a 39.5-point lead. At epoch 12 the comparison is $95.0\%$ versus
-$99.75\%$. The one final test audit is $93.1\%$ versus $100.0\%$ on 437
-unambiguous sources.
+The ledger separates two questions: how quickly validation exact match rises, and
+how many final errors remain. A mean difference is easier to trust when the
+individual seed pairs support it; its sample SD records training variation on
+this split. The five runs are not five independent test datasets.
 
 ::: {.callout-warning}
 ## Faster convergence is not a one-variable proof
 
-We matched examples, embedding and recurrent hidden widths, optimizer, top-level
-seed, number of updates, and epochs. We did **not** match parameter count,
-computation, or minibatch order: constructing models with different parameter counts
-consumes different random draws before their first permutation. The attentive model
+We matched examples, embedding and recurrent hidden widths, optimizer, seed panel,
+number of updates, epochs, and minibatch order. We did **not** match parameter count
+or computation. Nor do different architectures have identical initial weights,
+even when initialized with the same seed. The attentive model
 has 269,550 parameters versus 169,326, an increase of 59.2%, and its input-feeding
 decoder uses a Python step loop where Chapter 11's teacher-forced baseline uses one
-fused target-sequence call. This one seeded synthetic rematch shows that the
-attention-equipped model reaches higher accuracy in fewer epochs and optimizer
-updates, not in less wall-clock time. It does not isolate bottleneck removal as the
-only possible cause.
+fused target-sequence call. A gain measured in epochs or optimizer updates is not
+a measured wall-clock speedup. This five-seed synthetic comparison does not isolate
+bottleneck removal as the only possible cause of any accuracy difference.
 :::
 
 The heatmap answers a narrower question. On the fixed validation example, the year
 must travel from the last four source positions to the first four outputs. The orange
-block catches that movement, and across all 400 fixed validation examples, 97.5% of
-those four rows' mass lands on states indexed by the source-year region. The
-top-weighted state is indexed inside that region 99.7% of the time.
+block marks the region that would carry that movement. The accompanying audit
+reports the fraction of those rows' weight landing there across all 400 fixed
+validation examples, and how often their largest weight lies there. These are
+seed 6050's internal routing measurements, not five-seed effect estimates.
 
 Columns are indexed by source characters, but their values are encoder states. Each
 state summarizes a recurrent prefix, so a delimiter can legitimately carry
@@ -1098,9 +1226,9 @@ Close the book for one minute and reconstruct the soft lookup.
    not a mask. Cross-attention sees all real source positions, while causal masking
    belongs to the self-attentive decoder in Chapter 14.
 5. **The date rematch exposes learned access.** Under the shared schedule, attention
-   reaches 93.25% validation exact match at epoch 6 and 100.0% on the final test
-   audit. Its year rows route 97.5% of validation weight to states indexed by the
-   source-year region, with the parameter/compute caveat stated in full.
+   can consult the full encoder trajectory. Five freshly trained pairs report
+   validation curves and final errors; one predeclared validation heatmap audits
+   where the learned read allocates weight. Parameters and compute remain unmatched.
 
 ## Sources and further reading {.unnumbered}
 

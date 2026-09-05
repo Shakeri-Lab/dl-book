@@ -119,6 +119,7 @@ compositions for figures. Full guide: `docs/dl-course-code.md`.
 7. **Execute + render** (this refreshes the committed freeze cache — CI never executes):
    ```bash
    export QUARTO_PYTHON="$HOME/.venvs/dl-book/bin/python"
+   export PYTHONPATH="$PWD/code"  # bind dlbook imports to this verified checkout
    quarto render chapters/partN/XX-*.qmd  # NO --to flag!
    "$QUARTO_PYTHON" scripts/render_pdf_profiles.py
    quarto render --to html --no-clean  # canonical HTML last
@@ -126,6 +127,11 @@ compositions for figures. Full guide: `docs/dl-course-code.md`.
    An `--to html` single-file render leaves the PDF freeze (`tex.json`) stale → the
    book PDF ships without your changes. Any later prose edit invalidates the freeze
    and re-executes the whole chapter — batch fixes before re-rendering.
+   For a book-wide source pass, `quarto render chapters --no-clean` refreshes the
+   directory's executable units in both formats while composing the book once.
+   Resolve `dlbook` from this checkout: an older editable install may still point
+   into Box and block on an unavailable synced file. Do not change the numerical
+   environment or study settings to repair an import-path problem.
    The PDF helper renders both profiles through the three-pass LaTeX floor, audits
    every outline destination exactly, and retries to a bounded fixpoint. Do not replace
    it with ad hoc profile commands in a publication build.

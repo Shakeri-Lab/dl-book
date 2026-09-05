@@ -13,6 +13,15 @@ DIV_OPEN_RE = re.compile(r"^(:{3,})\s+\{([^}]*)\}\s*$")
 DIV_CLOSE_RE = re.compile(r"^(:{3,})\s*$")
 CODE_OPEN_RE = re.compile(r"^```(.*)$")
 STEP_RE = re.compile(r"^(\d+)\.\s+")
+# Catch the known inventory templates, not arbitrary uses of "setup" or "report".
+# Semantic accuracy still requires comparing each step with its revealed region.
+GENERIC_STEP_RE = re.compile(
+    r"(?:Prepare the inputs and fixed settings for the example\.?"
+    r"|Report or visualize the measured result\.?"
+    r"|Check the claimed identities, shapes, or invariants\.?"
+    r"|Define the reusable (?:helpers?:.*|.+ helpers?\.?))",
+    re.IGNORECASE,
+)
 MARKER_RE = re.compile(r"#\s*((?:\[\d+\])+)(.*)$", re.MULTILINE)
 INCLUDE_RE = re.compile(r'book-include="([^"]+)"')
 START_RE = re.compile(r"start-line=(\d+)")
@@ -26,6 +35,10 @@ class Div:
     line: int
     steps: list[int] = field(default_factory=list)
     code_surfaces: int = 0
+
+
+def generic_plan_step(text: str) -> bool:
+    return GENERIC_STEP_RE.fullmatch(" ".join(text.split())) is not None
 
 
 def marker_numbers(source: str) -> set[int]:
@@ -180,6 +193,11 @@ def audit(path: Path) -> tuple[int, int, list[str]]:
             in_plan = any("plan" in item.classes for item in stack)
             if panel is not None and in_plan:
                 panel.steps.append(int(step.group(1)))
+                if generic_plan_step(line[step.end() :]):
+                    errors.append(
+                        f"{path}:{index + 1}: generic plan inventory; name the "
+                        "mechanism, data contract, or specific check instead"
+                    )
         index += 1
 
     for panel in completed_panels:

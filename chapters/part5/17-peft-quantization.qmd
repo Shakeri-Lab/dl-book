@@ -66,7 +66,8 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
-torch.set_num_threads(6)
+import os
+torch.set_num_threads(int(os.environ.get("DLBOOK_TORCH_NUM_THREADS", "6")))
 torch.manual_seed(6050)
 
 navy, orange, green, wine = "#232D4B", "#E57200", "#2E7D32", "#722F37"
@@ -226,10 +227,12 @@ query logits $[B,4]$.
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Define the reusable helpers: `sample_episode_bank`, `render_episodes`, and `ContextLearner`.
-3. Define the reusable helpers: `evaluate_context` and `run_context_seed`.
-4. Meta-train a tiny causal Transformer, then audit frozen-weight in-context adaptation over five seeds.
+1. Define tokens and the varying context-size contract.
+2. Generate fresh label permutations and expose only the chosen demonstrations.
+3. Read demonstrations and queries through a causal Transformer.
+4. Vary the evaluation context and verify that every parameter stays frozen.
+5. Meta-train across episodes under the fixed update budget.
+6. Compare five-seed accuracy with the designed information ceilings.
 :::
 
 ```{python}
@@ -278,6 +281,7 @@ def render_episodes(
     return tokens, targets, covered
 
 
+# [3]
 class ContextLearner(nn.Module):
     def __init__(self, width: int = 48, heads: int = 4, layers: int = 2) -> None:
         super().__init__()
@@ -306,7 +310,7 @@ class ContextLearner(nn.Module):
         return self.head(hidden[:, -1])
 
 
-# [3]
+# [4]
 @torch.no_grad()
 def evaluate_context(
     model: nn.Module, seed: int, n: int = 8192
@@ -332,6 +336,7 @@ def evaluate_context(
     return rows, unchanged
 
 
+# [5]
 def run_context_seed(seed: int, steps: int = 1200) -> dict:
     torch.manual_seed(seed)
     generator = torch.Generator().manual_seed(seed)
@@ -369,7 +374,7 @@ context_ceiling = np.array([0.25, 0.50, 0.75, 1.00, 1.00])
 
 print("model parameters:", f'{context_runs[0]["parameters"]:,}')
 print("k  mean accuracy  seed sd  information ceiling")
-# [4]
+# [6]
 for k in range(5):
     print(
         f"{k}      {context_accuracy[:, k].mean():.3f}       "
@@ -526,36 +531,36 @@ restrictions on where gradient blame may write.
 
 ## LoRA: a low-rank correction beside a frozen path
 
-Consider one frozen linear map
+Consider one frozen linear map with weights
+$\matr{W}_0\in\mathbb{R}^{d_{\mathrm{out}}\times d_{\mathrm{in}}}$:
 
 $$
-\matr{W}_0\in\mathbb{R}^{d_{\mathrm{out}}\times d_{\mathrm{in}}},
-\qquad
-\vect{h}=\matr{W}_0\vect{x}.
+\predictionpart{\vect{h}}=\matr{W}_0\featurepart{\vect{x}}.
 $$
 
-Full fine-tuning learns an unrestricted correction $\Delta\matr{W}$ with
+Full fine-tuning learns an unrestricted correction $\Delta\parameterpart{\matr{W}}$ with
 $d_{\mathrm{out}}d_{\mathrm{in}}$ values. **Low-Rank Adaptation (LoRA)** instead
 constrains the correction to a product of two thin matrices:
 
 $$
-\Delta\matr{W}
-=\frac{\alpha}{r}\matr{B}\matr{A},
-\qquad
-\matr{A}\in\mathbb{R}^{r\times d_{\mathrm{in}}},
-\quad
-\matr{B}\in\mathbb{R}^{d_{\mathrm{out}}\times r}.
+\Delta\parameterpart{\matr{W}}
+=\frac{\alpha}{r}\parameterpart{\matr{B}}\parameterpart{\matr{A}}.
 $$ {#eq-lora-delta}
 
-The forward pass is
+The trainable factors have shapes
+$\parameterpart{\matr{A}}\in\mathbb{R}^{r\times d_{\mathrm{in}}}$ and
+$\parameterpart{\matr{B}}\in\mathbb{R}^{d_{\mathrm{out}}\times r}$.
+The forward pass maps input $\featurepart{\vect{x}}$ to output
+$\predictionpart{\vect{h}}$ through a frozen path plus a learned correction:
 
 $$
-\vect{h}
-=\matr{W}_0\vect{x}
-+\frac{\alpha}{r}\matr{B}(\matr{A}\vect{x}).
+\predictionpart{\vect{h}}
+=\matr{W}_0\featurepart{\vect{x}}
++\frac{\alpha}{r}\parameterpart{\matr{B}}(\parameterpart{\matr{A}}\featurepart{\vect{x}}).
 $$ {#eq-lora-forward}
 
-$\matr{A}$ compresses to $r$ coordinates and $\matr{B}$ expands back to the output
+$\parameterpart{\matr{A}}$ compresses to $r$ coordinates and
+$\parameterpart{\matr{B}}$ expands back to the output
 width. Because $\operatorname{rank}(\matr{B}\matr{A})\le r$, task updates can use
 at most $r$ independent linear directions in that matrix. The merged matrix is not
 therefore rank $r$—the constraint applies only to the correction.
@@ -713,12 +718,12 @@ estimated from the optimizer.
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Define the reusable helpers: `make_rank_problem`, `FullUpdate`, and `LoRAUpdate`.
-3. Define the reusable helpers: `train_linear_update` and `relative_update_error`.
-4. Compare frozen, full, and low-rank updates against a planted rank-six correction.
-5. Check the claimed identities, shapes, or invariants.
-6. Report or visualize the measured result.
+1. Fix the planted rank-six correction and candidate update ranks.
+2. Construct the known target and full or factorized update parameterizations.
+3. Fit the update by regression and measure its distance from the target.
+4. Train the full update as a capacity reference.
+5. Fit each low-rank arm and verify frozen-base and merge invariants.
+6. Compare learned errors with the singular-value capacity floors.
 :::
 
 ```{python}
@@ -960,19 +965,21 @@ Start with signed **symmetric uniform quantization** of a real-valued tensor
 $\matr{W}$. For $b$ bits, let
 
 $$
-Q=2^{b-1}-1,
-\qquad
-s=\frac{\max_{ij}|W_{ij}|}{Q}.
+\begin{aligned}
+Q&=2^{b-1}-1,\\
+s&=\frac{\max_{ij}|W_{ij}|}{Q}.
+\end{aligned}
 $$
 
 Quantize and reconstruct by
 
 $$
-q_{ij}=\operatorname{clip}\!\left(
+\begin{aligned}
+q_{ij}&=\operatorname{clip}\!\left(
 \operatorname{round}(W_{ij}/s),-Q,Q
-\right),
-\qquad
-\widehat W_{ij}=s q_{ij}.
+\right),\\
+\widehat W_{ij}&=s q_{ij}.
+\end{aligned}
 $$ {#eq-symmetric-quantization}
 
 $s$ is the distance between adjacent real-valued grid points. This symmetric choice
@@ -989,22 +996,24 @@ range formula below otherwise divides by zero.
 An **affine** grid also stores an integer zero-point $z$:
 
 $$
-q=\operatorname{clip}\!\left(
+\begin{aligned}
+q&=\operatorname{clip}\!\left(
 \operatorname{round}(w/s)+z,q_{\min},q_{\max}
-\right),
-\qquad
-\widehat w=s(q-z).
+\right),\\
+\widehat w&=s(q-z).
+\end{aligned}
 $$ {#eq-affine-quantization}
 
 For a nonconstant calibrated interval $[w_{\min},w_{\max}]$, a standard choice is
 
 $$
-s=\frac{w_{\max}-w_{\min}}{q_{\max}-q_{\min}},
-\qquad
-z=\operatorname{clip}\!\left(
+\begin{aligned}
+s&=\frac{w_{\max}-w_{\min}}{q_{\max}-q_{\min}},\\
+z&=\operatorname{clip}\!\left(
 \operatorname{round}\!\left(q_{\min}-\frac{w_{\min}}{s}\right),
 q_{\min},q_{\max}
 \right).
+\end{aligned}
 $$
 
 The zero-point lives in integer-code coordinates. Mixing it with a real-valued
@@ -1028,9 +1037,11 @@ is not a quantized production kernel.
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Define the reusable helpers: `make_quantization_problem`, `symmetric_quantize`, and `run_quantization_audit`.
-3. Compare per-tensor and per-row symmetric quantization, including output error and metadata.
+1. Fix the input and output widths for the weight matrix.
+2. Construct weights with heterogeneous row scales and representative inputs.
+3. Round and reconstruct weights with a shared or per-row symmetric grid.
+4. Measure weight error, output error, and metadata under each precision policy.
+5. Report the error/storage trade-offs.
 :::
 
 ```{python}
@@ -1055,6 +1066,7 @@ def make_quantization_problem(
     return weights, inputs
 
 
+# [3]
 def symmetric_quantize(
     weights: torch.Tensor, bits: int, per_row: bool
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -1070,6 +1082,7 @@ def symmetric_quantize(
 
 
 @torch.no_grad()
+# [4]
 def run_quantization_audit() -> list[dict]:
     weights, inputs = make_quantization_problem()
     reference = inputs @ weights.T
@@ -1107,7 +1120,7 @@ def run_quantization_audit() -> list[dict]:
 
 quant_rows = run_quantization_audit()
 print("bits  scheme       w err   out err  med row  max row  payload  meta  total")
-# [3]
+# [5]
 for row in quant_rows:
     print(
         f"{row['bits']:>4}  {row['granularity']:<10}  "

@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 CONTRACT = ROOT / "docs" / "public-anchors.md"
 SITE_PREFIX = "https://shakeri-lab.github.io/dl-book/"
 URL_RE = re.compile(r"https://shakeri-lab\.github\.io/dl-book/[^\s|]+#[A-Za-z0-9_-]+")
-EXPECTED_COUNT = 10
+EXPECTED_COUNT = 11
 
 
 def source_path(relative_html: str) -> Path:
@@ -48,7 +48,10 @@ def main() -> None:
         if not source.is_file():
             errors.append(f"missing source for {url}: {source.relative_to(ROOT)}")
             continue
-        if f"#{fragment}" not in source.read_text():
+        source_text = source.read_text()
+        if f"#{fragment}" not in source_text and not re.search(
+            rf"\bid=[\"']{re.escape(fragment)}[\"']", source_text
+        ):
             errors.append(f"missing source identifier #{fragment}: {source.relative_to(ROOT)}")
 
         if args.rendered is not None:

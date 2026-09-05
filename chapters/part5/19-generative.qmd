@@ -39,6 +39,11 @@ models make different choices along that route. Each supplies a sampling rule, a
 training signal, and a characteristic way to fail. A high training score does not
 make those choices interchangeable.
 
+For a focused diffusion reading, use the [noise-schedule witness](#destroy-data-on-purpose)
+to inspect the mechanism, or the [full paired denoiser study](#why-the-denoiser-needs-time)
+to test time conditioning. Execute the notebook from the top through the chosen
+study; these reading shortcuts do not replace its earlier definitions and setup.
+
 <!-- NOVEL: needs sign-off -->
 
 ```{python}
@@ -57,7 +62,8 @@ from torch import Tensor, nn
 import torch.nn.functional as F
 
 torch.set_default_dtype(torch.float64)
-torch.set_num_threads(6)
+import os
+torch.set_num_threads(int(os.environ.get("DLBOOK_TORCH_NUM_THREADS", "6")))
 torch.manual_seed(6050)
 
 navy, orange, green, wine = "#232D4B", "#E57200", "#2E7D32", "#722F37"
@@ -262,9 +268,9 @@ $q(z\mid x)=\mathcal{N}(0.35,0.75)$.
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
-1. Define the reusable helpers: `gaussian_kl`, `gaussian_elbo`, and `gaussian_density`.
-2. Prepare the inputs and fixed settings for the example.
-3. Verify the exact Gaussian ELBO gap.
+1. Evaluate Gaussian KL, expected reconstruction, and latent densities analytically.
+2. Construct an observation and compare the exact posterior with a trial approximation.
+3. Check that the ELBO gap equals posterior KL.
 :::
 
 ```{python}
@@ -511,9 +517,9 @@ undertrained, or locally confused.
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
-1. Define the reusable `js_divergence` helper.
-2. Prepare the inputs and fixed settings for the example.
-3. Audit finite GAN coverage and generator saturation.
+1. Measure distribution mismatch by Jensen–Shannon divergence.
+2. Compare generator coverage against known finite data masses.
+3. Compare minimax and non-saturating generator gradients.
 :::
 
 ```{python}
@@ -677,8 +683,8 @@ variance becomes $0.25\bar\alpha_t+(1-\bar\alpha_t)$.
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Audit a forward noise schedule and its direct marginal.
+1. Construct the per-step and cumulative signal/noise schedule.
+2. Compare direct noisy samples with the schedule's marginal moments.
 :::
 
 ```{python}
@@ -972,8 +978,8 @@ The coefficients deserve their own audit before any sampler runs.
 
 :::: {.plan-code}
 ::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Pin reverse-posterior coefficients and the final no-noise branch.
+1. Compute reverse-posterior coefficients from the forward schedule.
+2. Check that the final reverse step adds no fresh noise.
 :::
 
 ```{python}
@@ -1025,12 +1031,8 @@ law before treating “diffusion loss” as one universal object.
 
 ### Why the denoiser needs time
 
-The same observed value can mean different things at different noise levels. Near the
-first noising step, a point beside $+2$ is probably a lightly perturbed right-mode
-example. Near $t=T$, the same coordinate carries much less evidence about its origin.
-This is why a diffusion denoiser receives the timestep along with $\vect{x}_t$.
-
-We can test that claim without images or a large network. The target is the known
+Can a denoiser infer the required correction from the noisy coordinate alone?
+We can test that without images or a large network. The target is the known
 two-Gaussian mixture used above. A 4,417-parameter MLP with two 64-unit SiLU hidden
 layers predicts scalar noise for the 100-step schedule. The time-conditioned version
 receives $(x_t,t)$; the ablation has the identical architecture and seeded
@@ -1042,15 +1044,22 @@ steps with variance $\widetilde\beta_t$.
 The equations count timesteps from $t=1$, while arrays use zero-based index
 $j=t-1$. Model index zero therefore represents the equation's first noising step.
 
+::: {.notebook-prediction}
+Before running, consider the same observed coordinate near $+2$ early and late in
+the noise schedule. Should its best correction be the same? Predict how removing
+time might change the generated distribution, then choose which reported metric
+would expose that change. Keep this prediction separate from the result.
+:::
+
 <!-- NOVEL: needs sign-off -->
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Define the reusable helpers: `ScalarNoisePredictor` and `mixture_batch`.
-3. Define the reusable helpers: `oracle_noise_mean` and `fit_diffusion_ablation`.
-4. Train a tiny diffusion denoiser with and without timestep conditioning.
-5. Report or visualize the measured result.
+1. Fix diffusion coefficients and independent training/evaluation randomness.
+2. Construct the mixture and denoisers with or without timestep input.
+3. Fit noise prediction and evaluate against the analytic conditional mean.
+4. Repeat the paired conditioning comparison over the seed panel.
+5. Report held-out denoising and sample metrics with seed variation.
 :::
 
 ```{python}
@@ -1220,6 +1229,7 @@ def fit_diffusion_ablation(
     return metrics, generated_vector
 
 
+_diffusion_previous_threads = torch.get_num_threads()
 torch.set_num_threads(1)
 diffusion_results: dict[str, list[dict[str, float]]] = {
     "time conditioned": [], "no time": []
@@ -1235,7 +1245,7 @@ for condition_name, time_conditioned in conditions:
         diffusion_results[condition_name].append(metrics)
         if diffusion_seed == 6050:
             example_samples[condition_name] = generated_samples
-torch.set_num_threads(6)
+torch.set_num_threads(_diffusion_previous_threads)
 
 true_standard_deviation = math.sqrt(4.25)
 normal_cdf = lambda value: 0.5 * (1.0 + math.erf(value / math.sqrt(2.0)))
@@ -1263,7 +1273,7 @@ print(f"alpha_bar_T:               {training_alpha_bar[-1].item():.12f}")
 ```{python}
 #| label: fig-time-conditioned-diffusion
 #| echo: false
-#| fig-cap: "A designed one-dimensional diffusion sampler isolates the value of time conditioning with identical 4,417-parameter networks and seeded initial weights. Across seeds 6050–6054, the time-conditioned denoiser has evaluation noise MSE 0.429707 (SD 0.000927), close to the analytic conditional-mean oracle's fixed-evaluation MSE of 0.425920. Its generated samples have mean standard deviation 2.062095, central mass 0.019470, and Wasserstein-1 distance 0.058570 from a matched target sample; the population targets are 2.061553 and 0.022750 for standard deviation and central mass. Zeroing the time channel raises noise MSE to 0.750689, central mass to 0.223490, and Wasserstein distance to 0.379806. This is a CPU mechanism study of a planted scalar mixture, not an image-generation result."
+#| fig-cap: "Time conditioning in a planted scalar mixture. Matched networks receive either the timestep or a zeroed time channel. The no-time samples fill the gap between modes; central mass makes that failure visible. The final panel compares five-seed metrics with target or analytic-oracle references; exact values appear in the output above. This isolates a mechanism, not image-generation quality."
 #| fig-alt: "The first histogram shows time-conditioned generated samples matching two target modes near minus two and plus two. The second shows the no-time ablation placing too much mass between modes. The third panel compares five-seed noise error, central mass, and Wasserstein distance, with target or oracle reference lines."
 #| fig-width: 10
 #| fig-height: 4.1

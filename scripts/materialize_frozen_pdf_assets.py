@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import shutil
+import hashlib
 from pathlib import Path
 
 
@@ -16,8 +17,29 @@ def copy_pdf(source: Path, destination: Path) -> None:
     shutil.copy2(source, destination)
 
 
+def frozen_pdf_sources(freeze_root: Path) -> list[Path]:
+    """Accept genuine PDF or LaTeX executions; reject ambiguous stale siblings."""
+    by_destination: dict[tuple[Path, str], Path] = {}
+    for figure_dir in ("figure-pdf", "figure-latex"):
+        for source in sorted(freeze_root.glob(f"**/{figure_dir}/*.pdf")):
+            unit = source.parent.parent.relative_to(freeze_root)
+            key = unit, source.name
+            previous = by_destination.get(key)
+            if previous is not None:
+                if hashlib.sha256(previous.read_bytes()).digest() != hashlib.sha256(
+                    source.read_bytes()
+                ).digest():
+                    raise ValueError(
+                        f"conflicting frozen PDF/LaTeX figures: {previous} and {source}; "
+                        "regenerate the unit in a clean freeze"
+                    )
+                continue
+            by_destination[key] = source
+    return sorted(by_destination.values())
+
+
 def main() -> None:
-    frozen_pdfs = sorted(FREEZE_ROOT.glob("**/figure-pdf/*.pdf"))
+    frozen_pdfs = frozen_pdf_sources(FREEZE_ROOT)
     if not frozen_pdfs:
         raise SystemExit("no frozen PDF figures found")
 

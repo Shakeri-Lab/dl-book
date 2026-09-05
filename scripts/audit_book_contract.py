@@ -433,16 +433,23 @@ def main() -> None:
             (index for index, heading in enumerate(headings) if heading == "Check yourself"),
             None,
         )
+        next_index = check_index + 1 if check_index is not None else None
+        if next_index is not None and next_index < len(headings) and headings[next_index] == "Check your reasoning":
+            if not re.search(
+                r'::: \{\.callout-tip collapse="true"\}\n## Check your reasoning\n', text
+            ):
+                fail(errors, f"{path.relative_to(ROOT)}: reasoning feedback must be collapsed")
+            next_index += 1
         if (
             check_index is not None
             and (
-                check_index + 1 == len(headings)
-                or not headings[check_index + 1].startswith("Okay, so")
+                next_index == len(headings)
+                or not headings[next_index].startswith("Okay, so")
             )
         ):
             fail(
                 errors,
-                f"{path.relative_to(ROOT)}: Check yourself must immediately precede recap",
+                f"{path.relative_to(ROOT)}: Check yourself and optional collapsed feedback must precede recap",
             )
 
     for path in sorted((ROOT / "chapters").rglob("*.qmd")):
@@ -728,7 +735,9 @@ def main() -> None:
         for required in (
             '#the-route-at-a-glance > table',
             'responsive-route-table-frame',
-            'Five-part route table. Scroll horizontally to inspect.',
+            'registerFrame(frame, table, "Five-part route table")',
+            '`${description}. Scroll horizontally to inspect.`',
+            'frame.classList.toggle("is-overflowing", overflowing)',
         ):
             if required not in responsive_text:
                 fail(
@@ -897,10 +906,21 @@ def main() -> None:
         for path in sorted(ROOT.rglob("*.qmd"))
         if NOTEBOOK_TORCH_THREAD_OVERRIDE in path.read_text()
     ]
-    if thread_override_consumers != ["chapters/part5/18-alignment.qmd"]:
+    expected_thread_consumers = sorted([
+        "chapters/interludes/learning-by-experiment.qmd",
+        "chapters/interludes/making-pca-learnable.qmd",
+        "chapters/part4/14-self-attention-transformer.qmd",
+        "chapters/part4/15-bert-pretraining.qmd",
+        "chapters/part4/16-vit-scaling.qmd",
+        "chapters/part5/17-peft-quantization.qmd",
+        "chapters/part5/18-alignment.qmd",
+        "chapters/part5/19-generative.qmd",
+        "chapters/part5/20-multimodal.qmd",
+    ])
+    if thread_override_consumers != expected_thread_consumers:
         fail(
             errors,
-            "only Chapter 18 may consume the CI-only PyTorch thread override",
+            "authored thread-budget consumers differ from the explicit runtime policy",
         )
     if alignment_thread_contract not in alignment_source:
         fail(
@@ -957,6 +977,10 @@ def main() -> None:
                     errors,
                     f"scripts/render_pdf_profiles.py: missing contract {required}",
                 )
+    if "render_pdf_profiles.py --verify-reproducible" not in workflow_text:
+        fail(errors, "publish workflow must verify two clean PDF builds")
+    if "audit_notebook_exports.py _book/notebooks --html-dir _book" not in workflow_text:
+        fail(errors, "publish workflow must check notebook backlinks against rendered HTML")
     if workflow_text.count("render: false") != 1:
         fail(errors, "publish workflow must deploy the audited bundle without re-rendering")
     if "chapters/ index.qmd download.html README.md" not in workflow_text:

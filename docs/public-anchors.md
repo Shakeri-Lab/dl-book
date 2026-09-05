@@ -18,6 +18,11 @@ rendering, the corresponding HTML fragment.
 | Transformer assembly | https://shakeri-lab.github.io/dl-book/chapters/part4/14-self-attention-transformer.html#sec-14-self-attention-transformer |
 | Modern CNNs and normalization seed | https://shakeri-lab.github.io/dl-book/chapters/part2/09-modern-cnns-transfer.html#sec-09-modern-cnns-transfer |
 | Precision and hardware mechanics | https://shakeri-lab.github.io/dl-book/chapters/appendices/a3-precision-performance.html#sec-a3-precision-performance |
+| Legacy local-constant derivation (pointer to the TTR interlude) | https://shakeri-lab.github.io/dl-book/chapters/part4/12-kernel-regression.html#eq-local-constant-fit |
+
+The last row also protects previously shared within-book equation links. Its HTML
+alias remains beside a pointer to the relocated derivation; the current derivation
+belongs to the interlude and is unnumbered, like its other equations.
 
 The reciprocal pointers into *Making It Trainable* deliberately target only explicit,
 release-stable identifiers: `c01`, `c03`, `c11`, `c13`, `c15`, `beyond`, and

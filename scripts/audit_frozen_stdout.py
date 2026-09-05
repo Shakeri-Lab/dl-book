@@ -15,7 +15,9 @@ from notebook_stdout_contracts import compare_stdout_blocks
 
 DIV_OPEN_RE = re.compile(r"^(:{3,})\s+\{([^}]*)\}\s*$")
 DIV_CLOSE_RE = re.compile(r"^(:{3,})\s*$")
-CODE_FENCE_RE = re.compile(r"^(`{3,}|~{3,})(?:\s|\{|$)")
+# Info strings may be bare (```python / ```text), not only Quarto attributes.
+# Missing an opener makes its closing fence swallow the following real cell.
+CODE_FENCE_RE = re.compile(r"^(`{3,}|~{3,})")
 EXECUTION_COUNT_RE = re.compile(r"(?:^|\s)execution_count=(\d+)(?:\s|$)")
 
 
@@ -98,6 +100,28 @@ def stdout_records(raw_json: str) -> list[tuple[int, str]]:
 
 def stdout_blocks(raw_json: str) -> list[str]:
     return [text for _, text in stdout_records(raw_json)]
+
+
+def native_execution_ordinals(raw_json: str) -> list[int]:
+    """Read every executed native cell, including cells with no stdout."""
+    markdown = json.loads(raw_json)["result"]["markdown"]
+    result, code_fence = [], None
+    for line in markdown.splitlines():
+        if code_fence:
+            marker, width = code_fence
+            if re.fullmatch(rf"{re.escape(marker)}{{{width},}}\s*", line):
+                code_fence = None
+            continue
+        match = CODE_FENCE_RE.match(line)
+        if match:
+            code_fence = (match.group(1)[0], len(match.group(1)))
+            continue
+        opened = DIV_OPEN_RE.fullmatch(line)
+        if opened and ".cell" in opened.group(2).split():
+            count = EXECUTION_COUNT_RE.search(opened.group(2))
+            if count:
+                result.append(int(count.group(1)))
+    return result
 
 
 def git_text(revision: str, path: Path) -> str | None:

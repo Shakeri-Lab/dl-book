@@ -77,8 +77,8 @@ into $7\times7=49$ patches when $P=4$.
 
 :::: {.plan-code}
 ::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Load imports, the fixed Chapter 6 split, and image shapes.
+1. Load the fixed Chapter 6 split and preserve image and label shapes.
+2. Report fitting, validation, and benchmark population sizes.
 :::
 
 ```{python}
@@ -97,7 +97,8 @@ from torch import nn
 import torch.nn.functional as F
 
 # [1]
-torch.set_num_threads(6)
+import os
+torch.set_num_threads(int(os.environ.get("DLBOOK_TORCH_NUM_THREADS", "6")))
 torch.manual_seed(6050)
 
 development = torch.load("../../data/fashion-train.pt")
@@ -129,8 +130,8 @@ kernel size $P$ and stride $P$. The two computations are the same linear map.
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Patchify and verify unfold-plus-linear equals one strided convolution.
+1. Extract image patches and assign one shared projection.
+2. Compare patch projection with the equivalent strided convolution.
 :::
 
 ```{python}
@@ -147,6 +148,7 @@ b_patch = torch.randn(d, generator=generator)
 
 raw_patches = F.unfold(sample, kernel_size=P, stride=P).transpose(1, 2)
 tokens_linear = raw_patches @ E_patch + b_patch
+# [2]
 conv_kernel = E_patch.T.reshape(d, 1, P, P)
 tokens_conv = F.conv2d(
     sample, conv_kernel, bias=b_patch, stride=P
@@ -156,7 +158,6 @@ max_error = (tokens_linear - tokens_conv).abs().max().item()
 assert raw_patches.shape == (1, 49, 16)
 assert tokens_linear.shape == (1, 49, 32)
 assert max_error < 2e-6
-# [2]
 print("raw patches:", tuple(raw_patches.shape))
 print("projected tokens:", tuple(tokens_linear.shape))
 print(f"max |linear - convolution|: {max_error:.2e}")
@@ -315,8 +316,11 @@ quadratic term becomes especially painful when resolution rises or patches shrin
 The original ViT paper warns us that regime matters. Before looking at its large
 pretraining experiments, let us deliberately choose the opposite regime: 1,000
 Fashion-MNIST fitting images, no pretraining, and models small enough to inspect.
+
+::: {.notebook-prediction}
 Predict the ordering before the run — which architecture wins clean validation at
 this scale, and which degrades less under shift?
+:::
 
 The ViT uses $4\times4$ patches, width 32, four heads, two pre-LayerNorm blocks,
 and feedforward width 64. Its 49 patch tokens plus `[CLS]` make a 50-token
@@ -330,9 +334,12 @@ There is no imported ViT package hiding extra training machinery.
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
-1. Define the reusable helpers: `MultiHeadSelfAttention`, `EncoderBlock`, and `TinyViT`.
-2. Define the reusable helpers: `TinyCNN`, `_xavier_init`, and `count_parameters`.
-3. Independently define the tiny ViT and parameter-matched CNN.
+1. Score and mix all patch tokens with multi-head self-attention.
+2. Compose normalized attention and feedforward residual paths.
+3. Construct patch tokens, learned positions, and the classification readout.
+4. Build the local-convolution comparison.
+5. Apply the shared initialization rule and count model parameters.
+6. Compare the two parameter budgets before training.
 :::
 
 ```{python}
@@ -362,6 +369,7 @@ class MultiHeadSelfAttention(nn.Module):
         return self.proj(mixed)
 
 
+# [2]
 class EncoderBlock(nn.Module):
     def __init__(self, width: int, heads: int, ff_width: int) -> None:
         super().__init__()
@@ -377,6 +385,7 @@ class EncoderBlock(nn.Module):
         return x + self.ffn(self.norm2(x))
 
 
+# [3]
 class TinyViT(nn.Module):
     def __init__(self, width: int = 32, patch: int = 4, blocks: int = 2) -> None:
         super().__init__()
@@ -402,7 +411,7 @@ class TinyViT(nn.Module):
         return self.head(self.norm(encoded[:, 0]))
 
 
-# [2]
+# [4]
 class TinyCNN(nn.Module):
     def __init__(self) -> None:
         super().__init__()
@@ -421,6 +430,7 @@ class TinyCNN(nn.Module):
         return self.head(self.features(x))
 
 
+# [5]
 def _xavier_init(module: nn.Module) -> None:
     if isinstance(module, (nn.Linear, nn.Conv2d)):
         nn.init.xavier_uniform_(module.weight)
@@ -432,7 +442,7 @@ def count_parameters(model: nn.Module) -> int:
     return sum(parameter.numel() for parameter in model.parameters())
 
 
-# [3]
+# [6]
 print("CNN parameters:", f"{count_parameters(TinyCNN()):,}")
 print("ViT parameters:", f"{count_parameters(TinyViT()):,}")
 ```
@@ -453,10 +463,12 @@ The schedule hash makes that equality inspectable rather than aspirational.
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Define the reusable helpers: `minibatch_schedule`, `schedule_hash`, and `train_with_schedule`.
-3. Define the reusable helpers: `accuracy`, `shift_right`, and `run_paired_seed`.
-4. Define the explicit paired schedule, training loop, and shift audit.
+1. Fix the epoch budget and seed panel.
+2. Generate and hash one batch-order schedule per paired seed.
+3. Train either architecture on that exact schedule.
+4. Evaluate clean images and zero-filled shifts with parameters frozen.
+5. Pair the model runs and retain their clean/shift metrics and schedule hashes.
+6. Report the architecture-specific computation proxy.
 :::
 
 ```{python}
@@ -480,6 +492,7 @@ def schedule_hash(permutations: list[torch.Tensor]) -> str:
     return hashlib.sha256(raw).hexdigest()[:12]
 
 
+# [3]
 def train_with_schedule(
     model_fn, permutations: list[torch.Tensor], seed: int
 ) -> nn.Module:
@@ -501,7 +514,7 @@ def train_with_schedule(
     return model
 
 
-# [3]
+# [4]
 @torch.no_grad()
 def accuracy(model: nn.Module, x: torch.Tensor, y: torch.Tensor) -> float:
     model.eval()
@@ -516,6 +529,7 @@ def shift_right(x: torch.Tensor, pixels: int) -> torch.Tensor:
     return shifted
 
 
+# [5]
 def run_paired_seed(seed: int) -> list[dict]:
     permutations = minibatch_schedule(seed)
     rows = []
@@ -555,7 +569,7 @@ cnn_macs = (
     + 7 * 7 * 48 * 32 * 3 * 3
     + 48 * 10
 )
-# [4]
+# [6]
 print(f"dot-product/MAC proxy — CNN: {cnn_macs:,}; ViT: {vit_macs:,}")
 ```
 ::::
@@ -636,8 +650,8 @@ fashion_results.extend(run_paired_seed(6054))
 ::::
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Report the paired clean and shifted endpoints.
+1. Collect the paired clean and shift metrics across all seeds.
+2. Report means, seed spread, and within-seed architecture contrasts.
 :::
 
 ```{python}
@@ -819,8 +833,8 @@ exactly two, but close enough to serve as the intended budget step.
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Audit the EfficientNet compound-scaling constraint.
+1. Choose the published depth, width, and resolution multipliers.
+2. Check their combined compute multiplier against the scaling constraint.
 :::
 
 ```{python}
@@ -920,8 +934,8 @@ conditions that produced it.
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Turn the published Kaplan exponents into auditable multipliers.
+1. Record the published exponents and the resource multipliers to test.
+2. Compute the implied loss multipliers under each fitted power law.
 :::
 
 ```{python}
@@ -1070,9 +1084,9 @@ that range, partly for data and computational efficiency.
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Define the reusable `fitted_chinchilla_loss` helper.
-3. Report the joint-fit optimum beside the 20-token heuristic.
+1. Fix the joint-fit coefficients and compute budget.
+2. Evaluate the fitted loss for a parameter/token allocation.
+3. Compare the joint-fit allocation with the twenty-token heuristic.
 :::
 
 ```{python}

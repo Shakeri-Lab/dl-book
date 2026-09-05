@@ -6,10 +6,43 @@ lives here, where it can be updated without reprinting a chapter.
 
 ## Tested environment (last verified: September 2026, stable v1.3)
 
+**Canonical-runtime migration approved September 4, 2026; validation pending.**
+The next freeze will be produced by a pinned Linux/x86-64 container, not by an
+unrecorded local environment. Its recipe pins the platform-specific base digest,
+Python, wheel hashes, and thread/dispatch environment. Two independent CI runs of
+the same source and exact image must agree byte-for-byte on numerical stdout
+before that candidate replaces the publication freeze. Runtime fingerprints will
+travel beside the freeze. The current v1.3 release remains unchanged until the
+new evidence and complete publication audits pass.
+
+Portability and prose precision have different contracts:
+
+- Calibrate each mutable field from paired same-seed differences across explicitly
+  supported runtimes. Predeclare a safety factor (initial proposal: twice the
+  largest measured absolute difference, rounded upward to the printed field's
+  precision), retain the underlying observations, and review every change. Do not
+  derive these tolerances from between-seed SD or widen a gate just to pass a run.
+- Between-seed SD determines how precisely prose may report an empirical result
+  and which claims it supports. A paired study reports the paired differences,
+  not uncertainty reconstructed from two independent arm summaries.
+- Algebraic identities, normalization errors, shapes, denominators, and protocol
+  assertions retain their own strict gates. Relative tolerance alone is unsuitable
+  for a mean near zero. Unlisted fields stay exact.
+- Measured runtime differences do not bound an unseen runtime. Adding a runtime
+  requires fresh paired measurements and a reviewed ledger update. The Mac joins
+  the ledger with explicit one-thread and six-thread policies; default-thread
+  diagnostics are retained separately, not silently treated as either policy.
+
+The dispatch settings `ONEDNN_MAX_CPU_ISA=AVX2` and `MKL_CBWR=AVX2` restrict
+sources of variation but do not guarantee cross-host framework identity. In
+particular, Intel's AVX2 conditional numerical reproducibility guarantee is not a
+universal guarantee for AMD CPUs. Record the actual CPU and loaded libraries, and
+claim only the comparisons the repeat and weekly audits demonstrate.
+
 | Component | Version | Where it matters |
 |---|---|---|
 | Python | 3.12.14 in notebook CI; 3.12 locally | all executable cells |
-| PyTorch | 2.12.1 (CPU) — **2.13.0 verified equivalent**, see below | all executable cells |
+| PyTorch | 2.12.1 (CPU); the 2.13.0 check below covers Chapter 7 only | all executable cells |
 | Quarto | 1.10.18 | rendering only |
 | MathJax | 4.1.3 (exact jsDelivr pin) | canonical HTML mathematics |
 | OS | macOS 15 (arm64) / Ubuntu 24.04 x64 (notebook CI) | render + Execution Audit |
@@ -48,6 +81,33 @@ bit-identical where it is claimed, invariant-identical where it is not. Discard
 metadata-only figure churn rather than committing it; it pollutes history and hides
 real changes.
 
+**September 4 learning-loop refresh (not yet a publication approval).** Unchanged
+training code on the current Mac runtime produces differences from the historical
+freeze, some outside the existing per-study portability limits. Source identity is
+not output identity. See `docs/reviews/2026-09-04-learning-loop.md` and its cited
+freeze files for the discrepancy ledger; no tolerance has been relaxed. This does
+not change the fixed v1.3 artifacts or establish a single causal backend explanation.
+
+**September 4 thread diagnosis.** The fresh failing run also used macOS/arm64,
+not Ubuntu. Its Python 3.12.13 environment still has PyTorch 2.12.1 (source commit
+`7269437d655783a26cba32aa88195b741ff496aa`), so a current upgrade to 2.13.0 does not
+explain that failure. A Chapter 13 probe reproduced the fresh transcript under
+unmodified defaults; changing the thread policy changed continuous alignment
+measurements while preserving predicted strings and exact-match accuracy. An
+independent six-thread repeat reproduced final weights and attention tensors
+bit-for-bit. No tested policy reproduced the historical alignment metric, and no
+execution-specific historical CPU/build/thread fingerprint was found. The cause
+of the historical discrepancy remains unresolved. The Chapter 7 version check
+above is not evidence of equivalence in another chapter.
+
+Evidence: `build/portability-diagnosis/README.md` and `ch13-summary.json`
+(SHA-256 `2c4b143b6396154e560bb7d4f0173d9d4d357902f1e7327ec35568684e8a21f4`),
+relative to that directory; baseline
+`c058d1f401fd0ead3ae59a2a8730f95489a2d9aa`. These diagnostic files are local
+evidence, not a replacement freeze. The successful Ubuntu notebook comparisons
+for that baseline are retained in
+[publishing run 33700096348](https://github.com/Shakeri-Lab/dl-book/actions/runs/33700096348).
+
 ## Version-fragile engineering the chapters rely on
 
 - **MathJax renderer pin:** canonical HTML loads
@@ -60,7 +120,7 @@ real changes.
   chapters with no numbered equations; removing it leaves MathJax's container list
   empty and aborts lazy processing. The release guard still compares the displayed equation
   sequence and exercises representative direct links and complete-scroll behavior on
-  Chapters 14, 17, 19, and Appendix D. The three authored
+  Chapters 14, 17, 19, and Appendix D. The authored
   `.responsive-long-equation` displays remain the
   tested wrapping contract. MathJax 4's native `output.linebreaks` is a future
   replacement candidate, but enabling it is a book-wide rendering change and requires
@@ -70,8 +130,12 @@ real changes.
   final residual bits or the sign attached to a rounded zero. Chapter 18 explicitly reads
   and asserts the CI override after importing PyTorch; the weekly execution audit uses the
   same override when it regenerates the manuscript transcript for comparison.
-  Selected heavy chapters independently use `torch.set_num_threads(...)` for predictable
-  runtime on shared machines. Thread counts are machine choices, not semantic ones, and
+  The next canonical container uses an explicit Jupyter kernel launcher to set and
+  observe its initial intra-op and inter-op policies. Authored performance budgets
+  honor `DLBOOK_TORCH_NUM_THREADS` rather than silently overriding that policy.
+  With no override, their previous local defaults remain. Chapter 19 restores its
+  entering budget after the deliberately single-thread diffusion study. Thread
+  settings are part of the recorded runtime, not proof of numerical identity;
   exact/typed output gates still decide whether a run is acceptable.
 - **Determinism flags**: `torch.use_deterministic_algorithms(True)` where paired
   digests demand it (ch. 14/16). Some backends lack deterministic kernels; if a
@@ -109,6 +173,13 @@ real changes.
   eager and all later images carry `loading="lazy"` plus `decoding="async"`. The static
   PDF landing page serves `figures/cover.webp` first and keeps `cover.png` as its
   fallback and as the derived-PDF cover source.
+- **Independent printed evidence:** **Reveal results** opens plaintext outputs without
+  opening the implementation. A native Find match in those outputs follows that same
+  path. Step selection and **Show all code** still reveal source plus printed output;
+  **Hide results** changes only the evidence disclosure. No-JavaScript and static-PDF
+  reading retain the authored source and output without these browser-only controls.
+  The exact interaction script is exercised by the scoped jsdom suite in
+  `scripts/html-tests/`; its locked development dependencies are not web assets.
 - **Public notebook pipeline:** `scripts/notebook_manifest.json` is the sole map for
   the 26 exported units and their required assets. The generated bootstrap pins Python
   3.12's numerical stack through `scripts/notebook_requirements.txt`, embeds a full Git
@@ -119,8 +190,12 @@ real changes.
   learner-visible stdout must match byte for byte on the same runner. A separate
   reviewed portability contract compares that evidence with the canonical HTML freeze;
   exact comparison is the default, and accepted deviations remain visible in the CI
-  report. Only the unexecuted public source that passed both gates is published. This
-  route deliberately omits hidden plotting harnesses and does not alter either PDF.
+  report. Only the unexecuted public source that passed both gates is published.
+  Canonical hidden setup and figure cells remain in source order with source-collapse
+  metadata for notebook frontends; they are never duplicated in the bootstrap.
+  The executed audit requires actual figure image payloads, while source audits
+  preserve prediction prompts and check canonical section/figure backlinks.
+  Notebook presentation does not independently change the manuscript or either PDF.
 
 When a version bump changes any printed number or figure, the fix is: update the
 pinned environment here, re-run the Execution Audit, refresh freeze caches

@@ -386,6 +386,10 @@ Rules:
   long model, trainer, or experiment maps its major phases: construct the data,
   define the mechanism, run the protocol, verify the claim, report the result.
   Do not turn syntax into fake pseudocode.
+  Name the actual mechanism or control: “normalize over visible keys” or “fit the
+  shuffled-pair arm with the same schedule,” not “prepare inputs,” “define reusable
+  helpers,” or “report the result.” Split helper-heavy regions with internal
+  bracket markers when several teaching steps occur inside one function.
 - **Map every step without repeating it.** Each plan index must appear in the code as
   a bracket-only marker such as `# [1]`; the plan already carries the words. A marker
   at the start of a function or region covers that implementation until the next
@@ -411,10 +415,14 @@ Rules:
   or pressing Escape, clears the state and closes the Code region. A per-panel
   **Show all code** control opens the complete executed surface without applying a
   step highlight and toggles back to the closed state. The number, focus state, and
-  inset rule carry the interaction independently of colour. Collapsed source remains
+  inset rule carry the interaction independently of colour. When a panel has printed
+  output, a separate **Reveal results** control lets readers inspect that evidence
+  while leaving its implementation closed. Selecting a plan step or **Show all code**
+  also reveals its printed output; results can subsequently be closed independently.
+  Figures and rich displays retain their existing reading context. Collapsed source remains
   available to native Find-in-page: a match opens the panel, selects the plan step
-  whose bracket marker owns the matching line, and leaves output-only matches in the
-  explicit **Show all code** state. Implement searchable lines and outputs with
+  whose bracket marker owns the matching line. A match in printed output reveals
+  the results without forcing the source open. Implement searchable lines and outputs with
   `hidden="until-found"` and `beforematch`, without `aria-hidden` on those searchable
   nodes. Temporarily remove the enclosing source block and copy control from the focus
   and accessibility trees while the panel is closed, then restore them on reveal.
@@ -460,6 +468,12 @@ widths: preserve useful column widths, keep horizontal movement inside the table
 and expose the region to keyboard readers with an explicit accessible name. Do not
 let a wide table make the whole reading page pan or collapse words into letter-wide
 columns.
+
+Other chapter tables follow the same containment rule, retaining native table and
+caption semantics. A scroll cue, named region, and keyboard tab stop appear only
+when the content actually overflows, and update when a disclosure opens or the
+viewport changes. Inline code in prose may wrap at spaces or inside an otherwise
+unbreakable token; code inside `pre` retains its whitespace and local scrolling.
 
 The PDF conversion enables breakable verbatim code and stdout as a final safety
 net. Do not rely on that conversion to repair confusing source: rewrap authored
@@ -576,14 +590,21 @@ misdiagnosis deserves to be made explicit.
   appendix, and statistical-learning appendix retain a visibly unavailable,
   non-linking notebook placeholder rather than a dead link.
 - Public notebooks are generated artifacts, not a second manuscript. Preserve the
-  learner-visible Plan text and Python in source order, strip Quarto directives and
-  hidden plotting/layout harnesses, and add only one generated bootstrap cell. That
+  learner-visible Plan text and Python in source order, strip Quarto directives,
+  and retain hidden setup and figure harnesses once, in their original positions,
+  with source collapsed. Add one generated orientation and bootstrap cell. That
   bootstrap must name a full source commit, install exact runtime pins, fetch only the
   manifest-declared assets from that commit, verify every asset by SHA-256, and remain
-  silent. If a hidden cell mixes required imports or deterministic setup with plotting,
-  delimit only the necessary support using `# notebook-support-start` and
-  `# notebook-support-end`; never use those markers to smuggle an explanation,
-  computation, metric, or learner-facing check out of the visible code.
+  silent. Do not lift setup out of a hidden cell and execute it again: source order
+  protects RNG state as well as dependencies. Label figure harnesses “Render this
+  figure” and other support “Experiment setup.” The executed notebook audit must
+  find an actual image output for every canonical executable figure, not merely a
+  plotting call or metadata flag. Hidden-source collapse is a frontend hint, never
+  removal of the code or visual evidence.
+  Export headings with canonical section backlinks and copy source-authored prompts
+  marked `.notebook-prediction`. Expand book-only math macros and resolve cross-
+  references into notebook-readable math and canonical links; do not invent a
+  second explanation or an unsupported runtime estimate.
 - Publish a source notebook only after it and a full Quarto-derived reference execute
   independently on the same runner, preserve their cells, and produce byte-identical
   learner-visible stdout. Then compare the reference with the corresponding frozen
@@ -605,6 +626,31 @@ misdiagnosis deserves to be made explicit.
 
 The book's loop is **read → predict → run → audit**. Experiments state a
 prediction before showing an outcome; recaps ask what evidence would falsify.
+Ask for information the reader has not already seen. If clean accuracy has already
+been reported, ask for the shift-induced drop rather than its clean baseline.
+Keep the interpretation after the result when revealing it would answer the prompt.
+
+A short optional **Check your reasoning** callout may follow **Check yourself**
+and precede the recap. It starts collapsed, supplies a shape check or limiting
+case with an exact return link, and does not solve a graded exercise. Fund it by
+shortening duplicated recap prose rather than adding another summary layer.
+
+The likelihood-to-loss recipe is a principled route, not a definition of every
+loss. Distinguish squared error on arbitrary class IDs from squared error on
+predicted probabilities; the latter is a valid probability score. Comparisons
+must state their parameterization, reduction, and optimization protocol.
+
+Keep observation separate from diagnosis. A failed run, sampled error, or transfer
+gap can motivate a mechanism hypothesis, but it does not isolate that cause without
+a discriminating intervention. State tested seeds, budgets, and boundaries rather
+than turning a toy failure into an impossibility claim. Exercises inherit the same
+evaluation contract: compare the same task, label budget, split, and declared
+training protocol; never ask readers to close an accuracy gap across different tasks.
+
+Long chapters may offer two short reading links: a mechanism witness and the complete
+study. These identify where to read, not independent executable fragments. State
+that notebook execution starts at the top and proceeds through required setup;
+do not guess runtimes or add another prerequisite curriculum.
 
 ### Refusal ledger (named non-imports, with reasons)
 

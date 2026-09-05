@@ -2,8 +2,9 @@
 """Audit public notebooks, canonical references, and executed copies.
 
 The source notebooks are publication artifacts: they must contain exactly the
-learner-visible Plan -> Code surfaces, a commit-pinned bootstrap, and no saved
-execution state.  When ``--executed-dir`` is supplied, this audit additionally
+learner-visible Plan -> Code surfaces, ordered collapsed figure/support cells,
+source-authored prediction prompts, a commit-pinned bootstrap, and no saved
+execution state. When ``--executed-dir`` is supplied, this audit additionally
 requires an executed copy of every selected notebook.  When full internal
 references are supplied, the primary gate compares public and canonical
 learner-visible stdout byte for byte inside the same clean runtime.  The
@@ -14,15 +15,25 @@ exact by default, with only reviewed per-surface portability contracts.
 from __future__ import annotations
 
 import argparse
+import base64
 import difflib
 import fnmatch
 import hashlib
+import io
 import json
 import re
 import subprocess
+import warnings
 from collections.abc import Iterable
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote, urlsplit
+from xml.etree.ElementTree import ParseError
+
+from defusedxml.ElementTree import fromstring as safe_xml_fromstring
+from defusedxml.common import DefusedXmlException
+from PIL import Image
 
 from audit_frozen_stdout import stdout_records
 from notebook_manifest import (
@@ -257,6 +268,10 @@ def audit_source_notebook(
     support_code: str,
     errors: list[str],
 ) -> dict[str, Any] | None:
+    from export_notebooks import (
+        HTML_ROOT, _orientation, learner_code, notebook_markdown, parse_document,
+    )
+    parsed = parse_document(unit.source)
     document = load_notebook(path, errors)
     if document is None:
         return None
@@ -306,6 +321,9 @@ def audit_source_notebook(
         "source_url": expected_source_url,
         "requirements": list(PINNED_REQUIREMENTS),
         "learner_visible_surfaces": len(surfaces),
+        "canonical_url": HTML_ROOT + Path(unit.source).with_suffix(".html").as_posix(),
+        "hidden_native_cells": parsed.hidden_cells,
+        "figure_ids": [cell.figure_id for cell in parsed.native_cells if cell.figure_id],
     }
     if unit.support is None:
         expected_support = None
@@ -357,9 +375,9 @@ def audit_source_notebook(
         )
 
     bootstrap_cells = [cell for cell in cells if "dlbook-bootstrap" in tags(cell)]
-    if len(bootstrap_cells) != 1 or bootstrap_cells[0] is not cells[0]:
-        errors.append(f"{label}: cell 0 must be the one dlbook-bootstrap cell")
-        bootstrap = cells[0]
+    if len(bootstrap_cells) != 1 or len(cells) < 2 or bootstrap_cells[0] is not cells[1]:
+        errors.append(f"{label}: cell 1 must be the one dlbook-bootstrap cell, after orientation")
+        bootstrap = bootstrap_cells[0] if bootstrap_cells else cells[0]
     else:
         bootstrap = bootstrap_cells[0]
     if bootstrap.get("cell_type") != "code":
@@ -374,8 +392,8 @@ def audit_source_notebook(
         != expected_support
     ):
         errors.append(f"{label}: bootstrap support metadata differs from its source")
-    if support_code and support_code not in bootstrap_source:
-        errors.append(f"{label}: selected non-plot support is missing from bootstrap")
+    if support_code and support_code in bootstrap_source:
+        errors.append(f"{label}: canonical support must not run twice via the bootstrap")
     for token in (
         *PINNED_REQUIREMENTS,
         revision,
@@ -426,20 +444,21 @@ def audit_source_notebook(
             f"{label}: expected {len(surfaces)} plan/visible pairs, found "
             f"{len(plan_cells)} plan and {len(exported_visible)} visible cells"
         )
-    if len(cells) != 1 + 2 * len(surfaces):
-        errors.append(
-            f"{label}: expected bootstrap plus {len(surfaces)} plan/visible pairs "
-            f"({1 + 2 * len(surfaces)} cells), found {len(cells)}"
-        )
+    canonical_url = expected_metadata["canonical_url"]
+    if (tags(cells[0]) != {"dlbook-orientation"}
+        or cell_source(cells[0]) != _orientation(parsed, canonical_url, expected_source_url)):
+        errors.append(f"{label}: source-generated orientation is missing or changed")
 
     checked_includes: set[str] = set()
     for ordinal, surface in enumerate(surfaces, start=1):
-        plan_index = 2 * ordinal - 1
-        visible_index = 2 * ordinal
-        if visible_index >= len(cells):
+        if ordinal > len(plan_cells) or ordinal > len(exported_visible):
             break
-        plan_cell = cells[plan_index]
-        visible = cells[visible_index]
+        plan_cell = plan_cells[ordinal - 1]
+        visible = exported_visible[ordinal - 1]
+        plan_index = cells.index(plan_cell)
+        visible_index = cells.index(visible)
+        if visible_index != plan_index + 1:
+            errors.append(f"{label}: plan {ordinal} must immediately precede its code")
         if plan_cell.get("id") != f"plan-{ordinal:03d}":
             errors.append(f"{label}: plan {ordinal} has an unstable cell id")
         if visible.get("id") != f"surface-{ordinal:03d}":
@@ -520,9 +539,86 @@ def audit_source_notebook(
         if cell.get("cell_type") == "code"
         and "dlbook-bootstrap" not in tags(cell)
         and "dlbook-visible" not in tags(cell)
+        and "dlbook-harness" not in tags(cell)
     ]
     if extra_code:
         errors.append(f"{label}: unclassified code cells leak at indices {extra_code}")
+
+    native_expected = {cell.ordinal: cell for cell in parsed.native_cells}
+    native_cells = [
+        cell for cell in cells
+        if "dlbook-harness" in tags(cell) or (
+            "dlbook-visible" in tags(cell)
+            and cell.get("metadata", {}).get("dlbook", {}).get("native_ordinal") is not None
+        )
+    ]
+    actual_ordinals = [cell.get("metadata", {}).get("dlbook", {}).get("native_ordinal") for cell in native_cells]
+    if actual_ordinals != list(native_expected):
+        errors.append(f"{label}: native cells are missing, duplicated, or out of manuscript order")
+    for cell in native_cells:
+        meta = cell.get("metadata", {}).get("dlbook", {})
+        native = native_expected.get(meta.get("native_ordinal"))
+        if native is None:
+            continue
+        if meta.get("figure_id") != native.figure_id:
+            errors.append(f"{label}: native cell {native.ordinal} has the wrong figure identity")
+        if native.hidden:
+            if tags(cell) != {"dlbook-harness", "hide-input"}:
+                errors.append(f"{label}: hidden native {native.ordinal} is not a collapsed harness")
+            if cell.get("metadata", {}).get("jupyter", {}).get("source_hidden") is not True:
+                errors.append(f"{label}: hidden native {native.ordinal} source must start collapsed")
+            if cell_source(cell) != learner_code(native.body):
+                errors.append(f"{label}: hidden native {native.ordinal} differs from canonical source")
+            if meta.get("source_line") != native.source_line or meta.get("label") != native.label:
+                errors.append(f"{label}: hidden native {native.ordinal} lost source provenance")
+            if cell.get("id") != f"harness-{native.ordinal:03d}":
+                errors.append(f"{label}: hidden native {native.ordinal} lost its stable cell id")
+            index = cells.index(cell)
+            predecessor = cells[index - 1] if index else {}
+            if "dlbook-harness-label" not in tags(predecessor):
+                errors.append(f"{label}: hidden native {native.ordinal} lacks a readable label")
+            elif native.figure_id and (
+                "**Render this figure**" not in cell_source(predecessor)
+                or f"{canonical_url}#{native.figure_id}" not in cell_source(predecessor)
+            ):
+                errors.append(f"{label}: {native.figure_id} lost its figure return link")
+    predictions = [cell for cell in cells if "dlbook-prediction" in tags(cell)]
+    expected_predictions = [context for context in parsed.contexts if context.kind == "prediction"]
+    if len(predictions) != len(expected_predictions):
+        errors.append(f"{label}: source-authored prediction count differs")
+    for cell, context in zip(predictions, expected_predictions):
+        if cell_source(cell) != notebook_markdown(context.text, canonical_url):
+            errors.append(f"{label}: prediction at source line {context.source_line} differs")
+        if cell.get("metadata", {}).get("dlbook", {}) != {
+            "source_line": context.source_line, "anchor": context.anchor,
+        }:
+            errors.append(f"{label}: prediction at source line {context.source_line} lost provenance")
+    ordered_lines = [
+        cell.get("metadata", {}).get("dlbook", {}).get("source_line")
+        for cell in cells
+        if tags(cell).intersection({"dlbook-visible", "dlbook-harness", "dlbook-prediction"})
+    ]
+    if any(not isinstance(line, int) for line in ordered_lines) or ordered_lines != sorted(ordered_lines):
+        errors.append(f"{label}: predictions and executable surfaces are out of manuscript order")
+    section_contexts = {context.anchor: context for context in parsed.contexts if context.kind == "section"}
+    expected_sections = []
+    for line in sorted(ordered_lines) if all(isinstance(line, int) for line in ordered_lines) else []:
+        context = next((context for context in reversed(list(section_contexts.values())) if context.source_line < line), None)
+        if context is not None and (not expected_sections or expected_sections[-1] != context.anchor):
+            expected_sections.append(context.anchor)
+    actual_sections = [cell.get("metadata", {}).get("dlbook", {}).get("anchor") for cell in cells if "dlbook-section" in tags(cell)]
+    if actual_sections != expected_sections:
+        errors.append(f"{label}: executable sections lost their source headings or order")
+    for cell in cells:
+        if "dlbook-section" in tags(cell):
+            anchor = cell.get("metadata", {}).get("dlbook", {}).get("anchor")
+            if anchor not in section_contexts or f"{canonical_url}#{anchor}" not in cell_source(cell):
+                errors.append(f"{label}: section lost its canonical HTML return link")
+        if cell.get("cell_type") == "markdown" and not tags(cell).intersection({
+            "dlbook-orientation", "dlbook-section", "dlbook-prediction", "dlbook-plan",
+            "dlbook-visible", "dlbook-harness-label",
+        }):
+            errors.append(f"{label}: unclassified narrative cell {cell.get('id')}")
     return document
 
 
@@ -671,6 +767,7 @@ def audit_reference_notebook(
                 "source_line": native.source_line,
                 "label": native.label,
                 "learner_visible": not native.hidden,
+                "figure_id": native.figure_id,
             }
             if actual.get("execution_count") is not None:
                 errors.append(
@@ -815,7 +912,107 @@ def audit_executed_copy(
                     f"{label}: cell {index} raised {output.get('ename')}: "
                     f"{output.get('evalue')}"
                 )
+    audit_figure_outputs(executed, label, errors)
     return executed
+
+
+def valid_figure_payload(mime: str, payload: str) -> bool:
+    """Validate the actual image, without resolving XML entities or external DTDs."""
+    if mime == "image/svg+xml":
+        try:
+            root = safe_xml_fromstring(
+                payload, forbid_entities=True, forbid_external=True,
+            )
+        except (ParseError, DefusedXmlException, ValueError):
+            return False
+        return root.tag in {"svg", "{http://www.w3.org/2000/svg}svg"}
+    formats = {"image/png": "PNG", "image/jpeg": "JPEG"}
+    if mime not in formats:
+        return False
+    try:
+        data = base64.b64decode("".join(payload.split()), validate=True)
+        # open() identifies the header only. verify() checks file integrity;
+        # reopening and load() also forces decoding of the complete pixel data.
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            with Image.open(io.BytesIO(data), formats=[formats[mime]]) as raster:
+                if raster.width <= 0 or raster.height <= 0:
+                    return False
+                raster.verify()
+            with Image.open(io.BytesIO(data), formats=[formats[mime]]) as raster:
+                raster.load()
+    except (
+        OSError, ValueError, SyntaxError,
+        Image.DecompressionBombError, Image.DecompressionBombWarning,
+    ):
+        return False
+    return True
+
+
+def audit_figure_outputs(
+    document: dict[str, Any], label: str, errors: list[str],
+) -> None:
+    """A figure must emit real image data, not merely contain drawing code."""
+    found = []
+    for cell in document.get("cells", []):
+        if cell.get("cell_type") != "code":
+            continue
+        figure_id = cell.get("metadata", {}).get("dlbook", {}).get("figure_id")
+        if not figure_id:
+            continue
+        found.append(figure_id)
+        image_count = 0
+        for output in cell.get("outputs", []):
+            if output.get("output_type") not in {"display_data", "execute_result"}:
+                continue
+            for mime, payload in output.get("data", {}).items():
+                payload = "".join(payload) if isinstance(payload, list) else payload
+                if not isinstance(payload, str):
+                    continue
+                if valid_figure_payload(mime, payload):
+                    image_count += 1
+        if image_count == 0:
+            errors.append(f"{label}: {figure_id} produced no valid PNG, JPEG, or SVG output")
+    expected = document.get("metadata", {}).get("dlbook", {}).get("figure_ids")
+    if expected is not None and found != expected:
+        errors.append(f"{label}: executed figure identities differ from the source contract")
+    if len(found) != len(set(found)):
+        errors.append(f"{label}: duplicate executed figure identities")
+
+
+class _HTMLIds(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.ids: set[str] = set()
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self.ids.update(value for name, value in attrs if name == "id" and value is not None)
+
+
+def audit_html_backlinks(
+    document: dict[str, Any], html_dir: Path, label: str, errors: list[str],
+) -> None:
+    """Check notebook return links against the rendered canonical edition."""
+    from export_notebooks import HTML_ROOT
+    cache: dict[Path, set[str]] = {}
+    for cell in document.get("cells", []):
+        if cell.get("cell_type") != "markdown":
+            continue
+        for match in re.finditer(r"\]\((https://shakeri-lab\.github\.io/dl-book/[^)\s]*)\)", cell_source(cell)):
+            url = match.group(1)
+            relative = url[len(HTML_ROOT):]
+            parts = urlsplit(relative)
+            path = html_dir / unquote(parts.path or "index.html")
+            if not path.is_file():
+                errors.append(f"{label}: missing canonical return page: {url}")
+                continue
+            if parts.fragment:
+                if path not in cache:
+                    parser = _HTMLIds()
+                    parser.feed(path.read_text(encoding="utf-8"))
+                    cache[path] = parser.ids
+                if unquote(parts.fragment) not in cache[path]:
+                    errors.append(f"{label}: missing canonical return anchor: {url}")
 
 
 def _stdout_diff(
@@ -998,6 +1195,11 @@ def main() -> int:
         help="directory containing unexecuted public notebooks",
     )
     parser.add_argument(
+        "--html-dir",
+        type=Path,
+        help="Optional rendered HTML root for canonical section/figure backlink checks",
+    )
+    parser.add_argument(
         "--executed-dir",
         type=Path,
         help="directory containing separately executed notebook copies",
@@ -1093,7 +1295,9 @@ def main() -> int:
         total_surfaces += len(surfaces)
         executable_surfaces += sum(bool(surface.executable) for surface in surfaces)
         include_surfaces += sum(surface.include is not None for surface in surfaces)
-        audit_source_notebook(path, unit, surfaces, support_code, errors)
+        source_document = audit_source_notebook(path, unit, surfaces, support_code, errors)
+        if source_document is not None and args.html_dir is not None:
+            audit_html_backlinks(source_document, args.html_dir, path.as_posix(), errors)
 
         reference_path: Path | None = None
         if args.reference_source_dir is not None:

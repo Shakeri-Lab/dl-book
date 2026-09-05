@@ -1,0 +1,166 @@
+name: Canonical Freeze Candidate
+
+# Neither a run nor the independent-repeat check publishes or promotes _freeze.
+# The second workflow run must reuse the first run's exact saved image artifact.
+on:
+  workflow_dispatch:
+    inputs:
+      source_revision:
+        description: Full source commit (blank uses this workflow ref)
+        type: string
+        default: ""
+      image_run_id:
+        description: First independent run ID; blank builds and seals a new image
+        type: string
+        default: ""
+  workflow_call:
+    inputs:
+      source_revision:
+        type: string
+        default: ""
+      image_run_id:
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  execute:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    env:
+      IMAGE_RUN_ID: ${{ inputs.image_run_id }}
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - name: Check out the exact candidate source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_revision || github.sha }}
+          persist-credentials: false
+
+      - name: Record clean source identity before building or execution
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "$IMAGE_RUN_ID" && ! "$IMAGE_RUN_ID" =~ ^[0-9]+$ ]]; then
+            echo 'image_run_id must be a numeric GitHub Actions run ID' >&2
+            exit 1
+          fi
+          source_sha=$(git rev-parse HEAD)
+          source_epoch=$(git show -s --format=%ct "$source_sha")
+          mkdir -p build/canonical-input build/canonical-image build/canonical-candidate
+          python scripts/freeze_provenance.py source --root . --source-commit "$source_sha" --output build/canonical-input/source-before.json
+          python -c 'import json; assert json.load(open("build/canonical-input/source-before.json"))["dirty"] is False'
+          git archive --format=tar --output=build/canonical-input/source.tar "$source_sha"
+          echo "sha=$source_sha" >> "$GITHUB_OUTPUT"
+          echo "epoch=$source_epoch" >> "$GITHUB_OUTPUT"
+
+      - name: Build and seal one immutable Linux image
+        if: inputs.image_run_id == ''
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker build --platform linux/amd64 --file container/Dockerfile --tag "dlbook-canonical:$SOURCE_SHA" .
+          docker save "dlbook-canonical:$SOURCE_SHA" | gzip -n > build/canonical-image/image.tar.gz
+          python container/image_artifact.py seal --root . --commit "$SOURCE_SHA" --image "dlbook-canonical:$SOURCE_SHA" --archive build/canonical-image/image.tar.gz --manifest build/canonical-image/image.json
+
+      - name: Archive the exact image for the second independent run
+        if: inputs.image_run_id == ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: canonical-freeze-image
+          path: build/canonical-image/
+          compression-level: 0
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Retrieve the first run's immutable image
+        if: inputs.image_run_id != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: canonical-freeze-image
+          run-id: ${{ inputs.image_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: build/canonical-image/
+
+      - name: Verify image archive, source/recipe identity, and loaded content ID
+        id: image
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          image_id=$(python container/image_artifact.py verify --root . --commit "$SOURCE_SHA" --archive build/canonical-image/image.tar.gz --manifest build/canonical-image/image.json)
+          if [[ -n "$IMAGE_RUN_ID" ]]; then
+            docker load --input build/canonical-image/image.tar.gz
+          fi
+          test "$(docker image inspect --format '{{.Id}}' "$image_id")" = "$image_id"
+          test "$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$image_id")" = 'linux/amd64'
+          echo "id=$image_id" >> "$GITHUB_OUTPUT"
+
+      - name: Execute a fresh source snapshot without network access
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          SOURCE_DATE_EPOCH: ${{ steps.source.outputs.epoch }}
+          IMAGE_ID: ${{ steps.image.outputs.id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm --platform linux/amd64 --network none --shm-size 1g \
+            --mount "type=bind,source=$PWD/build/canonical-input,target=/input,readonly" \
+            --mount "type=bind,source=$PWD/build/canonical-candidate,target=/output" \
+            --env SOURCE_DATE_EPOCH --env GITHUB_RUN_ID --env GITHUB_RUN_ATTEMPT \
+            --env GITHUB_JOB --env GITHUB_WORKFLOW --env GITHUB_SHA --env GITHUB_REF \
+            --env GITHUB_REPOSITORY --env RUNNER_OS --env RUNNER_ARCH \
+            "$IMAGE_ID" --source-archive /input/source.tar --source-before /input/source-before.json \
+            --source-commit "$SOURCE_SHA" --container-digest "$IMAGE_ID" \
+            --run-id "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" --output /output
+
+      - name: Retrieve the first independently executed candidate
+        if: inputs.image_run_id != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: canonical-freeze-candidate
+          run-id: ${{ inputs.image_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: build/canonical-first/
+
+      - name: Require exact stdout and execution identity across independent runs
+        if: inputs.image_run_id != ''
+        env:
+          IMAGE_ID: ${{ steps.image.outputs.id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/canonical-comparison
+          docker run --rm --platform linux/amd64 --network none \
+            --entrypoint python \
+            --mount "type=bind,source=$PWD,target=/source,readonly" \
+            --mount "type=bind,source=$PWD/build/canonical-comparison,target=/comparison" \
+            "$IMAGE_ID" /opt/dlbook/canonical_python.py /source/scripts/compare_freeze_runs.py \
+            /source/build/canonical-first /source/build/canonical-candidate \
+            --report /comparison/exact-repeat.json --require-all-files
+
+      - name: Preserve candidate, observed kernels, and diagnostic logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: canonical-freeze-candidate
+          path: build/canonical-candidate/
+          include-hidden-files: true
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Preserve independent-repeat report
+        if: always() && inputs.image_run_id != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: canonical-freeze-comparison
+          path: build/canonical-comparison/
+          retention-days: 30
+          if-no-files-found: warn

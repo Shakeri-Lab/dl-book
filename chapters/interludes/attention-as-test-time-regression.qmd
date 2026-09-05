@@ -77,11 +77,10 @@ This objective is an umbrella, not an equivalence theorem. Its
 methods can restrict different function classes, use different weights, and stop at
 different approximations. Those differences are the lesson.
 
-### Solver 1: keep the data and fit at the query
+### Solver 1: keep the data and fit at the query {#local-constant-fit}
 
-Chapter 12 was more precise than saying “attention minimizes
-the shared objective.” For a query $\vect{q}$, softmax attention solves the
-local-constant problem
+Chapter 12's weighted average now acquires a precise optimization interpretation.
+For a query $\vect{q}$, softmax attention solves the local-constant problem
 
 $$
 \vect{c}^{*}(\vect{q})
@@ -114,9 +113,11 @@ $\kappa_\tau$ by the same positive constant and leaves the minimizer unchanged.
 
 :::: {.plan-code}
 ::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Verify softmax attention's local-constant optimum.
-3. Report or visualize the measured result.
+1. Draw a reproducible query and stored key–value pairs.
+2. Exponentiate shifted similarity scores into positive affinities.
+3. Solve for the affinity-weighted constant prediction.
+4. Compute the same mixture as a normalized attention row.
+5. Check agreement and the stationarity residual.
 :::
 
 ```{python}
@@ -129,14 +130,16 @@ ms_d, ms_T = 8, 12
 ms_K = ms_rng.standard_normal((ms_T, ms_d))
 ms_V = ms_rng.standard_normal((ms_T, 3))
 ms_q = ms_rng.standard_normal(ms_d)
+# [2]
 ms_scores = ms_K @ ms_q / np.sqrt(ms_d)
 ms_kappa = np.exp(ms_scores - ms_scores.max())
-ms_c = (ms_kappa[:, None] * ms_V).sum(0) / ms_kappa.sum()
-ms_attention = (ms_kappa / ms_kappa.sum()) @ ms_V
-ms_gradient = (ms_kappa[:, None] * (ms_c - ms_V)).sum(0)
-# [2]
-assert np.allclose(ms_c, ms_attention)
 # [3]
+ms_c = (ms_kappa[:, None] * ms_V).sum(0) / ms_kappa.sum()
+# [4]
+ms_attention = (ms_kappa / ms_kappa.sum()) @ ms_V
+# [5]
+ms_gradient = (ms_kappa[:, None] * (ms_c - ms_V)).sum(0)
+assert np.allclose(ms_c, ms_attention)
 print(f"max |stationarity gradient|: {np.abs(ms_gradient).max():.3e}")
 ```
 ::::
@@ -181,11 +184,12 @@ same answer as a full traversal of all pairs, for this factorized kernel.
 
 :::: {.plan-code}
 ::: {.plan}
-1. Define the reusable `ms_phi` helper.
-2. Prepare the inputs and fixed settings for the example.
-3. Compare a factorized-kernel traversal with its running state.
-4. Check the claimed identities, shapes, or invariants.
-5. Report or visualize the measured result.
+1. Map queries and keys to strictly positive features.
+2. Initialize the value accumulator and its normalizer.
+3. Accumulate each incoming key–value outer product and key feature.
+4. Read the query from the two running sums.
+5. Form the reference by traversing every stored pair.
+6. Assert equality and report floating-point disagreement.
 :::
 
 ```{python}
@@ -203,12 +207,13 @@ ms_z = np.zeros(ms_d)
 for ms_key, ms_value in zip(ms_K, ms_V, strict=True):
     ms_S += np.outer(ms_phi(ms_key), ms_value)
     ms_z += ms_phi(ms_key)
+# [4]
 ms_streaming = (ms_S.T @ ms_phi(ms_q)) / (ms_z @ ms_phi(ms_q))
+# [5]
 ms_weights = ms_phi(ms_K) @ ms_phi(ms_q)
 ms_traversal = (ms_weights[:, None] * ms_V).sum(0) / ms_weights.sum()
-# [4]
+# [6]
 assert np.allclose(ms_streaming, ms_traversal)
-# [5]
 print("streaming equals traversal:", np.allclose(ms_streaming, ms_traversal))
 print(f"max |difference|: {np.abs(ms_streaming-ms_traversal).max():.3e}")
 ```
@@ -254,9 +259,10 @@ $$
 
 :::: {.plan-code}
 ::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Verify that one SGD step is the delta recurrence.
-3. Report or visualize the measured result.
+1. Draw a state, one key–value pair, and a fixed step size.
+2. Take the residual-gradient step directly.
+3. Regroup it into a state transition plus a value write.
+4. Verify both updates agree and report their difference.
 :::
 
 ```{python}
@@ -268,12 +274,13 @@ ms_eta = 0.3
 ms_h = ms_rng.standard_normal(ms_d)
 ms_k = ms_rng.standard_normal(ms_d)
 ms_v = ms_rng.standard_normal()
+# [2]
 ms_sgd = ms_h - ms_eta * ms_k * (ms_k @ ms_h - ms_v)
+# [3]
 ms_delta = ((np.eye(ms_d) - ms_eta * np.outer(ms_k, ms_k)) @ ms_h
             + ms_eta * ms_v * ms_k)
-# [2]
+# [4]
 assert np.allclose(ms_sgd, ms_delta)
-# [3]
 print("SGD equals Delta recurrence:", np.allclose(ms_sgd, ms_delta))
 print(f"max |difference|: {np.abs(ms_sgd-ms_delta).max():.3e}")
 ```
@@ -406,10 +413,12 @@ on CPU in under a second on the reference machine.
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Define the reusable helpers: `ms_unit` and `ms_decode`.
-3. Define the reusable helpers: `ms_trial` and `ms_panel`.
-4. Run the sealed synthetic recall-under-capacity study.
+1. Fix the load grid, seed separation, and write-gate policy.
+2. Normalize random pairs, mark priority items, and decode by similarity.
+3. Retain every pair and retrieve with a softmax table.
+4. Write residuals into plain or selectively gated fixed-size states.
+5. Measure ordinary and priority recall under the same trial schedule.
+6. Open the sealed endpoint and report paired trade-offs.
 :::
 
 ```{python}
@@ -427,7 +436,7 @@ def ms_unit(x):
 def ms_decode(prediction, values):
     return np.argmax(prediction @ values.T, axis=1)
 
-# [3]
+# [2]
 def ms_trial(rng, repeat, d, load):
     n = max(4, round(load * d))
     keys = ms_unit(rng.standard_normal((n, d)))
@@ -435,11 +444,13 @@ def ms_trial(rng, repeat, d, load):
     priority = np.zeros(n, dtype=bool)
     priority[rng.permutation(n)[:max(1, round(0.25 * n))]] = True
 
+    # [3]
     scores = 32.0 * (keys @ keys.T)
     scores -= scores.max(axis=1, keepdims=True)
     weights = np.exp(scores); weights /= weights.sum(axis=1, keepdims=True)
     attention = weights @ values
 
+    # [4]
     def delta(write_gate):
         state = np.zeros((d, d))
         for key, value, gate in zip(keys, values, write_gate, strict=True):
@@ -448,6 +459,7 @@ def ms_trial(rng, repeat, d, load):
 
     plain = delta(np.ones(n))
     selective = delta(np.where(priority, 1.0, MS_GATE))
+    # [5]
     truth = np.arange(n)
     correct = lambda pred: ms_decode(pred, values) == truth
     a_ok, d_ok, s_ok = correct(attention), correct(plain), correct(selective)
@@ -456,6 +468,7 @@ def ms_trial(rng, repeat, d, load):
             d_ok.mean(), d_ok[priority].mean(), d_ok[ordinary].mean(),
             s_ok.mean(), s_ok[priority].mean(), s_ok[ordinary].mean()]
 
+# [1][5]
 def ms_panel(tag, repeats):
     seeds = np.random.SeedSequence([MS_SEED, tag]).spawn(
         repeats * len(MS_DIMS) * len(MS_LOADS))
@@ -468,6 +481,7 @@ def ms_panel(tag, repeats):
                 index += 1
     return np.asarray(rows)
 
+# [6]
 # Tags 0 and 1 were development; tag 2 remained sealed until settings were fixed.
 ms_development = np.vstack([ms_panel(tag, 5) for tag in (0, 1)])
 assert np.all(ms_development[:, 4] == 1.0)
@@ -479,7 +493,6 @@ print("endpoint_trials=30 x 3 dimensions; d=(8, 16, 32); "
       "N/d=(0.5, 1, 2, 4, 8)")
 print("fixed: eta=0.20; priority_fraction=0.25; ordinary_write_gate=0.10")
 print("load  attention  Delta  gated-all  gated-priority  gated-ordinary")
-# [4]
 for load in MS_LOADS:
     block = ms_endpoint[ms_endpoint[:, 3] == load]
     means = block[:, [4, 6, 9, 10, 11]].mean(0)
@@ -554,6 +567,15 @@ stream for a restricted kernel; online updates buy a steerable fixed state and a
 interference. The RNN state has returned as a statistical choice rather than a design
 we were supposed to declare dead.
 
+### Where this lens leads
+
+The four dials now let us read newer proposals without treating their names as
+explanations. Test-Time Training makes the carried state a learner; Titans adds an
+updated long-term memory; MesaNet studies locally solved test-time objectives.
+The epilogue returns to Wang, Yang, Vidal and colleagues' *Beyond Test-Time Memory*
+and its control framing. These are related design questions, not interchangeable
+algorithms: ask what is retained, what is fitted, and how accurately it is solved.
+
 ::: {.callout-note}
 ## Check yourself
 
@@ -591,6 +613,11 @@ Close the book for one minute and reconstruct the three memory contracts.
   learned gating around delta-style associative updates.
 - [Wang, Shi, and Fox, *Test-Time Regression: A Unifying Framework for Designing Sequence Models with Associative Memory*](https://arxiv.org/abs/2501.12352):
   the shared regression objective and solver-design perspective.
+
+- [Sun et al., *Learning to (Learn at Test Time): RNNs with Expressive Hidden States* (2024 preprint; 2025 proceedings)](https://proceedings.mlr.press/v267/sun25h.html): treats a sequence model's hidden state as a learner updated by a self-supervised objective during the forward pass.
+- [Behrouz et al., *Titans: Learning to Memorize at Test Time* (2025)](https://arxiv.org/abs/2501.00663): adds a learned long-term memory updated at test time.
+- [von Oswald et al., *MesaNet: Sequence Modeling by Locally Optimal Test-Time Training* (2025)](https://arxiv.org/abs/2506.05233): derives sequence layers from locally solved test-time objectives.
+- [Wang, Yang, Vidal et al., *Beyond Test-Time Memory: State-Space Optimal Control for LLM Reasoning* (2026)](https://vita-group.github.io/TTC-Net/): extends the regression framing toward test-time control; the epilogue treats that proposal as a frontier bet rather than settled equivalence.
 
 ## Exercises {.unnumbered}
 

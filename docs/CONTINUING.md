@@ -10,7 +10,49 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 
 ---
 
-> ## Current state — 2026-09-02 (read this first)
+> ## Current revision — 2026-09-04 (read this first)
+>
+> The learning-loop pass is implementing the accepted HTML review across plans,
+> notebook evidence, prediction timing, loss interpretation, Chapter 12 pacing,
+> and equation layout. Track verification in
+> `docs/reviews/2026-09-04-learning-loop.md`. The HTML remains canonical; live PDFs
+> are rolling post-v1.3 conversions, while the v1.3 tag and archived assets stay
+> fixed. The PDF pipeline now requires two clean same-toolchain builds and KOMA
+> Part preambles; see `docs/pdf-reproducibility.md` for the exact guarantee.
+>
+> Notebook exports now retain canonical hidden setup/figure cells once in source
+> order, with source collapsed, and copy `.notebook-prediction` prompts and section
+> backlinks. A valid export must regenerate its visual evidence. Plans must name
+> mechanisms and controls, not generic helper inventories. Optional collapsed
+> reasoning feedback may sit between Check yourself and its recap.
+>
+> The follow-up review also qualifies unisolated causal claims, makes the BatchNorm
+> exception to minibatch independence explicit, and repairs the shoe-task comparison.
+> Long labs distinguish a short mechanism-reading route from the full study without
+> implying that dependent cells run independently. **Reveal results** is separate
+> from opening code; native Find in printed output opens only that evidence.
+>
+> Publication is not yet cleared: unchanged training code produces fresh numerical
+> differences on this Mac: the completed refresh has four chapters outside existing
+> portability bounds (8, 11, 13, 19). The fresh evidence is preserved under
+> `build/review-fresh-evidence/`. The revision ledger records the outstanding author
+> decision. That decision is now resolved: the author approved a pinned Linux/x86-64
+> canonical container, a fingerprint beside the freeze, and two independent CI runs
+> with bit-identical stdout before promotion. The Mac becomes a measured portability
+> target at one and six threads. Gate calibration uses paired same-seed runtime
+> differences plus a declared safety factor; seed SD governs prose precision, not
+> gate width. Chapter 11 gains a five-seed paired study and Chapter 13 recomputes its
+> own baseline. Preserve strict normalization and algebraic-identity gates. See
+> `docs/compatibility.md` for the diagnosis and migration status. Do not treat the
+> old Mac refresh as the new canonical freeze or publish before the new gates pass.
+> The revised source audit now counts 195 visible surfaces, 95 execution-only
+> harnesses, 286 native executable cells, and four transclusions; older dated
+> inventories below describe their respective builds.
+> This uncommitted pass lives in `/tmp/dl-book-phase-a.XE6WWb/repo` on
+> `pedagogy-roundtrip-20260904`, not the stale Box checkout. Source edits after unit
+> execution still need refreshing; full two-profile and deployment checks remain.
+>
+> ## Previous stable and web-only state — 2026-09-02
 >
 > The manuscript is **complete and released**: tag **v1.3** carries the stable
 > course-arc PDFs and is the fixed edition to cite and pitch. The live canonical

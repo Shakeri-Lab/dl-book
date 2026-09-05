@@ -1,3 +1,50 @@
+# Pending validation — canonical numerical runtime (September 4, 2026)
+
+The numerical reference is moving to a Linux/x86-64 container with a digest-pinned
+base, hash-locked CPU wheels, explicit thread and dispatch settings, and a source
+and runtime fingerprint beside each candidate freeze. Two independent Actions runs
+must reuse the exact image and reproduce every frozen file before promotion. The
+current committed freeze has not yet been replaced; this entry records work in
+progress, not a completed release.
+
+Chapter 11 now specifies a five-seed paired teacher-forcing/free-running study.
+Chapter 13 recomputes its matching fixed-state baseline on the page, with semantic
+checks that reject stale cross-chapter results. Portability bounds will be calibrated
+from paired same-seed runtime differences, with an explicit safety factor; seed
+variation instead governs the precision and strength of prose claims. Strict
+normalization identities retain their existing gates. The author's Mac is a named
+portability target at one and six threads, not the canonical reference.
+
+# Rolling post-v1.3 — learning-loop revision (September 4, 2026)
+
+Plans now describe the computation or experimental control instead of helper
+inventories. Notebook exports carry orientation, canonical section links, prediction
+prompts, and the original setup and figure cells once in execution order, with
+rendering source collapsed. The gate checks actual image output as well as source
+identity and numerical stdout.
+
+The early likelihood discussion now leaves room for other valid probability scores.
+Chapter 12 puts its three-point lookup before the formalism and consolidates the
+local-constant derivation and duplicate exercise in the existing test-time-regression
+interlude. CNN, diffusion, and paired-retrieval studies ask for predictions before
+the relevant outcome; selected retrieval checks add collapsed reasoning hints.
+Long equations gain logical breaks and selective semantic colors.
+
+The follow-up review separates observed failures from causal diagnoses in transfer,
+recurrent memory, and teacher forcing; qualifies minibatch independence in the
+presence of BatchNorm; and repairs the transfer exercise's comparison contract.
+A two-mixture arithmetic witness precedes multi-head notation, and the BERT lab
+distinguishes pretraining exposure from supervised holdout. Longer labs name a short
+mechanism-reading route alongside the complete study. HTML panels gain an independent
+**Reveal results** control so checking evidence need not expose the implementation.
+Chapter tables now keep horizontal overflow local, while inline code examples wrap
+without changing source listings. A prediction-fence regression test protects the
+Chapter 16 prompt from being printed as literal markup.
+
+The live PDFs are identified as rolling conversions. Their Part transition prose
+uses KOMA preambles, and a two-clean-build gate checks full PDF hashes plus consumed
+inputs under the same recorded toolchain. No release tag is changed. See
+`docs/reviews/2026-09-04-learning-loop.md` for verification and pagination evidence.
 
 # Rolling post-v1.3 — executable notebook path (September 2, 2026)
 

@@ -130,8 +130,8 @@ runs from the last layer to the first.
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Compute the backward blame signal through every layer.
+1. Set layer widths, weights, and activation gates for one backward path.
+2. Propagate the output blame signal through each transposed map and gate.
 :::
 
 ```{python}
@@ -269,9 +269,11 @@ _ = torch.manual_seed(6050)
 ::::
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Cache the forward pass, propagate blame backward, and form both gradients.
-3. Report or visualize the measured result.
+1. Construct the regression batch and both layers' parameters.
+2. Cache hidden activations and compute the mean squared error.
+3. Propagate blame backward and form weight and bias gradients by hand.
+4. Rebuild the same graph with differentiable parameter copies.
+5. Compare every hand-derived gradient with autograd.
 :::
 
 ```{python}
@@ -286,12 +288,14 @@ W1, b1 = torch.randn(h, d) * 0.3, torch.zeros(h)
 W2, b2 = torch.randn(1, h) * 0.3, torch.zeros(1)
 
 # forward pass -- cache everything the backward pass will need
+# [2]
 Z1 = X @ W1.T + b1                            # (n, h)
 A1 = torch.sigmoid(Z1)                        # (n, h)
 Z2 = A1 @ W2.T + b2                           # (n, 1)
 L = ((Z2.squeeze() - y) ** 2).mean()
 
 # backward pass -- the four equations (batch-averaged)
+# [3]
 sig_prime = A1 * (1 - A1)                     # sigma'(z) = sigma(z)(1 - sigma(z))
 delta2 = 2 * (Z2.squeeze() - y)[:, None] / n  # eq. 1 (identity output: no gate)
 delta1 = (delta2 @ W2) * sig_prime            # eq. 2: blame through W^T, gated
@@ -301,14 +305,14 @@ grads = {                                     # eqs. 3 & 4: blame out x signal i
 }
 
 # same network, autograd's turn
+# [4]
 params = {k: v.clone().requires_grad_(True) for k, v in
           {"W1": W1, "b1": b1, "W2": W2, "b2": b2}.items()}
 A1_ = torch.sigmoid(X @ params["W1"].T + params["b1"])
 L_ = (((A1_ @ params["W2"].T + params["b2"]).squeeze() - y) ** 2).mean()
-# [2]
 L_.backward()
 
-# [3]
+# [5]
 for k in grads:
     gap = (grads[k] - params[k].grad).abs().max()
     print(f"{k}: max |ours - autograd| = {gap:.2e}")
@@ -392,9 +396,9 @@ class Value:
 ::::
 :::: {.plan-code}
 ::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Verify micro autograd.
-3. Report or visualize the measured result.
+1. Construct one scalar neuron and its squared prediction error.
+2. Run reverse-mode differentiation through the scalar graph.
+3. Compare its weight gradient with the analytic chain rule.
 :::
 
 ```{python}
@@ -436,9 +440,9 @@ gradients.
 
 :::: {.plan-code}
 ::: {.plan}
-1. Prepare the inputs and fixed settings for the example.
-2. Backpropagate twice without clearing the leaf gradient.
-3. Report or visualize the measured result.
+1. Create a leaf weight vector and a scalar expression that depends on it.
+2. Backpropagate once through that expression.
+3. Inspect gradient accumulation and the effects of detaching or disabling recording.
 :::
 
 ```{python}
@@ -577,10 +581,9 @@ learning-rate-$0.1$ update actually change the first layer's stored weights?
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
-1. Define the reusable `gradient_diagnostic` helper.
-2. Prepare the inputs and fixed settings for the example.
-3. Implement the depth experiment.
-4. Report or visualize the measured result.
+1. Measure gradients retained at successive layers of a deep network.
+2. Compare gradient magnitude through matched sigmoid and ReLU stacks.
+3. Check whether the first-layer gradients can change stored float32 weights.
 :::
 
 ```{python}
@@ -621,19 +624,18 @@ def gradient_diagnostic(
         "first_size": grad32.numel(),
     }
 
-# [2]
 diagnostics = {}
 plt.figure(figsize=(6.2, 3.4))
-# [3]
+# [2]
 for act, color in [(nn.Sigmoid, "#232D4B"), (nn.ReLU, "#E57200")]:
     diagnostics[act.__name__] = gradient_diagnostic(act)
     plt.semilogy(diagnostics[act.__name__]["norms"], "o-", ms=3,
                  color=color, label=act.__name__)
 plt.xlabel("layer (0 = closest to input)")
 plt.ylabel(r"$\|\partial L / \partial W^{(l)}\|$")
-# [4]
 plt.legend(); plt.tight_layout(); plt.show()
 
+# [3]
 for name, result in diagnostics.items():
     print(f"{name:7s}: max|g0|={result['first_max']:.2e}; "
           f"nonzero={result['first_nonzero']}/{result['first_size']}; "
@@ -677,10 +679,9 @@ network:
 
 :::: {.plan-code}
 ::: {.plan}
-1. Define the reusable `signal_std` helper.
-2. Prepare the inputs and fixed settings for the example.
-3. Signal energy vs depth.
-4. Report or visualize the measured result.
+1. Propagate a batch through random layers and measure activation spread.
+2. Choose the widths, depths, and initialization scales to compare.
+3. Compare signal spread as the same depth increases.
 :::
 
 ```{python}
@@ -716,7 +717,6 @@ plt.figure(figsize=(6.2, 3.4))
 for (name, fn), color in zip(schemes.items(), ["#5379AA", "#722F37", "#E57200"]):
     plt.semilogy(signal_std(fn), color=color, label=name)
 plt.xlabel("layer"); plt.ylabel("std of activations")
-# [4]
 plt.legend(); plt.tight_layout(); plt.show()
 ```
 ::::
@@ -739,14 +739,23 @@ Close the book for one minute and run the chain rule backward.
 - How do activation derivatives and initialization together control gradient scale with depth?
 :::
 
+::: {.callout-tip collapse="true"}
+## Check your reasoning
+
+If the next layer's weight matrix is $m\times n$, its output gradient has $m$
+entries. Only the transpose returns an $n$-entry input gradient in @eq-bp2:
+it adds the contributions from all downstream units; it does not invert the forward
+map. An open ReLU gate contributes a factor of one, but the weight matrices can
+still shrink or amplify that signal. Return to @eq-bp2 and trace those two factors
+separately.
+:::
+
 ## Okay, so — the chain rule, organized
 
 1. **The graph.** Any network is a computation graph; the forward pass computes and
    caches, the backward pass multiplies local derivatives in reverse.
-2. **The blame signal.** $\delta^{(l)} = \partial L / \partial \vect{z}^{(l)}$ turns
-   the tangle into four equations: start at the output (@eq-bp1), propagate through
-   $\matr{W}^\top$ and the gate (@eq-bp2), then read off weight and bias gradients
-   (@eq-bp3, @eq-bp4). The backward sweep costs a small constant multiple of the
+2. **The blame signal.** $\delta^{(l)} = \partial L / \partial \vect{z}^{(l)}$
+   organizes four equations (@eq-bp1 through @eq-bp4). The backward sweep costs a small constant multiple of the
    forward graph's operations, for *every* gradient at once.
 3. **We verified it**: our hand-built equations match `torch.autograd` to
    $10^{-8}$, and a tiny scalar `Value` class reproduces the machinery end to end.
