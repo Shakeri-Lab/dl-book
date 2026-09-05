@@ -81,6 +81,20 @@ Unknown, missing, or shadowed options fail. Pre-training fixtures exercise all
 authored option headers with synthetic print-only cells; they are pipeline
 checks, not replacements for actual book execution.
 
+Every native cell has a stable authored `label`, including silent setup and
+plotting cells. Pinned Quarto 1.10.18's bundled `bin/quarto.js` assigns an initial
+`shortUuid()` at line 33171, replaces it from an authored label at lines
+33200–33207, and otherwise uses that random notebook ID for HTML cell wrappers
+at lines 33531–33540. Explicit labels prevent this incidental frozen-HTML entropy;
+they do not replace existing figure/caption IDs. Final `manual_seed` calls assign
+their returned Generator instead of displaying its process-specific memory
+address. The source audit enforces both rules. A pre-training plotting-only
+control runs a seeded three-number witness and a fixed-coordinate line plot in
+two independent temporary projects, with an explicit `SOURCE_DATE_EPOCH`.
+It requires all native frozen JSON, PNG, and PDF bytes to match across projects.
+This isolates basic engine/plotting stability from solver or training behavior;
+whole-book exact-repeat verification remains necessary.
+
 After execution the source/input inventory must be unchanged, the native cells
 and kernels must cover the entire predeclared plan, and HTML/LaTeX ordered stdout
 must be byte-identical. The completed schema-2 fingerprint binds the original

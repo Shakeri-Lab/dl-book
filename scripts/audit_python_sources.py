@@ -23,6 +23,45 @@ INCLUDE_FENCE_RE = re.compile(
 VISIBLE_LINE_LIMIT = 88
 
 
+def audit_stable_cell_identity(text: str, label: str, errors: list[str]) -> None:
+    """Keep incidental notebook identity and seed-return repr out of freezes.
+
+    Quarto 1.10.18's jupyterFromMarkdown assigns shortUuid() to unlabeled cells;
+    jupyterCellWithOptions then uses that ID in HTML cell wrappers. Require labels
+    even for currently silent cells so adding an output cannot introduce entropy.
+    """
+    seen: set[str] = set()
+    for ordinal, match in enumerate(FENCE_RE.finditer(text), 1):
+        source = match.group(2)
+        directives = []
+        for line in re.split(r"\r\n?|\n", source):
+            if not line.startswith("#|"):
+                break
+            directives.append(line)
+        labels = [line for line in directives if re.match(r"#\|\s*label\s*:", line)]
+        cell = f"{label}:cell-{ordinal}"
+        valid = (re.fullmatch(r"#\|\s*label:\s*([a-z][a-z0-9-]*)\s*", labels[0])
+                 if len(labels) == 1 else None)
+        if valid is None:
+            errors.append(f"{cell}: require one stable lower-kebab-case label in leading options")
+        elif valid.group(1) in seen:
+            errors.append(f"{cell}: duplicate native cell label {valid.group(1)!r}")
+        else:
+            seen.add(valid.group(1))
+        try:
+            tree = ast.parse(source)
+        except SyntaxError:
+            continue  # parse_source owns the syntax diagnostic.
+        if tree.body and isinstance(tree.body[-1], ast.Expr):
+            last = tree.body[-1].value
+            if (isinstance(last, ast.Call) and isinstance(last.func, ast.Attribute)
+                    and last.func.attr == "manual_seed"):
+                errors.append(
+                    f"{cell}: assign the final manual_seed return (for example `_ = ...`) "
+                    "instead of displaying a process-specific Generator repr"
+                )
+
+
 def audit_visible_width(
     source: str,
     label: str,
@@ -111,6 +150,7 @@ def main() -> None:
     include_count = 0
     for chapter in sorted((ROOT / "chapters").rglob("*.qmd")):
         text = chapter.read_text()
+        audit_stable_cell_identity(text, str(chapter.relative_to(ROOT)), errors)
         for index, match in enumerate(FENCE_RE.finditer(text), start=1):
             cell_count += 1
             source = match.group(2)

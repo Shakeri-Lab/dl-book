@@ -87,6 +87,15 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > requires a new final-source checkpoint and four new runs, not relabeling the
 > rejected trials. See the dated review ledger for the exact evidence paths.
 >
+> **September 5 independent-repeat stop:** both original Linux A bundles are now
+> available. Printed outputs and paired sidecars match, but the full frozen bytes
+> do not. Incidental cell IDs and a Generator address account for seven JSON
+> differences; four figure files have real coordinate/pixel differences. The
+> `98349c8` Linux/Mac runs were cancelled before continuing this cycle. Diagnose
+> the small least-squares/plotting witnesses in the saved image, repair source
+> entropy, and rerun only after those checks. No tolerance or acceptance status
+> was changed. See `docs/reviews/2026-09-05-linux-repeat-diagnosis.md`.
+>
 > ## Previous stable and web-only state — 2026-09-02
 >
 > The manuscript is **complete and released**: tag **v1.3** carries the stable
