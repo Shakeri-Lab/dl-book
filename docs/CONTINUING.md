@@ -66,6 +66,18 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > assembly and canonical-notebook helpers once the new proof is installed;
 > direct Quarto assembly may mutate freeze library files or attempt execution.
 >
+> **September 5 prose reconciliation, not evidence promotion:** the complete Linux
+> run `33937390845` of source `1da26e860d6fa76ae6b76dede273748b1439128c` is also
+> rejected by the old silent-cell checker. Its retained raw results support draft
+> corrections before final-source C reruns: Chapter 11's paired free-running
+> advantage is modest and reverses in two seeds; Chapter 13's advantage is earlier
+> learning plus a small final error gap, with its parameter/compute confounds intact.
+> Chapter 14's within-run positional result changes numerically, and its hardcoded
+> LSTM comparison is now identified as historical. Current benchmark details and
+> exact JSON/native-cell sources are in `docs/arc-seeds.md` §2 and
+> `build/diagnostic-prose-33937390845-early.md`. Older dated summaries below retain
+> their historical values and do not describe an accepted new canonical freeze.
+>
 > ## Previous stable and web-only state — 2026-09-02
 >
 > The manuscript is **complete and released**: tag **v1.3** carries the stable

@@ -96,6 +96,47 @@ and `guarded-assembly-real.log` runs all 14 assembly tests, including deliberate
 cache-miss refusal. The source/Plan/book/anchor audits also pass in that directory.
 These are pipeline regression tests, not completion of the full-book migration.
 
+**September 5, 04:27 UTC: first Linux diagnostic completed.** Actions run
+`33937390845` also failed the old rendered-cell checker after executing all
+54 planned unit/format combinations. Original source, logs, startup probes,
+wheel records, and eight paired sidecars remain under
+`build/canonical-1da26e8-33937390845/`, with the failed status intact and no
+completed fingerprint. The read-only diagnostic inventory is
+`build/diagnostic-linux-a-33937390845/diagnostic.json`; it verifies the source
+archive SHA-256
+`4b9bd1ab0e2cab94f4d9f0b3319a4d21ee109d88b090782e3ec6bebcbf53316a`,
+251 source hashes, 68 exact wheel records, and 287 ordered native completions
+per format. All 133 stdout blocks agree between HTML and TeX. Nineteen units
+differ from the historical reference, including unquoted last-bit residuals.
+This is diagnostic consistency, not acceptance under the repaired proof contract.
+The actual image archive was not independently rehashed in this local inspection.
+
+The diagnostic outputs guide a prose-only reconciliation before final-source
+reruns. Exact per-unit JSON paths, native cells, hashes, and editing decisions
+are recorded in `docs/reviews/2026-09-05-provisional-numerics.md` and the detailed
+working reports `build/diagnostic-prose-33937390845-{root,early,late}.md`.
+The key corrections preserve claim boundaries: Chapter 8 still establishes no
+expected clean-accuracy ranking; Chapter 11's paired advantage is modest and
+reverses in two seeds; Chapter 13's matching recomputed baseline removes the
+historical inherited-number dependency; Chapter 16's CNN wins four, not five,
+clean pairs. The experiment interlude rounds its prose contrasts to reflect
+seed variation. Pinned Rivanna evidence and strict numerical identities remain
+unchanged. No native numerical AST, random stream, control, or gate is changed
+by this reconciliation. Final-source execution must confirm every revised quote.
+
+Final-source preparation also exposed a source-audit scope bug: the thread-budget
+inventory recursively counted retained diagnostic QMD copies under `build/`.
+It now scans only the authored chapter tree and `index.qmd`, retaining the exact
+nine-consumer contract. Six thread-policy tests check ignored artifact copies
+and rejected new/missing manuscript consumers. Diagnostic files were not deleted
+to silence the check. All 287 native Python ASTs still match source A, and the
+source/Plan/book/anchor audits pass. An independent boundary review reran 45
+provenance, 16 coverage, eight portable-driver, and 16 container tests, plus both
+real-Quarto fixtures; no final-source launch blocker was found. A future
+diagnostic improvement is to retain partial notebooks when Quarto itself exits
+unsuccessfully, not only when semantic coverage fails after a completed render;
+logs, preflight, and frozen partial artifacts already survive that failure.
+
 The final assembly path is being guarded separately: public/reference notebooks
 use the exact canonical image, while HTML and PDF assembly reuse frozen output in
 disposable snapshots with a refusing kernel. A source chapter's complete hash must

@@ -44,10 +44,10 @@ statistical-contract coherence passes.*
 | Test-time memory fits the past; could a layer evaluate futures before answering? | test-time-regression interlude and ch. 18's outside-the-policy judge | epilogue — scalar Riccati planning and the learnable-planner frontier | done |
 | "Hard address, learned content" (embeddings); soften the address too | ch. 11 | ch. 13 — harvest the phrase | done |
 | Masking = "which positions it may not look at"; causal mask preview | ch. 11 | ch. 14 (causal mask turns transformer into LM) | done |
-| Date-normalization benchmark (leak-free packed seq2seq: 53.8% @ epoch 6, 95.0% @ 12 on 400 unambiguous validation sources; 93.1% on the final 437-source unambiguous test; alignment invisible) | ch. 11 | ch. 13 — attention: 93.25% @ 6, 99.75% @ 12, 100.0% final test; validation alignment visible | done |
+| Date-normalization benchmark: five-seed paired TF/free-running study, fixed 400-source validation and 437-source test populations; early learning and endpoint errors separated | ch. 11 | ch. 13 — freshly paired fixed-state/attention study; faster learning, a small endpoint error gap, and validation-only routing audit (§2) | narrative done; numerical migration pending |
 | Cross-attention repairs the fixed handoff, but the surrounding RNNs remain serial; the Q/K/V operator does not care where its inputs came from | ch. 13 | ch. 14 (replace recurrence with self-attention; derive and implement multi-head) | done |
 | Beam search / decoding machinery | ch. 11 | chs. 15/17 (LM decoding reuses it) | ambient |
-| Book-corpus char-LM (held-out fixed-window loss 1.89; sampled training minibatch 1.42; babble) | ch. 10 | ch. 14 (exact corpus/split/evaluation and historical window schedule; positional transformer 1.9190, no-position 2.3405) | done |
+| Book-corpus char-LM (held-out fixed-window loss 1.89; sampled training minibatch 1.42; babble) | ch. 10 | ch. 14 (same corpus/split/evaluation and historical window schedule; controlled positional ablation, historical LSTM comparator distinguished) | narrative done; numerical migration pending |
 | Visibility is a modeling decision | ch. 14 | ch. 15 (causal generation versus bidirectional masked-token representation learning) | done |
 | Global routing trades away locality bias | ch. 14 | ch. 16 ✓ (patch-token ViT rematches convolution's built-in geometry in a five-seed scratch regime) | done |
 | Short paths, dense work; global access is not free memory | ch. 14 | test-time-regression interlude — one regression, three memory contracts; Appendix C — the $Bhn^2$ ledger becomes the FlashAttention I/O case study | done |
@@ -73,36 +73,55 @@ statistical-contract coherence passes.*
 ## 2. Cross-chapter running benchmarks
 
 1. **The shift cliff** (Fashion subset, `shift_right`): ch. 6 MLP 80.8→42.0% @2px →
-   ch. 8 LeNet 82.5→62.3% → ch. 9 NiN+GAP 76.2→66.5% from 0→4px (a much gentler
+   ch. 8 LeNet 81.3→62.0% → ch. 9 NiN+GAP 76.7→68.3% from 0→4px (a much gentler
    slope, not exact invariance). Ch. 16 reopens the mechanism in a separate,
    explicitly paired scratch regime: on the fixed 1,000-fit/200-validation Chapter
-   6 split over seeds 6050–6054, the tiny CNN averages 73.9→58.9% and the tiny ViT
-   70.1→25.2% from 0→4px. The CNN wins all five clean pairs and all 25
+   6 split over seeds 6050–6054, the tiny CNN averages 73.9→59.0% and the tiny ViT
+   70.4→24.8% from 0→4px. The CNN wins four of five clean pairs and 24 of 25
    seed×shift validation comparisons; on the already-opened 600-image benchmark,
-   clean means are 77.9% and 73.3%. Parameters differ by 3.0%, minibatch schedules
+   clean means are 77.9% and 73.9%. Parameters differ by 3.0%, minibatch schedules
    are pair-exact, and the dot-product proxies differ by 1.8%; architecture-specific
    tuning and pretraining are not matched, and zero filling clips the right edge.
-   Closed.
-2. **The date task** (synthetic, ch. 11): 9,000 unique source strings split
-   8,000/500/500 for train/validation/test, with zero exact-source overlap between
-   every pair. The packed seq2seq baseline is 53.8% at epoch 6 and 95.0% at epoch 12
-   on a fixed subset of 400 of the 421 unambiguous validation strings. After 25 epochs,
-   the single final audit scores 93.1% on all 437 unambiguous test strings (naive
-   padding: 34.3%; free-running: 99.1%). Ch. 13 closes the benchmark with the exact
-   generator/split and an additive-attention LSTM: 93.25% at epoch 6, 99.75% at
-   epoch 12, and 100.0% on the one final 437-source test audit. Across the fixed
-   validation subset, its first four decoder rows place 97.469% of their mass on
-   contextual states indexed by the source-year region. Schedule matched, but not
-   parameters (+59.2%), compute, or minibatch order. Closed.
+   Chapter 8, 9, and 16 values are pending final-source validation, from rejected Linux
+   diagnostic run `33937390845`, source `1da26e860d6fa76ae6b76dede273748b1439128c`:
+   `build/canonical-1da26e8-33937390845/_freeze/chapters/part2/08-cnn/execute-results/html.json`
+   cell 17 and `chapters/part2/09-modern-cnns-transfer/execute-results/html.json`
+   cell 7 under that same `_freeze/` root; Chapter 16 uses
+   `chapters/part4/16-vit-scaling/execute-results/html.json`, native cells 6–11.
+   This is not evidence promotion.
+2. **The date task** (synthetic, ch. 11; September 5 diagnostic revision,
+   **not accepted reference evidence**): 9,000 unique source strings split
+   8,000/500/500 with zero exact-source overlap. Five seeds 6050–6054 use fixed
+   400-source validation and 437-source unambiguous test populations. Separating
+   the batch RNG replaces the old single-seed schedule; it is not merely four
+   extra seeds. TF/free-running pairs share initialization and every permutation.
+   At 25 epochs, TF errors average 4.00 (sample SD 2.45), free-running 2.20
+   (1.10); the paired accuracy advantage is +0.412 pp (SD 0.713), with TF winning
+   two pairs. Ch. 13 retrains the same fixed-state baseline, not a pasted curve:
+   attention has zero errors in all five runs, a paired +0.915 pp (SD 0.561).
+   Earlier validation learning is the larger contrast. Seed 6050's first four
+   decoder rows place 96.833% of their mass on source-year positions; the largest
+   weight lies there in 99.500% of 1,600 rows. Batch order is now matched, but
+   parameters (+59.2%), computation, and cross-architecture initialization are not.
+   These values come from Linux run `33937390845`, source
+   `1da26e860d6fa76ae6b76dede273748b1439128c`: under
+   `build/canonical-1da26e8-33937390845/_freeze/`,
+   `chapters/part3/11-encoder-decoder/execute-results/html.json` cell 7 and
+   `chapters/part4/13-attention/execute-results/html.json` cell 12.
+   The original run remains rejected; final-source C reruns must validate the revision.
 3. **The book-corpus LM**: ch. 10 char-LSTM (hidden 128, random fixed windows of
    100 characters, 2,501 updates) finishes at sampled-minibatch loss 1.42 and
-   held-out fixed-window loss 1.8881. Ch. 14 reconstructs its exact historical
+   held-out fixed-window loss printed as 1.89. Ch. 14 reconstructs its historical
    2,501-by-64 window schedule and matches corpus, split, evaluation, optimizer,
    clipping, targets, and parameter scale. Its 132,488-parameter positional
-   Transformer reaches train/held-out 1.1132/1.9190; the no-position ablation reaches
-   1.8672/2.3405. Position improves 0.4214 (18.0%) in the matched seed; the LSTM
-   narrowly remains ahead by 0.0309 (1.64%). The positional repeat is tensor- and
-   metric-exact. Closed. The shared corpus is the committed 148,594-character
+   Transformer reaches train/held-out 1.1138/1.9052; the no-position ablation reaches
+   1.8590/2.3500 in the same rejected Linux diagnostic run, native cells 15–17 of
+   `chapters/part4/14-self-attention-transformer/execute-results/html.json` under
+   the artifact root above. Position improves 0.4448 (18.9%) in this seed. The
+   LSTM comparator 1.888110429 remains a historical constant in cell 17, not a
+   newly measured four-decimal baseline. Do not promote its small separation into
+   a stable architecture ranking. Final-source C repeat validation remains pending.
+   The shared corpus is the committed 148,594-character
    `data/book-corpus-ch1-9.txt` snapshot from commit `24ae3a6321ad901497776180b8e107490750adc9`, not a glob of live
    prose. Both chapters assert its SHA-256, so copyedits cannot silently move the
    benchmark.

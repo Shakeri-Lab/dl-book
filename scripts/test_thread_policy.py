@@ -7,8 +7,11 @@ import os
 from pathlib import Path
 import re
 from types import SimpleNamespace
+import tempfile
 import unittest
 from unittest.mock import patch
+
+from audit_book_contract import thread_budget_consumer_errors
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -41,6 +44,47 @@ def thread_calls(path: Path) -> list[ast.Call]:
 
 
 class ThreadPolicyTests(unittest.TestCase):
+    def consumer_fixture(self, root: Path) -> None:
+        for relative in [*BUDGETS, "part5/18-alignment.qmd"]:
+            path = root / "chapters" / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text('os.environ.get("DLBOOK_TORCH_NUM_THREADS", "6")\n')
+        (root / "index.qmd").write_text("# Preface\n")
+
+    def test_consumer_inventory_ignores_retained_source_copies(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.consumer_fixture(root)
+            self.assertEqual(thread_budget_consumer_errors(root), [])
+            for relative in (
+                "build/source-a/chapters/part5/18-alignment.qmd",
+                "sources/diagnostic-copy.qmd",
+                "_book/retained-source.qmd",
+            ):
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text('os.environ.get("DLBOOK_TORCH_NUM_THREADS", "6")\n')
+            self.assertEqual(thread_budget_consumer_errors(root), [])
+
+    def test_new_authored_consumer_still_fails(self):
+        for relative in ("chapters/part1/extra.qmd", "index.qmd"):
+            with self.subTest(relative=relative), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.consumer_fixture(root)
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text('os.environ.get("DLBOOK_TORCH_NUM_THREADS", "6")\n')
+                self.assertEqual(thread_budget_consumer_errors(root), [
+                    "authored thread-budget consumers differ from the explicit runtime policy"
+                ])
+
+    def test_missing_expected_consumer_still_fails(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.consumer_fixture(root)
+            (root / "chapters/part5/18-alignment.qmd").write_text("# Alignment\n")
+            self.assertTrue(thread_budget_consumer_errors(root))
+
     def test_budget_defaults_and_explicit_overrides(self):
         for relative, default in BUDGETS.items():
             path = ROOT / "chapters" / relative

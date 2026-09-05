@@ -270,6 +270,34 @@ def fail(errors: list[str], message: str) -> None:
     errors.append(message)
 
 
+def thread_budget_consumer_errors(root: Path) -> list[str]:
+    """Require the exact authored set of explicit PyTorch thread-budget readers."""
+    # Retained execution sources under build/ and other diagnostic copies are
+    # evidence, not new authored consumers of the runtime policy.
+    authored = list((root / "chapters").rglob("*.qmd"))
+    if (root / "index.qmd").is_file():
+        authored.append(root / "index.qmd")
+    consumers = [
+        path.relative_to(root).as_posix()
+        for path in sorted(authored)
+        if NOTEBOOK_TORCH_THREAD_OVERRIDE in path.read_text()
+    ]
+    expected = sorted([
+        "chapters/interludes/learning-by-experiment.qmd",
+        "chapters/interludes/making-pca-learnable.qmd",
+        "chapters/part4/14-self-attention-transformer.qmd",
+        "chapters/part4/15-bert-pretraining.qmd",
+        "chapters/part4/16-vit-scaling.qmd",
+        "chapters/part5/17-peft-quantization.qmd",
+        "chapters/part5/18-alignment.qmd",
+        "chapters/part5/19-generative.qmd",
+        "chapters/part5/20-multimodal.qmd",
+    ])
+    return ([] if consumers == expected else [
+        "authored thread-budget consumers differ from the explicit runtime policy"
+    ])
+
+
 def workflow_job(text: str, name: str) -> str:
     """Return one top-level GitHub Actions job block from workflow source."""
 
@@ -997,27 +1025,7 @@ def main() -> None:
     )
     if alignment_source.count("import os\n") != 1:
         fail(errors, "Chapter 18 hidden setup must import os exactly once")
-    thread_override_consumers = [
-        path.relative_to(ROOT).as_posix()
-        for path in sorted(ROOT.rglob("*.qmd"))
-        if NOTEBOOK_TORCH_THREAD_OVERRIDE in path.read_text()
-    ]
-    expected_thread_consumers = sorted([
-        "chapters/interludes/learning-by-experiment.qmd",
-        "chapters/interludes/making-pca-learnable.qmd",
-        "chapters/part4/14-self-attention-transformer.qmd",
-        "chapters/part4/15-bert-pretraining.qmd",
-        "chapters/part4/16-vit-scaling.qmd",
-        "chapters/part5/17-peft-quantization.qmd",
-        "chapters/part5/18-alignment.qmd",
-        "chapters/part5/19-generative.qmd",
-        "chapters/part5/20-multimodal.qmd",
-    ])
-    if thread_override_consumers != expected_thread_consumers:
-        fail(
-            errors,
-            "authored thread-budget consumers differ from the explicit runtime policy",
-        )
+    errors.extend(thread_budget_consumer_errors(ROOT))
     if alignment_thread_contract not in alignment_source:
         fail(
             errors,
