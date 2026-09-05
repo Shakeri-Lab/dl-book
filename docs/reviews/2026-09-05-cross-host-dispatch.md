@@ -187,3 +187,63 @@ or rejected-run status is changed. A matching pair is the acceptance test, not a
 host-selection loop seeking a favorable result. No freeze has been promoted.
 Publication, a stable release tag, and a durable runtime archive are separate
 steps; neither a new tag nor a runtime-archive prerelease is authorized here.
+
+## Full candidate result: the cross-vendor repeat fails
+
+The complete executions of source `6cb78af4a3a605e8221b6f980004f54f1623cd1d`
+finished on September 5. Run `33970821144` used AMD EPYC 7763; the independent
+saved-image repeat `33971040577` used Intel Xeon 6973P-C. Both execution steps
+completed, but the repeat workflow correctly failed its final exact comparison.
+The image is `sha256:bb26412521c1666551966e9a0ed20269f076f8e6580147f124ecbb1a6d8c4560`.
+The original compressed archive was downloaded and rehashed locally, matching
+`0b573488eac4cc75991198826ac618623353dda12d2e8ba30655a45e2844d23c`.
+
+Original candidate bundles are retained at
+`build/canonical-6cb78af-33970821144` and
+`build/canonical-6cb78af-33971040577`. Their original fingerprint hashes are,
+respectively, `89d321d35d963336a95bd7e4b9c3b5cb6cfc79e3458439a515d28ba7ae6c4520`
+and `6c2c27d2ff89a75b74776aab70692853ca0562eb09e25b35e7bb06607a1e6102`.
+Independent physical validation found no source, coverage, image, software,
+thread, or recorded effective-dispatch mismatch. Within each execution, all
+133 HTML/TeX stdout pairs agree. Across hosts, 32 native stdout outputs in
+12 units differ; 59 of the 274 frozen files differ (24 execution JSON files and
+35 figures). Raw results differ in all four paired studies, while Chapter 11/13
+recorded initialization and batch-schedule hashes agree across these two Linux
+hosts. This does not prove that every other random draw was identical.
+
+The actual comparison receipt is
+`build/canonical-comparison-6cb78af/exact-repeat.json`, SHA-256
+`2bd98d820be0604de4092acd859f23b17d000fcf699a81cd47f4a266ad73541d`.
+Running `scripts/compare_freeze_runs.py` locally with `--require-all-files`
+reproduced that receipt byte-for-byte and exited 1. The independent validation
+report is `build/linux-validation-6cb78af.json`, SHA-256
+`f531744bfd9d7197b4b08450ba246ee56f8c78a33757537c652661281404567b`.
+The real pretraining checks also passed; they did not establish full-book
+cross-vendor identity. In particular, the recorded authored least-squares
+witness hashes agree between these hosts, so the earlier least-squares repair
+does not account for the remaining differences.
+
+The smallest retained arithmetic witness is Chapter 19's forward-noise audit
+(native cell 7, stdout block 3). Its printed schedule and marginal moments agree,
+but the maximum sequential/direct discrepancy is `1.83e-15` on AMD and
+`1.78e-15` on Intel. It contains no model training or matrix multiplication.
+It therefore offers a short discriminator before another full execution:
+compare schedule and square-root coefficients, generated random-input hashes,
+and a separately labeled fixed-input replay. A math-library implementation,
+random-input transform, or subsequent arithmetic difference remains to be
+isolated. Matching dispatcher observations are not proof that every internal
+math routine takes the same path.
+
+Mac comparisons remain **provisional**, with the first Linux execution merely
+a named comparator, not an accepted reference. Existing gates fail in seven
+chapters at Mac 1/1 and six at Mac 6/1. Source-bound results and exact field
+interpretations are retained in `build/paired-review-6cb78af-results.json`
+(SHA-256 `6bbeddd64ebc72d151bcb8ae407ab5f4d2ff7f518d2920453044d88415d58e4a`),
+`build/paired-review-6cb78af-unchanged-gates.json`
+(`d7ae59d02507b9643cbd64822ff7fc876bccc84bb64f4e6493f94c1bea8fca29`), and
+`build/paired-review-6cb78af-findings.md`
+(`b45609f062a05487f5f185aafdd050358611ab71cb93e326be46e9da0567d22a`).
+That review also identifies stale Chapter 8/9/11/13 prose. Those provisional
+values have not been transplanted into the manuscript. No tolerance, frozen
+output, original status, main branch, or release has been changed; no reference
+has been promoted. Runtime evidence stays outside the published website.

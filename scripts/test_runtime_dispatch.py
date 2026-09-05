@@ -108,6 +108,54 @@ class DispatchProbeTests(unittest.TestCase):
         self.assertIn("torch.linalg.lstsq", spec["cells"]["closed-form"])
         self.assertNotIn("for epoch", "\n".join(spec["cells"].values()))
 
+    def test_forward_spec_binds_exact_setup_and_audit_without_training(self):
+        root = Path(__file__).resolve().parents[1]
+        forward = probe.source_spec(root)["forward"]
+        self.assertEqual(forward["source_sha256"], probe.shared.digest(root / probe.FORWARD_SOURCE))
+        self.assertEqual(tuple(forward["cells"]), probe.FORWARD_LABELS)
+        self.assertIn("torch.set_default_dtype(torch.float64)", forward["cells"]["generative-setup"])
+        self.assertIn("torch.randn(diffusion_steps, audit_x0.numel())", forward["cells"]["forward-diffusion-audit"])
+        self.assertNotIn("optimizer", "\n".join(forward["cells"].values()))
+
+    def test_forward_only_plan_keeps_two_processes_and_one_existing_policy(self):
+        self.assertEqual(probe.selected_policies(True), ("compatible-numpy",))
+        self.assertEqual(probe.selected_policies(False), tuple(probe.POLICIES))
+        workflow = (Path(probe.__file__).resolve().parents[1] / ".github/workflows/canonical-probe.yml").read_text()
+        self.assertIn("--forward-only --processes 2", workflow)
+
+    def test_hash_only_records_are_explicit_not_malformed_raw_records(self):
+        value = {"hash_only": True, "dtype": "torch.float64", "shape": [100, 10000],
+                 "byte_order": "little", "nbytes": 8000000, "sha256": "a" * 64}
+        probe.validate_record(value)
+        for mutation in ({"nbytes": 1}, {"sha256": "bad"}, {"bytes_hex": "00"}, {"values": []}):
+            with self.subTest(mutation=mutation), self.assertRaises(ValueError):
+                probe.validate_record({**value, **mutation})
+
+    def test_forward_source_ast_tampering_fails_before_execution(self):
+        spec = probe.source_spec(Path(probe.__file__).resolve().parents[1])["forward"]
+        spec["cells"]["forward-diffusion-audit"] += "\nraise RuntimeError('changed')\n"
+        with self.assertRaisesRegex(ValueError, "authored cell changed"):
+            probe.checked_ast(spec, "forward-diffusion-audit")
+
+    def test_forward_report_exposes_recorded_schedule_stdout_discrepancy(self):
+        # Exact changed line from the rejected 6cb78af native-cell-7 pair:
+        # build/canonical-6cb78af-{33970821144,33971040577}/_freeze/
+        # chapters/part5/19-generative/execute-results/html.json.
+        rows = [row for row in workers() if row["policy"] == "compatible-numpy"]
+        for row, maximum in zip(rows, ("1.83e-15", "1.78e-15")):
+            row.update(chapter19_stdout=f"largest sequential/direct difference at T: {maximum}\n",
+                       rational_stdout="separate fixed-input control\n")
+        rows[1]["outputs"]["exp"] = record(2.)
+        result = probe.summarize(rows, 2, forward_only=True)
+        self.assertEqual(tuple(result["policies"]), ("compatible-numpy",))
+        self.assertEqual(result["reference_policy"], "compatible-numpy")
+        report = result["policies"]["compatible-numpy"]
+        self.assertEqual(report["stdout_variants"], {"chapter19_stdout": 2, "rational_stdout": 1})
+        self.assertEqual(report["within_policy_differences"]["outputs"], ["exp"])
+        self.assertFalse(result["promotion_eligible"])
+        with self.assertRaisesRegex(ValueError, "process inventory"):
+            probe.summarize(rows[:1], 2, forward_only=True)
+
     def test_parent_import_is_stdlib_only(self):
         code = "import probe_runtime_dispatch; import sys; assert 'torch' not in sys.modules; assert 'numpy' not in sys.modules"
         subprocess.run([sys.executable, "-c", code], cwd=Path(probe.__file__).parent, check=True, timeout=10)
@@ -134,6 +182,59 @@ class DispatchProbeTests(unittest.TestCase):
                 self.assertIn("numpy_show_runtime", document["runtime_after"])
                 self.assertEqual(stat.S_IMODE(output.stat().st_mode), 0o644)
                 self.assertEqual(stat.S_IMODE(output.with_suffix(".preflight.json").stat().st_mode), 0o644)
+
+    @unittest.skipUnless(os.environ.get("DLBOOK_TEST_RUNTIME_DISPATCH") == "1", "opt-in exact authored forward-cell test")
+    def test_forward_two_fresh_workers_match_uninstrumented_authored_cell(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            spec = root / "case-spec.json"
+            probe.write(spec, probe.source_spec(Path(probe.__file__).resolve().parents[1]))
+            env = probe.environment("compatible-numpy")
+            rows = []
+            for repeat in range(2):
+                output = root / f"forward-{repeat}.json"
+                subprocess.run([sys.executable, str(Path(probe.__file__).resolve()), "--worker", "compatible-numpy",
+                                "--forward-only", "--case-spec", str(spec), "--output", str(output)],
+                               env=env, check=True, timeout=30)
+                rows.append(json.loads(output.read_text()))
+                self.assertLess(output.stat().st_size, 500_000)
+            reference_code = '''
+import contextlib, io, json, sys, torch
+import probe_runtime_dispatch as probe
+torch.set_num_threads(1)
+torch.set_num_interop_threads(1)
+spec = json.loads(open(sys.argv[1]).read())["forward"]
+namespace, printed = {}, io.StringIO()
+with contextlib.redirect_stdout(printed):
+    for label in probe.FORWARD_LABELS:
+        exec(compile(spec["cells"][label], spec["source_file"], "exec"), namespace)
+names = ("audit_x0", "step_noises", "sequential_state", "direct_state", "accumulated_noise", "effective_epsilon")
+print(json.dumps({"stdout": printed.getvalue(), "tensors": {name: probe.tensor_hash(namespace[name]) for name in names},
+                  "rng": probe.tensor_hash(torch.get_rng_state())}))
+'''
+            result = subprocess.run([sys.executable, "-c", reference_code, str(spec)],
+                                    cwd=Path(probe.__file__).parent, env=env, capture_output=True,
+                                    text=True, check=True, timeout=30)
+            reference = json.loads(result.stdout)
+            for row in rows:
+                self.assertEqual(row["chapter19_stdout"], reference["stdout"])
+                self.assertEqual(row["forward_default_dtype"], "torch.float64")
+                self.assertEqual(row["inputs"]["rng/after_authored_cell"], reference["rng"])
+                for name, value in reference["tensors"].items():
+                    group = "inputs" if name in ("audit_x0", "step_noises") else "outputs"
+                    self.assertEqual(row[group][f"authored/{name}"], value)
+                self.assertEqual(row["inputs"]["authored/step_noises"]["shape"], [100, 10000])
+                self.assertEqual(row["inputs"]["authored/step_noises"]["nbytes"], 8_000_000)
+                self.assertNotIn("bytes_hex", row["inputs"]["authored/step_noises"])
+                self.assertNotIn("values", row["inputs"]["authored/step_noises"])
+                self.assertEqual(row["outputs"]["schedule/scalar_sqrt_diffusion_alpha"]["shape"], [100])
+                self.assertIn("Not manuscript output", row["rational_control"])
+                self.assertIn("after the untouched authored execution", row["coefficient_observation"])
+            report = probe.summarize(rows, 2, forward_only=True)
+            self.assertEqual(report["policies"]["compatible-numpy"]["stdout_variants"]["chapter19_stdout"], 1)
+            for row in rows:
+                self.assertEqual(row["inputs"], rows[0]["inputs"])
+                self.assertEqual(row["outputs"], rows[0]["outputs"])
 
 
 if __name__ == "__main__":
