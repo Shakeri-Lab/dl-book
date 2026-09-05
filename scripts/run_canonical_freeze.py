@@ -31,7 +31,7 @@ def execution_command(quarto: str, unit: str, fmt: str) -> list[str]:
     if fmt not in {"latex", "html"}:
         raise ValueError("Native execution formats must be latex or html")
     return [quarto, "render", unit, "--profile", "execution", "--to", fmt,
-            "--no-clean", "--execute-daemon", "0"]
+            "--no-clean", "--execute-daemon", "0", "-M", "keep-ipynb:true"]
 
 
 def validate_execution_profile(work: Path) -> dict:
@@ -112,24 +112,34 @@ def run_logged(command: list[str], log: Path, work: Path, env: dict) -> None:
         raise RuntimeError(f"Command exited {result.returncode}; retained log: {log}")
 
 
-def check_completed(work: Path, freeze: Path, plan: dict, probes: Path) -> dict:
-    # Use the existing native-ordinal parser, never a tolerance comparison.
+def check_completed(work: Path, freeze: Path, plan: dict, probes: Path,
+                    source_files: dict | None = None) -> dict:
+    # Rendered Markdown cannot prove silent-cell execution. Require the retained
+    # source-bound native notebooks as well; never infer missing executed counts.
     sys.path.insert(0, str(work / "scripts"))
-    from audit_frozen_stdout import stdout_records, native_execution_ordinals
+    from audit_frozen_stdout import stdout_records
+    from audit_execution_coverage import validate_coverage_manifest
     expected = {str(Path(unit).with_suffix("")) + f"/execute-results/{fmt}.json"
                 for unit in plan["units"] for fmt in ("html", "tex")}
     actual = {p.relative_to(freeze).as_posix() for p in freeze.glob("**/execute-results/*.json")}
     if actual != expected:
         raise ValueError(f"Fresh freeze coverage differs; missing={sorted(expected-actual)}, extra={sorted(actual-expected)}")
+    provenance = probes.parent
+    manifest_path = provenance / "execution-coverage.json"
+    if not manifest_path.is_file():
+        raise ValueError("Retained executed-notebook coverage proof is required; rendered Markdown is insufficient")
+    if source_files is None:
+        source_files = json.loads((provenance / "source-before.json").read_text())["files_sha256"]
+    coverage_errors = validate_coverage_manifest(json.loads(manifest_path.read_text()), provenance,
+                                                 plan, freeze, source_files)
+    if coverage_errors:
+        raise ValueError("Executed native-cell coverage differs: " + "; ".join(coverage_errors))
     blocks = 0
     for unit, specification in plan["units"].items():
         records = []
         for fmt in ("html", "tex"):
             path = freeze / Path(unit).with_suffix("") / "execute-results" / f"{fmt}.json"
             raw = path.read_text()
-            wanted = list(range(1, len(specification["native_cells_sha256"]) + 1))
-            if native_execution_ordinals(raw) != wanted:
-                raise ValueError(f"Executed native-cell coverage differs: {unit} ({fmt})")
             records.append(stdout_records(raw))
         if records[0] != records[1]:
             raise ValueError(f"HTML/LaTeX stdout is not byte-identical: {unit}")
@@ -189,8 +199,19 @@ def main() -> int:
                 probes = provenance / "kernel-startup"
                 env = {**os.environ, "DLBOOK_KERNEL_PROBE_DIR": str(probes),
                        "PYTHONPATH": str(work / "code")}
+                from audit_execution_coverage import (
+                    build_coverage_manifest, kept_notebook_path, record_execution,
+                )
+                run_logged([sys.executable, str(installed / "canonical_python.py"),
+                            str(work / "scripts/freeze_provenance.py"), "preflight",
+                            "--root", str(work), "--source-commit", args.source_commit,
+                            "--run-id", args.run_id, "--runtime-kind", "canonical",
+                            "--output", str(provenance / "preflight.json")],
+                           output / "logs/preflight.log", work, env)
+                coverage = []
                 for unit in sorted(plan["units"]):
                     for fmt in ("latex", "html"):
+                        notebook = kept_notebook_path(work, unit)
                         print(f"Fresh canonical execution: {unit} ({fmt})", flush=True)
                         log = output / "logs" / (unit.removesuffix(".qmd").replace("/", "--") + f"--{fmt}.log")
                         run_logged(execution_command("quarto", unit, fmt),
@@ -198,7 +219,12 @@ def main() -> int:
                                                "DLBOOK_PAIRED_EVIDENCE_DIR": str(
                                                    provenance / "paired-evidence" / Path(unit).with_suffix("") / fmt
                                                )})
-                status["execution"] = check_completed(work, work / "_freeze", plan, probes)
+                        coverage.append(record_execution(work, work / "_freeze", provenance, unit, fmt,
+                                                         log, notebook, plan["units"][unit]))
+                write_json(provenance / "execution-coverage.json", build_coverage_manifest(
+                    provenance, plan, work / "_freeze", current["files_sha256"], coverage))
+                status["execution"] = check_completed(work, work / "_freeze", plan, probes,
+                                                       current["files_sha256"])
                 run_logged([sys.executable, str(installed / "canonical_python.py"),
                             str(work / "scripts/audit_date_study_stdout.py"),
                             "--freeze-root", str(work / "_freeze")],
@@ -221,6 +247,8 @@ def main() -> int:
                            "--container-digest", args.container_digest,
                            "--base-image-digest", config["base_image_digest"], "--run-id", args.run_id,
                            "--execution-probes", str(probes),
+                           "--preflight", str(provenance / "preflight.json"),
+                           "--execution-coverage-manifest", str(provenance / "execution-coverage.json"),
                            "--paired-evidence-manifest", str(provenance / "paired-evidence-manifest.json")]
                 run_logged(capture, output / "logs/capture.log", work, env)
                 status["passed"] = True

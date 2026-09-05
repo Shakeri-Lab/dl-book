@@ -58,6 +58,44 @@ and distinguishes same-seed end-to-end differences from comparisons whose realiz
 initialization and batch-order hashes also match. Within-runtime paired controls
 and the Chapter 11/13 baseline remain exact; no numerical gate is widened.
 
+**September 5, 03:15 UTC: coverage-checker defect.** Both Mac runs completed
+their 54 unit/format executions, then failed the same final native-cell audit.
+The checker incorrectly required every executed cell to appear in frozen display
+Markdown. The retained Mac-six logs show the complete ordered execution sequence;
+the omitted cells in six units are explicitly `echo: false` and silent. A tiny
+real-Quarto witness confirms that a silent setup can execute, supply a variable to
+the next cell, and disappear from the frozen display while remaining in the
+retained executed notebook. The corrected coverage contract must therefore bind
+those notebooks to source, unit, format, and kernel, without exempting silent cells
+from execution checks. Validation will run after each unit, not only at the end.
+
+The two failed statuses remain untouched. They are diagnostic evidence, not
+accepted calibration or promotion bundles. A separate read-only check of
+`build/portability-1da26e8/mac-six/_freeze/` found byte-identical HTML/TeX stdout
+in all 133 blocks; its eight raw paired sidecars also passed source/protocol and
+format-parity checks (`build/coverage-diagnosis/mac-six-paired-audit.json`). Those
+checks do not replace the missing successful provenance. Final-source Linux and
+Mac profiles must be rerun under the corrected coverage contract.
+
+The repair retains a pre-execution runtime observation even on failure and uses
+schema-2 completed fingerprints to bind the original source, executed notebooks,
+completion logs, and frozen output. Every observed kernel must match the recorded
+software/thread/environment policy; internally consistent kernels using the wrong
+thread count are not sufficient. The weekly native reporter uses the same physical
+coverage checks with an explicitly report-only HTML plan. It does not borrow the
+canonical two-format identity claim. Host provenance tooling explicitly pins its
+YAML parser, and real-Quarto smoke tests use writable system temporary directories
+when the source mount is read-only.
+
+Repair verification is recorded under `build/coverage-diagnosis/verification/`:
+`scripts-unit.log` reports 264 tests with six opt-in integration skips;
+`container-unit.log` reports 16 passing tests; `quarto-unit-smoke.log` runs both
+real unit-isolation/silent-cell tests; `native-portability-real.log` runs all 15
+native-report tests including actual execution followed by guarded assembly;
+and `guarded-assembly-real.log` runs all 14 assembly tests, including deliberate
+cache-miss refusal. The source/Plan/book/anchor audits also pass in that directory.
+These are pipeline regression tests, not completion of the full-book migration.
+
 The final assembly path is being guarded separately: public/reference notebooks
 use the exact canonical image, while HTML and PDF assembly reuse frozen output in
 disposable snapshots with a refusing kernel. A source chapter's complete hash must

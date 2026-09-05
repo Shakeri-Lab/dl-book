@@ -28,6 +28,9 @@ exact saved image, not a later rebuild from a tag, is reused for the second run.
 The image includes the pip installation report. The completed fingerprint records
 the actual Python, packages, Torch build configuration, loaded numerical-library
 binary hashes, CPU observations, source/data hashes, and dispatch/thread settings.
+The same runtime is observed before execution in `provenance/preflight.json`.
+That original observation survives a failed run; by itself it is never eligible
+for promotion.
 
 ## Execution contract
 
@@ -62,10 +65,21 @@ These observations report startup state, not a claim to have continuously
 monitored every cell. The portable `kernel_start.py` can also support explicitly
 labeled Mac diagnostics with another thread budget; those are not canonical runs.
 
+Each render retains Quarto's actual executed notebook before the next format can
+overwrite it. An immediate per-unit audit checks source and cell options, ordered
+execution counts, successful completion logs, and notebook stdout against the
+frozen output. Silent `echo:false` cells still require execution evidence even
+when Quarto omits them from rendered Markdown; visible-cell counts are not
+execution counts. Disabled or cell-cached execution fails the audit. Raw
+notebooks, source copies, and logs are retained even when that audit fails.
+
 After execution the source/input inventory must be unchanged, the native cells
 and kernels must cover the entire predeclared plan, and HTML/LaTeX ordered stdout
-must be byte-identical. Partial results and logs survive failure, but a failed
-execution does not receive a completed fingerprint.
+must be byte-identical. The completed schema-2 fingerprint binds the original
+preflight and physical `execution-coverage.json` proof, which is checked again
+during comparison, promotion, and derived-edition assembly. Partial results and
+logs survive failure, but a failed execution does not receive a completed
+fingerprint. Never manufacture missing proof for a historical failed run.
 
 ## Two independent Actions runs
 
@@ -86,9 +100,12 @@ and `image_run_id`. Its existing-workflow entry point is **Execution Audit**:
    figures and execution JSON. Both must pass this workflow's promotion gate.
    A CPU-model difference is recorded, not used to excuse changed bytes.
 
-Both run bundles contain `_freeze/`, `provenance/fingerprint.json`, the clean
-`source-before.json`, `execution-plan.json`, attributed `kernel-startup/*.json`,
-the wheel installation report, status, and per-unit execution logs. No job writes
+Both run bundles contain `_freeze/`, `provenance/fingerprint.json`, the original
+`preflight.json`, clean `source-before.json`, `execution-plan.json`, attributed
+`kernel-startup/*.json`, `execution-coverage.json` with its physical notebooks,
+source copies and logs, the wheel installation report, and status. Independent
+notebook timing metadata need not match; authenticated source, execution
+coverage, raw paired measurements, and every frozen file must. No job writes
 to `main`, replaces the checkout's freeze, dispatches itself, or publishes Pages.
 Source/data/recipe changes require a new first run and a matching independent
 repeat; reusing an image built for another source is rejected.
@@ -127,6 +144,7 @@ python container/test_contract.py
 The resolver is a maintenance tool, not a build step. It uses published file
 hashes, allows only compatible binary wheels, and fails when a wheel is missing.
 The focused tests check source isolation, exact wheel/policy pins, same-image
-validation, and fail-closed unit/format/kernel coverage. Docker image installation
+validation, and fail-closed unit/format/kernel coverage. The existing pre-training
+Quarto smoke gate also runs a real silent-cell fixture in both formats. Docker image installation
 and real execution still require the two CI runs; passing these fixtures is not
 an execution claim.

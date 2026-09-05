@@ -1,6 +1,8 @@
 """Fail-closed fixture tests for source and canonical repeat provenance."""
 
 from copy import deepcopy
+from argparse import Namespace
+import hashlib
 import json
 from pathlib import Path
 import shutil
@@ -10,7 +12,69 @@ from unittest.mock import patch
 
 from compare_freeze_runs import compare_runs, validate_fingerprint
 from audit_frozen_stdout import native_execution_ordinals, stdout_records
-from freeze_provenance import execution_plan, freeze_inventory, json_digest, sha256, source_fingerprint, write_json
+from freeze_provenance import SCHEMA_VERSION, execution_plan, freeze_inventory, json_digest, load_preflight, preflight_observation, sha256, source_fingerprint, write_json
+
+SOURCE = "# Test\n\n```{python}\nprint('value: 1.234')\n```\n"
+CONFIG = "execute:\n  freeze: true\n"
+
+
+def bind_probes(freeze: Path, document: dict) -> None:
+    for index, probe in enumerate(document["execution_probes"]):
+        path = freeze.parent / "provenance/kernel-startup" / f"fixture-{index}.json"
+        write_json(path, probe["observation"])
+        probe.update(artifact=path.name, sha256=sha256(path))
+
+
+def bind_preflight(freeze: Path, document: dict) -> None:
+    observation = {"schema_version": 1, "kind": "execution-preflight", "promotion_eligible": False,
+                   "runtime_kind": document["kind"], "created_utc": "2026-09-04T00:00:00Z",
+                   "source": {key: document["source"][key] for key in ("commit", "input_sha256")},
+                   "run": deepcopy(document["run"]), "cpu": deepcopy(document["cpu"]),
+                   "runtime": deepcopy(document["runtime"])}
+    path = freeze.parent / "provenance/preflight.json"
+    write_json(path, observation)
+    document["preflight"] = {"artifact": path.name, "sha256": sha256(path), "observation": observation}
+
+
+def bind_coverage(freeze: Path, document: dict, *, source_root: Path | None = None) -> None:
+    """Synthetic physical evidence, used only by isolated fixture tests."""
+    from audit_execution_coverage import evidence_record
+    from audit_python_sources import FENCE_RE
+    provenance = freeze.parent / "provenance"
+    config_path = provenance / "execution-sources/_quarto.yml"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text((source_root / "_quarto.yml").read_text() if source_root else CONFIG)
+    rows = []
+    for unit, specification in document["execution_plan"]["units"].items():
+        source = (source_root / unit).read_text() if source_root else SOURCE
+        path = provenance / "execution-sources" / unit
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(source)
+        bodies = [match.group(2) for match in FENCE_RE.finditer(source)]
+        for fmt in ("html", "tex"):
+            raw_path = freeze / Path(unit).with_suffix("") / "execute-results" / f"{fmt}.json"
+            if not raw_path.is_file():
+                continue
+            raw = raw_path.read_text()
+            outputs = stdout_records(raw)
+            notebook = provenance / "executed-notebooks" / Path(unit).with_suffix("") / f"{fmt}.ipynb"
+            write_json(notebook, {"nbformat": 4, "nbformat_minor": 5, "metadata": {}, "cells": [
+                {"cell_type": "code", "source": body, "metadata": {}, "execution_count": i,
+                 "outputs": [{"output_type": "stream", "name": "stdout", "text": value}
+                             for ordinal, value in outputs if ordinal == i]}
+                for i, body in enumerate(bodies, 1)]})
+            log = provenance / "execution-logs" / Path(unit).with_suffix("") / f"{fmt}.log"
+            log.parent.mkdir(parents=True, exist_ok=True)
+            log.write_text(f"Executing '{Path(unit).stem}.quarto_ipynb'\n" + "".join(
+                f"  Cell {i}/{len(bodies)}: ''...Done\n" for i in range(1, len(bodies) + 1)))
+            rows.append({"unit": unit, "format": fmt, "source": evidence_record(path, provenance),
+                         "notebook": evidence_record(notebook, provenance), "log": evidence_record(log, provenance),
+                         "freeze_sha256": sha256(raw_path), "native_ordinals": list(range(1, len(bodies) + 1)),
+                         "rendered_ordinals": native_execution_ordinals(raw)})
+    manifest = {"schema_version": 1, "passed": True, "config": evidence_record(config_path, provenance), "units": rows}
+    path = provenance / "execution-coverage.json"
+    write_json(path, manifest)
+    document["execution_coverage"] = {"manifest_sha256": sha256(path), "manifest": manifest}
 
 
 def execution(stdout: str = "value: 1.234\n", ordinal: int = 1) -> dict:
@@ -21,7 +85,8 @@ def execution(stdout: str = "value: 1.234\n", ordinal: int = 1) -> dict:
 
 
 def fingerprint(freeze: Path, run_id: str) -> dict:
-    inputs = {"chapters/test.qmd": "a" * 64, "container/Dockerfile": "b" * 64,
+    inputs = {"chapters/test.qmd": hashlib.sha256(SOURCE.encode()).hexdigest(),
+              "_quarto.yml": hashlib.sha256(CONFIG.encode()).hexdigest(), "container/Dockerfile": "b" * 64,
               "container/requirements-linux-amd64.lock": "c" * 64}
     runtime = {
         "python": {"version": "3.12.12", "full_version": "Python 3.12.12 test",
@@ -33,8 +98,8 @@ def fingerprint(freeze: Path, run_id: str) -> dict:
                               "version": "test", "num_threads": 1}],
         "environment": {"OMP_NUM_THREADS": "1", "MKL_CBWR": "AVX2"},
     }
-    return {
-        "schema_version": 1, "kind": "canonical", "created_utc": "2026-09-04T00:00:00Z",
+    document = {
+        "schema_version": SCHEMA_VERSION, "kind": "canonical", "created_utc": "2026-09-04T00:00:00Z",
         "run": {"id": run_id, "ci": {"GITHUB_RUN_ID": run_id}},
         "source": {"commit": "a" * 40, "dirty": False, "files_sha256": inputs,
                    "input_sha256": json_digest(inputs)},
@@ -46,8 +111,8 @@ def fingerprint(freeze: Path, run_id: str) -> dict:
         "cpu": {"machine": "x86_64", "system": "Linux", "processors": [{"vendor": "Intel", "model": "fixture A", "flags": ["avx2"]}]},
         "execution_plan": {"schema_version": 1, "source_commit": "a" * 40,
                            "source_input_sha256": json_digest(inputs), "formats": ["html", "tex"],
-                           "units": {"chapters/test.qmd": {"source_sha256": "a" * 64,
-                                                          "native_cells_sha256": ["e" * 64],
+                           "units": {"chapters/test.qmd": {"source_sha256": inputs["chapters/test.qmd"],
+                                                          "native_cells_sha256": [hashlib.sha256(b"print('value: 1.234')\n").hexdigest()],
                                                           "included_sources_sha256": {}}}},
         "execution_probes": [{"observation": {
             "python": runtime["python"], "torch": runtime["torch"],
@@ -56,13 +121,17 @@ def fingerprint(freeze: Path, run_id: str) -> dict:
         }} for fmt in ("html", "latex")],
         "freeze_files_sha256": freeze_inventory(freeze),
     }
+    bind_preflight(freeze, document)
+    bind_probes(freeze, document)
+    bind_coverage(freeze, document)
+    return document
 
 
 class FreezeProvenanceTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
         self.bundles = [self.root / "one", self.root / "two"]
         for bundle, run_id in zip(self.bundles, ("run-1", "run-2")):
             result = bundle / "_freeze/chapters/test/execute-results"
@@ -74,6 +143,10 @@ class FreezeProvenanceTests(unittest.TestCase):
         path = self.bundles[1] / "provenance/fingerprint.json"
         document = json.loads(path.read_text())
         fn(document)
+        bind_preflight(self.bundles[1] / "_freeze", document)
+        bind_probes(self.bundles[1] / "_freeze", document)
+        if "execution_plan" in document:
+            bind_coverage(self.bundles[1] / "_freeze", document)
         write_json(path, document)
 
     def compare(self):
@@ -99,7 +172,7 @@ class FreezeProvenanceTests(unittest.TestCase):
             write_json(path, {"value": index})
             sidecars[path.name] = sha256(path)
         manifest = {"passed": True, "plan_sha256": "1"*64,
-                    "source_sha256": {"chapters/test.qmd": "a"*64}, "files_sha256": sidecars}
+                    "source_sha256": {"chapters/test.qmd": hashlib.sha256(SOURCE.encode()).hexdigest()}, "files_sha256": sidecars}
         path = provenance / "paired-evidence-manifest.json"
         write_json(path,manifest)
         fingerprint_path = provenance / "fingerprint.json"
@@ -108,6 +181,7 @@ class FreezeProvenanceTests(unittest.TestCase):
         document["source"]["input_sha256"] = json_digest(document["source"]["files_sha256"])
         document["execution_plan"]["source_input_sha256"] = document["source"]["input_sha256"]
         document["paired_evidence"] = {"manifest_sha256": sha256(path),"manifest":manifest}
+        bind_preflight(bundle / "_freeze", document)
         write_json(fingerprint_path,document)
 
     def test_raw_evidence_is_bound_even_when_stdout_matches(self):
@@ -155,6 +229,7 @@ class FreezeProvenanceTests(unittest.TestCase):
             path = provenance/"kernel-startup"/f"fixture-{index}.json"
             write_json(path,probe["observation"])
             probe.update(artifact=path.name,sha256=sha256(path))
+        bind_preflight(bundle / "_freeze", document)
         write_json(provenance/"fingerprint.json",document)
         return bundle,document
 
@@ -205,7 +280,7 @@ class FreezeProvenanceTests(unittest.TestCase):
             document["execution_plan"]["source_input_sha256"] = document["source"]["input_sha256"]
             document["execution_plan"]["units"]["chapters/test.qmd"]["source_sha256"] = "d" * 64
         self.mutate_fingerprint(change)
-        self.assertFailure("source/input identity differs")
+        self.assertFailure("Original executed source differs")
 
     def test_source_inventory_digest_is_checked(self):
         self.mutate_fingerprint(lambda document: document["source"].update(input_sha256="0" * 64))
@@ -236,7 +311,7 @@ class FreezeProvenanceTests(unittest.TestCase):
             write_json(self.bundles[1] / f"_freeze/chapters/test/execute-results/{fmt}.json", execution(ordinal=2))
         self.mutate_fingerprint(lambda document: document.update(
             freeze_files_sha256=freeze_inventory(self.bundles[1] / "_freeze")))
-        self.assertFailure("moved from native cell")
+        self.assertFailure("rendered-cell coverage differs")
 
     def test_changed_file_without_refingerprinting_fails(self):
         write_json(self.bundles[1] / "_freeze/chapters/test/execute-results/html.json", execution("other\n"))
@@ -253,7 +328,7 @@ class FreezeProvenanceTests(unittest.TestCase):
         (self.bundles[1] / "_freeze/chapters/test/execute-results/tex.json").unlink()
         self.mutate_fingerprint(lambda document: document.update(
             freeze_files_sha256=freeze_inventory(self.bundles[1] / "_freeze")))
-        self.assertFailure("missing TeX counterpart")
+        self.assertFailure("every planned unit/format")
 
     def test_source_inventory_gitless_ignores_outputs_includes_real_inputs(self):
         root = self.root / "sources"
@@ -307,7 +382,15 @@ class FreezeProvenanceTests(unittest.TestCase):
             probe["observation"]["torch"]["num_threads"] = 6
             document["execution_probes"].append(probe)
         self.mutate_fingerprint(change)
-        self.assertFailure("executed kernels disagree")
+        self.assertFailure("differs from authenticated runtime")
+
+    def test_all_kernels_must_match_driver_threads_and_dispatch(self):
+        def change(document):
+            for probe in document["execution_probes"]:
+                probe["observation"]["torch"]["num_threads"] = 6
+                probe["observation"]["environment"]["OMP_NUM_THREADS"] = "6"
+        self.mutate_fingerprint(change)
+        self.assertFailure("differs from authenticated runtime")
 
     def test_different_commit_does_not_pass_on_identical_files(self):
         def change(document):
@@ -343,8 +426,10 @@ class FreezeProvenanceTests(unittest.TestCase):
                 probe = deepcopy(document["execution_probes"][0])
                 probe["observation"].update(unit="chapters/missing.qmd", format=fmt)
                 document["execution_probes"].append(probe)
+            bind_preflight(bundle / "_freeze", document)
+            bind_probes(bundle / "_freeze", document)
             write_json(path, document)
-        self.assertFailure("predeclared QMD/format set")
+        self.assertFailure("every planned unit/format")
 
     def test_empty_stdout_cannot_hide_skipped_native_cells(self):
         for fmt in ("html", "tex"):
@@ -352,7 +437,7 @@ class FreezeProvenanceTests(unittest.TestCase):
                        {"result": {"markdown": "empty render\n"}})
         self.mutate_fingerprint(lambda document: document.update(
             freeze_files_sha256=freeze_inventory(self.bundles[1] / "_freeze")))
-        self.assertFailure("native execution coverage differs")
+        self.assertFailure("rendered-cell coverage differs")
 
     def test_probe_must_be_bound_to_executed_unit(self):
         self.mutate_fingerprint(lambda document: document["execution_probes"][0]["observation"].update(unit="wrong.qmd"))
@@ -400,6 +485,98 @@ class FreezeProvenanceTests(unittest.TestCase):
         self.assertTrue(report["numerical_repeat_passed"])
         self.assertFalse(report["full_freeze_byte_identical"])
         self.assertEqual(report["freeze_file_differences"][0]["category"], "figure-asset")
+
+    def test_preflight_only_is_never_a_completed_fingerprint(self):
+        path = self.bundles[1] / "provenance/fingerprint.json"
+        document = json.loads(path.read_text())
+        write_json(path, document["preflight"]["observation"])
+        self.assertFailure("schema/kind")
+
+    def test_original_preflight_file_is_required(self):
+        (self.bundles[1] / "provenance/preflight.json").unlink()
+        self.assertFailure("Original preflight artifact")
+
+    def test_preflight_runtime_cannot_be_rewritten_post_execution(self):
+        path = self.bundles[1] / "provenance/fingerprint.json"
+        document = json.loads(path.read_text())
+        document["runtime"]["torch"]["num_threads"] = 6
+        write_json(path, document)
+        self.assertFailure("Original preflight observation differs")
+
+    def test_missing_raw_executed_notebook_is_rejected(self):
+        (self.bundles[1] / "provenance/executed-notebooks/chapters/test/html.ipynb").unlink()
+        self.assertFailure("Unsafe/missing execution evidence")
+
+    def test_actual_execution_log_is_required(self):
+        (self.bundles[1] / "provenance/execution-logs/chapters/test/tex.log").write_text("failed execution")
+        self.assertFailure("evidence checksum mismatch")
+
+    def test_notebook_metadata_may_differ_between_exact_repeats(self):
+        provenance = self.bundles[1] / "provenance"
+        path = provenance / "fingerprint.json"
+        document = json.loads(path.read_text())
+        manifest = document["execution_coverage"]["manifest"]
+        row = manifest["units"][0]
+        notebook = provenance / row["notebook"]["artifact"]
+        value = json.loads(notebook.read_text())
+        value["metadata"] = {"kernel_id": "different-per-run-id"}
+        write_json(notebook, value)
+        row["notebook"]["sha256"] = sha256(notebook)
+        coverage_path = provenance / "execution-coverage.json"
+        write_json(coverage_path, manifest)
+        document["execution_coverage"]["manifest_sha256"] = sha256(coverage_path)
+        write_json(path, document)
+        report = compare_runs(*self.bundles, require_all_files=True)
+        self.assertTrue(report["passed"], report)
+
+    def test_silent_hidden_cell_requires_real_notebook_execution(self):
+        source_root = self.root / "hidden-source"
+        (source_root / "chapters").mkdir(parents=True)
+        source = SOURCE + "\n```{python}\n#| echo: false\nunused = 2\n```\n"
+        (source_root / "chapters/test.qmd").write_text(source)
+        (source_root / "_quarto.yml").write_text(CONFIG)
+        for bundle in self.bundles:
+            path = bundle / "provenance/fingerprint.json"
+            document = json.loads(path.read_text())
+            files = document["source"]["files_sha256"]
+            files["chapters/test.qmd"] = sha256(source_root / "chapters/test.qmd")
+            document["source"]["input_sha256"] = json_digest(files)
+            document["execution_plan"] = execution_plan(source_root, document["source"])
+            bind_preflight(bundle / "_freeze", document)
+            bind_coverage(bundle / "_freeze", document, source_root=source_root)
+            write_json(path, document)
+        self.assertTrue(self.compare()["passed"])
+        provenance = self.bundles[1] / "provenance"
+        path = provenance / "fingerprint.json"
+        document = json.loads(path.read_text())
+        row = document["execution_coverage"]["manifest"]["units"][0]
+        notebook_path = provenance / row["notebook"]["artifact"]
+        notebook = json.loads(notebook_path.read_text())
+        notebook["cells"].pop()  # Coherent hash rewrite must not hide skipped execution.
+        write_json(notebook_path, notebook)
+        row["notebook"]["sha256"] = sha256(notebook_path)
+        coverage_path = provenance / "execution-coverage.json"
+        write_json(coverage_path, document["execution_coverage"]["manifest"])
+        document["execution_coverage"]["manifest_sha256"] = sha256(coverage_path)
+        write_json(path, document)
+        self.assertFailure("exact ordered native execution counts")
+
+    def test_preflight_capture_preserves_actual_observations_without_claiming_success(self):
+        source_root = self.root / "preflight-source"
+        source_root.mkdir()
+        (source_root / "index.qmd").write_text("# Before execution\n")
+        args = Namespace(root=source_root, source_commit="a" * 40, run_id="started-only", runtime_kind="local")
+        with patch("freeze_provenance.runtime_observation", return_value={"observed": "runtime"}), \
+             patch("freeze_provenance.cpu_observation", return_value={"observed": "cpu"}):
+            document = preflight_observation(args)
+        self.assertFalse(document["promotion_eligible"])
+        self.assertEqual(document["runtime"], {"observed": "runtime"})
+        path = self.root / "preflight.json"
+        write_json(path, document)
+        bound = load_preflight(path, source=document["source"], kind="local", run_id="started-only")
+        self.assertEqual(bound["sha256"], sha256(path))
+        with self.assertRaisesRegex(ValueError, "not bound"):
+            load_preflight(path, source=document["source"], kind="local", run_id="another-run")
 
 
 if __name__ == "__main__":

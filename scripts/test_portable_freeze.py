@@ -92,8 +92,8 @@ class PortablePolicyTests(unittest.TestCase):
         freeze.mkdir()
         (freeze / "witness.json").write_text("{}")
         calls = []
-        plan = {"units": {"chapters/witness.qmd": {"native_cells_sha256": ["hash"]}}}
-        source = SimpleNamespace(source_fingerprint=lambda *_: {}, execution_plan=lambda *_: plan,
+        plan = {"formats": ["html", "tex"], "units": {"chapters/witness.qmd": {"native_cells_sha256": ["hash"]}}}
+        source = SimpleNamespace(source_fingerprint=lambda *_: {"files_sha256": {}}, execution_plan=lambda *_: plan,
                                  ENVIRONMENT_KEYS=freeze_provenance.ENVIRONMENT_KEYS)
         complete = {"html_tex_stdout_identical": True}
         common = SimpleNamespace(load_source_tools=lambda _: source, validate_source=lambda *_: None,
@@ -102,18 +102,24 @@ class PortablePolicyTests(unittest.TestCase):
             run_logged=lambda *args: calls.append(args), check_completed=lambda *_: complete)
         with patch.object(portable, "load_execution_tools", return_value=common), \
              patch.object(portable, "observe_selection", return_value=self.selection([])), \
-             patch.object(portable, "validate_portable_probes") as verified:
+             patch.object(portable, "validate_portable_probes") as verified, \
+             patch("audit_execution_coverage.record_execution", return_value={}) as recorded, \
+             patch("audit_execution_coverage.build_coverage_manifest", return_value={}):
             result = portable.execute_snapshot(self.work, output, {}, "a" * 40, "mac-six",
                 self.python, "quarto", self.root / "jupyter", 6, "1770000000")
         self.assertIs(result, complete)
-        self.assertEqual(len(calls), 5)  # latex, HTML, semantic audit, evidence audit, local capture
-        self.assertEqual([calls[i][0][calls[i][0].index("--to") + 1] for i in range(2)], ["latex", "html"])
-        self.assertEqual([calls[i][0][calls[i][0].index("--profile") + 1] for i in range(2)], ["execution", "execution"])
-        self.assertEqual(calls[0][3]["DLBOOK_EXECUTION_UNIT"], "chapters/witness.qmd")
-        self.assertEqual(calls[0][3]["DLBOOK_EXECUTION_FORMAT"], "latex")
+        self.assertEqual(len(calls), 6)  # preflight, latex, HTML, semantic audit, evidence audit, local capture
+        self.assertIn("preflight", calls[0][0])
+        self.assertEqual(recorded.call_count, 2)
+        self.assertEqual([calls[i][0][calls[i][0].index("--to") + 1] for i in (1, 2)], ["latex", "html"])
+        self.assertEqual([calls[i][0][calls[i][0].index("--profile") + 1] for i in (1, 2)], ["execution", "execution"])
+        self.assertEqual(calls[1][3]["DLBOOK_EXECUTION_UNIT"], "chapters/witness.qmd")
+        self.assertEqual(calls[1][3]["DLBOOK_EXECUTION_FORMAT"], "latex")
         capture = calls[-1][0]
         self.assertEqual(capture[capture.index("--kind") + 1], "local")
         self.assertNotIn("--container-digest", capture)
+        self.assertIn("--preflight", capture)
+        self.assertIn("--execution-coverage-manifest", capture)
         self.assertIn(str(self.work / "container/canonical_python.py"), capture)
         self.assertTrue((output / "_freeze/witness.json").is_file())
         verified.assert_called_once()

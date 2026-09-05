@@ -2,9 +2,12 @@
 from __future__ import annotations
 from copy import deepcopy
 import io
+import hashlib
 import json
 from pathlib import Path
 import re
+import shutil
+import subprocess
 import sys
 import tarfile
 import tempfile
@@ -21,6 +24,7 @@ from resolve_wheel_lock import linux_tags
 from run_canonical_freeze import (check_completed, execution_command, extract_source,
                                  validate_execution_profile, validate_source, write_json)
 from runtime_policy import ENVIRONMENT_KEYS as KERNEL_KEYS
+from audit_execution_coverage import build_coverage_manifest, record_execution
 
 
 def frozen(value="metric: 0.125\n", ordinal=1):
@@ -74,10 +78,19 @@ class RecipeTests(unittest.TestCase):
         for fmt in ("html", "latex"):
             self.assertEqual(execution_command("quarto", "chapters/test.qmd", fmt),
                              ["quarto", "render", "chapters/test.qmd", "--profile", "execution",
-                              "--to", fmt, "--no-clean", "--execute-daemon", "0"])
+                              "--to", fmt, "--no-clean", "--execute-daemon", "0", "-M", "keep-ipynb:true"])
         with tempfile.TemporaryDirectory() as temporary:
             with self.assertRaisesRegex(ValueError, "execution-only profile"):
                 validate_execution_profile(Path(temporary))
+
+    def test_image_owned_runner_defers_source_helper_imports(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            runner = Path(temporary) / "run_canonical_freeze.py"
+            shutil.copy2(ROOT / "scripts/run_canonical_freeze.py", runner)
+            result = subprocess.run([sys.executable, "-I", str(runner), "--help"],
+                                    cwd=temporary, capture_output=True, text=True, timeout=15)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("--source-archive", result.stdout)
 
 
 class IsolationTests(unittest.TestCase):
@@ -139,13 +152,32 @@ class CoverageTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
         self.freeze = self.root / "_freeze"
-        self.probes = self.root / "probes"
-        self.plan = {"units": {"chapters/test.qmd": {"native_cells_sha256": ["a" * 64]}}}
+        self.probes = self.root / "provenance/kernel-startup"
+        body = 'print("metric: 0.125")\n'
+        source = "# Test\n\n```{python}\n" + body + "```\n"
+        unit = "chapters/test.qmd"
+        (self.root / "chapters").mkdir()
+        (self.root / unit).write_text(source)
+        (self.root / "_quarto.yml").write_text("execute:\n  freeze: true\n")
+        self.source_files = {name: digest(self.root / name) for name in (unit, "_quarto.yml")}
+        self.plan = {"formats": ["html", "tex"], "units": {unit: {"source_sha256": self.source_files[unit],
+                     "native_cells_sha256": [hashlib.sha256(body.encode()).hexdigest()]}}}
+        coverage = []
         for fmt in ("html", "tex"):
             write_json(self.freeze / f"chapters/test/execute-results/{fmt}.json", frozen())
             write_json(self.probes / f"{fmt}.json", {"unit": "chapters/test.qmd", "format": fmt})
+            notebook = self.root / "chapters/test.quarto_ipynb"
+            write_json(notebook, {"cells": [{"cell_type": "code", "execution_count": 1, "source": body,
+                       "outputs": [{"output_type": "stream", "name": "stdout", "text": "metric: 0.125\n"}]}]})
+            log = self.root / f"{fmt}.log"
+            log.write_text("Executing 'test.quarto_ipynb'\n  Cell 1/1: ''...Done\n")
+            coverage.append(record_execution(self.root, self.freeze, self.probes.parent, unit, fmt,
+                                              log, notebook, self.plan["units"][unit]))
+        manifest = build_coverage_manifest(self.probes.parent, self.plan, self.freeze, self.source_files, coverage)
+        write_json(self.probes.parent / "execution-coverage.json", manifest)
+        write_json(self.probes.parent / "source-before.json", {"files_sha256": self.source_files})
 
     def test_exact_formats_and_fresh_kernel_coverage_pass(self):
         report = check_completed(ROOT, self.freeze, self.plan, self.probes)
@@ -154,6 +186,18 @@ class CoverageTests(unittest.TestCase):
 
     def test_changed_stdout_fails_without_a_tolerance(self):
         write_json(self.freeze / "chapters/test/execute-results/tex.json", frozen("metric: 0.1250000001\n"))
+        # Each synthetic form carries its own coherent evidence; the separate
+        # cross-format byte check must still reject their numerical difference.
+        path = self.probes.parent / "execution-coverage.json"
+        manifest = json.loads(path.read_text())
+        row = next(row for row in manifest["units"] if row["format"] == "tex")
+        notebook = self.probes.parent / row["notebook"]["artifact"]
+        document = json.loads(notebook.read_text())
+        document["cells"][0]["outputs"][0]["text"] = "metric: 0.1250000001\n"
+        write_json(notebook, document)
+        row["notebook"]["sha256"] = digest(notebook)
+        row["freeze_sha256"] = digest(self.freeze / "chapters/test/execute-results/tex.json")
+        write_json(path, manifest)
         with self.assertRaisesRegex(ValueError, "not byte-identical"):
             check_completed(ROOT, self.freeze, self.plan, self.probes)
 
@@ -171,6 +215,11 @@ class CoverageTests(unittest.TestCase):
     def test_duplicate_kernel_probe_fails(self):
         write_json(self.probes / "extra.json", {"unit": "chapters/test.qmd", "format": "html"})
         with self.assertRaisesRegex(ValueError, "one fresh kernel"):
+            check_completed(ROOT, self.freeze, self.plan, self.probes)
+
+    def test_missing_retained_proof_has_no_log_only_fallback(self):
+        (self.probes.parent / "execution-coverage.json").unlink()
+        with self.assertRaisesRegex(ValueError, "coverage proof is required"):
             check_completed(ROOT, self.freeze, self.plan, self.probes)
 
 

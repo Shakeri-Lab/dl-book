@@ -1,6 +1,7 @@
 """Small synthetic evidence fixtures only; never execute a training cell."""
 from copy import deepcopy
 from decimal import Decimal
+import hashlib
 import json
 from pathlib import Path
 import statistics
@@ -9,10 +10,11 @@ import unittest
 
 from audit_paired_evidence import audit_evidence
 from date_study_schema import parameter_counts
-from freeze_provenance import freeze_inventory, json_digest, sha256, write_json
+from audit_python_sources import FENCE_RE
+from freeze_provenance import SCHEMA_VERSION, freeze_inventory, json_digest, sha256, write_json
 from report_paired_runtime import (ROOT, compare_bundles, compare_study, field, load_bundle,
                                    markdown_report, sample_sd)
-from test_freeze_provenance import execution, fingerprint
+from test_freeze_provenance import bind_coverage, bind_preflight, execution, fingerprint
 
 PLAN = json.loads((ROOT / "docs/paired-evidence-plan.json").read_text())
 PROVENANCE = {"computation_sha256": "a" * 64, "canonical_fingerprint_sha256": "b" * 64,
@@ -211,6 +213,7 @@ class PairedBundleTests(unittest.TestCase):
         self.source = self.root / "source"
         self.plan_path = self.source / "docs/paired-evidence-plan.json"
         write_json(self.plan_path, PLAN)
+        (self.source / "_quarto.yml").write_text("execute:\n  freeze: true\n")
         for spec in PLAN["studies"].values():
             path = self.source / spec["unit"]
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -222,16 +225,28 @@ class PairedBundleTests(unittest.TestCase):
         bundle = self.root / name
         inputs = {spec["unit"]: sha256(self.source/spec["unit"]) for spec in PLAN["studies"].values()}
         inputs.update({"docs/paired-evidence-plan.json": sha256(self.plan_path),
+                       "_quarto.yml": sha256(self.source / "_quarto.yml"),
                        "container/Dockerfile": "b"*64, "container/requirements-linux-amd64.lock": "c"*64})
         units = {}
         for study, spec in PLAN["studies"].items():
             unit = spec["unit"]
-            units[unit] = dict(source_sha256=inputs[unit], native_cells_sha256=["e"*64], included_sources_sha256={})
+            units[unit] = dict(source_sha256=inputs[unit], native_cells_sha256=[
+                hashlib.sha256(match.group(2).encode()).hexdigest()
+                for match in FENCE_RE.finditer((self.source / unit).read_text())
+            ], included_sources_sha256={})
             for fmt in ("html", "tex"):
                 write_json(bundle / "_freeze" / Path(unit).with_suffix("") / "execute-results" / f"{fmt}.json", execution())
             for fmt in ("html", "latex"):
                 write_json(bundle / "provenance/paired-evidence" / Path(unit).with_suffix("") / fmt / f"{study}.json", payload(study,fmt))
-        document = fingerprint(bundle/"_freeze",name)
+        # The shared template writes its own physical fixture proof. Keep that
+        # separate so only this bundle's four real stub units enter its inventory.
+        with tempfile.TemporaryDirectory(prefix="report-proof-template-") as directory:
+            template = Path(directory) / "_freeze"
+            for fmt in ("html", "tex"):
+                write_json(template / "chapters/test/execute-results" / f"{fmt}.json", execution())
+            document = fingerprint(template, name)
+        document["schema_version"] = SCHEMA_VERSION
+        document["freeze_files_sha256"] = freeze_inventory(bundle / "_freeze")
         document["kind"] = kind
         document["source"].update(files_sha256=inputs, input_sha256=json_digest(inputs), dirty=False if kind == "canonical" else None)
         document["execution_plan"].update(units=units, source_input_sha256=json_digest(inputs))
@@ -254,6 +269,8 @@ class PairedBundleTests(unittest.TestCase):
         manifest_path = bundle/"provenance/paired-evidence-manifest.json"
         write_json(manifest_path,manifest)
         document["paired_evidence"] = dict(manifest_sha256=sha256(manifest_path),manifest=manifest)
+        bind_preflight(bundle / "_freeze", document)
+        bind_coverage(bundle / "_freeze", document, source_root=self.source)
         write_json(bundle/"provenance/fingerprint.json",document)
         write_json(bundle/"status.json",dict(passed=True))
         return bundle
@@ -294,6 +311,7 @@ class PairedBundleTests(unittest.TestCase):
             artifact = second/"provenance/kernel-startup"/item["artifact"]
             write_json(artifact,item["observation"])
             item["sha256"] = sha256(artifact)
+        bind_preflight(second / "_freeze", document)
         write_json(path,document)
         result = compare_bundles(self.left,{"Mac1":self.right,"Mac6":second},self.source,self.plan_path)
         self.assertEqual(set(result["comparisons"]),{"Mac1","Mac6"})
@@ -352,6 +370,7 @@ class PairedBundleTests(unittest.TestCase):
         document["execution_plan"]["source_commit"] = "b"*40
         write_json(self.right/"provenance/source-before.json",{**document["source"],"dirty":False})
         write_json(self.right/"provenance/execution-plan.json",document["execution_plan"])
+        bind_preflight(self.right / "_freeze", document)
         write_json(path,document)
         with self.assertRaisesRegex(ValueError,"source commit identity differs"):
             self.compare()
@@ -359,6 +378,17 @@ class PairedBundleTests(unittest.TestCase):
     def test_missing_or_tampered_fingerprint_fails(self):
         (self.right/"provenance/fingerprint.json").unlink()
         with self.assertRaises(OSError):
+            self.compare()
+
+    def test_physical_preflight_is_required(self):
+        (self.right / "provenance/preflight.json").unlink()
+        with self.assertRaisesRegex(ValueError, "preflight"):
+            self.compare()
+
+    def test_actual_executed_notebook_is_required(self):
+        notebook = next((self.right / "provenance/executed-notebooks").rglob("*.ipynb"))
+        notebook.unlink()
+        with self.assertRaisesRegex(ValueError, "coverage proof"):
             self.compare()
 
     def test_failed_execution_is_not_reported_as_success(self):
@@ -386,8 +416,11 @@ class PairedBundleTests(unittest.TestCase):
         fingerprint_path = self.right/"provenance/fingerprint.json"
         document = json.loads(fingerprint_path.read_text())
         document["freeze_files_sha256"] = freeze_inventory(self.right/"_freeze")
+        # Updating every saved checksum still cannot excuse a rendered cell
+        # whose ordinal disagrees with the actual executed notebook and source.
+        bind_coverage(self.right / "_freeze", document, source_root=self.source)
         write_json(fingerprint_path,document)
-        with self.assertRaisesRegex(ValueError,"native-cell coverage"):
+        with self.assertRaisesRegex(ValueError,"rendered-cell coverage"):
             self.compare()
 
     def test_clean_source_manifest_is_required_for_local(self):

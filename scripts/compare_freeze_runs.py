@@ -8,13 +8,14 @@ native-cell ordinals; CPU identities are observations, never identity gates.
 from __future__ import annotations
 
 import argparse
+from datetime import datetime
 import json
 from pathlib import Path
 import re
 import sys
 from typing import Any
 
-from audit_frozen_stdout import native_execution_ordinals, stdout_records
+from audit_frozen_stdout import stdout_records
 from freeze_provenance import SCHEMA_VERSION, freeze_inventory, json_digest, sha256, write_json
 
 DIGEST_RE = re.compile(r"[0-9a-f]{64}")
@@ -61,6 +62,16 @@ def kernel_identity(observation: dict[str, Any]) -> dict[str, Any]:
                   for key in ("version", "config", "num_threads", "num_interop_threads")},
         "environment": _required(observation, "environment"),
     }
+
+
+def coverage_identity(coverage: dict[str, Any]) -> dict[str, Any]:
+    """Compare semantic execution coverage, not notebook IDs or log timestamps."""
+    manifest = _required(coverage, "manifest")
+    rows = [{key: _required(row, key) for key in (
+        "unit", "format", "source", "native_ordinals", "rendered_ordinals",
+    )} for row in _required(manifest, "units")]
+    return {"config": _required(manifest, "config"),
+            "units": sorted(rows, key=lambda row: (row["unit"], row["format"]))}
 
 
 def validate_fingerprint(document: dict[str, Any], freeze_root: Path, *,
@@ -147,6 +158,25 @@ def validate_fingerprint(document: dict[str, Any], freeze_root: Path, *,
         for key in ("num_threads", "num_interop_threads"):
             if not isinstance(runtime["torch"].get(key), int) or runtime["torch"][key] < 1:
                 raise ValueError(f"invalid observed torch {key}")
+        preflight = _required(document, "preflight")
+        observation = _required(preflight, "observation")
+        started = datetime.fromisoformat(_required(observation, "created_utc"))
+        completed = datetime.fromisoformat(_required(document, "created_utc"))
+        if started.tzinfo is None or completed.tzinfo is None or started > completed:
+            raise ValueError("Preflight/completion timestamps are absent, unzoned, or reversed")
+        path = provenance / "preflight.json"
+        if (preflight.get("artifact") != "preflight.json" or not path.is_file() or path.is_symlink()
+                or sha256(path) != preflight.get("sha256") or json.loads(path.read_text()) != observation):
+            raise ValueError("Original preflight artifact is missing or differs from its fingerprint")
+        if (observation.get("schema_version") != 1 or observation.get("kind") != "execution-preflight"
+                or observation.get("promotion_eligible") is not False
+                or observation.get("runtime_kind") != document["kind"]
+                or observation.get("run") != document["run"]
+                or any(observation.get("source", {}).get(key) != source.get(key)
+                       for key in ("commit", "input_sha256"))
+                or runtime_identity(_required(observation, "runtime")) != runtime
+                or observation.get("cpu") != cpu):
+            raise ValueError("Original preflight observation differs from the completed source/run/runtime")
         probes = _required(document, "execution_probes")
         if not probes:
             raise ValueError("executed-kernel observations are missing")
@@ -154,15 +184,16 @@ def validate_fingerprint(document: dict[str, Any], freeze_root: Path, *,
         probe_units = []
         for probe in probes:
             observation = _required(probe, "observation")
-            if local or "artifact" in probe or "sha256" in probe:
-                name = str(probe.get("artifact", ""))
-                path = provenance / "kernel-startup" / name
-                if (not name or Path(name).name != name or not path.is_file() or path.is_symlink()
-                        or not path.resolve().is_relative_to((provenance / "kernel-startup").resolve())
-                        or sha256(path) != probe.get("sha256")
-                        or json.loads(path.read_text()) != observation):
-                    raise ValueError("Executed-kernel artifact is missing or differs from its fingerprint")
+            name = str(probe.get("artifact", ""))
+            path = provenance / "kernel-startup" / name
+            if (not name or Path(name).name != name or not path.is_file() or path.is_symlink()
+                    or not path.resolve().is_relative_to((provenance / "kernel-startup").resolve())
+                    or sha256(path) != probe.get("sha256")
+                    or json.loads(path.read_text()) != observation):
+                raise ValueError("Executed-kernel artifact is missing or differs from its fingerprint")
             identity = kernel_identity(observation)
+            if identity != kernel_identity(document["runtime"]):
+                raise ValueError("Executed-kernel software/thread/environment differs from authenticated runtime")
             if identity["python"]["version"] != runtime["python"]["version"]:
                 raise ValueError("kernel Python version differs from captured environment")
             if identity["torch"]["version"] != runtime["torch"]["version"]:
@@ -180,15 +211,24 @@ def validate_fingerprint(document: dict[str, Any], freeze_root: Path, *,
         expected_pairs = {(unit, fmt) for unit in plan["units"] for fmt in plan["formats"]}
         if set(probe_units) != expected_pairs or len(probe_units) != len(expected_pairs):
             raise ValueError("Kernel probes do not cover exactly the planned unit/format pairs")
-        if local or any("artifact" in probe for probe in probes):
-            recorded_names = [probe.get("artifact") for probe in probes]
-            actual_names = {path.name for path in (provenance / "kernel-startup").glob("*.json")}
-            if len(set(recorded_names)) != len(probes) or set(recorded_names) != actual_names:
-                raise ValueError("Actual kernel artifacts do not match the fingerprint coverage")
+        recorded_names = [probe.get("artifact") for probe in probes]
+        actual_names = {path.name for path in (provenance / "kernel-startup").glob("*.json")}
+        if len(set(recorded_names)) != len(probes) or set(recorded_names) != actual_names:
+            raise ValueError("Actual kernel artifacts do not match the fingerprint coverage")
         expected = _required(document, "freeze_files_sha256")
         actual = freeze_inventory(freeze_root)
         if actual != expected:
             errors.append("freeze files differ from the recorded fingerprint inventory")
+        coverage = _required(document, "execution_coverage")
+        manifest = _required(coverage, "manifest")
+        path = provenance / "execution-coverage.json"
+        if (not path.is_file() or path.is_symlink() or sha256(path) != coverage.get("manifest_sha256")
+                or json.loads(path.read_text()) != manifest):
+            raise ValueError("Executed-notebook coverage manifest is missing or differs from its fingerprint")
+        from audit_execution_coverage import validate_coverage_manifest
+        coverage_errors = validate_coverage_manifest(manifest, provenance, plan, freeze_root, files)
+        if coverage_errors:
+            raise ValueError("Executed-notebook coverage proof failed: " + "; ".join(coverage_errors))
         if "docs/paired-evidence-plan.json" in files:
             evidence = _required(document, "paired_evidence")
             manifest = _required(evidence, "manifest")
@@ -251,6 +291,8 @@ def compare_runs(left: Path, right: Path, *, require_all_files: bool = False) ->
         ("source/input", first["source"]["files_sha256"], second["source"]["files_sha256"]),
         ("source commit", first["source"]["commit"], second["source"]["commit"]),
         ("execution plan", first["execution_plan"], second["execution_plan"]),
+        ("executed-notebook coverage", coverage_identity(first["execution_coverage"]),
+         coverage_identity(second["execution_coverage"])),
         ("raw paired evidence", first.get("paired_evidence"), second.get("paired_evidence")),
         ("container/recipe/wheel-lock", first["container"], second["container"]),
         ("software/thread/dispatch", runtime_identity(first["runtime"]), runtime_identity(second["runtime"])),
@@ -281,10 +323,9 @@ def compare_runs(left: Path, right: Path, *, require_all_files: bool = False) ->
                 name = path.relative_to(root).as_posix()
                 raw = path.read_text()
                 records[name] = stdout_records(raw)
-                if name in planned:
-                    ordinals = list(range(1, len(planned[name]["native_cells_sha256"]) + 1))
-                    if native_execution_ordinals(raw) != ordinals:
-                        report["errors"].append(f"{label}: {name} native execution coverage differs from plan")
+                # A silent hidden native cell may have no rendered .cell. Its
+                # exact execution is proved by the retained notebook above,
+                # never inferred from the publication's visible Markdown.
             except (ValueError, KeyError, TypeError) as exc:
                 report["errors"].append(f"{label}: malformed execution result {path}: {exc}")
         for name in records:

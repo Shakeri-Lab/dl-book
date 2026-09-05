@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 from run_canonical_freeze import execution_command
 from audit_frozen_stdout import stdout_records
+from test_execution_coverage import SilentCellExecutionTests  # Run in the same real-image smoke gate.
 
 
 @unittest.skipUnless(os.environ.get("QUARTO_BIN") and os.environ.get("QUARTO_PYTHON"),

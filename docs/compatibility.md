@@ -38,7 +38,13 @@ The numerical runner uses the committed execution-only Quarto profile to select
 `project.type=default`. This prevents a nominal chapter-only LaTeX command from
 expanding to the entire book. The publication build still uses the book profile;
 the execution profile changes no manuscript cells or format settings. A real
-Quarto fixture verifies this isolation before training. Four source-bound raw
+Quarto fixture verifies this isolation before training. A second real fixture
+verifies that silent hidden cells execute even when absent from rendered
+Markdown. Coverage is checked from original executed notebooks, ordered cell
+completion logs, source/options, and frozen stdout immediately after each render.
+The run records its actual environment before execution, retaining that preflight
+even on failure. Only complete runs receive a schema-2 fingerprint binding the
+physical coverage proof. Four source-bound raw
 measurement exports are specified in `docs/paired-evidence-plan.json`; these
 small, environment-gated sidecars preserve per-seed evidence without changing
 learner stdout or random-number state.
@@ -49,10 +55,17 @@ particular, Intel's AVX2 conditional numerical reproducibility guarantee is not 
 universal guarantee for AMD CPUs. Record the actual CPU and loaded libraries, and
 claim only the comparisons the repeat and weekly audits demonstrate.
 
+### Previous publication baseline, retained during migration
+
+The table and workflow description below document the already-published baseline,
+not the pending container's environment. `container/README.md` defines the new
+candidate: Debian Bookworm userspace on a Linux/x86-64 host and an exact CPU wheel
+build. Do not infer wheel identity from the fact that both studies ran on a CPU.
+
 | Component | Version | Where it matters |
 |---|---|---|
 | Python | 3.12.14 in notebook CI; 3.12 locally | all executable cells |
-| PyTorch | 2.12.1 (CPU); the 2.13.0 check below covers Chapter 7 only | all executable cells |
+| PyTorch | 2.12.1, CPU execution; the 2.13.0 check below covers Chapter 7 only | all executable cells |
 | Quarto | 1.10.18 | rendering only |
 | MathJax | 4.1.3 (exact jsDelivr pin) | canonical HTML mathematics |
 | OS | macOS 15 (arm64) / Ubuntu 24.04 x64 (notebook CI) | render + Execution Audit |

@@ -127,17 +127,28 @@ def execute_snapshot(work: Path, output: Path, before: dict, commit: str, run_id
         "environment": {key: env.get(key) for key in source_tools.ENVIRONMENT_KEYS},
         "canonical_container": False, "promotion": "not performed",
     })
+    from audit_execution_coverage import build_coverage_manifest, kept_notebook_path, record_execution
+    wrapper = [str(python), str(work / "container/canonical_python.py")]
+    common.run_logged(wrapper + [str(work / "scripts/freeze_provenance.py"), "preflight",
+                      "--root", str(work), "--source-commit", commit, "--run-id", run_id,
+                      "--runtime-kind", "local", "--output", str(provenance / "preflight.json")],
+                      output / "logs/preflight.log", work, env)
+    coverage = []
     for unit in sorted(plan["units"]):
         for fmt in ("latex", "html"):
+            notebook = kept_notebook_path(work, unit)
             print(f"Fresh Mac portability execution ({threads} threads): {unit} ({fmt})", flush=True)
             log = output / "logs" / (unit.removesuffix(".qmd").replace("/", "--") + f"--{fmt}.log")
             evidence_dir = provenance / "paired-evidence" / Path(unit).with_suffix("") / fmt
             common.run_logged(common.execution_command(quarto, unit, fmt), log, work,
                               {**env, "DLBOOK_EXECUTION_UNIT": unit, "DLBOOK_EXECUTION_FORMAT": fmt,
                                "DLBOOK_PAIRED_EVIDENCE_DIR": str(evidence_dir)})
-    checked = common.check_completed(work, work / "_freeze", plan, probes)
+            coverage.append(record_execution(work, work / "_freeze", provenance, unit, fmt,
+                                              log, notebook, plan["units"][unit]))
+    write_json(provenance / "execution-coverage.json", build_coverage_manifest(
+        provenance, plan, work / "_freeze", current["files_sha256"], coverage))
+    checked = common.check_completed(work, work / "_freeze", plan, probes, current["files_sha256"])
     validate_portable_probes(probes, selection, env, source_tools.ENVIRONMENT_KEYS, threads)
-    wrapper = [str(python), str(work / "container/canonical_python.py")]
     common.run_logged(wrapper + [str(work / "scripts/audit_date_study_stdout.py"),
                                 "--freeze-root", str(work / "_freeze")],
                       output / "logs/date-study-semantics.log", work, env)
@@ -151,6 +162,8 @@ def execute_snapshot(work: Path, output: Path, before: dict, commit: str, run_id
                       "--source-before", str(provenance / "source-before.json"),
                       "--execution-plan", str(provenance / "execution-plan.json"),
                       "--output", str(provenance / "fingerprint.json"), "--run-id", run_id,
+                      "--preflight", str(provenance / "preflight.json"),
+                      "--execution-coverage-manifest", str(provenance / "execution-coverage.json"),
                       "--execution-probes", str(probes), "--paired-evidence-manifest", str(evidence_manifest)],
                       output / "logs/capture.log", work, env)
     return checked

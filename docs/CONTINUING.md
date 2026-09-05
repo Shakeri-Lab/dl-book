@@ -55,8 +55,13 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > Source-only checkpoints are pushed on that branch. Fresh runs execute
 > `1da26e860d6fa76ae6b76dede273748b1439128c`: Actions `33937390845` and its
 > independent same-image repeat `33938819036`, plus the Mac 1/1 and 6/1
-> intra-op/inter-op profiles in `build/portability-1da26e8/`. Their completion,
-> calibration, and promotion must be checked, not inferred from dispatch. Keep
+> intra-op/inter-op profiles in `build/portability-1da26e8/`. The two Mac runs
+> completed all planned unit/formats but failed a coverage checker that mistook
+> rendered cells for executed cells. These bundles remain rejected diagnostics;
+> their original status must not be rewritten. The repaired runner retains actual
+> executed notebooks, starting runtime observations, and source/log proof, checked
+> immediately per unit. All four profiles must rerun on final source with that
+> proof before calibration or promotion; see the September 4 review ledger. Keep
 > the old dirty Mac `_freeze` separate from these candidates. Use the guarded
 > assembly and canonical-notebook helpers once the new proof is installed;
 > direct Quarto assembly may mutate freeze library files or attempt execution.

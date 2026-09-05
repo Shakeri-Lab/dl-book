@@ -310,7 +310,8 @@ class CanonicalNotebookTests(unittest.TestCase):
     def test_workflow_uses_sealed_offline_runtime_and_exact_comparison(self):
         workflow = (runner.ROOT / ".github/workflows/publish.yml").read_text()
         job = workflow.split("  validate_notebooks:\n", 1)[1].split("  build-deploy:\n", 1)[0]
-        self.assertNotIn("pip install", job)
+        self.assertEqual([line.strip() for line in job.splitlines() if "pip install" in line],
+                         ["run: python -m pip install -r scripts/provenance_requirements.txt"])
         self.assertNotIn("--freeze-policy portable", job)
         for invariant in ("--network none", "--entrypoint python", "canonical_python.py",
                           "fetch-depth: 0", "--env GIT_CONFIG_VALUE_0=/source",
@@ -327,6 +328,42 @@ class CanonicalPublicationTripwireTests(unittest.TestCase):
 
     def test_current_integrated_contract_is_green(self):
         self.assertEqual(canonical_publication_runtime_errors(self.workflow, self.inputs), [])
+
+    def test_host_provenance_and_assembly_dependencies_are_explicit(self):
+        jobs = {
+            "validate_notebooks": ("-r scripts/provenance_requirements.txt", "scripts/run_canonical_notebooks.py prepare"),
+            "build-deploy": ("-r requirements.txt -r scripts/provenance_requirements.txt", "scripts/guarded_assembly.py --verify-only"),
+        }
+        for name, (requirements, invocation) in jobs.items():
+            with self.subTest(job=name):
+                job = self.workflow.split(f"  {name}:\n", 1)[1].split("\n  link-check:", 1)[0]
+                if name == "validate_notebooks":
+                    job = job.split("\n  build-deploy:", 1)[0]
+                command = f"python -m pip install {requirements}"
+                self.assertIn(command, job)
+                self.assertLess(job.index(command), job.index(invocation))
+        provenance = (runner.ROOT / "scripts/provenance_requirements.txt").read_text()
+        self.assertEqual([line for line in provenance.splitlines() if line and not line.startswith("#")],
+                         ["PyYAML==6.0.3"])
+        export = (runner.ROOT / "scripts/notebook_ci_requirements.txt").read_text()
+        self.assertIn("-r provenance_requirements.txt", export.splitlines())
+
+    def test_missing_or_expanded_host_provenance_dependencies_fail(self):
+        for before, after in (
+            ("python -m pip install -r scripts/provenance_requirements.txt", "true"),
+            ("python -m pip install -r requirements.txt -r scripts/provenance_requirements.txt", "pip install -r requirements.txt"),
+        ):
+            with self.subTest(command=before):
+                self.assertIn(before, self.workflow)
+                self.assertTrue(canonical_publication_runtime_errors(self.workflow.replace(before, after), self.inputs))
+        for name, bad in (
+            ("scripts/provenance_requirements.txt", "PyYAML>=6\n"),
+            ("scripts/provenance_requirements.txt", "PyYAML==6.0.3\ntorch==2.12.1\n"),
+            ("scripts/notebook_ci_requirements.txt", "nbformat==5.10.4\n"),
+        ):
+            with self.subTest(requirements=name, content=bad):
+                changed = dict(self.inputs, **{name: bad})
+                self.assertTrue(canonical_publication_runtime_errors(self.workflow, changed))
 
     def test_workflow_safety_downgrades_fail(self):
         mutations = (

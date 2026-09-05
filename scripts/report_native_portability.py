@@ -14,13 +14,17 @@ import json
 import math
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import traceback
 
-from audit_frozen_stdout import git_html_paths, git_text, native_execution_ordinals, stdout_records
+from audit_frozen_stdout import git_html_paths, git_text, stdout_records
+from audit_execution_coverage import (build_coverage_manifest, kept_notebook_path, record_execution,
+                                      validate_coverage_manifest)
 from freeze_provenance import (CI_KEYS, cpu_observation, execution_plan,
-                               runtime_observation, source_fingerprint, write_json)
+                               runtime_observation, sha256, source_fingerprint, write_json)
+from run_canonical_freeze import execution_command, run_logged, validate_execution_profile
 from notebook_manifest import UNITS_BY_SOURCE
 from notebook_stdout_contracts import (STRUCTURAL_RULES, _number_parts,
                                       _structural_errors, compare_stdout_blocks)
@@ -33,12 +37,18 @@ def observation(root):
             "quarto": subprocess.check_output(["quarto", "--version"], text=True).strip()}
 
 
+def native_plan(root: Path, source: dict) -> dict:
+    plan = execution_plan(root, source)
+    plan.update(formats=["html"], purpose="native-portability-html-only")
+    return plan
+
+
 def prepare(root: Path, output: Path):
     before = observation(root)
     if before["source"]["dirty"] is not False:
         raise ValueError("Native audit requires a clean source checkout")
     write_json(output / "before.json", before)
-    write_json(output / "execution-plan.json", execution_plan(root, before["source"]))
+    write_json(output / "execution-plan.json", native_plan(root, before["source"]))
     baseline = {}
     with chdir(root):
         for path in git_html_paths(before["source"]["commit"]):
@@ -50,6 +60,48 @@ def prepare(root: Path, output: Path):
     if not baseline:
         raise ValueError("Committed reference has no native HTML execution results")
     write_json(output / "baseline-stdout.json", baseline)
+
+
+def execute(root: Path, output: Path) -> None:
+    """Fresh HTML execution, one native unit/kernel at a time, then cached assembly."""
+    from guarded_assembly import guarded_render
+    before = json.loads((output / "before.json").read_text())
+    current = source_fingerprint(root)
+    plan = json.loads((output / "execution-plan.json").read_text())
+    if current != before["source"] or plan != native_plan(root, current):
+        raise ValueError("Native execution inputs differ from the recorded clean preparation")
+    validate_execution_profile(root)
+    if (root / "_freeze").exists():
+        raise ValueError("Move the committed reference out of _freeze before fresh native execution")
+    provenance = output / "provenance"
+    if provenance.exists() and any(provenance.iterdir()):
+        raise ValueError("Native execution evidence directory must be fresh")
+    env = {**os.environ, "QUARTO_PYTHON": sys.executable, "PYTHONPATH": str(root / "code")}
+    records = []
+    for unit in sorted(plan["units"]):
+        print(f"Native report-only execution: {unit} (html)", flush=True)
+        notebook = kept_notebook_path(root, unit)
+        log = output / "logs" / (unit.removesuffix(".qmd").replace("/", "--") + "--html.log")
+        try:
+            run_logged(execution_command("quarto", unit, "html"), log, root, env)
+            records.append(record_execution(root, root / "_freeze", provenance, unit, "html",
+                                              log, notebook, plan["units"][unit]))
+        except Exception:
+            if notebook.is_file():
+                retained = output / "failed-notebooks" / unit.replace(".qmd", ".quarto_ipynb")
+                retained.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(notebook, retained)
+            raise
+        write_json(output / "execution-progress.json", {
+            "promotion_eligible": False, "completed_units": [row["unit"] for row in records],
+        })
+    write_json(provenance / "execution-coverage.json", build_coverage_manifest(
+        provenance, plan, root / "_freeze", current["files_sha256"], records))
+    # This is a separate presentation pass over the newly executed HTML cache.
+    # Any missing-cache fallback is denied, and result/figure bytes cannot change.
+    assembly = guarded_render(root, ["--to", "html", "--no-clean", "--debug", "--log",
+                                     str(output / "assembly.log")], env)
+    write_json(output / "assembly.json", assembly)
 
 
 def compare_unit(source: str, baseline: list, current: list) -> dict:
@@ -113,6 +165,19 @@ def finish(root: Path, output: Path, execution_outcome: str) -> dict:
         report["validation_errors"].append(f"Native execution did not succeed: {execution_outcome}")
     baseline = json.loads((output / "baseline-stdout.json").read_text())
     plan = json.loads((output / "execution-plan.json").read_text())
+    if plan != native_plan(root, before["source"]):
+        report["validation_errors"].append("Native execution plan differs from the recorded source/purpose")
+    coverage_path = output / "provenance/execution-coverage.json"
+    if not coverage_path.is_file():
+        report["validation_errors"].append("Missing retained-notebook native execution coverage proof")
+    else:
+        try:
+            coverage = json.loads(coverage_path.read_text())
+            report["validation_errors"].extend(validate_coverage_manifest(
+                coverage, output / "provenance", plan, root / "_freeze", before["source"]["files_sha256"]))
+            report["execution_coverage_sha256"] = sha256(coverage_path)
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            report["validation_errors"].append(str(exc))
     expected_paths = {"_freeze/" + str(Path(unit).with_suffix("")) + "/execute-results/html.json"
                       for unit in plan["units"]}
     paths = sorted((root / "_freeze").glob("**/execute-results/html.json"))
@@ -126,9 +191,8 @@ def finish(root: Path, output: Path, execution_outcome: str) -> dict:
             source = str(Path(name).relative_to("_freeze").parent.parent) + ".qmd"
             if source not in plan["units"]:
                 raise ValueError(f"Unplanned native execution: {source}")
-            wanted = list(range(1, len(plan["units"][source]["native_cells_sha256"]) + 1))
-            if native_execution_ordinals(raw) != wanted:
-                raise ValueError(f"Incomplete native-cell execution: {source}")
+            # Hidden silent cells need no rendered .cell. Their exact execution
+            # is certified by the retained notebook/source/log proof above.
         except (OSError, ValueError, KeyError, TypeError) as exc:
             report["validation_errors"].append(str(exc))
     write_json(output / "fresh-stdout.json", current)
@@ -167,9 +231,9 @@ def summary(report: dict) -> str:
     else:
         headline = "Native portability audit: VALIDATION/EXECUTION ERROR (blocking)"
     lines = ["## " + headline, "", "This is uncontainerized Ubuntu evidence, not canonical same-image verification.",
-             "No frozen reference or publication artifact was replaced.", "",
+             "No committed frozen reference or publication artifact was replaced.", "",
              "Download the native-portability-report artifact for before/after source/runtime/CPU observations, "
-             "raw execution JSON, stdout, and diffs.", ""]
+             "raw executed notebooks, source and completion logs, execution JSON, stdout, and diffs.", ""]
     for key in ("validation_errors", "contract_errors", "accepted_deviations"):
         if report.get(key):
             lines.extend([key.replace("_", " ").capitalize() + ":", ""])
@@ -182,7 +246,7 @@ def summary(report: dict) -> str:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=("prepare", "finish"))
+    parser.add_argument("mode", choices=("prepare", "execute", "finish"))
     parser.add_argument("--root", type=Path, default=Path("."))
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--execution-outcome", default="unknown")
@@ -192,6 +256,9 @@ def main():
     try:
         if args.mode == "prepare":
             prepare(root, output)
+            return 0
+        if args.mode == "execute":
+            execute(root, output)
             return 0
         report = finish(root, output, args.execution_outcome)
     except Exception as exc:

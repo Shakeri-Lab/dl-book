@@ -16,7 +16,7 @@ from freeze_provenance import (
     execution_plan, freeze_inventory, sha256, source_fingerprint, write_json,
 )
 import promote_canonical_freeze as promotion
-from test_freeze_provenance import execution, fingerprint
+from test_freeze_provenance import bind_coverage, bind_preflight, CONFIG, execution, fingerprint
 
 
 class PromotionTests(unittest.TestCase):
@@ -28,6 +28,7 @@ class PromotionTests(unittest.TestCase):
         self.root.mkdir()
         self.commit = "a" * 40
         inputs = {
+            "_quarto.yml": CONFIG,
             "chapters/test.qmd": "# Test\n\n```{python}\nprint('value: 1.234')\n```\n",
             "container/Dockerfile": "# synthetic recipe\n",
             "container/requirements-linux-amd64.lock": "# synthetic lock\n",
@@ -61,6 +62,8 @@ class PromotionTests(unittest.TestCase):
             for key in ("recipe", "wheel_lock"):
                 record = document["container"][key]
                 record["sha256"] = source["files_sha256"][record["path"]]
+            bind_preflight(freeze, document)
+            bind_coverage(freeze, document, source_root=self.root)
             write_json(bundle / "provenance/fingerprint.json", document)
         self.destination = self.root / "_freeze"
         write_json(self.destination / "chapters/old/execute-results/html.json", execution("old value\n"))
@@ -84,6 +87,7 @@ class PromotionTests(unittest.TestCase):
         path = self.bundles[index] / "provenance/fingerprint.json"
         document = json.loads(path.read_text())
         change(document)
+        bind_preflight(self.bundles[index] / "_freeze", document)
         write_json(path, document)
 
     def add_paired_evidence(self):
@@ -109,6 +113,7 @@ class PromotionTests(unittest.TestCase):
             document["source"] = deepcopy(source)
             document["execution_plan"] = execution_plan(self.root, source)
             document["paired_evidence"] = {"manifest_sha256": sha256(manifest_path), "manifest": manifest}
+            bind_preflight(bundle / "_freeze", document)
             write_json(path, document)
 
     def test_dry_run_is_read_only_and_uses_all_files_gate(self):
@@ -130,10 +135,11 @@ class PromotionTests(unittest.TestCase):
         self.assertTrue(previous.is_relative_to(self.root / "build/freeze-backups"))
         self.assertEqual(self.bytes_tree(previous), self.old)
         self.assertEqual(freeze_inventory(self.destination), first_document["freeze_files_sha256"])
-        self.assertEqual(validate_fingerprint(first_document, self.destination), [])
         self.assertEqual((self.destination / "provenance.json").read_bytes(),
                          (self.bundles[0] / "provenance/fingerprint.json").read_bytes())
         proof = Path(result["proof_destination"])
+        self.assertEqual(validate_fingerprint(first_document, self.destination,
+                                              provenance_root=proof / "first/provenance"), [])
         self.assertEqual((proof / "second/provenance/fingerprint.json").read_bytes(),
                          (self.bundles[1] / "provenance/fingerprint.json").read_bytes())
         self.assertEqual(promotion.verify_installed(self.root, proof), [])
@@ -280,6 +286,30 @@ class PromotionTests(unittest.TestCase):
                 write_json(path / "paired-evidence/fixture-0.json", {"corrupted": True})
             return result
         with patch.object(promotion.shutil, "copytree", side_effect=corrupt_evidence):
+            with self.assertRaisesRegex(RuntimeError, "first evidence no longer matches"):
+                self.invoke(apply=True)
+        self.assertEqual(self.bytes_tree(self.destination), self.old)
+
+    def test_executed_notebook_and_preflight_survive_promotion_and_are_rechecked(self):
+        result = self.invoke(apply=True)
+        proof = Path(result["proof_destination"])
+        for label, bundle in zip(("first", "second"), self.bundles):
+            for relative in ("preflight.json", "executed-notebooks/chapters/test/html.ipynb"):
+                self.assertEqual((proof / label / "provenance" / relative).read_bytes(),
+                                 (bundle / "provenance" / relative).read_bytes())
+        (proof / "second/provenance/execution-logs/chapters/test/tex.log").write_text("altered log")
+        errors = promotion.verify_installed(self.root, proof)
+        self.assertTrue(any("evidence checksum mismatch" in error for error in errors), errors)
+
+    def test_notebook_copy_corruption_is_rejected_before_freeze_swap(self):
+        original = shutil.copytree
+        def corrupt_notebook(source, destination, *args, **kwargs):
+            result = original(source, destination, *args, **kwargs)
+            path = Path(destination)
+            if path.name == "provenance" and path.parent.name == "first":
+                write_json(path / "executed-notebooks/chapters/test/html.ipynb", {"cells": []})
+            return result
+        with patch.object(promotion.shutil, "copytree", side_effect=corrupt_notebook):
             with self.assertRaisesRegex(RuntimeError, "first evidence no longer matches"):
                 self.invoke(apply=True)
         self.assertEqual(self.bytes_tree(self.destination), self.old)

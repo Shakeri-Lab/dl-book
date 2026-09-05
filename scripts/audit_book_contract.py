@@ -285,7 +285,8 @@ def native_portability_workflow_errors(text: str) -> list[str]:
     job = workflow_job(text, "execute-all")
     required = (
         "Native Ubuntu portability report (not canonical)",
-        "report_native_portability.py prepare", "report_native_portability.py finish",
+        "report_native_portability.py prepare", "report_native_portability.py execute",
+        "report_native_portability.py finish", "-r scripts/provenance_requirements.txt",
         '--execution-outcome "$EXECUTION_OUTCOME"',
         "if: always() && steps.prepare.outcome == 'success'",
         "GITHUB_STEP_SUMMARY", "name: native-portability-report",
@@ -304,6 +305,7 @@ CANONICAL_PUBLICATION_INPUTS = (
     "container/Dockerfile", "container/canonical-runtime.json",
     "container/install_quarto.py", "container/runtime_policy.py",
     "container/kernel_start.py", "container/kernel.json", "container/canonical_python.py",
+    "scripts/provenance_requirements.txt", "scripts/notebook_ci_requirements.txt",
 )
 
 
@@ -328,6 +330,22 @@ def canonical_publication_runtime_errors(workflow: str, inputs: dict[str, str]) 
         f"host export and assembly must each pin Quarto {QUARTO_VERSION}; validation uses its sealed image")
     job = workflow_job(workflow, "validate_notebooks")
     deployment = workflow_job(workflow, "build-deploy")
+    provenance_install = "python -m pip install -r scripts/provenance_requirements.txt"
+    assembly_install = "python -m pip install -r requirements.txt -r scripts/provenance_requirements.txt"
+    require([line.strip() for line in job.splitlines() if "pip install" in line]
+            == ["run: " + provenance_install],
+            "host validation may install only the pinned provenance parser, never a numerical runtime")
+    for scope, command, invocation in (
+        (job, provenance_install, "scripts/run_canonical_notebooks.py prepare"),
+        (deployment, assembly_install, "scripts/guarded_assembly.py --verify-only"),
+    ):
+        require(command in scope and invocation in scope and scope.index(command) < scope.index(invocation),
+                f"{invocation} requires explicit host provenance dependencies before invocation")
+    provenance_pins = [line.strip() for line in inputs["scripts/provenance_requirements.txt"].splitlines()
+                       if line.strip() and not line.lstrip().startswith("#")]
+    require(provenance_pins == ["PyYAML==6.0.3"], "host provenance tooling must pin only PyYAML 6.0.3")
+    require("-r provenance_requirements.txt" in inputs["scripts/notebook_ci_requirements.txt"].splitlines(),
+            "notebook export tests must install the same provenance parser explicitly")
     require("needs: validate_notebooks" in deployment,
             "deployment must depend on successful notebook validation")
     require("concurrency:\n  group: ${{ github.workflow }}-${{ github.ref }}\n  cancel-in-progress: true" in workflow,
@@ -359,7 +377,7 @@ def canonical_publication_runtime_errors(workflow: str, inputs: dict[str, str]) 
         "build/notebooks/canonical-context.json", "build/notebooks/evidence/", "if: always()",
     ):
         require(token in job, f"workflow missing {token!r}")
-    for forbidden in ("continue-on-error:", "pip install", "docker build", "--freeze-policy portable"):
+    for forbidden in ("continue-on-error:", "docker build", "--freeze-policy portable"):
         require(forbidden not in job, f"validation must not contain {forbidden!r}")
     runner = inputs["scripts/run_canonical_notebooks.py"]
     for token in (

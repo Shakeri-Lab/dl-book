@@ -16,7 +16,9 @@ entry point creates a separate disposable snapshot and installs its verified
 recoverable under `build/html-previous-*/_book`.
 
 Before assembly, the original immutable promotion receipt and physical evidence
-sidecars are revalidated. Every executable QMD must match its full canonical
+sidecars are revalidated, including the starting runtime observation and retained
+executed-notebook coverage proof. A silent hidden cell is not exempt from
+execution merely because it has no rendered code or output. Every executable QMD must match its full canonical
 source hash, including prose and captions: frozen Quarto Markdown contains those
 words, not just cell outputs. The complete executable-unit inventory and protected
 code, data, experiment, and container inputs must also match. The source-tree

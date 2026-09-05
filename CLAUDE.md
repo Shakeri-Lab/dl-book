@@ -6,6 +6,14 @@
 > listed). Version-fragile engineering lives in `docs/compatibility.md`, not in
 > the chapters.
 
+> **Active migration, September 4–5, 2026:** the author approved a pinned
+> Linux/x86-64 container as the next numerical reference. Work in the verified
+> checkout named at the top of `docs/CONTINUING.md`, not a stale Box copy.
+> Candidate execution, promotion, and presentation-only assembly are separate
+> stages. Read `container/README.md` and `docs/assembly-contract.md` before
+> executing or rendering. The old Mac diagnostic `_freeze` is not a promotable
+> candidate. The new reference is pending full validation; v1.3 stays fixed.
+
 This repo is *Deep Learning: Making It Learnable*, the Quarto companion textbook for
 DS 6050 (Heman Shakeri, UVA). This file is the operating manual for working on it with
 Claude Code. Read `docs/style-guide.md` before writing any prose — every chapter must
@@ -28,18 +36,22 @@ chapter must respect. Those two files replace any account-local memory.
   at `../Box-Box/Teaching/6050/Resources/D2L/` is reference-only.
 - **Every cell runs**: CPU-only, seeded (`torch.manual_seed(6050)`). Tiny/synthetic
   or committed data only; nothing downloads at render time. Single cell ≤ ~5 min;
-  training-heavy chapters may take 5–15 min total to execute (one-time local — CI
-  uses the committed freeze). **Pre-test every experiment regime in a scratch
+  training-heavy chapters may take 5–15 min total to execute. Canonical evidence
+  is regenerated in the pinned CI container; edition assembly consumes a verified
+  committed freeze without executing cells. **Pre-test every experiment regime in a scratch
   script before writing prose** (see `docs/CONTINUING.md` §2 and §5).
-- **Numbers must match prose.** If a cell's printed output contradicts the surrounding
-  narrative, fix the experiment or the narrative (see Chapter 1's ridge regime,
-  tuned to n=25 so OLS genuinely overfits).
+- **Numbers must match prose.** Investigate contradictions before revising a claim.
+  Do not retune a sealed study to restore its intended story or hand-edit frozen
+  output. Report paired study results with their uncertainty and boundaries;
+  between-seed SD informs prose precision, while paired runtime differences inform
+  separately reviewed portability bounds. Strict identities retain strict gates.
 
 ## Environment (this machine)
 
 *New Mac? `docs/NEW-MACHINE-SETUP.md` reproduces everything below from a bare
-machine — toolchain, venv, credentials, and a verification pass that proves the
-new machine reproduces the committed book.*
+machine: toolchain, venv, and credentials. It is a development/portability setup,
+not the canonical container's reproduction recipe. Check the current measured
+runtime ledger rather than assuming the new Mac reproduces the reference.*
 
 ```bash
 export PATH="$HOME/.local/bin:$HOME/Library/TinyTeX/bin/universal-darwin:/opt/homebrew/bin:$PATH"
@@ -116,28 +128,40 @@ compositions for figures. Full guide: `docs/dl-course-code.md`.
    and numerical audits keep visible code. Pure concept-diagram drawing cells use
    `#| echo: false`; split mixed cells first so hiding coordinates never hides an
    implementation or evidence.
-7. **Execute + render** (this refreshes the committed freeze cache — CI never executes):
+7. **Execute, verify, then assemble.** Development runs are diagnostics, not a
+   replacement reference. For publication, finish the complete source revision,
+   commit it, and follow `container/README.md` to execute two independent CI runs
+   of that exact source in the same saved image. Both formats, native execution
+   coverage, raw paired evidence, and the complete freeze must pass. Record the
+   actual environment; a seed is not a reproduction recipe. Promote only with
+   `scripts/promote_canonical_freeze.py`, first in dry-run mode and then with
+   explicit `--apply` after the two-run proof passes. Preserve original fingerprints
+   and the exact image durably; do not rewrite a rejected run's status.
+
+   After promotion, use the guarded assembly entry points:
    ```bash
    export QUARTO_PYTHON="$HOME/.venvs/dl-book/bin/python"
    export PYTHONPATH="$PWD/code"  # bind dlbook imports to this verified checkout
-   quarto render chapters/partN/XX-*.qmd  # NO --to flag!
-   "$QUARTO_PYTHON" scripts/render_pdf_profiles.py
-   quarto render --to html --no-clean  # canonical HTML last
+   "$QUARTO_PYTHON" scripts/guarded_assembly.py --verify-only
+   "$QUARTO_PYTHON" scripts/render_pdf_profiles.py --verify-reproducible
+   "$QUARTO_PYTHON" scripts/guarded_assembly.py  # canonical HTML last
    ```
-   An `--to html` single-file render leaves the PDF freeze (`tex.json`) stale → the
-   book PDF ships without your changes. Any later prose edit invalidates the freeze
-   and re-executes the whole chapter — batch fixes before re-rendering.
-   For a book-wide source pass, `quarto render chapters --no-clean` refreshes the
-   directory's executable units in both formats while composing the book once.
+   These commands use disposable snapshots and refuse any fallback code execution.
+   Do not directly render over the installed freeze, and do not use `--no-execute`
+   as a cache-preservation shortcut: it can drop cached output. A later executable
+   QMD prose edit invalidates the complete source match because frozen Markdown
+   contains prose as well as results. Batch editorial changes before canonical
+   re-execution; never splice new prose into generated evidence by hand.
    Resolve `dlbook` from this checkout: an older editable install may still point
    into Box and block on an unavailable synced file. Do not change the numerical
    environment or study settings to repair an import-path problem.
-   The PDF helper renders both profiles through the three-pass LaTeX floor, audits
-   every outline destination exactly, and retries to a bounded fixpoint. Do not replace
-   it with ad hoc profile commands in a publication build.
+   The PDF helper renders both profiles in two clean workers, compares their bytes,
+   enforces the three-pass LaTeX floor, audits every outline destination, and retries
+   to a bounded fixpoint. Do not replace it with ad hoc profile commands.
 8. **Verify before pushing**: grep the built HTML for the cells' printed numbers and
    confirm they support the prose; check both PDFs; skim for unrendered math.
-9. **Commit `_freeze/` together with the chapter.** Push; then confirm CI:
+9. **Commit the verified `_freeze/` with its original provenance proof.** Preserve
+   existing release tags. Push only within the author's publication authority, then confirm CI:
    `gh run list -R Shakeri-Lab/dl-book -L 1` and spot-check the live URL (mind CDN
    cache, ~1 min).
 
@@ -167,7 +191,7 @@ automatically during conversion, but chapters should use the canonical set.
 | Equations unrendered / red on the site | a macro exists in `tex/macros.tex` but not `mathjax-config.html` |
 | Render hangs or times out | you're probably in Box; work in `~/dl-book` |
 | Subagents unavailable (spend limit) | draft inline: read seed + transcripts fully first, then write; audit-by-construction and verify code by executing |
-| Book PDF missing latest chapter edits | stale `tex.json` from an `--to html` render — re-render the chapter with no `--to` flag, then full render |
+| Book PDF missing latest chapter edits | stale or mismatched frozen source — regenerate both formats through the canonical execution workflow, verify the repeat, then use guarded assembly |
 | Book-corpus LM numbers move after a copyedit | the training cell read live chapter sources — Chapters 10 and 14 must read `data/book-corpus-ch1-9.txt`, whose length and SHA-256 are asserted; rebuild it only as an explicit benchmark revision |
 | PDF chapter links all print as “Chapter 1” | chapter-level `sec-*` references were resolved in a chapter-local PDF pass — keep `filters/pdf-chapter-xrefs.lua` enabled and never begin an indented continuation line with `@sec-*` (Pandoc reads it as an example-list marker) |
 | seq2seq/RNN mysteriously stuck at 40–60% | padding poisoning — `pack_padded_sequence` the encoder, `ignore_index=PAD` the loss (ch. 11 runs this as an experiment) |

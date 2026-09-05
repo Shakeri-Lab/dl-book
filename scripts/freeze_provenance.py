@@ -22,7 +22,7 @@ import sys
 import sysconfig
 from typing import Any
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 ENVIRONMENT_KEYS = (
     "OMP_NUM_THREADS", "OMP_DYNAMIC", "OMP_THREAD_LIMIT", "OMP_PROC_BIND",
     "OMP_PLACES", "MKL_NUM_THREADS", "MKL_DYNAMIC", "MKL_CBWR", "MKL_ENABLE_INSTRUCTIONS",
@@ -242,6 +242,35 @@ def load_execution_probes(path: Path) -> list[dict[str, Any]]:
              "observation": json.loads(item.read_text())} for item in paths]
 
 
+def preflight_observation(args: argparse.Namespace) -> dict[str, Any]:
+    """Record the real starting environment even if execution later fails."""
+    source = source_fingerprint(args.root.resolve(), args.source_commit)
+    return {
+        "schema_version": 1, "kind": "execution-preflight", "promotion_eligible": False,
+        "runtime_kind": args.runtime_kind,
+        "created_utc": datetime.now(timezone.utc).isoformat(),
+        "run": {"id": args.run_id, "ci": {key: os.environ.get(key) for key in CI_KEYS}},
+        "source": {key: source[key] for key in ("commit", "input_sha256")},
+        "runtime": runtime_observation(), "cpu": cpu_observation(),
+    }
+
+
+def load_preflight(path: Path | None, *, source: dict, kind: str, run_id: str) -> dict:
+    if path is None or not path.is_file() or path.is_symlink():
+        raise ValueError("Completed capture requires its original preflight runtime snapshot")
+    observation = json.loads(path.read_text())
+    if (observation.get("schema_version") != 1 or observation.get("kind") != "execution-preflight"
+            or observation.get("promotion_eligible") is not False
+            or observation.get("runtime_kind") != kind
+            or observation.get("run", {}).get("id") != run_id
+            or any(observation.get("source", {}).get(key) != source.get(key)
+                   for key in ("commit", "input_sha256"))):
+        raise ValueError("Preflight snapshot is not bound to this source/run/runtime kind")
+    if path.name != "preflight.json":
+        raise ValueError("Preflight snapshot must retain the canonical artifact name preflight.json")
+    return {"artifact": path.name, "sha256": sha256(path), "observation": observation}
+
+
 def capture(args: argparse.Namespace) -> dict[str, Any]:
     root = args.root.resolve()
     source = source_fingerprint(root, args.source_commit)
@@ -275,6 +304,20 @@ def capture(args: argparse.Namespace) -> dict[str, Any]:
     plan = json.loads(args.execution_plan.read_text()) if args.execution_plan else None
     if plan is not None and plan != execution_plan(root, source):
         raise ValueError("Execution plan no longer matches source/input inventory")
+    preflight = load_preflight(getattr(args, "preflight", None), source=source,
+                               kind=args.kind, run_id=args.run_id)
+    coverage_path = getattr(args, "execution_coverage_manifest", None)
+    if coverage_path is None or not coverage_path.is_file():
+        raise ValueError("Completed capture requires retained-notebook execution coverage")
+    if (coverage_path.name != "execution-coverage.json"
+            or args.preflight.parent.resolve() != coverage_path.parent.resolve()):
+        raise ValueError("Preflight and execution-coverage.json must remain together in original provenance")
+    from audit_execution_coverage import validate_coverage_manifest
+    coverage = json.loads(coverage_path.read_text())
+    errors = validate_coverage_manifest(coverage, coverage_path.parent, plan,
+                                        args.freeze_root, source["files_sha256"])
+    if errors:
+        raise ValueError("Execution coverage proof failed: " + "; ".join(errors))
     paired = None
     paired_manifest = getattr(args, "paired_evidence_manifest", None)
     if "docs/paired-evidence-plan.json" in source["files_sha256"]:
@@ -287,6 +330,11 @@ def capture(args: argparse.Namespace) -> dict[str, Any]:
         if recorded != verified:
             raise ValueError("Paired evidence manifest differs from the observed source/sidecars")
         paired = {"manifest_sha256": sha256(paired_manifest), "manifest": verified}
+    runtime, cpu = runtime_observation(), cpu_observation()
+    from compare_freeze_runs import runtime_identity
+    if (runtime_identity(preflight["observation"]["runtime"]) != runtime_identity(runtime)
+            or preflight["observation"]["cpu"] != cpu):
+        raise ValueError("Completed environment differs from the original preflight observation")
     return {
         "schema_version": SCHEMA_VERSION, "kind": args.kind,
         "created_utc": datetime.now(timezone.utc).isoformat(),
@@ -294,7 +342,9 @@ def capture(args: argparse.Namespace) -> dict[str, Any]:
         "source": source,
         "container": {"digest": args.container_digest, "base_digest": args.base_image_digest,
                       "recipe": input_record(args.recipe), "wheel_lock": input_record(args.lock)},
-        "runtime": runtime_observation(), "cpu": cpu_observation(),
+        "runtime": runtime, "cpu": cpu,
+        "preflight": preflight,
+        "execution_coverage": {"manifest_sha256": sha256(coverage_path), "manifest": coverage},
         "execution_plan": plan,
         "execution_probes": load_execution_probes(args.execution_probes) if args.execution_probes else [],
         "paired_evidence": paired,
@@ -313,6 +363,12 @@ def main() -> int:
     plan.add_argument("--root", type=Path, default=Path("."))
     plan.add_argument("--source-commit")
     plan.add_argument("--output", type=Path, required=True)
+    preflight = commands.add_parser("preflight", help="Record actual starting runtime; not promotion eligible")
+    preflight.add_argument("--root", type=Path, default=Path("."))
+    preflight.add_argument("--source-commit")
+    preflight.add_argument("--run-id", required=True)
+    preflight.add_argument("--runtime-kind", choices=("canonical", "local"), required=True)
+    preflight.add_argument("--output", type=Path, required=True)
     run = commands.add_parser("capture", help="Capture completed-run provenance")
     run.add_argument("--root", type=Path, default=Path("."))
     run.add_argument("--freeze-root", type=Path, required=True)
@@ -328,12 +384,16 @@ def main() -> int:
     run.add_argument("--execution-probes", type=Path)
     run.add_argument("--execution-plan", type=Path)
     run.add_argument("--paired-evidence-manifest", type=Path)
+    run.add_argument("--preflight", type=Path, required=True)
+    run.add_argument("--execution-coverage-manifest", type=Path, required=True)
     args = parser.parse_args()
     try:
         if args.command in {"source", "plan"}:
             document = source_fingerprint(args.root, args.source_commit)
             if args.command == "plan":
                 document = execution_plan(args.root, document)
+        elif args.command == "preflight":
+            document = preflight_observation(args)
         else:
             document = capture(args)
         write_json(args.output, document)
