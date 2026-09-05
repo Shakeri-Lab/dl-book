@@ -5,6 +5,7 @@ from copy import deepcopy
 import hashlib
 import json
 import os
+import platform
 from pathlib import Path
 import stat
 import struct
@@ -35,16 +36,21 @@ def workers():
 
 
 class DispatchProbeTests(unittest.TestCase):
-    def test_four_policies_only_and_no_unverified_numpy_override(self):
-        with patch.dict(os.environ, {"ATEN_CPU_CAPABILITY": "avx512", "OPENBLAS_CORETYPE": "Zen"}):
+    def test_six_policies_preserve_baseline_and_clear_inherited_numpy_override(self):
+        with patch.dict(os.environ, {"ATEN_CPU_CAPABILITY": "avx512", "OPENBLAS_CORETYPE": "Zen",
+                                     "NPY_DISABLE_CPU_FEATURES": "INHERITED_VALUE"}):
             for policy, overrides in probe.POLICIES.items():
                 env = probe.environment(policy)
-                for key in ("ATEN_CPU_CAPABILITY", "OPENBLAS_CORETYPE"):
+                for key in probe.OPTIONAL_OVERRIDES:
                     self.assertEqual(env.get(key), overrides.get(key))
-                self.assertEqual(env["MKL_CBWR"], "AVX2")
+                self.assertEqual(env["MKL_CBWR"], overrides.get("MKL_CBWR", "AVX2"))
                 self.assertEqual(env["ONEDNN_MAX_CPU_ISA"], "AVX2")
-                self.assertNotIn("NPY_DISABLE_CPU_FEATURES", overrides)
-        self.assertEqual(len(probe.POLICIES), 4)
+                if policy != "compatible-numpy":
+                    self.assertNotIn("NPY_DISABLE_CPU_FEATURES", env)
+        self.assertEqual(len(probe.POLICIES), 6)
+        self.assertEqual(probe.POLICIES["compatible-numpy"]["NPY_DISABLE_CPU_FEATURES"],
+                         "X86_V4,AVX512_ICL,AVX512_SPR")
+        self.assertTrue(probe.summarize(workers(), 2)["completed"])
 
     def test_report_distinguishes_within_policy_output_and_input_drift(self):
         rows = workers()
@@ -81,6 +87,19 @@ class DispatchProbeTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "byte/hash mismatch"):
             probe.summarize(rows, 2)
 
+    def test_compatibility_overrides_and_actual_x86_capability_are_checked(self):
+        rows = workers()
+        compatible = next(row for row in rows if row["policy"] == "compatible-numpy")
+        compatible["runtime_after"]["environment"]["NPY_DISABLE_CPU_FEATURES"] = None
+        with self.assertRaisesRegex(ValueError, "declared policy"):
+            probe.summarize(rows, 2)
+        rows = workers()
+        aten = next(row for row in rows if row["policy"] == "aten-avx2")
+        aten["runtime_after"].update(machine={"machine": "x86_64"})
+        aten["runtime_after"]["torch"]["cpu_capability"] = "AVX512"
+        with self.assertRaisesRegex(ValueError, "capability was not observed"):
+            probe.summarize(rows, 2)
+
     def test_source_spec_is_exactly_the_three_authored_cells(self):
         root = Path(__file__).resolve().parents[1]
         spec = probe.source_spec(root)
@@ -99,20 +118,22 @@ class DispatchProbeTests(unittest.TestCase):
             root = Path(temporary)
             spec = root / "case-spec.json"
             probe.write(spec, probe.source_spec(Path(probe.__file__).resolve().parents[1]))
-            output = root / "worker.json"
-            subprocess.run([sys.executable, str(Path(probe.__file__).resolve()), "--worker", "baseline",
-                            "--case-spec", str(spec), "--output", str(output)],
-                           env=probe.environment("baseline"), check=True, timeout=30)
-            document = json.loads(output.read_text())
-            self.assertEqual(document["status"], "completed")
-            self.assertIn("torch/float32/tanh", document["outputs"])
-            self.assertIn("torch/float64/updated_w", document["outputs"])
-            self.assertIn("numpy/float64/svd_s", document["outputs"])
-            self.assertIn("chapter1/X_aug", document["inputs"])
-            self.assertIn("chapter1/solution", document["outputs"])
-            self.assertIn("numpy_show_runtime", document["runtime_after"])
-            self.assertEqual(stat.S_IMODE(output.stat().st_mode), 0o644)
-            self.assertEqual(stat.S_IMODE(output.with_suffix(".preflight.json").stat().st_mode), 0o644)
+            policies = ("baseline", "compatible-numpy") if platform.system() == "Linux" and platform.machine() == "x86_64" else ("baseline",)
+            for policy in policies:
+                output = root / f"{policy}.json"
+                subprocess.run([sys.executable, str(Path(probe.__file__).resolve()), "--worker", policy,
+                                "--case-spec", str(spec), "--output", str(output)],
+                               env=probe.environment(policy), check=True, timeout=30)
+                document = json.loads(output.read_text())
+                self.assertEqual(document["status"], "completed")
+                self.assertIn("torch/float32/tanh", document["outputs"])
+                self.assertIn("torch/float64/updated_w", document["outputs"])
+                self.assertIn("numpy/float64/svd_s", document["outputs"])
+                self.assertIn("chapter1/X_aug", document["inputs"])
+                self.assertIn("chapter1/solution", document["outputs"])
+                self.assertIn("numpy_show_runtime", document["runtime_after"])
+                self.assertEqual(stat.S_IMODE(output.stat().st_mode), 0o644)
+                self.assertEqual(stat.S_IMODE(output.with_suffix(".preflight.json").stat().st_mode), 0o644)
 
 
 if __name__ == "__main__":

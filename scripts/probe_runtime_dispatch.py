@@ -19,12 +19,16 @@ POLICIES = {
     "baseline": {}, "aten-avx2": {"ATEN_CPU_CAPABILITY": "avx2"},
     "openblas-haswell": {"OPENBLAS_CORETYPE": "Haswell"},
     "both": {"ATEN_CPU_CAPABILITY": "avx2", "OPENBLAS_CORETYPE": "Haswell"},
+    "compatible": {"ATEN_CPU_CAPABILITY": "avx2", "OPENBLAS_CORETYPE": "Haswell", "MKL_CBWR": "COMPATIBLE"},
+    "compatible-numpy": {"ATEN_CPU_CAPABILITY": "avx2", "OPENBLAS_CORETYPE": "Haswell", "MKL_CBWR": "COMPATIBLE",
+                         "NPY_DISABLE_CPU_FEATURES": "X86_V4,AVX512_ICL,AVX512_SPR"},
 }
+OPTIONAL_OVERRIDES = ("ATEN_CPU_CAPABILITY", "OPENBLAS_CORETYPE", "NPY_DISABLE_CPU_FEATURES")
 SOURCE = "chapters/part1/01-linear-regression.qmd"
 LABELS = ("setup", "synthetic-data", "closed-form")
 LIMITATION = ("Finite observations on the recorded host/image, not a cross-host guarantee or a canonical "
-              "admission decision. Policy differences identify witnesses, not a universal cause. NumPy's "
-              "own SIMD dispatcher is observed, not disabled by guessed feature names.")
+              "admission decision. Policy differences identify witnesses, not a universal cause. The NumPy "
+              "disable policy uses groups observed in the saved NumPy2.5.1 wheel; runtime dispatch is retained.")
 
 
 def write(path: Path, document) -> None:
@@ -34,7 +38,7 @@ def write(path: Path, document) -> None:
 
 def environment(policy: str) -> dict:
     env = {**os.environ, **shared.POLICY, "MKL_CBWR": "AVX2", "MPLBACKEND": "Agg"}
-    for key in ("ATEN_CPU_CAPABILITY", "OPENBLAS_CORETYPE"):
+    for key in OPTIONAL_OVERRIDES:
         env.pop(key, None)
     return {**env, **POLICIES[policy]}
 
@@ -141,11 +145,15 @@ def summarize(workers: list[dict], processes: int) -> dict:
             if any(observed["torch"][key] != 1 for key in ("num_threads", "num_interop_threads")):
                 raise ValueError("Actual thread policy is not 1/1")
             if any(observed["environment"].get(key) != value
-                   for key, value in {**shared.POLICY, "MKL_CBWR": "AVX2"}.items()):
+                   for key, value in {**shared.POLICY, "MKL_CBWR": "AVX2", **POLICIES[row["policy"]]}.items()):
                 raise ValueError("Observed fixed base environment differs from declared policy")
-            for key in ("ATEN_CPU_CAPABILITY", "OPENBLAS_CORETYPE"):
+            for key in OPTIONAL_OVERRIDES:
                 if observed["environment"].get(key) != POLICIES[row["policy"]].get(key):
                     raise ValueError("Observed dispatch override differs from declared policy")
+            if (observed.get("machine", {}).get("machine") in ("x86_64", "amd64")
+                    and POLICIES[row["policy"]].get("ATEN_CPU_CAPABILITY") == "avx2"
+                    and observed["torch"]["cpu_capability"].upper() != "AVX2"):
+                raise ValueError("Requested x86 Torch AVX2 capability was not observed")
         for group, keys in expected_keys.items():
             if set(row[group]) != keys or not keys:
                 raise ValueError("Incomplete case inventory")

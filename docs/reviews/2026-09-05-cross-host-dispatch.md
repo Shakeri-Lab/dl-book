@@ -65,3 +65,38 @@ NumPy SIMD is observed; no unverified feature names are disabled.
 This probe is finite diagnostic evidence, never a book candidate or a replacement
 for the two full independent executions. No numerical tolerance, manuscript
 claim, archived result, or canonical runtime policy is changed by running it.
+
+## First controlled observations and next intervention
+
+Two completed diagnostic runs used the exact image from source `95fa50d`:
+`33967832721` (AMD EPYC 7763) and `33967834515` (Intel Xeon 6973P-C).
+Their original reports are
+`build/runtime-probe-33967832721/results/report.json` (SHA-256
+`ba8ee78e6475de883b7cd3fec7f5d5dce8effb220ab11c5529dfc9197f4db5fa`)
+and `build/runtime-probe-33967834515/results/report.json` (SHA-256
+`a25b61de49f96b2436de15ba1b73b8db4f1743c0eea0a6131e696d0866d53559`).
+No fixed input differs across policies or hosts, and the two fresh processes
+agree within every policy. There are 13 cross-host output differences under the
+baseline and eight with both overrides. OpenBLAS Haswell removes the five SVD
+output differences in this witness; changing the ATen setting alone changes
+none of its selected outputs. That absence is not proof that ATen dispatch is
+irrelevant to every book operation. Chapter 1's solved coefficients and several
+elementary/gradient results still differ, so the two flags are not sufficient.
+
+The raw `numpy_show_runtime` and `numpy_opt_func_info` fields additionally show
+the pinned wheel's separate NumPy SIMD groups: the AMD host uses `X86_V3`, while
+Intel can select `X86_V4`, `AVX512_ICL`, and `AVX512_SPR`. The float64 exponential
+selects different implementations and remains a cross-host witness.
+
+Intel explicitly documents another boundary: on non-Intel processors,
+`MKL_CBWR=AVX2` can fall back to automatic dispatch; the supported cross-vendor
+CNR setting is `COMPATIBLE`. See
+[Intel's CNR setup conditions](https://www.intel.com/content/www/us/en/docs/onemkl/developer-reference-c/2026-0/getting-started-with-conditional-numerical.html).
+This documents a limitation of the proposed original setting, not a measured
+claim that it explains every differing operation.
+
+The next probe retains the four original policies and the exact same case code,
+then adds `COMPATIBLE` with both overrides, and a final condition also disabling
+the three observed NumPy AVX-512 groups. The feature names come from the actual
+pinned wheel and its introspection, not an assumed old NumPy naming scheme.
+These are diagnostic interventions only; full canonical acceptance still waits.
