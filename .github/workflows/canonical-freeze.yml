@@ -118,6 +118,29 @@ jobs:
             --env DLBOOK_CAPTURE_WITNESS_REPORT=/pretraining/capture-lifecycle.json \
             "$IMAGE_ID" /source/container/test_unit_execution.py
 
+      - name: Verify the host uploader can read retained fixture evidence
+        if: always() && steps.image.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Docker's root-owned mkdtemp directories are mode 0700. Change only
+          # host ownership of this disposable fixture tree, never its contents
+          # or the separately retained canonical candidate. Check before training.
+          test -d "$PWD/build/canonical-pretraining"
+          test ! -L "$PWD/build/canonical-pretraining"
+          sudo chown -hR -- "$(id -u):$(id -g)" "$PWD/build/canonical-pretraining"
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          def refuse(error):
+              raise error
+          for directory, _, names in os.walk('build/canonical-pretraining', onerror=refuse):
+              for name in names:
+                  with (Path(directory) / name).open('rb') as stream:
+                      stream.read(1)
+          print('Retained fixture evidence is readable by the host uploader.')
+          PY
+
       - name: Execute a fresh source snapshot without network access
         env:
           SOURCE_SHA: ${{ steps.source.outputs.sha }}
