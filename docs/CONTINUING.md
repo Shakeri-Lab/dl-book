@@ -78,6 +78,15 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > `build/diagnostic-prose-33937390845-early.md`. Older dated summaries below retain
 > their historical values and do not describe an accepted new canonical freeze.
 >
+> The first reconciled-source trial (`97d070f`) stopped at Appendix A before any
+> training: Quarto rewrites option quoting and moves figure dimensions into cell
+> metadata. Both Mac bundles retain that failed status and their partial notebook
+> proof; the corresponding Linux candidate was canceled before execution. The
+> checker now preserves exact Python while comparing complete semantic options,
+> and the pre-training fixture covers all authored option headers. This repair
+> requires a new final-source checkpoint and four new runs, not relabeling the
+> rejected trials. See the dated review ledger for the exact evidence paths.
+>
 > ## Previous stable and web-only state — 2026-09-02
 >
 > The manuscript is **complete and released**: tag **v1.3** carries the stable

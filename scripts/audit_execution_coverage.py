@@ -41,12 +41,69 @@ def text(value) -> str:
     return "".join(value) if isinstance(value, list) else value
 
 
-def options(source: str) -> dict:
-    parsed = yaml.safe_load("\n".join(line[2:].lstrip() for line in source.splitlines()
-                                     if line.startswith("#|"))) or {}
+def partition_options(source: str) -> tuple[dict, str]:
+    """Read only the leading directive block; preserve all other Python text.
+
+    Quarto 1.10.18 core/lib/partition-cell-options.ts and
+    core/jupyter/jupyter.ts reserialize this YAML when creating a notebook.
+    Directive-like lines inside strings or later comments are not cell options.
+    """
+    # Match Quarto's CR/LF-only lines(), not str.splitlines(): Unicode line
+    # separators and form feeds can be meaningful inside a Python string.
+    lines = re.split(r"\r\n?|\n", source)
+    count = 0
+    yaml_lines = []
+    for line in lines:
+        if not line.startswith("#|"):
+            break
+        value = line[2:]
+        yaml_lines.append(value[1:] if value.startswith(" ") else value)
+        count += 1
+    parsed = yaml.safe_load("\n".join(yaml_lines)) or {}
     if not isinstance(parsed, dict):
         raise ValueError("Native cell options must be a mapping")
-    return parsed
+    return parsed, "\n".join(lines[count:])
+
+
+def options(source: str) -> dict:
+    return partition_options(source)[0]
+
+
+def trim_outer_empty_lines(source: str) -> str:
+    # Quarto trims outer blank lines and the final newline, not internal code,
+    # indentation, ordinary comments, or whitespace on nonempty lines.
+    lines = re.split(r"\r\n?|\n", source)
+    while lines and not lines[0].strip():
+        lines.pop(0)
+    while lines and not lines[-1].strip():
+        lines.pop()
+    return "\n".join(lines)
+
+
+def same_option_values(left, right) -> bool:
+    # YAML/JSON may spell a numeric dimension 2.0 or 2. Boolean execution
+    # switches must never compare equal to 0/1 through Python's numeric rules.
+    if isinstance(left, bool) or isinstance(right, bool):
+        return type(left) is type(right) and left == right
+    if isinstance(left, dict) and isinstance(right, dict):
+        return left.keys() == right.keys() and all(same_option_values(left[k], right[k]) for k in left)
+    if isinstance(left, list) and isinstance(right, list):
+        return len(left) == len(right) and all(same_option_values(a, b) for a, b in zip(left, right))
+    return left == right
+
+
+def source_options_match(body: str, cell: dict) -> bool:
+    expected, expected_code = partition_options(body)
+    observed, observed_code = partition_options(text(cell["source"]))
+    metadata = cell.get("metadata", {})
+    # Of this book's authored options, only these two are moved by pinned
+    # Quarto's kJupyterCellOptionKeys partition. Do not license arbitrary
+    # metadata (including execution overrides/tags), dropped options, or values.
+    if (not isinstance(metadata, dict) or set(metadata) - {"fig-width", "fig-height"}
+            or set(metadata) & set(observed)):
+        return False
+    return (trim_outer_empty_lines(expected_code) == trim_outer_empty_lines(observed_code)
+            and same_option_values(expected, {**observed, **metadata}))
 
 
 def collect_stdout(records) -> list[tuple[int, str]]:
@@ -83,7 +140,7 @@ def audit_execution_notebook(source: str, notebook: dict, freeze_raw: str,
         raise ValueError("Successful execution log lacks exact unit/ordered cell completion")
     rendered, expected_stdout = [], []
     for ordinal, (body, cell) in enumerate(zip(bodies, cells, strict=True), 1):
-        if text(cell["source"]).rstrip("\n") != body.rstrip("\n"):
+        if not source_options_match(body, cell):
             raise ValueError(f"Kept notebook source/options differ at native cell {ordinal}")
         opts = {**defaults, **options(body)}
         if opts.get("eval", True) is not True or opts.get("cache", False) is not False:

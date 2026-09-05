@@ -73,6 +73,14 @@ when Quarto omits them from rendered Markdown; visible-cell counts are not
 execution counts. Disabled or cell-cached execution fails the audit. Raw
 notebooks, source copies, and logs are retained even when that audit fails.
 
+Pinned Quarto reserializes the leading YAML directives and relocates authored
+figure dimensions into notebook metadata. The audit therefore checks complete
+semantic option values with an explicit relocation allowlist, while preserving
+exact non-option Python and comments after Quarto's outer-empty-line handling.
+Unknown, missing, or shadowed options fail. Pre-training fixtures exercise all
+authored option headers with synthetic print-only cells; they are pipeline
+checks, not replacements for actual book execution.
+
 After execution the source/input inventory must be unchanged, the native cells
 and kernels must cover the entire predeclared plan, and HTML/LaTeX ordered stdout
 must be byte-identical. The completed schema-2 fingerprint binds the original

@@ -137,6 +137,42 @@ diagnostic improvement is to retain partial notebooks when Quarto itself exits
 unsuccessfully, not only when semantic coverage fails after a completed render;
 logs, preflight, and frozen partial artifacts already survive that failure.
 
+**September 5, 04:44 UTC: option-normalization diagnostic.** The source-only
+prose checkpoint is `97d070ff652e3e93645469903f2cb3505846060b`. Both new Mac
+profiles stopped immediately after Appendix A's first LaTeX render: retained
+notebook source/options did not byte-match the authored directive spelling.
+Their original rejected bundles are `build/portability-97d070f/{mac-one,mac-six}/`;
+the preserved preflight, notebook, source, and log reveal the cause directly.
+Linux Actions run `33945331472` was canceled before numerical execution.
+
+Pinned Quarto 1.10.18 reserializes the leading `#|` YAML and moves `fig-width`
+and `fig-height` into cell metadata. The checker now compares complete parsed
+option values, permits only those explicit metadata relocations, rejects
+missing/extra/shadowed values, and preserves the exact remaining Python and
+comments after Quarto's documented outer-empty-line normalization. It parses
+only the leading directive block, so directive-like string content remains code.
+An independent review caught and regression-tested Python's broader Unicode
+line splitting; the checker uses the same CR/LF splitting as pinned Quarto.
+The source hashes, execution counts/logs, actual stdout, and failed-run rejection
+are unchanged. This is serialization handling, not a numerical tolerance change.
+
+The lightweight witness `build/check_all_authored_options.py` runs synthetic
+print-only bodies with all 287 authored option headers through both real formats;
+`build/options-diagnosis/all-authored-options.log` records its pass. It trains
+no book model and is not manuscript execution evidence. A corresponding
+pre-training integration test prevents new option spellings from wasting a full
+candidate run. New final-source executions are required; neither earlier failed
+bundle is retroactively completed or promoted.
+
+Option-repair verification: `build/options-diagnosis/scripts-unit.log` reports
+273 script tests passing with seven opt-in integration skips. The focused
+`container/test_unit_execution.py` invocation with pinned local Quarto/Python
+runs all three real pre-training tests, including all authored headers and an
+actual plotted cell with relocated dimensions; all pass. Independent review
+confirms the changed-string regression fails as intended. The ordinary source,
+Plan, book, anchor, and whitespace checks also pass. Complete book runs remain
+the next gate; these fixtures do not certify their outcomes.
+
 The final assembly path is being guarded separately: public/reference notebooks
 use the exact canonical image, while HTML and PDF assembly reuse frozen output in
 disposable snapshots with a refusing kernel. A source chapter's complete hash must

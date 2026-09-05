@@ -3,6 +3,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tempfile
@@ -26,7 +27,16 @@ counter = 40
 ```
 
 ```{python}
+#| label: fig-coverage-witness
+#| code-summary: "Code: preserve quoted metadata"
+#| fig-cap: "A quoted caption: one small figure."
+#| fig-alt: "A line rising from zero to one."
+#| fig-width: 3
+#| fig-height: 2.0
+import matplotlib.pyplot as plt
 print(counter + 2)
+plt.plot([0, 1], [0, 1])
+plt.show()
 ```
 
 ```{python}
@@ -45,6 +55,59 @@ def fixture_directory():
 @unittest.skipUnless(os.environ.get("QUARTO_BIN") and os.environ.get("QUARTO_PYTHON"),
                      "Set QUARTO_BIN and QUARTO_PYTHON for the tiny real-Quarto fixture")
 class SilentCellExecutionTests(unittest.TestCase):
+    def test_all_authored_option_headers_survive_quarto_normalization(self):
+        # Execute only synthetic sentinels. Keep every current authored header
+        # (including its YAML spelling), never any numerical experiment body.
+        entries = []
+        for path in sorted((ROOT / "chapters").rglob("*.qmd")):
+            for ordinal, match in enumerate(FENCE_RE.finditer(path.read_text()), 1):
+                directives = []
+                for line in re.split(r"\r\n?|\n", match.group(2)):
+                    if not line.startswith("#|"):
+                        break
+                    directives.append(line)
+                serial = len(entries) + 1
+                directives = [re.sub(r"^#\| label:.*$", f"#| label: option-witness-{serial}", line)
+                              for line in directives]
+                entries.append("```{python}\n" + "\n".join(directives) + "\n"
+                               + f"# Source options: {path.relative_to(ROOT)} native {ordinal}\n"
+                               + f'print("option witness {serial}")\n' + "```\n")
+        self.assertTrue(entries, "The source-mounted book must supply authored cell headers")
+        source = "# Authored option normalization witness\n\n" + "\n".join(entries)
+        with fixture_directory() as temporary:
+            root = Path(temporary)
+            (root / "chapters").mkdir()
+            unit = "chapters/option-witness.qmd"
+            (root / unit).write_text(source)
+            (root / "_quarto.yml").write_text(
+                "project:\n  type: book\n  output-dir: _book\nbook:\n"
+                "  title: Option witness\n  chapters:\n    - chapters/option-witness.qmd\n"
+                "execute:\n  freeze: true\nformat:\n  html: default\n  pdf: default\n")
+            shutil.copy2(ROOT / "_quarto-execution.yml", root / "_quarto-execution.yml")
+            plan = {"formats": ["html", "tex"], "units": {unit: {
+                "source_sha256": hashlib.sha256(source.encode()).hexdigest(),
+                "native_cells_sha256": [hashlib.sha256(m.group(2).encode()).hexdigest()
+                                        for m in FENCE_RE.finditer(source)],
+            }}}
+            provenance = root / "provenance"
+            coverage = []
+            for fmt in ("latex", "html"):
+                kept = kept_notebook_path(root, unit)
+                result = subprocess.run(
+                    execution_command(os.environ["QUARTO_BIN"], unit, fmt), cwd=root,
+                    env=os.environ, text=True, capture_output=True, timeout=120)
+                log = root / f"{fmt}.log"
+                log.write_text(result.stdout + result.stderr)
+                self.assertEqual(result.returncode, 0, log.read_text())
+                coverage.append(record_execution(root, root / "_freeze", provenance,
+                                                 unit, fmt, log, kept, plan["units"][unit]))
+            hashes = {name: hashlib.sha256((root / name).read_bytes()).hexdigest()
+                      for name in (unit, "_quarto.yml")}
+            manifest = build_coverage_manifest(provenance, plan, root / "_freeze", hashes, coverage)
+            self.assertEqual(validate_coverage_manifest(manifest, provenance, plan, root / "_freeze", hashes), [])
+            self.assertEqual([row["native_ordinals"] for row in manifest["units"]],
+                             [list(range(1, len(entries) + 1))] * 2)
+
     def test_completed_silent_setup_and_final_cell_are_not_skipped(self):
         with fixture_directory() as temporary:
             root = Path(temporary)
@@ -77,6 +140,9 @@ class SilentCellExecutionTests(unittest.TestCase):
                 notebook = json.loads(notebooks[-1].read_text())
                 cells = [cell for cell in notebook["cells"] if cell["cell_type"] == "code"]
                 self.assertEqual([cell["execution_count"] for cell in cells], [1, 2, 3])
+                self.assertEqual(cells[1]["metadata"]["fig-width"], 3)
+                self.assertEqual(cells[1]["metadata"]["fig-height"], 2)
+                self.assertNotIn("#| fig-width:", "".join(cells[1]["source"]))
                 (probes / f"{fmt}.json").write_text(json.dumps({"unit": unit, "format": fmt}))
                 log = root / f"{fmt}.log"
                 log.write_text(result.stdout + result.stderr)
@@ -160,6 +226,58 @@ class NativeCoverageTests(unittest.TestCase):
         self.notebook["cells"][0]["source"] = "#| echo: false\ncounter = 41"
         with self.assertRaisesRegex(ValueError, "source/options differ"):
             self.audit()
+
+    def relocated_figure(self):
+        cell = self.notebook["cells"][1]
+        cell["source"] = (cell["source"]
+            .replace('#| code-summary: "Code: preserve quoted metadata"', "#| code-summary: 'Code: preserve quoted metadata'")
+            .replace('#| fig-cap: "A quoted caption: one small figure."', "#| fig-cap: 'A quoted caption: one small figure.'")
+            .replace('#| fig-alt: "A line rising from zero to one."', '#| fig-alt: A line rising from zero to one.')
+            .replace("#| fig-width: 3\n", "").replace("#| fig-height: 2.0\n", ""))
+        cell["metadata"] = {"fig-width": 3, "fig-height": 2}
+        return cell
+
+    def test_quarto_yaml_reserialization_and_dimension_relocation(self):
+        self.relocated_figure()
+        self.assertEqual(self.audit(), {"native_ordinals": [1, 2, 3], "rendered_ordinals": [2]})
+
+    def test_missing_changed_or_extra_relocated_option_is_rejected(self):
+        for metadata in ({"fig-width": 3}, {"fig-width": 4, "fig-height": 2},
+                         {"fig-width": 3, "fig-height": 2, "eval": False},
+                         {"fig-width": 3, "fig-height": 2, "tags": ["remove-cell"]}):
+            with self.subTest(metadata=metadata):
+                cell = self.relocated_figure()
+                cell["metadata"] = metadata
+                with self.assertRaisesRegex(ValueError, "source/options differ"):
+                    self.audit()
+
+    def test_reserialized_options_do_not_license_changed_python_or_comments(self):
+        cell = self.relocated_figure()
+        original = cell["source"]
+        for replacement in ("print(counter + 3)", "# changed non-option comment\nprint(counter + 2)",
+                            "print( counter + 2 )"):
+            with self.subTest(replacement=replacement):
+                cell["source"] = original.replace("print(counter + 2)", replacement)
+                with self.assertRaisesRegex(ValueError, "source/options differ"):
+                    self.audit()
+
+    def test_directive_like_string_content_is_not_discarded(self):
+        source = self.source.replace("counter = 40", 'counter = 40\nnote = """kept\n#| echo: false\n"""')
+        bodies = [m.group(2) for m in FENCE_RE.finditer(source)]
+        spec = {"native_cells_sha256": [hashlib.sha256(body.encode()).hexdigest() for body in bodies]}
+        self.notebook["cells"][0]["source"] = bodies[0].replace("#| echo: false\n\"\"\"", "#| echo: true\n\"\"\"")
+        with self.assertRaisesRegex(ValueError, "source/options differ"):
+            self.audit(source=source, specification=spec)
+
+    def test_non_quarto_line_separators_in_strings_are_exact(self):
+        for separator in ("\u2028", "\u2029", "\x85", "\f", "\v"):
+            with self.subTest(separator=repr(separator)):
+                source = self.source.replace("counter = 40", 'counter = 40\nnote = """a' + separator + 'b"""')
+                bodies = [m.group(2) for m in FENCE_RE.finditer(source)]
+                spec = {"native_cells_sha256": [hashlib.sha256(body.encode()).hexdigest() for body in bodies]}
+                self.notebook["cells"][0]["source"] = bodies[0].replace(separator, "\n")
+                with self.assertRaisesRegex(ValueError, "source/options differ"):
+                    self.audit(source=source, specification=spec)
 
     def test_errors_are_not_hidden_by_include_false(self):
         self.notebook["cells"][2]["outputs"] = [{"output_type": "error", "ename": "AssertionError"}]
