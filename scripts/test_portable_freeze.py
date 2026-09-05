@@ -85,7 +85,7 @@ class PortablePolicyTests(unittest.TestCase):
             portable.validate_portable_probes(self.probes, selection, env, freeze_provenance.ENVIRONMENT_KEYS, 6)
 
     def test_uses_shared_exact_completion_and_local_capture(self):
-        (self.work / "_quarto-execution.yml").write_text("project:\n  type: default\n")
+        (self.work / "_quarto-execution.yml").write_text("project:\n  type: default\nuse-rsvg-convert: false\n")
         output = self.root / "out"
         (output / "provenance").mkdir(parents=True)
         freeze = self.work / "_freeze"

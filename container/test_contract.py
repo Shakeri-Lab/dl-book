@@ -92,6 +92,87 @@ class RecipeTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertIn("--source-archive", result.stdout)
 
+    def test_execution_svg_bypass_requires_the_profile_level_option(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for options in ("", "use-rsvg-convert: true\n",
+                            "format:\n  pdf:\n    use-rsvg-convert: false\n"):
+                (root / "_quarto-execution.yml").write_text("project:\n  type: default\n" + options)
+                with self.subTest(options=options), self.assertRaisesRegex(ValueError, "use-rsvg-convert:false"):
+                    validate_execution_profile(root)
+
+    def test_execution_svg_images_require_source_bound_pdf_siblings(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            shutil.copy2(ROOT / "_quarto-execution.yml", root / "_quarto-execution.yml")
+            (root / "chapters").mkdir()
+            (root / "figures").mkdir()
+            source = root / "chapters/test.qmd"
+            source.write_text("# Fixture\n\n![An image](../figures/mechanism.svg)\n")
+            (root / "figures/mechanism.svg").write_text("<svg/>")
+            with self.assertRaisesRegex(ValueError, "in-source SVG/PDF pair"):
+                validate_execution_profile(root)
+            (root / "figures/mechanism.pdf").write_bytes(b"PDF fixture")
+            self.assertEqual(validate_execution_profile(root)["sha256"], digest(root / "_quarto-execution.yml"))
+            (root / "figures/mechanism.svg").unlink()
+            with self.assertRaisesRegex(ValueError, "in-source SVG/PDF pair"):
+                validate_execution_profile(root)
+
+    def test_execution_svg_guard_checks_preface_and_paths_with_spaces(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            shutil.copy2(ROOT / "_quarto-execution.yml", root / "_quarto-execution.yml")
+            (root / "index.qmd").write_text("![Image](<figure with spaces.svg>)\n")
+            (root / "figure with spaces.svg").write_text("<svg/>")
+            with self.assertRaisesRegex(ValueError, "in-source SVG/PDF pair"):
+                validate_execution_profile(root)
+            (root / "figure with spaces.pdf").write_bytes(b"PDF fixture")
+            validate_execution_profile(root)
+
+    def test_execution_svg_guard_rejects_external_pairs_but_ignores_diagnostic_copies(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            root = parent / "source"
+            root.mkdir()
+            shutil.copy2(ROOT / "_quarto-execution.yml", root / "_quarto-execution.yml")
+            (parent / "outside.svg").write_text("<svg/>")
+            (parent / "outside.pdf").write_bytes(b"PDF fixture")
+            (root / "index.qmd").write_text("![Image](../outside.svg)\n")
+            with self.assertRaisesRegex(ValueError, "in-source SVG/PDF pair"):
+                validate_execution_profile(root)
+            (root / "index.qmd").write_text("# Preface\n")
+            (root / "build").mkdir()
+            (root / "build/old-source.qmd").write_text("![Old image](missing.svg)\n")
+            # Website-only favicon configuration is not a PDF body image.
+            (root / "_quarto.yml").write_text("book:\n  favicon: figures/favicon.svg\n")
+            validate_execution_profile(root)
+
+    def test_execution_svg_guard_rejects_a_pdf_symlink_outside_source(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            root = parent / "source"
+            root.mkdir()
+            shutil.copy2(ROOT / "_quarto-execution.yml", root / "_quarto-execution.yml")
+            (root / "index.qmd").write_text("![Image](figure.svg)\n")
+            (root / "figure.svg").write_text("<svg/>")
+            (parent / "outside.pdf").write_bytes(b"PDF fixture")
+            (root / "figure.pdf").symlink_to(parent / "outside.pdf")
+            with self.assertRaisesRegex(ValueError, "in-source SVG/PDF pair"):
+                validate_execution_profile(root)
+
+    def test_execution_svg_guard_rejects_existing_but_unbound_generated_pairs(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            shutil.copy2(ROOT / "_quarto-execution.yml", root / "_quarto-execution.yml")
+            for directory in ("_book", "build", "figures/__pycache__", "chapters/test_files"):
+                images = root / directory
+                images.mkdir(parents=True)
+                (images / "image.svg").write_text("<svg/>")
+                (images / "image.pdf").write_bytes(b"PDF fixture")
+                (root / "index.qmd").write_text(f"![Image]({directory}/image.svg)\n")
+                with self.subTest(directory=directory), self.assertRaisesRegex(ValueError, "in-source SVG/PDF pair"):
+                    validate_execution_profile(root)
+
 
 class IsolationTests(unittest.TestCase):
     def setUp(self):

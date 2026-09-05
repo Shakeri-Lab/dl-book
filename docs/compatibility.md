@@ -37,7 +37,8 @@ Portability and prose precision have different contracts:
 The numerical runner uses the committed execution-only Quarto profile to select
 `project.type=default`. This prevents a nominal chapter-only LaTeX command from
 expanding to the entire book. The publication build still uses the book profile;
-the execution profile changes no manuscript cells or format settings. A real
+the execution profile changes no manuscript cells. Its additional SVG/PDF-pair
+handling is described below. A real
 Quarto fixture verifies this isolation before training. A second real fixture
 verifies that silent hidden cells execute even when absent from rendered
 Markdown. Coverage is checked from original executed notebooks, ordered cell
@@ -66,6 +67,18 @@ device contract. No dispatch setting or tolerance was relaxed. See
 `docs/reviews/2026-09-05-linux-repeat-diagnosis.md` for the original runs,
 hash-bound observations, and limits. Full final-source repeats remain required;
 this does not explain the historical Mac training drift.
+
+**Final-capture boundary, September 5.** The execution-only renderer uses existing
+source-bound SVG/PDF pairs directly. Its preflight requires each referenced SVG's
+PDF sibling before any execution; the profile bypasses Quarto's mediabag copy
+that otherwise writes a duplicate PDF into a chapter's source directory. The
+source inventory and stale-notebook checks remain strict. A real full-A1 fixture
+exercises the entire preflight, two-format execution, notebook archival, and
+schema-2 capture lifecycle before training. Rejected capture retains an explicitly
+ineligible post-execution source observation and path difference report, without
+rewriting earlier evidence. See
+`docs/reviews/2026-09-05-source-inventory-capture.md` for the reproduced failure
+and the boundary between a diagnostic fixture and an accepted book run.
 
 ### Previous publication baseline, retained during migration
 

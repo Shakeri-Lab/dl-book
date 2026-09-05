@@ -36,9 +36,31 @@ def execution_command(quarto: str, unit: str, fmt: str) -> list[str]:
 
 def validate_execution_profile(work: Path) -> dict:
     import yaml
+    from freeze_provenance import _is_input_name
     path = work / "_quarto-execution.yml"
-    if not path.is_file() or yaml.safe_load(path.read_text()) != {"project": {"type": "default"}}:
-        raise ValueError("The source must include the explicit project.type=default execution-only profile")
+    expected = {"project": {"type": "default"}, "use-rsvg-convert": False}
+    if not path.is_file() or yaml.safe_load(path.read_text()) != expected:
+        raise ValueError("The source must include the explicit project.type=default execution-only profile "
+                         "with use-rsvg-convert:false")
+    # The execution profile bypasses Quarto's SVG mediabag conversion, not the
+    # source gate. Require every authored Markdown SVG image's existing PDF
+    # counterpart; the unchanged-source fingerprint binds both files' bytes.
+    root = work.resolve()
+    sources = sorted((root / "chapters").rglob("*.qmd"))
+    if (root / "index.qmd").is_file():
+        sources.append(root / "index.qmd")
+    image = re.compile(r'!\[[\s\S]*?\]\(\s*(?:<([^>]+\.svg)>|([^\s)]+\.svg))(?=[\s)])', re.I)
+    for source in sources:
+        for match in image.finditer(source.read_text()):
+            target = match.group(1) or match.group(2)
+            svg = (source.parent / target).resolve()
+            pdf = svg.with_suffix(".pdf").resolve()
+            if (not svg.is_relative_to(root) or not pdf.is_relative_to(root)
+                    or not svg.is_file() or not pdf.is_file()
+                    or not _is_input_name(svg.relative_to(root).as_posix())
+                    or not _is_input_name(pdf.relative_to(root).as_posix())):
+                raise ValueError(f"Execution-only SVG image requires an in-source SVG/PDF pair: "
+                                 f"{source.relative_to(root)} -> {target}")
     return {"path": path.name, "sha256": file_hash(path)}
 
 

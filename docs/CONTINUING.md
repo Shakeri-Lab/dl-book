@@ -102,6 +102,18 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > dtypes, seeds, `rcond`, dispatch settings, and strict gates are unchanged.
 > Actual-source prefix tests and two full final-source executions remain required.
 > This finding does not explain the older Mac training discrepancy.
+> **September 5 final-capture regression:** the new `eabfcc9` Mac profiles
+> completed all unit/format and paired-evidence checks, then failed the final
+> input inventory. A real full-A1 replay isolates Quarto's duplicate-PDF mediabag
+> write into the chapter directory; original inputs are unchanged in the replay.
+> The correction bypasses SVG conversion only when its source-bound sibling PDF
+> is present, and adds a cheap real end-to-end capture fixture before training.
+> Failed capture now retains an explicitly ineligible source-after/difference
+> record. Do not broaden input exclusions, relax stale-notebook checks, or turn
+> the original failed profiles into accepted proof. See
+> `docs/reviews/2026-09-05-source-inventory-capture.md`. New complete-source runs
+> remain required; neither the old Mac refresh nor these rejected profiles are
+> eligible for promotion.
 >
 > ## Previous stable and web-only state — 2026-09-02
 >

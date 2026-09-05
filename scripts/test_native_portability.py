@@ -51,7 +51,7 @@ class NativeReportTests(unittest.TestCase):
         source.write_text('# Fixture\n\n```{python}\nprint("metric: 1.0")\n```\n\n'
                           '```{python}\n#| echo: false\nunused = 2\n```\n')
         (self.root / "_quarto.yml").write_text("execute:\n  freeze: true\n")
-        (self.root / "_quarto-execution.yml").write_text("project:\n  type: default\n")
+        (self.root / "_quarto-execution.yml").write_text("project:\n  type: default\nuse-rsvg-convert: false\n")
         self.before = {"kind": "native-portability-probe", "source": {
             **source_fingerprint(self.root, "a" * 40), "dirty": False}}
         write_json(self.output / "before.json", self.before)
@@ -197,7 +197,7 @@ class NativeQuartoTests(unittest.TestCase):
                 "project:\n  type: book\n  output-dir: _book\nbook:\n  title: Fixture\n"
                 "  chapters: [index.qmd, second.qmd]\nexecute:\n  freeze: true\n"
                 "format:\n  html: default\njupyter: python3\n")
-            (root / "_quarto-execution.yml").write_text("project:\n  type: default\n")
+            (root / "_quarto-execution.yml").write_text("project:\n  type: default\nuse-rsvg-convert: false\n")
             for name in ("index", "second"):
                 (root / f"{name}.qmd").write_text(
                     f"# {name}\n\n```{{python}}\nprint('{name}')\n```\n\n"

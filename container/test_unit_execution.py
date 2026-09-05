@@ -19,6 +19,7 @@ from audit_frozen_stdout import stdout_records
 from test_execution_coverage import SilentCellExecutionTests  # Run in the same real-image smoke gate.
 from test_stable_cell_identity import RealQuartoStableIdentityTests
 from test_lstsq_sources import RealQuartoAuthoredLstsqTests
+from test_capture_lifecycle import RealCaptureLifecycleTests
 
 
 @unittest.skipUnless(os.environ.get("QUARTO_BIN") and os.environ.get("QUARTO_PYTHON"),

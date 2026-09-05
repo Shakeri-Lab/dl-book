@@ -4,6 +4,8 @@ from copy import deepcopy
 from argparse import Namespace
 import hashlib
 import json
+import io
+from contextlib import redirect_stderr
 from pathlib import Path
 import shutil
 import tempfile
@@ -12,7 +14,7 @@ from unittest.mock import patch
 
 from compare_freeze_runs import compare_runs, validate_fingerprint
 from audit_frozen_stdout import native_execution_ordinals, stdout_records
-from freeze_provenance import SCHEMA_VERSION, execution_plan, freeze_inventory, json_digest, load_preflight, preflight_observation, sha256, source_fingerprint, write_json
+from freeze_provenance import SCHEMA_VERSION, execution_plan, freeze_inventory, json_digest, load_preflight, main, preflight_observation, sha256, source_fingerprint, write_json
 
 SOURCE = "# Test\n\n```{python}\nprint('value: 1.234')\n```\n"
 CONFIG = "execute:\n  freeze: true\n"
@@ -577,6 +579,66 @@ class FreezeProvenanceTests(unittest.TestCase):
         self.assertEqual(bound["sha256"], sha256(path))
         with self.assertRaisesRegex(ValueError, "not bound"):
             load_preflight(path, source=document["source"], kind="local", run_id="another-run")
+
+    def test_capture_rejection_preserves_actual_source_after_and_file_diff(self):
+        source_root = self.root / "capture-source"
+        (source_root / "chapters").mkdir(parents=True)
+        (source_root / "data").mkdir()
+        chapter = source_root / "chapters/test.qmd"
+        chapter.write_text(SOURCE)
+        removed = source_root / "data/input.txt"
+        removed.write_text("original input\n")
+        provenance = self.root / "capture-proof"
+        before_path = provenance / "source-before.json"
+        write_json(before_path, source_fingerprint(source_root, "a" * 40))
+        originals = {}
+        for name, data in (("preflight.json", {"kind": "execution-preflight", "promotion_eligible": False}),
+                           ("status.json", {"state": "running"})):
+            path = provenance / name
+            write_json(path, data)
+            originals[path] = path.read_bytes()
+        originals[before_path] = before_path.read_bytes()
+        chapter.write_text(SOURCE + "\nChanged after execution.\n")
+        removed.unlink()
+        # Keep the real failure class: generated duplicate PDFs remain inputs.
+        (source_root / "chapters/test.pdf").write_bytes(b"%PDF-1.7\ndiagnostic fixture\n")
+        observed = source_fingerprint(source_root, "a" * 40)
+        output = provenance / "fingerprint.json"
+        argv = ["freeze_provenance.py", "capture", "--root", str(source_root),
+                "--source-commit", "a" * 40, "--source-before", str(before_path),
+                "--freeze-root", str(self.root / "unused-freeze"), "--kind", "local",
+                "--run-id", "rejected-fixture", "--output", str(output),
+                "--preflight", str(provenance / "preflight.json"),
+                "--execution-coverage-manifest", str(provenance / "execution-coverage.json")]
+        error = io.StringIO()
+        with patch("sys.argv", argv), redirect_stderr(error):
+            result = main()
+        self.assertEqual(result, 1)
+        self.assertIn("Source/input inventory changed during execution", error.getvalue())
+        self.assertFalse(output.exists(), "Rejected capture must not produce a completed fingerprint")
+        after_path = provenance / "source-after.json"
+        self.assertTrue(after_path.is_file(), "Capture lost its rejecting source observation")
+        after = json.loads(after_path.read_text())
+        self.assertFalse(after["promotion_eligible"])
+        self.assertEqual(after["kind"], "rejected-source-after")
+        self.assertEqual(after["source"], observed)
+        report = json.loads((provenance / "source-inventory-mismatch.json").read_text())
+        self.assertFalse(report["promotion_eligible"])
+        self.assertEqual(report["added"], ["chapters/test.pdf"])
+        self.assertEqual(report["removed"], ["data/input.txt"])
+        self.assertEqual(report["changed"], ["chapters/test.qmd"])
+        self.assertEqual(report["after"]["sha256"], sha256(after_path))
+        self.assertEqual(report["before"]["sha256"], sha256(before_path))
+        for path, original in originals.items():
+            self.assertEqual(path.read_bytes(), original)
+        saved = {path: path.read_bytes() for path in
+                 (after_path, provenance / "source-inventory-mismatch.json")}
+        chapter.write_text(SOURCE + "\nA later, different failed capture.\n")
+        with patch("sys.argv", argv), redirect_stderr(io.StringIO()):
+            self.assertEqual(main(), 1)
+        self.assertFalse(output.exists())
+        for path, original in {**originals, **saved}.items():
+            self.assertEqual(path.read_bytes(), original, "Retry rewrote original failure evidence")
 
 
 if __name__ == "__main__":

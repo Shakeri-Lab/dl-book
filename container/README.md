@@ -43,9 +43,14 @@ network access; the data and pinned study artifacts are repository inputs.
 The predeclared execution plan includes **every executable QMD**, its native-cell
 ordinals, and transcluded source hashes. Each unit runs in LaTeX and HTML format
 with a new Jupyter kernel (`--execute-daemon 0`). The committed
-`_quarto-execution.yml` profile changes only the project type to `default`, avoiding
-book-mode LaTeX's expansion of a single-input command into the entire book; all
-inherited execution and format settings remain in effect. This profile is part of
+`_quarto-execution.yml` profile changes the project type to `default`, avoiding
+book-mode LaTeX's expansion of a single-input command into the entire book. It also
+sets top-level `use-rsvg-convert: false`: authored SVG figures must have verified,
+source-bound PDF siblings, which LaTeX execution uses directly without Quarto's
+mediabag duplicate-file write into the chapter source directory. Nested PDF-format
+configuration does not govern the native `--to latex` path; the real full-A1
+capture fixture tests the effective option. All other inherited execution and
+format settings remain in effect. This profile is part of
 the source fingerprint and is never used to publish the complete editions.
 LaTeX execution creates genuine
 `tex.json` and PDF figure assets; it does not copy HTML results or compile TeX.
@@ -102,6 +107,16 @@ preflight and physical `execution-coverage.json` proof, which is checked again
 during comparison, promotion, and derived-edition assembly. Partial results and
 logs survive failure, but a failed execution does not receive a completed
 fingerprint. Never manufacture missing proof for a historical failed run.
+If final capture rejects a changed input inventory, it retains an explicitly
+ineligible `source-after.json` and an added/removed/changed-path report before
+raising. Retries cannot overwrite that original rejection evidence.
+
+A cheap pre-training fixture executes the complete authored Appendix A1, including
+its static SVG/PDF reference, through both formats, actual notebook archival,
+source validation, and schema-2 capture with a real runtime preflight. Its
+one-unit project and commit identity are explicitly synthetic; its retained
+fingerprint is fixture evidence, never a book candidate. This tests the full
+capture lifecycle in addition to the smaller plotting and source-option witnesses.
 
 ## Two independent Actions runs
 

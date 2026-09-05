@@ -271,12 +271,53 @@ def load_preflight(path: Path | None, *, source: dict, kind: str, run_id: str) -
     return {"artifact": path.name, "sha256": sha256(path), "observation": observation}
 
 
+def retain_rejected_source(args: argparse.Namespace, before: dict, after: dict) -> None:
+    """Keep the rejecting observation, never a replacement accepted fingerprint.
+
+    Preserve existing evidence if capture is accidentally retried in the same
+    bundle. No source filtering, preflight, or status record is changed here.
+    """
+    directory = args.output.parent
+    directory.mkdir(parents=True, exist_ok=True)
+    after_path = directory / "source-after.json"
+    report_path = directory / "source-inventory-mismatch.json"
+    if any(path.exists() or path.is_symlink() for path in (after_path, report_path)):
+        raise ValueError("Source/input inventory changed during execution; previous rejection evidence retained unchanged")
+    observation = {
+        "schema_version": 1, "kind": "rejected-source-after", "promotion_eligible": False,
+        "run": {"id": args.run_id, "runtime_kind": args.kind}, "source": after,
+    }
+    # Exclusive creation prevents a second capture from overwriting the first
+    # forensic observation, including through a pre-existing symlink.
+    with after_path.open("x") as stream:
+        stream.write(json.dumps(observation, indent=2, sort_keys=True) + "\n")
+    before_files, after_files = before["files_sha256"], after["files_sha256"]
+    added = sorted(after_files.keys() - before_files.keys())
+    removed = sorted(before_files.keys() - after_files.keys())
+    changed = sorted(name for name in before_files.keys() & after_files.keys()
+                     if before_files[name] != after_files[name])
+    report = {
+        "schema_version": 1, "kind": "source-inventory-mismatch", "promotion_eligible": False,
+        "run": observation["run"],
+        "before": {"artifact": args.source_before.name, "sha256": sha256(args.source_before),
+                   "commit": before.get("commit"), "input_sha256": before.get("input_sha256")},
+        "after": {"artifact": after_path.name, "sha256": sha256(after_path),
+                  "commit": after["commit"], "input_sha256": after["input_sha256"]},
+        "commit_changed": before.get("commit") != after["commit"],
+        "added": added, "removed": removed, "changed": changed,
+        "counts": {"added": len(added), "removed": len(removed), "changed": len(changed)},
+    }
+    with report_path.open("x") as stream:
+        stream.write(json.dumps(report, indent=2, sort_keys=True) + "\n")
+
+
 def capture(args: argparse.Namespace) -> dict[str, Any]:
     root = args.root.resolve()
     source = source_fingerprint(root, args.source_commit)
     if args.source_before:
         before = json.loads(args.source_before.read_text())
         if before.get("commit") != source["commit"] or before["files_sha256"] != source["files_sha256"]:
+            retain_rejected_source(args, before, source)
             raise ValueError("Source/input inventory changed during execution")
     def input_record(name: str) -> dict[str, str]:
         path = root / name
