@@ -284,6 +284,25 @@ def workflow_job(text: str, name: str) -> str:
     return match.group(0) if match else ""
 
 
+def native_portability_workflow_errors(text: str) -> list[str]:
+    """Native drift reporting must not turn execution/evidence errors green."""
+    job = workflow_job(text, "execute-all")
+    required = (
+        "Native Ubuntu portability report (not canonical)",
+        "report_native_portability.py prepare", "report_native_portability.py finish",
+        '--execution-outcome "$EXECUTION_OUTCOME"',
+        "if: always() && steps.prepare.outcome == 'success'",
+        "GITHUB_STEP_SUMMARY", "name: native-portability-report",
+        "path: build/native-portability/", "if: always()",
+    )
+    errors = [f"native portability workflow is missing {item!r}" for item in required if item not in job]
+    if "continue-on-error:" in job:
+        errors.append("native portability must classify drift, not blanket-ignore execution/evidence failures")
+    if "All cells executed cleanly and satisfied" in job:
+        errors.append("native portability workflow retains an unconditional success claim")
+    return errors
+
+
 def main() -> None:
     errors: list[str] = []
 
@@ -880,6 +899,7 @@ def main() -> None:
             "PyTorch thread override must appear only in notebook validation",
         )
     execution_job = workflow_job(execution_workflow_text, "execute-all")
+    errors.extend(native_portability_workflow_errors(execution_workflow_text))
     execution_thread_block = (
         "    env:\n"
         + f'      {NOTEBOOK_TORCH_THREAD_OVERRIDE}: "1"\n'

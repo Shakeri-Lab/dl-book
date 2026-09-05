@@ -39,7 +39,12 @@ network access; the data and pinned study artifacts are repository inputs.
 
 The predeclared execution plan includes **every executable QMD**, its native-cell
 ordinals, and transcluded source hashes. Each unit runs in LaTeX and HTML format
-with a new Jupyter kernel (`--execute-daemon 0`). LaTeX execution creates genuine
+with a new Jupyter kernel (`--execute-daemon 0`). The committed
+`_quarto-execution.yml` profile changes only the project type to `default`, avoiding
+book-mode LaTeX's expansion of a single-input command into the entire book; all
+inherited execution and format settings remain in effect. This profile is part of
+the source fingerprint and is never used to publish the complete editions.
+LaTeX execution creates genuine
 `tex.json` and PDF figure assets; it does not copy HTML results or compile TeX.
 The later print build consumes these executed artifacts. The copied `code/`
 directory is the only injected repository import path for native QMD helpers.
@@ -87,6 +92,15 @@ the wheel installation report, status, and per-unit execution logs. No job write
 to `main`, replaces the checkout's freeze, dispatches itself, or publishes Pages.
 Source/data/recipe changes require a new first run and a matching independent
 repeat; reusing an image built for another source is rejected.
+
+Chapters 8, 11, 13, and 19 additionally export the predeclared per-seed raw records
+in their existing hidden execution harnesses when `DLBOOK_PAIRED_EVIDENCE_DIR` is
+set. Each format receives a separate directory beneath `provenance/paired-evidence`.
+The source-bound `docs/paired-evidence-plan.json` defines the exact eight sidecars;
+their validator checks protocol, counts, and cross-format raw equality before
+fingerprinting. Their manifest and hashes accompany the candidate, so later
+portability calibration does not have to reconstruct seeds from rounded means.
+This export path does not change random streams, models, or printed output.
 
 Actions artifacts expire after **30 days**. Before treating this as a durable
 release, archive the exact image archive and its manifest, both candidate bundles,

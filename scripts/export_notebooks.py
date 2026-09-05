@@ -42,8 +42,8 @@ from notebook_manifest import (
 
 REPOSITORY = "Shakeri-Lab/dl-book"
 HTML_ROOT = "https://shakeri-lab.github.io/dl-book/"
-EXPECTED_VISIBLE_SURFACES = 193
-EXPECTED_HIDDEN_CELLS = 93
+EXPECTED_VISIBLE_SURFACES = 194
+EXPECTED_HIDDEN_CELLS = 94
 EXPECTED_INCLUDED_SURFACES = 4
 SUPPORT_START = "# notebook-support-start"
 SUPPORT_END = "# notebook-support-end"

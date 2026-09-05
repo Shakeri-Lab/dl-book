@@ -3,13 +3,14 @@
 from copy import deepcopy
 import json
 from pathlib import Path
+import shutil
 import tempfile
 import unittest
 from unittest.mock import patch
 
-from compare_freeze_runs import compare_runs
+from compare_freeze_runs import compare_runs, validate_fingerprint
 from audit_frozen_stdout import native_execution_ordinals, stdout_records
-from freeze_provenance import execution_plan, freeze_inventory, json_digest, source_fingerprint, write_json
+from freeze_provenance import execution_plan, freeze_inventory, json_digest, sha256, source_fingerprint, write_json
 
 
 def execution(stdout: str = "value: 1.234\n", ordinal: int = 1) -> dict:
@@ -89,6 +90,55 @@ class FreezeProvenanceTests(unittest.TestCase):
         report = self.compare()
         self.assertTrue(report["passed"], report)
         self.assertEqual(report["stdout_blocks_checked"], 2)
+
+    def add_paired_manifest(self, bundle):
+        provenance = bundle / "provenance"
+        sidecars = {}
+        for index in range(8):
+            path = provenance / "paired-evidence" / f"fixture-{index}.json"
+            write_json(path, {"value": index})
+            sidecars[path.name] = sha256(path)
+        manifest = {"passed": True, "plan_sha256": "1"*64,
+                    "source_sha256": {"chapters/test.qmd": "a"*64}, "files_sha256": sidecars}
+        path = provenance / "paired-evidence-manifest.json"
+        write_json(path,manifest)
+        fingerprint_path = provenance / "fingerprint.json"
+        document = json.loads(fingerprint_path.read_text())
+        document["source"]["files_sha256"]["docs/paired-evidence-plan.json"] = "1"*64
+        document["source"]["input_sha256"] = json_digest(document["source"]["files_sha256"])
+        document["execution_plan"]["source_input_sha256"] = document["source"]["input_sha256"]
+        document["paired_evidence"] = {"manifest_sha256": sha256(path),"manifest":manifest}
+        write_json(fingerprint_path,document)
+
+    def test_raw_evidence_is_bound_even_when_stdout_matches(self):
+        for bundle in self.bundles:
+            self.add_paired_manifest(bundle)
+        self.assertTrue(self.compare()["passed"])
+        write_json(self.bundles[1]/"provenance/paired-evidence/fixture-0.json",{"value":99})
+        self.assertFailure("sidecars are missing or differ")
+
+    def test_missing_paired_fingerprint_is_not_accepted(self):
+        for bundle in self.bundles:
+            self.add_paired_manifest(bundle)
+        self.mutate_fingerprint(lambda document: document.pop("paired_evidence"))
+        self.assertFailure("missing fingerprint field paired_evidence")
+
+    def test_installed_freeze_revalidates_immutable_proof_directory(self):
+        bundle = self.bundles[0]
+        self.add_paired_manifest(bundle)
+        original = json.loads((bundle/"provenance/fingerprint.json").read_text())
+        proof = self.root/"immutable-proof/first/provenance"
+        shutil.move(str(bundle/"provenance"),proof)
+        self.assertEqual(validate_fingerprint(original,bundle/"_freeze",provenance_root=proof),[])
+        write_json(proof/"paired-evidence/fixture-0.json",{"value":-1})
+        self.assertIn("sidecars are missing or differ", "\n".join(
+            validate_fingerprint(original,bundle/"_freeze",provenance_root=proof)))
+
+    def test_explicit_proof_path_must_match_original_fingerprint(self):
+        document = json.loads((self.bundles[0]/"provenance/fingerprint.json").read_text())
+        errors = validate_fingerprint(document,self.bundles[0]/"_freeze",
+                                      provenance_root=self.bundles[1]/"provenance")
+        self.assertIn("original fingerprint", "\n".join(errors))
 
     def test_missing_fingerprint_fails_even_if_outputs_match(self):
         (self.bundles[1] / "provenance/fingerprint.json").unlink()

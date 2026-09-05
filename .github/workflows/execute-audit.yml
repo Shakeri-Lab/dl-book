@@ -1,10 +1,10 @@
 name: Execution Audit
 
 # The book's covenant: every printed snippet is the executed artifact.
-# This job enforces it mechanically — a full from-scratch re-execution of every
-# notebook cell (freeze caches deleted), independent of the publish pipeline.
-# Publishing still uses committed freeze results; the regenerated transcript
-# must satisfy the exact-by-default portability ledger against that evidence.
+# Canonical candidates use the sealed same-image workflow. The scheduled native
+# Ubuntu job is a portability report, not a replacement numerical reference.
+# It reports reviewed-contract drift without blocking publication; incomplete
+# execution, changed inputs, unsupported schemas, and evidence errors still fail.
 
 on:
   workflow_dispatch:
@@ -38,6 +38,7 @@ jobs:
       image_run_id: ${{ inputs.image_run_id }}
 
   execute-all:
+    name: Native Ubuntu portability report (not canonical)
     if: github.event_name != 'workflow_dispatch' || inputs.mode == 'portability'
     runs-on: ubuntu-24.04
     timeout-minutes: 300
@@ -46,6 +47,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Set up Quarto
         uses: quarto-dev/quarto-actions/setup@v2
@@ -70,6 +73,12 @@ jobs:
           -r requirements.txt
           -r scripts/notebook_requirements.txt
 
+      - name: Record clean source, native runtime, and committed stdout
+        id: prepare
+        run: >-
+          python scripts/report_native_portability.py prepare
+          --output build/native-portability
+
       - name: Audit manuscript contracts
         run: |
           python scripts/audit_plan_code.py
@@ -77,16 +86,23 @@ jobs:
           python scripts/audit_python_sources.py
           python scripts/audit_public_anchors.py
 
-      - name: Re-execute every cell from scratch
+      - name: Re-execute every cell from scratch in the native runtime
+        id: execute
         run: |
-          rm -rf _freeze
-          quarto render --to html
+          set -euo pipefail
+          mv _freeze build/native-reference-freeze
+          export PYTHONPATH="$PWD/code"
+          quarto render --to html --execute-daemon 0 2>&1 | tee build/native-portability/execution.log
 
-      - name: Compare regenerated stdout with the committed evidence
+      - name: Record post-execution evidence and report reviewed-contract drift
+        if: always() && steps.prepare.outcome == 'success'
+        id: comparison
+        env:
+          EXECUTION_OUTCOME: ${{ steps.execute.outcome }}
         run: >-
-          python scripts/audit_frozen_stdout.py
-          --base "$GITHUB_SHA"
-          --policy portable
+          python scripts/report_native_portability.py finish
+          --output build/native-portability
+          --execution-outcome "$EXECUTION_OUTCOME"
 
       - name: Audit rendered HTML support assets
         run: >-
@@ -97,7 +113,35 @@ jobs:
       - name: Audit rendered public anchors
         run: python scripts/audit_public_anchors.py --rendered _book
 
-      - name: Report
-        if: success()
-        run: >-
-          echo "All cells executed cleanly and satisfied the reviewed stdout contracts."
+      - name: Summarize the native audit outcome without claiming canonical parity
+        if: always()
+        env:
+          PREPARE_OUTCOME: ${{ steps.prepare.outcome }}
+          EXECUTION_OUTCOME: ${{ steps.execute.outcome }}
+          COMPARISON_OUTCOME: ${{ steps.comparison.outcome }}
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          summary = Path("build/native-portability/summary.md")
+          text = summary.read_text() if summary.is_file() else (
+              "## Native portability audit did not produce a completed report\n\n"
+              "This is an infrastructure, setup, or execution failure, not a successful comparison.\n"
+          )
+          text += "\nWorkflow step outcomes: " + ", ".join(
+              f"{key.lower()}={os.environ[key]}" for key in (
+                  "PREPARE_OUTCOME", "EXECUTION_OUTCOME", "COMPARISON_OUTCOME"
+              )
+          ) + "\n"
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as stream:
+              stream.write(text)
+          PY
+
+      - name: Retain native evidence even on failure (JSON/stdout, not figure assets)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-portability-report
+          path: build/native-portability/
+          retention-days: 30
+          if-no-files-found: warn

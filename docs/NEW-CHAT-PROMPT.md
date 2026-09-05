@@ -61,8 +61,8 @@ The August 6 coherence pass adds Appendix E as an optional statistical-contract
 retrieval layer, replaces Chapter 1's bias--variance cartoon with a seeded
 show-then-name experiment, separates representation, optimization, and generalization
 evidence in Chapter 6, and bounds Chapter 18 alignment claims within a broader
-sociotechnical audit. The current code contract covers 195 visible surfaces, 95
-execution-only harnesses, and 286 native executable cells plus four transclusions.
+sociotechnical audit. The current code contract covers 195 visible surfaces, 96
+execution-only harnesses, and 287 native executable cells plus four transclusions.
 The August 8 presentation pass
 adds interactive Plan → Code mapping, responsive wide-figure inspection, a repaired
 Figure 9.1, and a complete Chapter 1 semantic-colour equation sweep.

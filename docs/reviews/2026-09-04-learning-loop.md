@@ -25,6 +25,18 @@ The HTML edition remains canonical; v1.3 and its archived assets are unchanged.
 
 ## Verification ledger
 
+### Canonical migration integration check (not replacement evidence)
+
+Source-only checkpoint `85e53849341daf8f1d20f3ae2cf7092cd9cba6d2` was pushed
+to the working branch, not `main`. Actions run `33935907806` verified and built
+the hash-locked container. It was then canceled: a nominal single-chapter LaTeX
+render in a Quarto book expands to the whole book, so the driver's per-unit
+kernel labels were invalid. The two corresponding Mac probes were interrupted
+for the same reason. Their partial logs under
+`build/portability-85e5384/{mac-one,mac-six}/` are diagnostic artifacts only.
+No numerical freeze was committed or promoted. A unit-isolation regression
+check must pass before fresh candidate runs restart.
+
 The numerical reference is the baseline's committed `_freeze/` stdout, checked by
 `scripts/audit_frozen_stdout.py --base c058d1f401fd0ead3ae59a2a8730f95489a2d9aa`.
 This was the reference for the original editorial-only pass. The subsequently

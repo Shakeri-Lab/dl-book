@@ -38,17 +38,18 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > `build/review-fresh-evidence/`. The revision ledger records the outstanding author
 > decision. That decision is now resolved: the author approved a pinned Linux/x86-64
 > canonical container, a fingerprint beside the freeze, and two independent CI runs
-> with bit-identical stdout before promotion. The Mac becomes a measured portability
+> with bit-identical stdout, frozen files, and raw paired evidence before promotion.
+> The Mac becomes a measured portability
 > target at one and six threads. Gate calibration uses paired same-seed runtime
 > differences plus a declared safety factor; seed SD governs prose precision, not
 > gate width. Chapter 11 gains a five-seed paired study and Chapter 13 recomputes its
 > own baseline. Preserve strict normalization and algebraic-identity gates. See
 > `docs/compatibility.md` for the diagnosis and migration status. Do not treat the
 > old Mac refresh as the new canonical freeze or publish before the new gates pass.
-> The revised source audit now counts 195 visible surfaces, 95 execution-only
-> harnesses, 286 native executable cells, and four transclusions; older dated
+> The revised source audit now counts 195 visible surfaces, 96 execution-only
+> harnesses, 287 native executable cells, and four transclusions; older dated
 > inventories below describe their respective builds.
-> This uncommitted pass lives in `/tmp/dl-book-phase-a.XE6WWb/repo` on
+> This working pass lives in `/tmp/dl-book-phase-a.XE6WWb/repo` on
 > `pedagogy-roundtrip-20260904`, not the stale Box checkout. Source edits after unit
 > execution still need refreshing; full two-profile and deployment checks remain.
 >

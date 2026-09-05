@@ -550,6 +550,42 @@ print(f"seed 6050 padding witness: naive errors {naive_errors}/437; "
 #| label: fig-tf-vs-fr
 #| fig-alt: "Five-seed validation exact-match curves compare teacher-forced and free-running training. Thin lines show individual runs, thick lines their means, and shading one sample standard deviation."
 #| fig-cap: "The same 400 unambiguous validation sources at every checkpoint. Thin lines retain all five runs; thick lines and shading show mean and one sample SD across training seeds. Each TF/free-running pair shares initialization and minibatch order. These are optimization variations on one split, not population confidence intervals. TF uses one fused decoder call per batch; free-running uses a token loop. The final test comparison is reported separately above."
+import json as _evidence_json
+import os as _evidence_os
+from pathlib import Path as _EvidencePath
+
+if _evidence_dir := _evidence_os.environ.get("DLBOOK_PAIRED_EVIDENCE_DIR"):
+    _evidence = {
+        "schema_version": 1, "study": "ch11",
+        "unit": "chapters/part3/11-encoder-decoder.qmd",
+        "format": _evidence_os.environ["DLBOOK_EXECUTION_FORMAT"],
+        "seed_set": list(study_seeds),
+        "protocol": {"epochs": 25, "batch": 128, "learning_rate": 0.001,
+                     "clip": 5, "fit_n": len(train_pairs),
+                     "validation_n": 400, "test_n": len(test_unamb),
+                     "checkpoints": list(cps), "schedule_seed_offset": 90000},
+        "records": [
+            {"seed": seed, "condition": name, "metric": metric, "value": value}
+            for i, seed in enumerate(study_seeds)
+            for col, (name, runs) in enumerate((("TF", tf_runs), ("FR", fr_runs)))
+            for metric, value in [
+                ("test_errors", error_rows[i][col]),
+                ("test_accuracy", paired_rows[i][col]),
+                *[(f"validation_epoch_{epoch}", runs[i][1][epoch]) for epoch in cps],
+            ]
+        ],
+        "identities": [
+            {"seed": seed, "condition": name, **runs[i][2]}
+            for i, seed in enumerate(study_seeds)
+            for name, runs in (("TF", tf_runs), ("FR", fr_runs))
+        ],
+        "padding_witness": {"seed": 6050, "naive_errors": naive_errors},
+    }
+    _evidence_path = _EvidencePath(_evidence_dir) / "ch11.json"
+    _evidence_path.parent.mkdir(parents=True, exist_ok=True)
+    _evidence_path.write_text(_evidence_json.dumps(
+        _evidence, sort_keys=True, allow_nan=False) + "\n", encoding="utf-8")
+
 plt.figure(figsize=(6, 3.2))
 for mode, name, color in ((0, "teacher forcing", "#232D4B"),
                            (1, "free-running", "#E57200")):

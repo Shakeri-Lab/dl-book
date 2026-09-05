@@ -28,6 +28,8 @@ import math
 import re
 from typing import Mapping, Sequence
 
+from date_study_schema import is_current_date_study, validate_date_stdout_schema
+
 
 ROOT = Path(__file__).resolve().parents[1]
 BlockKey = tuple[str, int]
@@ -551,6 +553,8 @@ def _ch11_error_gallery(
 
 
 def _ch11_relations(actual: Sequence[str], label: str) -> list[str]:
+    if is_current_date_study("11-encoder-decoder", actual):
+        return validate_date_stdout_schema("11-encoder-decoder", actual)
     if len(actual) < 4:
         return [f"{label}: expected at least four stdout blocks"]
     accuracy_match = re.search(
@@ -631,6 +635,8 @@ def _ch13_scaled_dot_walk(actual: str, label: str) -> list[str]:
 def _ch13_relations(actual: Sequence[str], label: str) -> list[str]:
     """Protect the protocol and conclusions of the attention comparison."""
 
+    if is_current_date_study("13-attention", actual):
+        return validate_date_stdout_schema("13-attention", actual)
     if len(actual) < 6:
         return [f"{label}: expected six stdout blocks"]
     split = re.fullmatch(
@@ -1293,6 +1299,15 @@ def compare_stdout_blocks(
 
     errors: list[str] = []
     accepted: list[str] = []
+    current_date = (is_current_date_study(slug, expected_blocks)
+                    or is_current_date_study(slug, actual_blocks))
+    if current_date:
+        for name, blocks, ordinals in (
+            ("reference", expected_blocks, expected_ordinals),
+            ("actual", actual_blocks, actual_ordinals),
+        ):
+            errors.extend(f"{name}: {error}" for error in
+                          validate_date_stdout_schema(slug, blocks, ordinals))
     if (expected_ordinals is None) != (actual_ordinals is None):
         errors.append(f"{slug}: stdout cell ordinals were supplied for only one transcript")
     elif expected_ordinals is not None and actual_ordinals is not None:
@@ -1317,7 +1332,15 @@ def compare_stdout_blocks(
             continue
         key = (slug, block)
         label = f"{slug} stdout block {block}"
-        if key in NUMERIC_RULES:
+        if current_date and ((slug == "11-encoder-decoder" and block >= 2)
+                             or (slug == "13-attention" and block == 6)):
+            # These cells now use a different paired experiment protocol. The
+            # historical positional ledger is not a calibration of this study,
+            # including its padding witness, residual gallery, or beam samples.
+            block_errors = [f"{label}: current five-seed protocol differs from the exact "
+                            "reference; no reviewed portability calibration is available"]
+            kind = "exact"
+        elif key in NUMERIC_RULES:
             block_errors = _numeric_errors(
                 expected, actual, NUMERIC_RULES[key], label
             )
@@ -1337,8 +1360,8 @@ def compare_stdout_blocks(
                 f"({PORTABILITY_LEDGER[key].description})"
             )
 
-    relation_errors = _relation_errors(slug, expected_blocks, actual_blocks)
-    errors.extend(relation_errors)
+    if not current_date:
+        errors.extend(_relation_errors(slug, expected_blocks, actual_blocks))
     return ComparisonResult(not errors, tuple(errors), tuple(accepted))
 
 

@@ -15,7 +15,7 @@ import sys
 from typing import Any
 
 from audit_frozen_stdout import native_execution_ordinals, stdout_records
-from freeze_provenance import SCHEMA_VERSION, freeze_inventory, json_digest, write_json
+from freeze_provenance import SCHEMA_VERSION, freeze_inventory, json_digest, sha256, write_json
 
 DIGEST_RE = re.compile(r"[0-9a-f]{64}")
 
@@ -63,9 +63,15 @@ def kernel_identity(observation: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def validate_fingerprint(document: dict[str, Any], freeze_root: Path) -> list[str]:
+def validate_fingerprint(document: dict[str, Any], freeze_root: Path, *,
+                         provenance_root: Path | None = None) -> list[str]:
     errors = []
     try:
+        if provenance_root is not None:
+            archived_fingerprint = provenance_root / "fingerprint.json"
+            if (not archived_fingerprint.is_file()
+                    or json.loads(archived_fingerprint.read_text()) != document):
+                raise ValueError("Explicit proof directory does not contain the original fingerprint")
         if document.get("schema_version") != SCHEMA_VERSION or document.get("kind") != "canonical":
             raise ValueError("canonical fingerprint schema/kind is missing or unsupported")
         if not _required(document, "run", "id"):
@@ -148,6 +154,25 @@ def validate_fingerprint(document: dict[str, Any], freeze_root: Path) -> list[st
         actual = freeze_inventory(freeze_root)
         if actual != expected:
             errors.append("freeze files differ from the recorded fingerprint inventory")
+        if "docs/paired-evidence-plan.json" in files:
+            evidence = _required(document, "paired_evidence")
+            manifest = _required(evidence, "manifest")
+            provenance = provenance_root if provenance_root is not None else freeze_root.parent / "provenance"
+            manifest_path = provenance / "paired-evidence-manifest.json"
+            if (not manifest_path.is_file() or sha256(manifest_path) != evidence.get("manifest_sha256")
+                    or json.loads(manifest_path.read_text()) != manifest):
+                raise ValueError("Paired evidence manifest is missing or differs from its fingerprint")
+            if (manifest.get("passed") is not True
+                    or manifest.get("plan_sha256") != files["docs/paired-evidence-plan.json"]):
+                raise ValueError("Paired evidence is not bound to the source plan")
+            if not manifest.get("source_sha256") or any(files.get(name) != value for name, value
+                                                         in manifest["source_sha256"].items()):
+                raise ValueError("Paired evidence source identities differ")
+            sidecars = manifest.get("files_sha256", {})
+            observed_sidecars = {path.relative_to(provenance / "paired-evidence").as_posix(): sha256(path)
+                                for path in (provenance / "paired-evidence").rglob("*.json")}
+            if len(sidecars) != 8 or sidecars != observed_sidecars:
+                raise ValueError("Paired evidence sidecars are missing or differ from their fingerprint")
     except (ValueError, KeyError, TypeError, AttributeError, OSError) as exc:
         errors.append(str(exc))
     return errors
@@ -192,6 +217,7 @@ def compare_runs(left: Path, right: Path, *, require_all_files: bool = False) ->
         ("source/input", first["source"]["files_sha256"], second["source"]["files_sha256"]),
         ("source commit", first["source"]["commit"], second["source"]["commit"]),
         ("execution plan", first["execution_plan"], second["execution_plan"]),
+        ("raw paired evidence", first.get("paired_evidence"), second.get("paired_evidence")),
         ("container/recipe/wheel-lock", first["container"], second["container"]),
         ("software/thread/dispatch", runtime_identity(first["runtime"]), runtime_identity(second["runtime"])),
         ("executed-kernel", kernel_identity(first["execution_probes"][0]["observation"]),

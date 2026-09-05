@@ -18,7 +18,8 @@ from packaging.utils import canonicalize_name, parse_wheel_filename
 from freeze_provenance import ENVIRONMENT_KEYS as PROBE_KEYS, source_fingerprint
 from image_artifact import digest, verify
 from resolve_wheel_lock import linux_tags
-from run_canonical_freeze import check_completed, extract_source, validate_source, write_json
+from run_canonical_freeze import (check_completed, execution_command, extract_source,
+                                 validate_execution_profile, validate_source, write_json)
 from runtime_policy import ENVIRONMENT_KEYS as KERNEL_KEYS
 
 
@@ -67,6 +68,16 @@ class RecipeTests(unittest.TestCase):
             self.assertIn(required, text)
         self.assertNotIn("git push", text)
         self.assertNotIn("contents: write", text)
+
+    def test_unit_execution_cannot_fall_back_to_book_mode(self):
+        self.assertEqual(validate_execution_profile(ROOT)["path"], "_quarto-execution.yml")
+        for fmt in ("html", "latex"):
+            self.assertEqual(execution_command("quarto", "chapters/test.qmd", fmt),
+                             ["quarto", "render", "chapters/test.qmd", "--profile", "execution",
+                              "--to", fmt, "--no-clean", "--execute-daemon", "0"])
+        with tempfile.TemporaryDirectory() as temporary:
+            with self.assertRaisesRegex(ValueError, "execution-only profile"):
+                validate_execution_profile(Path(temporary))
 
 
 class IsolationTests(unittest.TestCase):

@@ -26,6 +26,22 @@ from datetime import datetime, timezone
 GENERATED_ROOTS = {".git", ".quarto", "_book", "_freeze", "build", ".venv"}
 
 
+def execution_command(quarto: str, unit: str, fmt: str) -> list[str]:
+    """Render one input, never expand book-mode LaTeX to other chapters."""
+    if fmt not in {"latex", "html"}:
+        raise ValueError("Native execution formats must be latex or html")
+    return [quarto, "render", unit, "--profile", "execution", "--to", fmt,
+            "--no-clean", "--execute-daemon", "0"]
+
+
+def validate_execution_profile(work: Path) -> dict:
+    import yaml
+    path = work / "_quarto-execution.yml"
+    if not path.is_file() or yaml.safe_load(path.read_text()) != {"project": {"type": "default"}}:
+        raise ValueError("The source must include the explicit project.type=default execution-only profile")
+    return {"path": path.name, "sha256": file_hash(path)}
+
+
 def write_json(path: Path, value) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n")
@@ -165,6 +181,7 @@ def main() -> int:
                 source_tools = load_source_tools(work)
                 current = source_tools.source_fingerprint(work, args.source_commit)
                 validate_source(before, current, args.source_commit)
+                status["execution_profile"] = validate_execution_profile(work)
                 plan = source_tools.execution_plan(work, current)
                 write_json(provenance / "execution-plan.json", plan)
                 shutil.copy2(installed / "wheel-install-report.json", provenance / "wheel-install-report.json")
@@ -176,13 +193,22 @@ def main() -> int:
                     for fmt in ("latex", "html"):
                         print(f"Fresh canonical execution: {unit} ({fmt})", flush=True)
                         log = output / "logs" / (unit.removesuffix(".qmd").replace("/", "--") + f"--{fmt}.log")
-                        run_logged(["quarto", "render", unit, "--to", fmt, "--no-clean", "--execute-daemon", "0"],
-                                   log, work, {**env, "DLBOOK_EXECUTION_UNIT": unit, "DLBOOK_EXECUTION_FORMAT": fmt})
+                        run_logged(execution_command("quarto", unit, fmt),
+                                   log, work, {**env, "DLBOOK_EXECUTION_UNIT": unit, "DLBOOK_EXECUTION_FORMAT": fmt,
+                                               "DLBOOK_PAIRED_EVIDENCE_DIR": str(
+                                                   provenance / "paired-evidence" / Path(unit).with_suffix("") / fmt
+                                               )})
                 status["execution"] = check_completed(work, work / "_freeze", plan, probes)
                 run_logged([sys.executable, str(installed / "canonical_python.py"),
                             str(work / "scripts/audit_date_study_stdout.py"),
                             "--freeze-root", str(work / "_freeze")],
                            output / "logs/date-study-semantics.log", work, env)
+                run_logged([sys.executable, str(installed / "canonical_python.py"),
+                            str(work / "scripts/audit_paired_evidence.py"),
+                            "--source-root", str(work), "--evidence-root", str(provenance / "paired-evidence"),
+                            "--plan", str(work / "docs/paired-evidence-plan.json"),
+                            "--output", str(provenance / "paired-evidence-manifest.json")],
+                           output / "logs/paired-evidence.log", work, env)
                 shutil.copytree(work / "_freeze", output / "_freeze")
                 capture = [sys.executable, str(installed / "canonical_python.py"),
                            str(work / "scripts/freeze_provenance.py"), "capture",
@@ -194,7 +220,8 @@ def main() -> int:
                            "--recipe", "container/Dockerfile", "--lock", "container/requirements-linux-amd64.lock",
                            "--container-digest", args.container_digest,
                            "--base-image-digest", config["base_image_digest"], "--run-id", args.run_id,
-                           "--execution-probes", str(probes)]
+                           "--execution-probes", str(probes),
+                           "--paired-evidence-manifest", str(provenance / "paired-evidence-manifest.json")]
                 run_logged(capture, output / "logs/capture.log", work, env)
                 status["passed"] = True
             finally:

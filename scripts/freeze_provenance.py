@@ -275,6 +275,18 @@ def capture(args: argparse.Namespace) -> dict[str, Any]:
     plan = json.loads(args.execution_plan.read_text()) if args.execution_plan else None
     if plan is not None and plan != execution_plan(root, source):
         raise ValueError("Execution plan no longer matches source/input inventory")
+    paired = None
+    paired_manifest = getattr(args, "paired_evidence_manifest", None)
+    if "docs/paired-evidence-plan.json" in source["files_sha256"]:
+        if not paired_manifest:
+            raise ValueError("Source declares paired evidence but no validated manifest was supplied")
+        from audit_paired_evidence import audit_evidence
+        recorded = json.loads(paired_manifest.read_text())
+        verified = audit_evidence(paired_manifest.parent / "paired-evidence", root,
+                                  root / "docs/paired-evidence-plan.json")
+        if recorded != verified:
+            raise ValueError("Paired evidence manifest differs from the observed source/sidecars")
+        paired = {"manifest_sha256": sha256(paired_manifest), "manifest": verified}
     return {
         "schema_version": SCHEMA_VERSION, "kind": args.kind,
         "created_utc": datetime.now(timezone.utc).isoformat(),
@@ -285,6 +297,7 @@ def capture(args: argparse.Namespace) -> dict[str, Any]:
         "runtime": runtime_observation(), "cpu": cpu_observation(),
         "execution_plan": plan,
         "execution_probes": load_execution_probes(args.execution_probes) if args.execution_probes else [],
+        "paired_evidence": paired,
         "freeze_files_sha256": freeze_inventory(args.freeze_root),
     }
 
@@ -314,6 +327,7 @@ def main() -> int:
     run.add_argument("--run-id", required=True)
     run.add_argument("--execution-probes", type=Path)
     run.add_argument("--execution-plan", type=Path)
+    run.add_argument("--paired-evidence-manifest", type=Path)
     args = parser.parse_args()
     try:
         if args.command in {"source", "plan"}:

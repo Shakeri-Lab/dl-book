@@ -1095,6 +1095,46 @@ assert max(row_errors) < 1e-6
 #| label: fig-attention-rematch
 #| fig-alt: "Left, five-seed validation exact-match curves compare freshly trained fixed-state and attention models, with mean lines and sample-SD bands. Right, seed 6050's first validation example shows an output-by-source attention map with the source-year region outlined."
 #| fig-cap: "Left: exact-sequence accuracy on Chapter 11's fixed 400-source validation subset. Thin lines show all five runs; thick lines and bands show mean and sample SD across seeds, not population confidence intervals. Each pair shares the data and batch schedule, but attention adds parameters and a stepwise decoder. Right: seed 6050 and the first validation example, both fixed before training. Rows are emitted ISO characters; columns are contextual encoder states indexed by source character. The orange box marks the year region, not supervised alignment or a causal explanation."
+import json as _evidence_json
+import os as _evidence_os
+from pathlib import Path as _EvidencePath
+
+if _evidence_dir := _evidence_os.environ.get("DLBOOK_PAIRED_EVIDENCE_DIR"):
+    _evidence = {
+        "schema_version": 1, "study": "ch13",
+        "unit": "chapters/part4/13-attention.qmd",
+        "format": _evidence_os.environ["DLBOOK_EXECUTION_FORMAT"],
+        "seed_set": list(study_seeds),
+        "protocol": {"epochs": 25, "batch": 128, "learning_rate": 0.001,
+                     "clip": 5, "fit_n": len(train_pairs),
+                     "validation_n": len(valid_fixed), "test_n": len(test_unamb),
+                     "checkpoints": list(checkpoints), "schedule_seed_offset": 90000},
+        "records": [
+            {"seed": seed, "condition": name, "metric": metric, "value": value}
+            for i, seed in enumerate(study_seeds)
+            for col, (name, runs) in enumerate(
+                (("fixed", baseline_runs), ("attention", attention_runs)))
+            for metric, value in [
+                ("test_errors", error_rows[i][col]),
+                ("test_accuracy", paired_rows[i][col]),
+                *[(f"validation_epoch_{epoch}", runs[i][1][epoch])
+                  for epoch in checkpoints],
+            ]
+        ],
+        "identities": [
+            {"seed": seed, "condition": name, **runs[i][2]}
+            for i, seed in enumerate(study_seeds)
+            for name, runs in (("fixed", baseline_runs), ("attention", attention_runs))
+        ],
+        "routing": {"seed": 6050, "year_mass": year_mass,
+                    "top_key_in_region": year_top1, "row_errors": row_errors},
+        "parameters": {"fixed": baseline_params, "attention": attention_params},
+    }
+    _evidence_path = _EvidencePath(_evidence_dir) / "ch13.json"
+    _evidence_path.parent.mkdir(parents=True, exist_ok=True)
+    _evidence_path.write_text(_evidence_json.dumps(
+        _evidence, sort_keys=True, allow_nan=False) + "\n", encoding="utf-8")
+
 from matplotlib.patches import Rectangle
 
 fig, axes = plt.subplots(

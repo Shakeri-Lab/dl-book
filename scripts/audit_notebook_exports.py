@@ -89,10 +89,10 @@ EXPECTED_UNIT_PAIRS = (
         "chapters/appendices/a3-precision-performance.qmd",
     ),
 )
-EXPECTED_VISIBLE_SURFACES = 193
-EXPECTED_EXECUTABLE_SURFACES = 192
+EXPECTED_VISIBLE_SURFACES = 194
+EXPECTED_EXECUTABLE_SURFACES = 193
 EXPECTED_INCLUDE_SURFACES = 4
-EXPECTED_HIDDEN_CELLS = 93
+EXPECTED_HIDDEN_CELLS = 94
 REVISION_RE = re.compile(r"[0-9a-f]{40}")
 RAW_REPO_PREFIX = "https://raw.githubusercontent.com/Shakeri-Lab/dl-book/"
 SOURCE_REPO_PREFIX = "https://github.com/Shakeri-Lab/dl-book/blob/"

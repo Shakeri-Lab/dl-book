@@ -607,9 +607,12 @@ def accuracy(model: nn.Module, X: torch.Tensor, y: torch.Tensor) -> float:
 mlp = train_model(make_mlp)
 lenet = train_model(LeNet)
 # [3]
+fit_metrics = {}
 for name, model in [("MLP  ", mlp), ("LeNet", lenet)]:
-    print(f"{name}  train {accuracy(model, X_tr, y_tr):.1%}   "
-          f"validation {accuracy(model, X_val, y_val):.1%}")
+    fit_metrics[name.strip()] = (
+        accuracy(model, X_tr, y_tr), accuracy(model, X_val, y_val))
+    print(f"{name}  train {fit_metrics[name.strip()][0]:.1%}   "
+          f"validation {fit_metrics[name.strip()][1]:.1%}")
 ```
 ::::
 Read the clean-validation column honestly: the MLP scores 75.5% and LeNet 74.5% in this
@@ -755,11 +758,50 @@ decision-inert while this chapter's choices were made.
 mlp_final = train_model(make_mlp, X_dev, y_dev)
 lenet_final = train_model(LeNet, X_dev, y_dev)
 # [2]
+holdout_metrics = {}
 for name, model in [("MLP  ", mlp_final), ("LeNet", lenet_final)]:
-    print(f"{name}  clean {accuracy(model, X_test, y_test):.1%}   "
-          f"shift-2 {accuracy(model, shift_right(X_test, 2), y_test):.1%}")
+    holdout_metrics[name.strip()] = (
+        accuracy(model, X_test, y_test),
+        accuracy(model, shift_right(X_test, 2), y_test))
+    print(f"{name}  clean {holdout_metrics[name.strip()][0]:.1%}   "
+          f"shift-2 {holdout_metrics[name.strip()][1]:.1%}")
 ```
 ::::
+
+```{python}
+#| label: cnn-portability-evidence
+#| echo: false
+import json as _evidence_json
+import os as _evidence_os
+from pathlib import Path as _EvidencePath
+
+if _evidence_dir := _evidence_os.environ.get("DLBOOK_PAIRED_EVIDENCE_DIR"):
+    _evidence = {
+        "schema_version": 1, "study": "ch08",
+        "unit": "chapters/part2/08-cnn.qmd",
+        "format": _evidence_os.environ["DLBOOK_EXECUTION_FORMAT"],
+        "seed_set": [6050],
+        "protocol": {"epochs": 150, "batch": 128, "fit_n": len(X_tr),
+                     "validation_n": len(X_val), "test_n": len(X_test),
+                     "refit_n": len(X_dev), "split_seed": 6050},
+        "records": [
+            {"seed": 6050, "condition": name, "metric": metric, "value": value}
+            for name, shift_scores in (("MLP", acc_mlp), ("LeNet", acc_cnn))
+            for metric, value in [
+                ("fit_accuracy", fit_metrics[name][0]),
+                ("validation_accuracy", fit_metrics[name][1]),
+                *[(f"validation_shift_{s}", value)
+                  for s, value in zip(shifts, shift_scores)],
+                ("test_clean_accuracy", holdout_metrics[name][0]),
+                ("test_shift_2_accuracy", holdout_metrics[name][1]),
+            ]
+        ],
+    }
+    _evidence_path = _EvidencePath(_evidence_dir) / "ch08.json"
+    _evidence_path.parent.mkdir(parents=True, exist_ok=True)
+    _evidence_path.write_text(_evidence_json.dumps(
+        _evidence, sort_keys=True, allow_nan=False) + "\n", encoding="utf-8")
+```
 The sealed check confirms the validation diagnosis. Clean accuracy is 82.2% for the
 MLP and 82.5% for LeNet, a descriptive 0.3-point gap from one seed. Under the
 predeclared two-pixel shift, the gap becomes 41.8% versus 62.3%.
