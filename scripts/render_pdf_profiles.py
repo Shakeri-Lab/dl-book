@@ -14,10 +14,14 @@ import sys
 import tempfile
 
 import pymupdf
+from guarded_assembly import (
+    guarded_render, inventory, verify_assembly_inventory, verify_installed_inputs,
+    verify_original_unchanged,
+)
 
 from pdf_build_contract import (
     build_environment, consumed_inputs, input_manifest, manifest_digest,
-    sha256, snapshot, source_state, tool_versions,
+    sha256, snapshot, source_state, tool_versions, SOURCE_RECORD,
 )
 
 
@@ -77,9 +81,7 @@ def render(profile: PdfProfile, max_attempts: int, env: dict[str, str]) -> None:
         if run([sys.executable, "scripts/materialize_frozen_pdf_assets.py"], env):
             raise SystemExit("Failed to materialize frozen PDF assets")
         log = build / f"quarto-{profile.name}-render-attempt-{attempt}.log"
-        command = [
-            "quarto",
-            "render",
+        arguments = [
             *profile.quarto_args,
             "--no-clean",
             "--debug",
@@ -89,8 +91,10 @@ def render(profile: PdfProfile, max_attempts: int, env: dict[str, str]) -> None:
         previous_mtime = (
             profile.output.stat().st_mtime_ns if profile.output.is_file() else None
         )
-        if run(command, env):
-            raise SystemExit(f"Quarto failed while rendering {profile.name} PDF")
+        report = guarded_render(ROOT, arguments, env)
+        (build / f"assembly-{profile.name}-{attempt}.json").write_text(
+            json.dumps(report, indent=2, sort_keys=True) + "\n"
+        )
         if not profile.output.is_file():
             raise SystemExit(f"Quarto did not create the {profile.name} PDF")
         current_mtime = profile.output.stat().st_mtime_ns
@@ -160,14 +164,16 @@ def retain_build_diagnostics(checkout: Path, destination: Path, number: int) -> 
 
 def verify_reproducible(selected: tuple[PdfProfile, ...], max_attempts: int) -> None:
     """Two fresh input trees, one toolchain, no inherited Quarto/LaTeX aux files."""
-    state = source_state(ROOT)
-    manifest = input_manifest(ROOT)
-    env = build_environment(state)
     build = ROOT / "build"
     build.mkdir(exist_ok=True)
     success_record = build / "pdf-reproducibility.json"
-    # A failed new attempt must not leave a previous attempt's success sentinel.
+    # Clear success even when the new attempt fails its canonical preflight.
     success_record.unlink(missing_ok=True)
+    context = verify_installed_inputs(ROOT)
+    original_freeze = inventory(ROOT / "_freeze")
+    state = source_state(ROOT)
+    manifest = input_manifest(ROOT)
+    env = build_environment(state)
     with tempfile.TemporaryDirectory(prefix="dlbook-pdf-repro-") as temporary:
         results = []
         for number in (1, 2):
@@ -175,7 +181,7 @@ def verify_reproducible(selected: tuple[PdfProfile, ...], max_attempts: int) -> 
             snapshot(ROOT, checkout, manifest, state)
             profile_arg = selected[0].name if len(selected) == 1 else "all"
             command = [sys.executable, "scripts/render_pdf_profiles.py", "--profile",
-                       profile_arg, "--max-attempts", str(max_attempts)]
+                       profile_arg, "--max-attempts", str(max_attempts), "--assembly-worker"]
             log = build / f"pdf-repro-build-{number}.log"
             print(f"Reproducible PDF gate: fresh build {number}/2 (log: {log})", flush=True)
             with log.open("w") as stream:
@@ -184,6 +190,8 @@ def verify_reproducible(selected: tuple[PdfProfile, ...], max_attempts: int) -> 
             # Quarto/LaTeX may fail before a per-profile manifest can be written.
             # Keep their evidence while the isolated checkout still exists.
             retain_build_diagnostics(checkout, build, number)
+            verify_original_unchanged(ROOT, original_freeze)
+            verify_assembly_inventory(original_freeze, checkout / "_freeze")
             if outcome.returncode:
                 raise SystemExit(
                     f"Fresh PDF build {number} failed; inspect {log} and "
@@ -194,8 +202,11 @@ def verify_reproducible(selected: tuple[PdfProfile, ...], max_attempts: int) -> 
                 filename = f"pdf-{profile.name}-manifest.json"
                 record_path = checkout / "build" / filename
                 row[profile.name] = json.loads(record_path.read_text())
+                actual_pdf = checkout / profile.output.relative_to(ROOT)
+                if sha256(actual_pdf) != row[profile.name]["pdf_sha256"]:
+                    raise SystemExit(f"Fresh {profile.name} PDF bytes differ from their worker manifest")
                 shutil.copy2(record_path, build / f"repro-{number}-{filename}")
-                shutil.copy2(checkout / profile.output.relative_to(ROOT),
+                shutil.copy2(actual_pdf,
                              build / f"repro-{number}-pdf-{profile.name}.pdf")
             results.append(row)
         if input_manifest(ROOT) != manifest:
@@ -209,11 +220,18 @@ def verify_reproducible(selected: tuple[PdfProfile, ...], max_attempts: int) -> 
                 )
         # Validate the complete selected set before replacing any installed PDF.
         # A mismatch in the second profile must leave both previous artifacts intact.
+        verify_original_unchanged(ROOT, original_freeze)
+        for profile in selected:
+            source = Path(temporary) / "build-2" / profile.output.relative_to(ROOT)
+            if sha256(source) != results[1][profile.name]["pdf_sha256"]:
+                raise SystemExit(f"Verified {profile.name} PDF changed before installation")
         for profile in selected:
             # Publish only the verified fresh artifact, never a stale local output.
             source = Path(temporary) / "build-2" / profile.output.relative_to(ROOT)
             profile.output.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, profile.output)
+            if sha256(profile.output) != results[1][profile.name]["pdf_sha256"]:
+                raise SystemExit(f"Installed {profile.name} PDF differs from the verified artifact")
             shutil.copy2(Path(temporary) / "build-2" / "build" /
                          f"pdf-{profile.name}-manifest.json", build /
                          f"pdf-{profile.name}-manifest.json")
@@ -221,10 +239,12 @@ def verify_reproducible(selected: tuple[PdfProfile, ...], max_attempts: int) -> 
                 retained = build / f"repro-2-pdf-{profile.name}.{suffix}"
                 if retained.is_file():
                     shutil.copy2(retained, build / f"pdf-{profile.name}.{suffix}")
+        verify_original_unchanged(ROOT, original_freeze)
         success_record.write_text(json.dumps({
             "source": state,
             "input_sha256": manifest_digest(manifest),
             "fresh_builds": 2,
+            "canonical_evidence": context,
             "profiles": {name: record["pdf_sha256"] for name, record in results[0].items()},
         }, indent=2, sort_keys=True) + "\n")
     print("Both fresh builds agree byte-for-byte for every selected PDF profile.", flush=True)
@@ -232,6 +252,7 @@ def verify_reproducible(selected: tuple[PdfProfile, ...], max_attempts: int) -> 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--assembly-worker", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument(
         "--verify-reproducible",
         action="store_true",
@@ -257,15 +278,16 @@ def main() -> int:
         if args.profile == "all"
         else tuple(profile for profile in PROFILES if profile.name == args.profile)
     )
-    if args.verify_reproducible:
-        verify_reproducible(selected, args.max_attempts)
-    else:
+    if args.assembly_worker:
+        if (ROOT / ".git").exists() or not (ROOT / SOURCE_RECORD).is_file():
+            parser.error("PDF assembly workers may only run in disposable input snapshots")
+        verify_installed_inputs(ROOT)
         env = build_environment(source_state(ROOT))
-        # An editable installation may point at a different (or offline) checkout.
-        # Any unexpectedly unfrozen cell must import this snapshot's own code.
-        env["PYTHONPATH"] = str(ROOT / "code")
         for profile in selected:
             render(profile, args.max_attempts, env)
+    else:
+        # No public entry point renders inside the installed evidence tree.
+        verify_reproducible(selected, args.max_attempts)
     return 0
 
 

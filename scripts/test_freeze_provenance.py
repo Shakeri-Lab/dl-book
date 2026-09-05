@@ -140,6 +140,56 @@ class FreezeProvenanceTests(unittest.TestCase):
                                       provenance_root=self.bundles[1]/"provenance")
         self.assertIn("original fingerprint", "\n".join(errors))
 
+    def local_fixture(self):
+        bundle = self.bundles[0]
+        provenance = bundle / "provenance"
+        document = json.loads((provenance/"fingerprint.json").read_text())
+        document["kind"] = "local"
+        document["cpu"] = {"machine":"arm64", "system":"Darwin"}
+        document["source"]["dirty"] = None
+        document["container"]["digest"] = None
+        document["container"]["base_digest"] = None
+        write_json(provenance/"source-before.json",{**document["source"],"dirty":False})
+        write_json(provenance/"execution-plan.json",document["execution_plan"])
+        for index,probe in enumerate(document["execution_probes"]):
+            path = provenance/"kernel-startup"/f"fixture-{index}.json"
+            write_json(path,probe["observation"])
+            probe.update(artifact=path.name,sha256=sha256(path))
+        write_json(provenance/"fingerprint.json",document)
+        return bundle,document
+
+    def test_local_validation_is_opt_in_and_retains_native_identity(self):
+        bundle,document = self.local_fixture()
+        self.assertTrue(validate_fingerprint(document,bundle/"_freeze"))
+        self.assertEqual(validate_fingerprint(document,bundle/"_freeze",allow_local=True),[])
+        self.assertEqual(document["kind"],"local")
+        self.assertEqual(document["cpu"]["machine"],"arm64")
+
+    def test_local_dirty_parent_cannot_authenticate_gitless_source(self):
+        bundle,document = self.local_fixture()
+        path = bundle/"provenance/source-before.json"
+        before = json.loads(path.read_text())
+        before["dirty"] = True
+        write_json(path,before)
+        self.assertIn("clean parent manifest", "\n".join(
+            validate_fingerprint(document,bundle/"_freeze",allow_local=True)))
+
+    def test_local_missing_actual_plan_is_rejected(self):
+        bundle,document = self.local_fixture()
+        (bundle/"provenance/execution-plan.json").unlink()
+        self.assertIn("execution plan file", "\n".join(
+            validate_fingerprint(document,bundle/"_freeze",allow_local=True)))
+
+    def test_actual_kernel_probe_tamper_fails_local_and_canonical(self):
+        bundle,document = self.local_fixture()
+        write_json(bundle/"provenance/kernel-startup/fixture-0.json",{"altered":True})
+        self.assertIn("Executed-kernel artifact", "\n".join(
+            validate_fingerprint(document,bundle/"_freeze",allow_local=True)))
+        canonical = json.loads((self.bundles[1]/"provenance/fingerprint.json").read_text())
+        canonical["execution_probes"][0].update(artifact="missing.json",sha256="a"*64)
+        self.assertIn("Executed-kernel artifact", "\n".join(
+            validate_fingerprint(canonical,self.bundles[1]/"_freeze")))
+
     def test_missing_fingerprint_fails_even_if_outputs_match(self):
         (self.bundles[1] / "provenance/fingerprint.json").unlink()
         self.assertFailure("missing/invalid fingerprint")

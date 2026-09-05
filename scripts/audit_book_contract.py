@@ -102,10 +102,6 @@ NOTEBOOK_THREAD_DEFAULTS = (
     "VECLIB_MAXIMUM_THREADS",
     "NUMEXPR_NUM_THREADS",
 )
-NOTEBOOK_SINGLE_THREAD_SLUGS = (
-    "a1-linear-algebra",
-    "18-alignment",
-)
 NOTEBOOK_TORCH_THREAD_OVERRIDE = "DLBOOK_TORCH_NUM_THREADS"
 DOWNLOAD_TOOL_CONFIG = (
     '    tools:\n'
@@ -300,6 +296,115 @@ def native_portability_workflow_errors(text: str) -> list[str]:
         errors.append("native portability must classify drift, not blanket-ignore execution/evidence failures")
     if "All cells executed cleanly and satisfied" in job:
         errors.append("native portability workflow retains an unconditional success claim")
+    return errors
+
+
+CANONICAL_PUBLICATION_INPUTS = (
+    "scripts/run_canonical_notebooks.py", "scripts/export_notebooks.py",
+    "container/Dockerfile", "container/canonical-runtime.json",
+    "container/install_quarto.py", "container/runtime_policy.py",
+    "container/kernel_start.py", "container/kernel.json", "container/canonical_python.py",
+)
+
+
+def canonical_publication_runtime_errors(workflow: str, inputs: dict[str, str]) -> list[str]:
+    """Pin publication to its proven image, not obsolete host shell overrides.
+
+    These source tripwires complement the executable runtime/asset/kernel fixture
+    tests and full offline notebook executions; they are not runtime evidence.
+    """
+    errors = []
+    def require(condition: bool, message: str) -> None:
+        if not condition:
+            errors.append("canonical notebook publication: " + message)
+    for name in CANONICAL_PUBLICATION_INPUTS:
+        require(name in inputs, f"missing runtime contract input {name}")
+    if errors:
+        return errors
+    quarto_pin = f'version: "{QUARTO_VERSION}"'
+    require(workflow.count(quarto_pin) == 2 and all(
+        workflow_job(workflow, job).count(quarto_pin) == 1
+        for job in ("export_notebooks", "build-deploy")),
+        f"host export and assembly must each pin Quarto {QUARTO_VERSION}; validation uses its sealed image")
+    job = workflow_job(workflow, "validate_notebooks")
+    require("needs: validate_notebooks" in workflow_job(workflow, "build-deploy"),
+            "deployment must depend on successful notebook validation")
+    for token in (
+        "needs: export_notebooks", "fetch-depth: 0", "id: canonical",
+        "scripts/run_canonical_notebooks.py prepare", "scripts/run_canonical_notebooks.py verify-image",
+        "scripts/run_canonical_notebooks.py execute", "steps.canonical.outputs.image_run_id",
+        'test "$verified_id" = "$IMAGE_ID"',
+        'test "$(docker image inspect --format \'{{.Id}}\' "$IMAGE_ID")" = "$IMAGE_ID"',
+        'test "$(docker image inspect --format \'{{.Os}}/{{.Architecture}}\' "$IMAGE_ID")" = linux/amd64',
+        "IMAGE_ID: ${{ steps.canonical.outputs.image_id }}",
+        "SOURCE_DATE_EPOCH: ${{ steps.canonical.outputs.source_date_epoch }}",
+        "--network none", "--platform linux/amd64", "--entrypoint python --env SOURCE_DATE_EPOCH",
+        '"$IMAGE_ID" /opt/dlbook/canonical_python.py',
+        "type=bind,source=$PWD,target=/source,readonly", "--shard-count 6",
+        "build/notebooks/canonical-context.json", "build/notebooks/evidence/", "if: always()",
+    ):
+        require(token in job, f"workflow missing {token!r}")
+    for forbidden in ("continue-on-error:", "pip install", "docker build", "--freeze-policy portable"):
+        require(forbidden not in job, f"validation must not contain {forbidden!r}")
+    runner = inputs["scripts/run_canonical_notebooks.py"]
+    for token in (
+        'root / "provenance/canonical-freezes"', "len(matches) != 1", "verify_installed(root, matches[0])",
+        'fingerprint["runtime"]["environment"].get("SOURCE_DATE_EPOCH", "")', "epoch != git_epoch",
+        '"source_date_epoch": epoch', 'fingerprint["execution_plan"]["units"].items()',
+        'sha256(path) != specification["source_sha256"]', "recipe_names != current_recipe",
+        'sha256(path) != source_files.get(name)', "scripts/audit_execution_identity.py",
+        'runtime_identity(observed) != runtime_identity(fingerprint["runtime"])',
+        'canonical_files.get(name.as_posix()) != record["sha256"]',
+        'metadata["revision"] != context["publication_commit"]',
+        'module.identity_inputs(root, context["canonical_source_commit"])',
+        'image_id != context["image_id"]',
+        '"--freeze-policy", "exact"', 'DLBOOK_NOTEBOOK_CANONICAL="1"',
+        '"public", "source", "executed"', '"reference", "reference-source", "reference-executed"',
+        'subprocess.run([*source_audit, *audit_args], cwd=root, check=True)',
+        "check_kernel_probes(probes, unit.source, form, expected_kernel)",
+        "len(observations) != 1", "kernel_identity(document) != expected",
+        'document.get("unit") != unit', 'document.get("format") != f"notebook-{form}"',
+    ):
+        require(token in runner, f"runner missing {token!r}")
+    bootstrap = inputs["scripts/export_notebooks.py"]
+    require(bootstrap.count("_bootstrap_os.environ.get('DLBOOK_NOTEBOOK_CANONICAL') == '1'") == 2,
+            "bootstrap must refuse both dependency installation and asset downloads in canonical mode")
+    require("Canonical notebook runtime is missing pinned requirements" in bootstrap
+            and "Canonical notebook asset is missing or changed" in bootstrap,
+            "offline bootstrap failures must remain explicit")
+    try:
+        runtime = json.loads(inputs["container/canonical-runtime.json"])
+        kernelspec = json.loads(inputs["container/kernel.json"])
+    except (ValueError, TypeError) as error:
+        errors.append(f"canonical notebook publication: invalid runtime/kernel JSON: {error}")
+        return errors
+    require(runtime.get("quarto_version") == QUARTO_VERSION
+            and f"/v{QUARTO_VERSION}/quarto-{QUARTO_VERSION}-linux-amd64.tar.gz" in runtime.get("quarto_url", "")
+            and re.fullmatch(r"[0-9a-f]{64}", runtime.get("quarto_sha256", "")) is not None,
+            "sealed image must pin the same Quarto version and verified Linux archive")
+    docker = inputs["container/Dockerfile"]
+    require("RUN python /opt/dlbook/install_quarto.py" in docker
+            and 'digest != settings["quarto_sha256"]' in inputs["container/install_quarto.py"],
+            "sealed Quarto installation must verify its pinned archive before extraction")
+    thread_keys = (*NOTEBOOK_THREAD_DEFAULTS, NOTEBOOK_TORCH_THREAD_OVERRIDE, "DLBOOK_TORCH_INTEROP_THREADS")
+    for key in thread_keys:
+        require(runtime.get("environment", {}).get(key) == "1"
+                and re.findall(rf"\b{key}=([^\s\\]+)", docker) == ["1"],
+                f"sealed image must apply one-thread {key} to every notebook")
+        require(key not in job, f"host validation must not shadow sealed-image {key}")
+    require(kernelspec.get("argv") == ["/opt/venv/bin/python", "/opt/dlbook/kernel_start.py", "-f", "{connection_file}"],
+            "notebooks must use the explicit observed canonical kernel launcher")
+    policy = inputs["container/runtime_policy.py"]
+    for token in ("torch.set_num_threads(threads)", "torch.set_num_interop_threads(interop)",
+                  "(torch.get_num_threads(), torch.get_num_interop_threads()) != (threads, interop)"):
+        require(token in policy, f"actual Torch startup policy missing {token!r}")
+    kernel = inputs["container/kernel_start.py"]
+    for token in ("torch = initialize_torch()", "DLBOOK_KERNEL_PROBE_DIR", "DLBOOK_EXECUTION_UNIT",
+                  "DLBOOK_EXECUTION_FORMAT", '"num_threads": torch.get_num_threads()',
+                  '"num_interop_threads": torch.get_num_interop_threads()', "IPKernelApp.launch_instance()"):
+        require(token in kernel, f"real kernel observation missing {token!r}")
+    require("initialize_torch()" in inputs["container/canonical_python.py"],
+            "the validation driver must share the explicit startup policy")
     return errors
 
 
@@ -823,81 +928,19 @@ def main() -> None:
     fixpoint_call = "python scripts/render_pdf_profiles.py"
     if workflow_text.count(fixpoint_call) != 1:
         fail(errors, "publish workflow must use the bounded PDF outline fixpoint")
+    runtime_inputs = {
+        name: (ROOT / name).read_text()
+        for name in CANONICAL_PUBLICATION_INPUTS if (ROOT / name).is_file()
+    }
+    errors.extend(canonical_publication_runtime_errors(workflow_text, runtime_inputs))
     quarto_pin = f'version: "{QUARTO_VERSION}"'
-    quarto_jobs = ("export_notebooks", "validate_notebooks", "build-deploy")
-    if workflow_text.count(quarto_pin) != len(quarto_jobs) or any(
-        workflow_job(workflow_text, job).count(quarto_pin) != 1
-        for job in quarto_jobs
-    ):
-        fail(
-            errors,
-            "publish workflow must pin the validated Quarto "
-            f"{QUARTO_VERSION} once in export, validation, and publication",
-        )
     if execution_workflow_text.count(quarto_pin) != 1:
-        fail(
-            errors,
-            f"execution audit must pin the validated Quarto {QUARTO_VERSION}",
-        )
-    validation_job = workflow_job(workflow_text, "validate_notebooks")
-    scoped_thread_block = (
-        "            notebook_thread_env=()\n"
-        + '            case "$notebook_slug" in\n'
-        + "              "
-        + "|".join(NOTEBOOK_SINGLE_THREAD_SLUGS)
-        + ")\n"
-        + "                notebook_thread_env=(\n"
-        + "".join(
-            f"                  {variable}=1\n"
-            for variable in NOTEBOOK_THREAD_DEFAULTS
-        )
-        + "                )\n"
-        + "                ;;\n"
-        + "            esac\n"
-        + '            if [[ "$notebook_slug" == "18-alignment" ]]; then\n'
-        + "              notebook_thread_env+=("
-        + NOTEBOOK_TORCH_THREAD_OVERRIDE
-        + "=1)\n"
-        + "            fi\n"
-        + '            if [[ "${#notebook_thread_env[@]}" -gt 0 ]]; then\n'
-        + "              printf 'notebook=%s numerical_thread_env=%s\\n' \\\n"
-        + '                "$notebook_slug" "${notebook_thread_env[*]}" \\\n'
-        + "                >> build/notebooks/evidence/environment.txt\n"
-        + "            fi\n"
-    )
-    for required in (
-        scoped_thread_block,
-        'if ! env "${notebook_thread_env[@]}" \\',
-        '"torch_num_interop_threads": torch.get_num_interop_threads()',
-    ):
-        if required not in validation_job:
-            fail(
-                errors,
-                "publish workflow does not scope and record the complete "
-                "one-thread numerical-library override",
-            )
-            break
+        fail(errors, f"execution audit must pin the validated Quarto {QUARTO_VERSION}")
+    # Native Ubuntu remains an explicitly different portability measurement.
+    # Do not silently apply canonical numerical-library defaults to that host.
     for variable in NOTEBOOK_THREAD_DEFAULTS:
-        if workflow_text.count(variable) != 1:
-            fail(
-                errors,
-                f"publish workflow must scope {variable} exactly once",
-            )
         if variable in execution_workflow_text:
-            fail(
-                errors,
-                f"execution audit must not globally pin {variable}",
-            )
-    if validation_job.count(NOTEBOOK_TORCH_THREAD_OVERRIDE) != 1:
-        fail(
-            errors,
-            "publish workflow must apply the PyTorch thread override to Chapter 18 once",
-        )
-    if workflow_text.count(NOTEBOOK_TORCH_THREAD_OVERRIDE) != 1:
-        fail(
-            errors,
-            "PyTorch thread override must appear only in notebook validation",
-        )
+            fail(errors, f"execution audit must not globally pin {variable}")
     execution_job = workflow_job(execution_workflow_text, "execute-all")
     errors.extend(native_portability_workflow_errors(execution_workflow_text))
     execution_thread_block = (

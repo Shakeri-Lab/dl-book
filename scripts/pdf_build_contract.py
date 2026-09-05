@@ -12,7 +12,7 @@ import subprocess
 
 SOURCE_RECORD = ".dlbook-pdf-source.json"
 PREVIEW_ROOTS = {
-    "scripts", "filters", "tex", "chapters", "_freeze", "figures", "data", "code",
+    "scripts", "filters", "tex", "chapters", "_freeze", "figures", "data", "code", "provenance",
 }
 PREVIEW_SUFFIXES = {
     ".py", ".lua", ".tex", ".qmd", ".yml", ".yaml", ".json", ".png", ".svg",

@@ -64,29 +64,37 @@ def kernel_identity(observation: dict[str, Any]) -> dict[str, Any]:
 
 
 def validate_fingerprint(document: dict[str, Any], freeze_root: Path, *,
-                         provenance_root: Path | None = None) -> list[str]:
+                         provenance_root: Path | None = None,
+                         allow_local: bool = False) -> list[str]:
+    """Validate actual evidence; local runtimes require explicit report-only opt-in."""
     errors = []
     try:
+        provenance = provenance_root if provenance_root is not None else freeze_root.parent / "provenance"
         if provenance_root is not None:
             archived_fingerprint = provenance_root / "fingerprint.json"
             if (not archived_fingerprint.is_file()
                     or json.loads(archived_fingerprint.read_text()) != document):
                 raise ValueError("Explicit proof directory does not contain the original fingerprint")
-        if document.get("schema_version") != SCHEMA_VERSION or document.get("kind") != "canonical":
+        local = allow_local and document.get("kind") == "local"
+        if document.get("schema_version") != SCHEMA_VERSION or not (document.get("kind") == "canonical" or local):
             raise ValueError("canonical fingerprint schema/kind is missing or unsupported")
         if not _required(document, "run", "id"):
             raise ValueError("run identity is empty")
         _required(document, "run", "ci")
         _required(document, "created_utc")
         cpu = _required(document, "cpu")
-        if cpu.get("machine") not in {"x86_64", "amd64"} or cpu.get("system") != "Linux" or not cpu.get("processors"):
-            raise ValueError("Canonical CPU observation must identify Linux x86_64")
-        if any(not processor.get("vendor") or not processor.get("model")
-               or not isinstance(processor.get("flags"), list) or not processor["flags"]
-               for processor in cpu["processors"]):
-            raise ValueError("Canonical CPU vendor/model/flags observations are incomplete")
+        if local:
+            if not cpu.get("machine") or not cpu.get("system"):
+                raise ValueError("Local CPU/platform observation is missing")
+        else:
+            if cpu.get("machine") not in {"x86_64", "amd64"} or cpu.get("system") != "Linux" or not cpu.get("processors"):
+                raise ValueError("Canonical CPU observation must identify Linux x86_64")
+            if any(not processor.get("vendor") or not processor.get("model")
+                   or not isinstance(processor.get("flags"), list) or not processor["flags"]
+                   for processor in cpu["processors"]):
+                raise ValueError("Canonical CPU vendor/model/flags observations are incomplete")
         source = _required(document, "source")
-        if source.get("dirty") is not False:
+        if not (source.get("dirty") is False or local and source.get("dirty") is None):
             raise ValueError("Canonical source was not verified clean")
         if not re.fullmatch(r"[0-9a-f]{40}", str(source.get("commit", ""))):
             raise ValueError("source commit is missing or invalid")
@@ -95,11 +103,23 @@ def validate_fingerprint(document: dict[str, Any], freeze_root: Path, *,
             raise ValueError("source input hashes are empty or invalid")
         if json_digest(files) != _required(source, "input_sha256"):
             raise ValueError("source input hash does not match its inventory")
+        if local:
+            before_path = provenance / "source-before.json"
+            if not before_path.is_file():
+                raise ValueError("Local execution requires its actual clean source-before manifest")
+            before = json.loads(before_path.read_text())
+            if before.get("dirty") is not False or any(before.get(key) != source.get(key)
+                    for key in ("commit", "files_sha256", "input_sha256")):
+                raise ValueError("Local source does not match its verified clean parent manifest")
         plan = _required(document, "execution_plan")
         if (plan.get("schema_version") != 1 or plan.get("source_commit") != source["commit"]
                 or plan.get("source_input_sha256") != source["input_sha256"]
                 or plan.get("formats") != ["html", "tex"] or not plan.get("units")):
             raise ValueError("Execution plan is absent or not bound to source identity")
+        if local:
+            plan_path = provenance / "execution-plan.json"
+            if not plan_path.is_file() or json.loads(plan_path.read_text()) != plan:
+                raise ValueError("Local execution plan file is missing or differs from the fingerprint")
         for unit, specification in plan["units"].items():
             if files.get(unit) != specification.get("source_sha256") or not specification.get("native_cells_sha256"):
                 raise ValueError(f"Execution plan has invalid source/native coverage for {unit}")
@@ -108,6 +128,8 @@ def validate_fingerprint(document: dict[str, Any], freeze_root: Path, *,
                     raise ValueError(f"Included source identity differs: {name}")
         container = _required(document, "container")
         for key in ("digest", "base_digest"):
+            if local and container.get(key) is None:
+                continue  # A native Mac must not pretend it ran in the Linux image.
             if not re.fullmatch(r"(?:[^\s]+@)?sha256:[0-9a-f]{64}", str(container.get(key, ""))):
                 raise ValueError(f"immutable container {key} is missing or invalid")
         for key in ("recipe", "wheel_lock"):
@@ -132,6 +154,14 @@ def validate_fingerprint(document: dict[str, Any], freeze_root: Path, *,
         probe_units = []
         for probe in probes:
             observation = _required(probe, "observation")
+            if local or "artifact" in probe or "sha256" in probe:
+                name = str(probe.get("artifact", ""))
+                path = provenance / "kernel-startup" / name
+                if (not name or Path(name).name != name or not path.is_file() or path.is_symlink()
+                        or not path.resolve().is_relative_to((provenance / "kernel-startup").resolve())
+                        or sha256(path) != probe.get("sha256")
+                        or json.loads(path.read_text()) != observation):
+                    raise ValueError("Executed-kernel artifact is missing or differs from its fingerprint")
             identity = kernel_identity(observation)
             if identity["python"]["version"] != runtime["python"]["version"]:
                 raise ValueError("kernel Python version differs from captured environment")
@@ -150,6 +180,11 @@ def validate_fingerprint(document: dict[str, Any], freeze_root: Path, *,
         expected_pairs = {(unit, fmt) for unit in plan["units"] for fmt in plan["formats"]}
         if set(probe_units) != expected_pairs or len(probe_units) != len(expected_pairs):
             raise ValueError("Kernel probes do not cover exactly the planned unit/format pairs")
+        if local or any("artifact" in probe for probe in probes):
+            recorded_names = [probe.get("artifact") for probe in probes]
+            actual_names = {path.name for path in (provenance / "kernel-startup").glob("*.json")}
+            if len(set(recorded_names)) != len(probes) or set(recorded_names) != actual_names:
+                raise ValueError("Actual kernel artifacts do not match the fingerprint coverage")
         expected = _required(document, "freeze_files_sha256")
         actual = freeze_inventory(freeze_root)
         if actual != expected:
@@ -157,7 +192,6 @@ def validate_fingerprint(document: dict[str, Any], freeze_root: Path, *,
         if "docs/paired-evidence-plan.json" in files:
             evidence = _required(document, "paired_evidence")
             manifest = _required(evidence, "manifest")
-            provenance = provenance_root if provenance_root is not None else freeze_root.parent / "provenance"
             manifest_path = provenance / "paired-evidence-manifest.json"
             if (not manifest_path.is_file() or sha256(manifest_path) != evidence.get("manifest_sha256")
                     or json.loads(manifest_path.read_text()) != manifest):

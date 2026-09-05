@@ -7,7 +7,7 @@ it from editing before you have said what you want done.
 Keep this file current: if a rule changes or the state moves, edit the prompt here
 rather than re-deriving it in chat.
 
-**In-progress exception, September 4:** resume the uncommitted learning-loop pass in
+**In-progress exception, September 4:** resume the learning-loop pass in
 `/tmp/dl-book-phase-a.XE6WWb/repo`, branch `pedagogy-roundtrip-20260904`, not the stale
 Box tree named in the general bootstrap below. The author approved moving the
 canonical freeze to a pinned Linux/x86-64 container with a fingerprint alongside
@@ -19,6 +19,11 @@ recomputes its own baseline. Preserve strict identity gates. Implementation and
 publication validation remain pending; the old Mac refresh is not canonical. Read
 `docs/reviews/2026-09-04-learning-loop.md` before rendering or publishing. No release
 tag has changed, and final PDF page counts are not yet available.
+Source-only checkpoints have been pushed on the working branch, never `main`.
+The two fresh Linux runs (`33937390845`, `33938819036`) execute
+`1da26e860d6fa76ae6b76dede273748b1439128c` with one saved image; the Mac 1/1 and
+6/1 thread profiles use that same source. Check actual completion and retained
+proof before promotion. Do not stage the old dirty Mac `_freeze` as a shortcut.
 
 ---
 

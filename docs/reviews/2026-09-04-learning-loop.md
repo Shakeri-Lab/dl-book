@@ -37,6 +37,35 @@ for the same reason. Their partial logs under
 No numerical freeze was committed or promoted. A unit-isolation regression
 check must pass before fresh candidate runs restart.
 
+The corrected source checkpoint is
+`1da26e860d6fa76ae6b76dede273748b1439128c`. Its clean input manifest is
+`build/canonical-source-1da26e8.json` (input SHA-256
+`da091e7676b0a712ee864237a99833176eefc6f00d842191d6b070f1d97e432e`).
+The real single-unit Quarto check passed before Actions run `33937390845`
+started fresh execution. Independent run `33938819036` reuses that run's saved
+image and executes the same source checkpoint. Its workflow is dispatched from
+coordination-only commit `61c156ecd0290e600186fb97dc7364293a301be5`, which allows
+the expensive executions to overlap and waits for the first run only before
+comparison. Workflow revision and executed source revision are distinct records.
+Neither run is yet declared passed here.
+
+The two Mac runs use the same source checkpoint and retain evidence under
+`build/portability-1da26e8/{mac-one,mac-six}/`. Their startup budgets are respectively
+1/1 and 6/1 intra-op/inter-op threads. These are explicit new profiles, not the
+earlier inter-op-14 diagnostic environment. Partial logs or sidecars must not be
+used as completed calibration bundles. The reporter requires completed provenance
+and distinguishes same-seed end-to-end differences from comparisons whose realized
+initialization and batch-order hashes also match. Within-runtime paired controls
+and the Chapter 11/13 baseline remain exact; no numerical gate is widened.
+
+The final assembly path is being guarded separately: public/reference notebooks
+use the exact canonical image, while HTML and PDF assembly reuse frozen output in
+disposable snapshots with a refusing kernel. A source chapter's complete hash must
+match its freeze, because frozen Markdown also contains prose. Presentation-only
+library changes may occur in the disposable copy, never in installed evidence.
+The original image, both complete run bundles, and the comparison proof still need
+durable archiving; expiring Actions artifacts alone are not a release archive.
+
 The numerical reference is the baseline's committed `_freeze/` stdout, checked by
 `scripts/audit_frozen_stdout.py --base c058d1f401fd0ead3ae59a2a8730f95489a2d9aa`.
 This was the reference for the original editorial-only pass. The subsequently
@@ -149,9 +178,11 @@ refresh as bit-identical or silently overwrite the book's numerical claims.
 
 ## Resume safely
 
-The active uncommitted checkout is `/tmp/dl-book-phase-a.XE6WWb/repo`, branch
+The active in-progress checkout is `/tmp/dl-book-phase-a.XE6WWb/repo`, branch
 `pedagogy-roundtrip-20260904`, based on the baseline commit above. Do not resume in
-the stale Box checkout or reset this branch. No commit, push, or tag was made.
+the stale Box checkout or reset this branch. Source-only checkpoints have been
+committed and pushed on this working branch; no regenerated freeze has been
+committed, and `main` and release tags remain unchanged.
 
 The author has now approved a Linux/x86-64 canonical container and replacement
 evidence, with a pinned base digest, Python, wheel hashes, and explicit thread and

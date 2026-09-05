@@ -146,7 +146,8 @@ class PdfProfilePromotionTests(unittest.TestCase):
         self.success_record.write_text('{"old_success": true}\n')
         self.worker_roots = []
 
-    def run_gate(self, *, mismatch=False, changed_inputs=False, fail_worker=False):
+    def run_gate(self, *, mismatch=False, changed_inputs=False, fail_worker=False, stale_manifest=False,
+                 final_freeze_drift=False):
         def fake_worker(command, *, cwd, **kwargs):
             checkout = Path(cwd)
             self.worker_roots.append(checkout)
@@ -174,11 +175,21 @@ class PdfProfilePromotionTests(unittest.TestCase):
                 (checkout / "build" / f"pdf-{profile.name}-manifest.json").write_text(
                     json.dumps(record)
                 )
+                if stale_manifest and profile.name == "continuous":
+                    # A later profile/hook changed the actual artifact after its
+                    # manifest was recorded. Manifest equality alone misses this.
+                    pdf.write_bytes(f"mutated-after-manifest-{len(self.worker_roots)}".encode())
             return subprocess.CompletedProcess(command, 0)
 
         final_manifest = {**self.manifest, "changed.qmd": "new"} if changed_inputs else self.manifest
         with (
             patch.object(renderer, "ROOT", self.root),
+            patch.object(renderer, "verify_installed_inputs", return_value={"fixture": True}),
+            patch.object(renderer, "inventory", return_value={}),
+            patch.object(renderer, "verify_original_unchanged", side_effect=(
+                [None, None, None, ValueError("late freeze drift")]
+                if final_freeze_drift else None)),
+            patch.object(renderer, "verify_assembly_inventory"),
             patch.object(renderer, "source_state", return_value=self.state),
             patch.object(renderer, "input_manifest", side_effect=[self.manifest, final_manifest]),
             patch.object(renderer.subprocess, "run", side_effect=fake_worker),
@@ -196,6 +207,16 @@ class PdfProfilePromotionTests(unittest.TestCase):
             self.run_gate(mismatch=True)
         self.assert_previous_pdfs_retained()
         self.assertTrue((self.root / "build" / "repro-2-pdf-continuous.pdf").is_file())
+
+    def test_matching_stale_manifests_cannot_promote_changed_actual_pdfs(self):
+        with self.assertRaises(SystemExit):
+            self.run_gate(stale_manifest=True)
+        self.assert_previous_pdfs_retained()
+
+    def test_final_freeze_failure_cannot_write_success_metadata(self):
+        with self.assertRaisesRegex(ValueError, "late freeze drift"):
+            self.run_gate(final_freeze_drift=True)
+        self.assertFalse(self.success_record.exists())
 
     def test_changed_inputs_promote_nothing(self):
         with self.assertRaisesRegex(SystemExit, "Book inputs changed"):

@@ -606,18 +606,31 @@ misdiagnosis deserves to be made explicit.
   references into notebook-readable math and canonical links; do not invent a
   second explanation or an unsupported runtime estimate.
 - Publish a source notebook only after it and a full Quarto-derived reference execute
-  independently on the same runner, preserve their cells, and produce byte-identical
-  learner-visible stdout. Then compare the reference with the corresponding frozen
-  HTML stdout under `scripts/notebook_stdout_contracts.py`: exact is the default, and
-  every exception must name one surface, parse its complete output, bound each mutable
-  quantity, and state the invariant that survives the platform change. Never use a
-  book-wide tolerance. The Appendix A1 and Chapter 18 validation pairs use and record a
-  one-thread numerical-library environment to remove process-level LAPACK reduction drift
-  without perturbing seeded training elsewhere. Chapter 18's hidden setup keeps its
-  six-thread manuscript default while honoring and asserting the CI-only PyTorch override
-  during notebook validation and the weekly full-manuscript execution audit. A heavy
-  chapter may explicitly choose its own PyTorch thread count; the output gates remain the
-  proof rather than the thread setting.
+  independently in the promoted freeze's exact saved Linux/x86-64 container, preserve
+  their cells and figures, and produce byte-identical learner-visible stdout. The
+  reference must also match frozen HTML stdout exactly. Verify the actual kernel,
+  pinned assets, full executable-QMD source, and thread/dispatch environment; prohibit
+  dependency installation or network fetching in this canonical validation run.
+  A new numerical freeze needs two independent same-image CI executions, original
+  fingerprints beside its evidence, and a durable image archive. The HTML edition
+  remains canonical; the container is its numerical reference, not another edition.
+- Keep native-runtime portability separate from that exact publication gate.
+  Calibrate each mutable field from paired same-seed differences across explicitly
+  recorded supported runtimes, using a predeclared safety factor and rounding rule.
+  Record realized initialization and batch-order hashes: a same-seed comparison need
+  not isolate later floating-point arithmetic. Within-runtime experimental pairing,
+  normalization identities, and algebraic or near-zero gates remain strict. Seed SD
+  governs prose precision and the strength of a claim, never the width of a runtime
+  gate. Every exception must name one surface, parse its complete output, bound each
+  mutable quantity, and name its surviving invariant; never use a book-wide tolerance.
+  New runtimes require new measurements. Weekly native-runtime drift is reported,
+  not silently accepted as canonical evidence. See `docs/compatibility.md`.
+- Assemble HTML and the derived PDFs from verified cached Markdown in disposable
+  snapshots, with kernel execution prohibited and original evidence immutable.
+  Quarto's cache contains prose too: changing an executable chapter requires a fresh
+  freeze even when its numerical code is unchanged. Do not hand-edit frozen numbers,
+  reweave outputs, or let a missing cache trigger training on the PDF builder.
+  See `docs/assembly-contract.md` for the tested assembly boundary.
   Executed notebooks are evidence for the gate, not public artifacts. A deliberately
   partial or non-executable listing stays visibly marked as such; the exporter must not
   invent missing implementation.
