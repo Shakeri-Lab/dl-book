@@ -327,8 +327,23 @@ def canonical_publication_runtime_errors(workflow: str, inputs: dict[str, str]) 
         for job in ("export_notebooks", "build-deploy")),
         f"host export and assembly must each pin Quarto {QUARTO_VERSION}; validation uses its sealed image")
     job = workflow_job(workflow, "validate_notebooks")
-    require("needs: validate_notebooks" in workflow_job(workflow, "build-deploy"),
+    deployment = workflow_job(workflow, "build-deploy")
+    require("needs: validate_notebooks" in deployment,
             "deployment must depend on successful notebook validation")
+    require("concurrency:\n  group: ${{ github.workflow }}-${{ github.ref }}\n  cancel-in-progress: true" in workflow,
+            "superseded publication workflows must not race newer deployments")
+    freshness = deployment.split("      - name: Refuse a superseded publication\n", 1)
+    require(len(freshness) == 2 and freshness[1].split("      - name: ", 1)[-1].startswith("Publish to GitHub Pages\n"),
+            "a main-tip freshness check must immediately precede publication")
+    if len(freshness) == 2:
+        guard = freshness[1].split("      - name: ", 1)[0]
+        for token in ("if: github.ref == 'refs/heads/main'", "set -euo pipefail",
+                      'test "$(git rev-parse HEAD)" = "$GITHUB_SHA"',
+                      "git ls-remote --exit-code origin refs/heads/main",
+                      'if [ "$publication_main_tip" != "$GITHUB_SHA" ]; then', "exit 1"):
+            require(token in guard, f"publication freshness check missing {token!r}")
+        require("continue-on-error:" not in guard,
+                "a superseded or unverified main tip must fail publication")
     for token in (
         "needs: export_notebooks", "fetch-depth: 0", "id: canonical",
         "scripts/run_canonical_notebooks.py prepare", "scripts/run_canonical_notebooks.py verify-image",

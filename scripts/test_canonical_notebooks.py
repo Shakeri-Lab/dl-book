@@ -8,7 +8,9 @@ import json
 import os
 from pathlib import Path
 import shutil
+import subprocess
 import tempfile
+import textwrap
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -328,6 +330,9 @@ class CanonicalPublicationTripwireTests(unittest.TestCase):
 
     def test_workflow_safety_downgrades_fail(self):
         mutations = (
+            ("cancel-in-progress: true", "cancel-in-progress: false"),
+            ("git ls-remote --exit-code origin refs/heads/main", "git rev-parse HEAD"),
+            ('if [ "$publication_main_tip" != "$GITHUB_SHA" ]; then', 'if false; then'),
             ("--network none", "--network bridge"),
             ('"$IMAGE_ID" /opt/dlbook/canonical_python.py', '"dlbook:latest" /opt/dlbook/canonical_python.py'),
             ("--entrypoint python --env SOURCE_DATE_EPOCH", "--entrypoint python"),
@@ -349,6 +354,36 @@ class CanonicalPublicationTripwireTests(unittest.TestCase):
                 changed = self.workflow.replace("  validate_notebooks:\n", "  validate_notebooks:\n    " + forbidden + "\n")
                 self.assertTrue(canonical_publication_runtime_errors(changed, self.inputs))
 
+    def test_actual_publication_shell_rejects_stale_or_unverified_main(self):
+        guard = self.workflow.split("      - name: Refuse a superseded publication\n", 1)[1].split("      - name: ", 1)[0]
+        script = textwrap.dedent(guard.split("        run: |\n", 1)[1])
+        with tempfile.TemporaryDirectory(prefix="publication-freshness-test-") as directory:
+            # Exercise the workflow's actual shell. No remote calls or Git
+            # mutation are needed to model an old run finishing after a new one.
+            fake_git = Path(directory) / "git"
+            fake_git.write_text("#!/bin/sh\n"
+                                'case "$1" in\n'
+                                'rev-parse) printf "%s\\n" "$TEST_CHECKOUT_SHA" ;;\n'
+                                'ls-remote) test "$TEST_REMOTE_FAIL" = 0 || exit 128; '
+                                'printf "%s\\trefs/heads/main\\n" "$TEST_MAIN_SHA" ;;\n'
+                                '*) exit 129 ;;\n'
+                                'esac\n')
+            fake_git.chmod(0o755)
+            old, new = "a" * 40, "b" * 40
+            for label, checkout, tip, unavailable, succeeds in (
+                ("current main", old, old, "0", True),
+                ("older run completes last", old, new, "0", False),
+                ("checkout differs from audited run", new, old, "0", False),
+                ("remote is unavailable", old, old, "1", False),
+                ("main ref is missing", old, "", "0", False),
+            ):
+                with self.subTest(case=label):
+                    environment = {**os.environ, "PATH": directory + os.pathsep + os.environ["PATH"],
+                                   "GITHUB_SHA": old, "TEST_CHECKOUT_SHA": checkout,
+                                   "TEST_MAIN_SHA": tip, "TEST_REMOTE_FAIL": unavailable}
+                    result = subprocess.run(["bash", "-c", script], env=environment,
+                                            text=True, capture_output=True)
+                    self.assertEqual(result.returncode == 0, succeeds, result.stdout + result.stderr)
     def test_runner_proof_downgrades_fail(self):
         name = "scripts/run_canonical_notebooks.py"
         mutations = (

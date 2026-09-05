@@ -9,6 +9,12 @@ on:
 permissions:
   contents: read
 
+# Keep a superseded build from racing a newer deployment. The main-tip check
+# below also rejects a manually rerun historical commit.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   export_notebooks:
     runs-on: ubuntu-24.04
@@ -319,6 +325,18 @@ jobs:
         run: |
           python scripts/audit_frozen_stdout.py
           python scripts/guarded_assembly.py --verify-only
+
+      - name: Refuse a superseded publication
+        if: github.ref == 'refs/heads/main'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          publication_main_tip=$(git ls-remote --exit-code origin refs/heads/main | cut -f1)
+          if [ "$publication_main_tip" != "$GITHUB_SHA" ]; then
+            echo "::error::Refusing to publish superseded commit $GITHUB_SHA; main is $publication_main_tip."
+            exit 1
+          fi
 
       - name: Publish to GitHub Pages
         if: github.ref == 'refs/heads/main'
