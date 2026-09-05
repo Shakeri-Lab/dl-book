@@ -95,6 +95,13 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > the small least-squares/plotting witnesses in the saved image, repair source
 > entropy, and rerun only after those checks. No tolerance or acceptance status
 > was changed. See `docs/reviews/2026-09-05-linux-repeat-diagnosis.md`.
+> The saved-image probe `33946933974` then reproduced default least-squares
+> variation within single-threaded processes with identical inputs. Explicit
+> CPU `gelsd` was stable in its finite tested cases and offset controls; the
+> candidate source now names it at all seven least-squares calls. Inputs,
+> dtypes, seeds, `rcond`, dispatch settings, and strict gates are unchanged.
+> Actual-source prefix tests and two full final-source executions remain required.
+> This finding does not explain the older Mac training discrepancy.
 >
 > ## Previous stable and web-only state — 2026-09-02
 >

@@ -55,6 +55,18 @@ particular, Intel's AVX2 conditional numerical reproducibility guarantee is not 
 universal guarantee for AMD CPUs. Record the actual CPU and loaded libraries, and
 claim only the comparisons the repeat and weekly audits demonstrate.
 
+**Least-squares driver correction, September 5.** The independent Linux repeat
+exposed actual figure-coordinate differences despite identical rounded stdout.
+A small probe in that exact saved image reproduced default CPU least-squares
+variation within single-threaded processes with identical input bytes. The
+SVD-based `gelsd` driver was stable in the tested authored-input and offset
+controls, so the seven small CPU least-squares examples name it explicitly.
+This preserves rank-deficient examples; CUDA's `gels`-only path is a different
+device contract. No dispatch setting or tolerance was relaxed. See
+`docs/reviews/2026-09-05-linux-repeat-diagnosis.md` for the original runs,
+hash-bound observations, and limits. Full final-source repeats remain required;
+this does not explain the historical Mac training drift.
+
 ### Previous publication baseline, retained during migration
 
 The table and workflow description below document the already-published baseline,

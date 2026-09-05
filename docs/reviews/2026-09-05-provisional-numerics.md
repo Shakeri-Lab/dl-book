@@ -9,6 +9,12 @@ unit/formats completed. Its failed status is preserved. The repaired execution
 contract requires new physical notebook/preflight proof; none is manufactured
 for this diagnostic run.
 
+This ledger describes the prose-only reconciliation checkpoint. The subsequent
+independent-repeat diagnosis adds an explicit CPU least-squares driver at seven
+sites and replaces Appendix A1's tiny residual quote with a roundoff-scale
+description; see `2026-09-05-linux-repeat-diagnosis.md`. Its separate numerical
+method change is not covered by the unchanged-computation statement below.
+
 The retrieved artifact is `canonical-freeze-candidate`, ID `9962913893`, archived
 ZIP SHA-256 `a16733e3855731080880a1b89082cecae4cc2f5bdcaa385fd47cc329e0b581cb`.
 Local root: `build/canonical-1da26e8-33937390845/`. Each source below names

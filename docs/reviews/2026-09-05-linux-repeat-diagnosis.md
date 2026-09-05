@@ -72,3 +72,55 @@ The `98349c8` candidate and both accompanying Mac profiles were cancelled when
 this full-file discrepancy was discovered. Their partial records stay rejected;
 there is no second `98349c8` independent run to dispatch. Finish the minimal
 diagnosis and corrections before starting another full execution cycle.
+
+## Saved-image probe outcome and candidate correction
+
+[Diagnostic run 33946933974](https://github.com/Shakeri-Lab/dl-book/actions/runs/33946933974)
+uses probe source `a57132855d48f0f597f6b7ae926277238fc48493` and the original
+source-A image, not a newly built image. The workflow verified the original
+archive with its original source/helper before loading and checked the loaded
+immutable ID. Raw evidence is `build/lstsq-probe-33946933974/results/`:
+
+- `report.json`, SHA-256
+  `5bde0822dbde565bb34ed344a19ebef28421d565076f23fef333132a0ff0ae67`;
+- `provenance.json`, SHA-256
+  `2a066a75111af95c1be2a94a7e0269476087b9ac76891e8302f17f106ab999bd`;
+- `case-spec.json` preserves the input-generation statements extracted from the
+  authenticated original QMDs, rather than copied numerical formulas;
+- `workers/` retains preflight, inputs, complete exact observations, and logs.
+
+All following counts come from that report and its independently rechecked raw
+records. On the recorded AMD EPYC 9V74 host, the two source cases were tested at
+both float32 and float64 (the latter casts the same generated input data), with
+four drivers, three dispatch policies, eight fresh processes per policy, and
+20 authored-layout repetitions. Separate offset controls retain the same data
+bytes. Inputs agree across every policy, driver, process, and offset. All workers
+observe one intra-op and one inter-op thread.
+
+| Authored float32 case under `MKL_CBWR=AVX2` | Default-driver solution byte patterns | Processes with within-process changes | `gelsd` solution byte patterns |
+|---|---:|---:|---:|
+| Chapter 1 | 3 | 8 of 8 | 1 |
+| Chapter 4 | 2 | 8 of 8 | 1 |
+
+`gelsd` also retains one solution, prediction, and MSE pattern in every tested
+authored and offset condition, including across offsets. Neither `AVX2,STRICT`
+nor `COMPATIBLE` eliminates default-driver variability in all cases. Thus changed
+data, fresh-process variation alone, and differing thread budgets are not needed
+to reproduce this failure. The internal MKL/LAPACK cause is not identified, and
+this does not resolve the historical Mac training discrepancy.
+
+The candidate source correction names `driver="gelsd"` at all seven CPU
+least-squares calls in Chapters 1, 4, 18, and Appendix A1. This is an explicit
+SVD-based, rank-aware numerical-method choice, not a tensor-rounding patch or a
+runtime monkeypatch. In particular, Chapter 18 intentionally uses a singular
+incidence matrix; replacing everything with full-rank-only `gels` would break
+its contract. The API/device boundary follows the
+[pinned-version PyTorch documentation](https://docs.pytorch.org/docs/2.12/generated/torch.linalg.lstsq.html).
+Inputs, seeds, dtype, default `rcond`, dispatch policy, and all existing assertions
+and tolerance gates remain unchanged. Appendix A1's prose now describes roundoff
+scale rather than committing to one tiny residual's leading digits.
+
+The actual authored seven-call prefixes must pass the new pretraining byte
+witness. Then two new independent complete executions of final source in the
+same exact image must pass the original all-file gate. This finite diagnostic
+supports that candidate repair; it is not itself a release or promotion proof.
