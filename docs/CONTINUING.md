@@ -10,6 +10,26 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 
 ---
 
+> **HTML maintenance — September 8, 2026.** The HTML-only split from the pending
+> numerical-runtime work adds independent **Reveal results**, responsive table
+> inspection, and inline-code wrapping. Plan steps and Show all code restore
+> output nodes to their original positions; searching a printed value can open
+> only its result. Prose-output wrapping follows moved nodes. The manuscript,
+> `_freeze`, numerical gates, publishing/notebook pipeline, PDF configuration,
+> and stable tags remain unchanged from main `c058d1f`. This does not accept or
+> complete the separate runtime migration. The content-date stamp stays fixed.
+>
+> Run the scoped browser regressions with
+> `npm ci --prefix scripts/html-tests --ignore-scripts` then
+> `npm test --prefix scripts/html-tests`; the package runs both
+> `scripts/test_plan_result_disclosure.cjs` and
+> `scripts/test_responsive_tables.cjs`. These dependencies are test-only and
+> are not shipped with the website. Also check real browser Find, keyboard
+> scrolling, result/source round trips, and phone/desktop reflow after rendering.
+> The HTML review used existing published downloads from `gh-pages`
+> `d0eaecb91dead06145010aa508e96e6613a0cd4f`, verified against their Git blob IDs,
+> solely to complete the local bundle; it did not regenerate numerical evidence.
+
 > ## Current state — 2026-09-02 (read this first)
 >
 > The manuscript is **complete and released**: tag **v1.3** carries the stable
