@@ -1,4 +1,22 @@
 
+# Rolling post-v1.3 — lighter HTML reading controls (September 8, 2026)
+
+Plan → Code panels now offer **Reveal results** independently of source code.
+Selecting a plan step or Show all code still restores the complete listing and
+its original output order. Native browser search can reveal a printed result
+without opening the code; Escape and keyboard controls retain their existing
+behavior. Chapters 14 and 20 keep their prose-output wrapping in both views.
+
+Wide tables now scroll inside the reading column, with a keyboard focus target
+and inspection hint only when they actually overflow. Captions and native table
+semantics remain intact. Inline code can wrap without changing source listings.
+The changes reuse the existing browser scripts and add no browser dependency.
+
+This is an HTML-only maintenance release, separate from the pending numerical
+runtime migration. Manuscript sources, frozen results, notebook and publishing
+pipelines, PDF settings, and stable release tags are unchanged. The content-date
+stamp remains September 2: this pass changes the controls, not the manuscript.
+
 # Rolling post-v1.3 — executable notebook path (September 2, 2026)
 
 Twenty-six chapter, interlude, and foundational-appendix pages now offer both a
