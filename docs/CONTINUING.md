@@ -10,6 +10,37 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 
 ---
 
+> **Approved Chapter 7 animation — September 9, 2026.** An optional, closed
+> **Watch the mechanism** disclosure follows the 2-D recipe. It is a compact
+> adaptation of the instructor's PatchScore scene and an explicitly labeled
+> walkthrough of existing Exercise 1. One local script loads on opening; playback
+> remains paused until requested. Input/parameter roles, written/unwritten outputs,
+> keyboard controls, transcript, and static fallback are tested. See
+> `docs/convolution-excerpt.md` for source hashes, integration, and the PDF boundary.
+> QMD sources, `_freeze`, numerical tolerances, notebook-generation rules, PDF
+> settings, and release tags are unchanged. The author approved publication after
+> local review; verify the commit's publishing run and live anchor before reporting
+> deployment. The existing pipeline rebuilds both PDFs and must preserve their
+> content and pagination. The separate numerical migration and its scheduled monitor remain
+> paused; do not resume them under this task.
+> The follow-up movie-style controls add continuous Play/Pause, playback speed,
+> elapsed time, scrubbing, Replay, and fullscreen with a native-dialog fallback.
+> The focused-player shortcuts do not intercept native control keys. The scoped
+> interaction suite now passes 43 tests; numerical output remains unchanged.
+> Default playback is 1.5x. On-diagram rays replace the position selector: one
+> matched input/kernel pair feeds multiplication, then all nine products feed
+> addition and the current output. The two-by-two matrix layout reserves operator
+> gutters; rays remeasure on resize and clear during placement/sliding.
+> Source receipts and checks are in the same doc.
+> The transport is now one compact on-pane bar: Play/Pause (Replay at the end),
+> scrubber, clock, speed, and fullscreen. Separate step/reset buttons and visible
+> step-count/help rows are removed; named icons and keyboard routes remain.
+> The publishing workflow requires `html_interactions` (test-only Node dependencies)
+> alongside notebook validation. The next candidates are recorded in
+> [the animation roadmap](backlog.md#focused-animation-roadmap--approved-september-9-2026):
+> backpropagation, kernel weighting, then BERT's masking ledger. Build and review each
+> separately; no additional animation is bundled with this publication.
+
 > **HTML maintenance — September 8, 2026.** The HTML-only split from the pending
 > numerical-runtime work adds independent **Reveal results**, responsive table
 > inspection, and inline-code wrapping. Plan steps and Show all code restore

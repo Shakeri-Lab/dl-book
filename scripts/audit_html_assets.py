@@ -183,6 +183,9 @@ class SupportAssetParser(HTMLParser):
             self.assets.append(("script", src))
             if "mathjax" in src.lower():
                 self.mathjax_urls.append(src)
+        elif tag == "details" and "conv-excerpt" in classes:
+            if player := values.get("data-player"):
+                self.assets.append(("deferred player", player))
         elif tag == "img" and (src := values.get("src")):
             self.assets.append(("image", src))
             if Path(urlsplit(src).path).name == "cover.png":

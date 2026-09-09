@@ -3,6 +3,82 @@
 Planned items from the author's chapter reviews. Pick these up only when he green-lights
 them or a chapter naturally touches them.
 
+## Focused animation roadmap — approved September 9, 2026
+
+Publish the approved Chapter 7 convolution player first. The following queue is
+separate: build one excerpt at a time, obtain local review, then publish it without
+bundling unreviewed scenes. Prioritize difficult mechanisms across the book rather
+than adding an animation to every chapter.
+
+### First wave, in order
+
+1. **Backpropagation (Chapter 5, “One neuron, one chain,” beside `fig-chain-graph`).**
+   Ask whether increasing the weight raises or lowers the loss. Trace the forward
+   values and cache, then reverse the rays to expose local derivatives and their
+   product. Reuse the manuscript's `micro-autograd-check` example (`w=0.7`, `x=2`,
+   `b=-0.5`, target `0.3`), preserving its full squared error, not half-squared error.
+   Test the factor of two and agreement with the example's hand derivative.
+   Differentiation is not a parameter update; one chain does not teach branch
+   accumulation. Source composition: `6050-Ch5/lecture.jsx`, `SOneChain`, and the
+   storyboard's **OneChain** scene. The book's fixture and loss definition govern.
+2. **Kernel weighting (Chapter 12, beside `fig-kernel-lookup`).** Ask which
+   observation gains influence as the query moves. Reveal distance, Gaussian
+   affinity, normalized weights, weighted values, and their sum; then move only the
+   query. Reuse `keys3=(1,3,5)`, `values3=(1.5,2.8,1.8)`, bandwidth `0.6`, and end at
+   the manuscript's `q=3.5` witness. Check nonnegative weights summing to one and a
+   prediction within the observed-value range. No bandwidth knob, learned similarity,
+   uncertainty interpretation, or causal-explanation claim. Source composition:
+   `6050-Ch12/lecture.jsx`, `FinalGaussianLookup`, storyboard **GaussianLookup**.
+3. **BERT's masking ledger (Chapter 15, beside `fig-mlm-policy`).** Ask whether an
+   ordinary-looking selected token contributes to the loss. Follow the manuscript's
+   twelve-token `mlm-policy-ledger` fixture through masked, random-replacement,
+   unchanged-selected, and unselected sites. Keep corrupted input and original-target
+   routes separate; retain the canonical five Boolean rows and full nonpadding
+   attention visibility. Check that the three corruption rows partition selection,
+   selection is a subset of eligibility, and unchanged-selected sites still score.
+   The small fixture is not an illustration of exact population proportions. Source
+   composition: `6050-Ch15/lecture.jsx`, `FourLedgers`, with storyboard
+   **FourLedgers/CorruptionPolicy**; do not copy the lecture's alternative grouping.
+
+The scene paths above are relative to the read-only instructor source collection
+`Teaching/6050/Video_lectures/`. Inspect the current files and record exact source
+hashes in each excerpt's receipt before adaptation. They supply choreography, not
+authority to replace manuscript examples or colors.
+
+### Second-wave candidates, not implementation commitments
+
+- **Chapter 10, LSTM retain/write/read:** distinguish stored cell state from exposed
+  output; closing the read gate does not erase memory. Adapt **LSTMDesign** without
+  inventing a trained gate trajectory from aggregate statistics.
+- **Chapter 8, pooling boundaries:** movement within a fixed bin versus crossing its
+  boundary; show alignment-dependent tolerance, not general translation invariance.
+  Adapt **Pooling** using the existing `pool-invariance` fixture.
+- **Chapter 3, three hinges form a bump:** sweep the existing `hinge-bump-values`
+  construction and add its weighted terms. Adapt **Bump**; no training claim.
+
+Defer training replays, diffusion, RoPE, and elaborate 3-D scenes until the smaller
+excerpts demonstrate useful teaching value.
+
+### Shared acceptance contract
+
+- Follow the approved convolution player: optional and closed/paused initially,
+  silent, compact on-pane controls, 1.5x default, keyboard/scrubbing/fullscreen,
+  reduced-motion behavior, transcript, and static fallback. Aim for about forty
+  seconds, one prediction, and one mechanism per excerpt; no extra parameter knobs.
+- Use deferred local HTML/SVG/JavaScript. Do not import the lecture's React/Babel/
+  KaTeX runtime, video payloads, or a general animation framework. Extract only
+  demonstrably shared playback code when building the second player.
+- Apply the book's semantic palette, with labels and geometry independent of color.
+  Reflow at phone widths instead of scaling down a complete lecture slide.
+- Existing figures, prose, and code remain authoritative in both editions. Any new
+  required example must enter the shared manuscript before publication. Optional
+  motion does not excuse an HTML-only claim or an absent static explanation.
+- Independently test every arithmetic/Boolean state, deterministic scrubbing,
+  pause/replay, resize/fullscreen, failed-script fallback, and direct anchors. Require
+  unchanged frozen stdout, structural/HTML audits, and narrow/desktop visual review.
+- Do not restart the paused numerical-runtime migration or scheduled monitor, add a
+  new GPU workload, change a numerical tolerance, or cut a stable tag for this queue.
+
 ## Cross-book reciprocity — COMPLETED 2026-08-02
 
 The v1.2.1 point release declares and audits the ten stable anchors consumed by

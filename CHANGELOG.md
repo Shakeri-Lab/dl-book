@@ -1,4 +1,34 @@
 
+# Rolling post-v1.3 — Chapter 7 convolution walkthrough (September 9, 2026)
+
+An optional, closed-by-default animation beside the 2-D recipe walks through one
+patch, nine products, one sum, and the four output positions. It adapts the
+instructor's existing PatchScore scene to the book's semantic palette and responsive
+layout. The player loads only when opened and starts paused. Movie-style controls
+offer Play/Pause, 0.5x–2x speed, continuous scrubbing, elapsed time, Replay, and
+fullscreen (or an expanded modal view). Discrete keyboard controls remain available.
+The window slides smoothly while products and sums stay tied to integer patches;
+reduced-motion preferences disable interpolation. A static calculation and
+transcript remain available if scripting is unavailable.
+Playback defaults to 1.5x. On-diagram rays replace the position selector: a matched
+pixel and fixed weight meet at a multiplication point, then reach their product.
+In the next phase, all nine products feed an addition point and its outgoing ray
+reaches the current output. The two-by-two matrix layout reserves space for these
+connections; they reflow with the pane and clear during placement and sliding.
+The transport is a single compact on-pane bar with accessible Play/Pause and
+fullscreen icons, scrubber, clock, and speed. Play becomes Replay at completion;
+keyboard stepping replaces the separate Previous/Next/Reset row.
+It is labeled as a walkthrough of Exercise 1 so the answer is not presented as a
+new experiment. No frontend dependency or video payload is added.
+
+Approved for publication after local review. The publishing workflow now requires
+the existing HTML interaction suite as well as notebook validation; its Node
+dependencies are test-only. Manuscript sources, frozen numerical evidence,
+notebook-generation rules, PDF settings, and stable tags are unchanged. The existing
+pipeline still rebuilds and audits both PDF editions. Source and format boundaries
+are recorded in `docs/convolution-excerpt.md`; the separately reviewed next-animation
+roadmap is in `docs/backlog.md`.
+
 # Rolling post-v1.3 — lighter HTML reading controls (September 8, 2026)
 
 Plan → Code panels now offer **Reveal results** independently of source code.
