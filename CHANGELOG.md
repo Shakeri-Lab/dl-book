@@ -1,3 +1,24 @@
+# Rolling post-v1.3 — kernel weighting and BERT masking (September 9, 2026)
+
+Two optional HTML-only excerpts now accompany the existing Chapter 12 Gaussian
+lookup and Chapter 15 Boolean masking ledger. Kernel weighting reveals the fixed
+calculation before moving its query; BERT separates corrupted input from original
+targets and shows why unchanged selected tokens still contribute to the loss.
+Both use the manuscript's fixtures, the semantic palette, responsive layouts,
+compact deferred playback, and transcripts/static fallbacks. A small common
+transport supports both; the published convolution player is unchanged.
+
+Kernel weighting is author-approved and unchanged. The BERT review adds paired
+original/input tokens, progressive input/prediction/target rays, a delayed
+unchanged-token payoff, and a collapsed Boolean inspection panel. Reduced motion
+uses discrete reveals. Direct links now open a targeted nested disclosure itself.
+All 86 interaction tests and the frozen-output checks pass.
+
+Both players are approved for publication after local review. This is an HTML-only
+rolling revision, not a new stable edition. The reusable reference in
+`docs/animation-authoring.md` explains all three players and their acceptance rules.
+No manuscript, frozen numerical evidence, PDF content, or stable tag changes.
+Source receipts and the review anchors are in `docs/kernel-bert-excerpts.md`.
 
 # Rolling post-v1.3 — Chapter 7 convolution walkthrough (September 9, 2026)
 

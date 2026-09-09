@@ -5,14 +5,19 @@ them or a chapter naturally touches them.
 
 ## Focused animation roadmap — approved September 9, 2026
 
-Publish the approved Chapter 7 convolution player first. The following queue is
-separate: build one excerpt at a time, obtain local review, then publish it without
-bundling unreviewed scenes. Prioritize difficult mechanisms across the book rather
-than adding an animation to every chapter.
+The approved Chapter 7 convolution player shipped in `304f3d4`. The author then
+reprioritized **kernel weighting and BERT's masking ledger** for implementation;
+both are now **author-approved for publication**, including the revised BERT view.
+Confirm the containing commit's CI/live assets to establish deployment. Exact
+anchors, source receipts, and checks are in [the implementation record](kernel-bert-excerpts.md).
+The [animation guide](animation-authoring.md) explains all three implementations
+and the reusable authoring rules.
+Backpropagation remains planned. Obtain local review before publishing another
+scene. Prioritize difficult mechanisms rather than animating every chapter.
 
-### First wave, in order
+### First wave (original priorities; current status explicit)
 
-1. **Backpropagation (Chapter 5, “One neuron, one chain,” beside `fig-chain-graph`).**
+1. **Backpropagation — planned (Chapter 5, “One neuron, one chain,” beside `fig-chain-graph`).**
    Ask whether increasing the weight raises or lowers the loss. Trace the forward
    values and cache, then reverse the rays to expose local derivatives and their
    product. Reuse the manuscript's `micro-autograd-check` example (`w=0.7`, `x=2`,
@@ -21,7 +26,7 @@ than adding an animation to every chapter.
    Differentiation is not a parameter update; one chain does not teach branch
    accumulation. Source composition: `6050-Ch5/lecture.jsx`, `SOneChain`, and the
    storyboard's **OneChain** scene. The book's fixture and loss definition govern.
-2. **Kernel weighting (Chapter 12, beside `fig-kernel-lookup`).** Ask which
+2. **Kernel weighting — approved for publication (Chapter 12, beside `fig-kernel-lookup`).** Ask which
    observation gains influence as the query moves. Reveal distance, Gaussian
    affinity, normalized weights, weighted values, and their sum; then move only the
    query. Reuse `keys3=(1,3,5)`, `values3=(1.5,2.8,1.8)`, bandwidth `0.6`, and end at
@@ -29,11 +34,13 @@ than adding an animation to every chapter.
    prediction within the observed-value range. No bandwidth knob, learned similarity,
    uncertainty interpretation, or causal-explanation claim. Source composition:
    `6050-Ch12/lecture.jsx`, `FinalGaussianLookup`, storyboard **GaussianLookup**.
-3. **BERT's masking ledger (Chapter 15, beside `fig-mlm-policy`).** Ask whether an
+3. **BERT's masking ledger — revised and approved for publication (Chapter 15, beside `fig-mlm-policy`).** Ask whether an
    ordinary-looking selected token contributes to the loss. Follow the manuscript's
    twelve-token `mlm-policy-ledger` fixture through masked, random-replacement,
    unchanged-selected, and unselected sites. Keep corrupted input and original-target
-   routes separate; retain the canonical five Boolean rows and full nonpadding
+   routes separate; keep paired originals and input copies visible, reveal the
+   paths before the answer, and keep the five Boolean rows in a collapsed audit
+   panel. Retain full nonpadding
    attention visibility. Check that the three corruption rows partition selection,
    selection is a subset of eligibility, and unchanged-selected sites still score.
    The small fixture is not an illustration of exact population proportions. Source

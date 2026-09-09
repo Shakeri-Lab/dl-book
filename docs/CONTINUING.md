@@ -10,7 +10,50 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 
 ---
 
-> **Approved Chapter 7 animation — September 9, 2026.** An optional, closed
+> **Approved for publication — September 9, 2026.** After the approved
+> convolution release `304f3d4`, the author requested the kernel-weighting and
+> BERT-ledger candidates next. Both are implemented in `/Users/hs9hd/dl-book-html-release`
+> at `12-kernel-regression.html#kernel-weighting-excerpt` and
+> `15-bert-pretraining.html#bert-ledger-excerpt` (both under `chapters/part4/`).
+> See [the receipt and acceptance record](kernel-bert-excerpts.md). They share a
+> small deferred playback helper; the published convolution assets are unchanged.
+> **Review update:** the author approved Chapter 12; its scene assets are unchanged.
+> Chapter 15 now keeps original/input token pairs visible, reveals input and target
+> paths progressively, delays the unchanged-token answer until both loss routes
+> arrive, and moves the Boolean flags into a collapsed audit panel. The author
+> approved this BERT revision and requested a push to main. A one-line shared-loader fix opens a directly
+> targeted nested disclosure as well as its ancestors; playback remains paused.
+> The canonical QMD sources, freeze, numerical gates, PDFs, and stable tags remain
+> unchanged in content and settings. The new filter is a tested LaTeX no-op.
+> Backpropagation remains **planned**. Verify the containing commit's publishing
+> run and live assets before claiming deployment. The numerical migration and monitor remain
+> paused. Local acceptance: all **86** interaction tests pass (43 existing plus
+> 43 mechanism checks); the full frozen HTML render, asset/public-anchor/Plan-to-Code/Python/
+> book-contract audits, and whitespace check pass. All **133** stdout blocks in
+> **27** units are byte-identical to `HEAD`; all 27 HTML/TeX pairs match. Browser
+> review covered desktop and measured 390/300 CSS-pixel widths, no horizontal
+> page overflow, compact controls, real playback/pause, and separate BERT routes.
+> Fullscreen entry/exit and geometry passed; emulated-fullscreen screenshots were
+> not reliable, so DOM/interaction checks (not those images) support that claim.
+> Both local preview tabs are left at time zero, paused, with no console errors.
+> The future-reference guide, [Mechanism animations](animation-authoring.md),
+> explains all three players, their teaching boundaries, the small shared transport,
+> accessibility, responsive geometry, and the publication checklist.
+>
+> **Full publication build record:** `scripts/render_pdf_profiles.py` rebuilt
+> `_book/Deep-Learning--Making-It-Learnable.pdf` and
+> `_book/Deep-Learning--Making-It-Learnable--Continuous.pdf`; both reached the
+> outline/printed-ToC fixpoint on attempt 2. Print remains **548 pages**, continuous
+> **519 pages**, each with **390** identical outline entries. Both files' full and
+> per-page extracted text match the before-build baseline byte for byte; all
+> **1,067** page raster hashes at 36 dpi match as well. The pre-push live PDFs'
+> extracted text also matches that baseline. Full PDF geometry, glyph, outline,
+> accessible-icon-text, and retained-log audits pass without warnings. Canonical
+> HTML is rendered last to restore its complete support bundle. The containing
+> commit's CI still runs notebook validation and rebuilds/audits both PDF editions;
+> do not bypass that pipeline or infer a successful deployment from local checks.
+
+> **Historical Chapter 7 publication record — September 9, 2026.** An optional, closed
 > **Watch the mechanism** disclosure follows the 2-D recipe. It is a compact
 > adaptation of the instructor's PatchScore scene and an explicitly labeled
 > walkthrough of existing Exercise 1. One local script loads on opening; playback

@@ -5,6 +5,10 @@ Approved for publication after local review, September 9, 2026. Built on book co
 edition or numerical refresh. Confirm deployment through the publishing run for
 the commit containing these assets, not this approval record alone.
 
+See [Mechanism animations: reference and authoring contract](animation-authoring.md)
+for the overview of convolution, kernel weighting, and BERT's masking ledger and
+the rules to reuse when building another excerpt.
+
 ## Instructional contract
 
 One local dot product becomes one output pixel. The optional disclosure at the end

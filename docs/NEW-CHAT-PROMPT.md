@@ -7,6 +7,17 @@ it from editing before you have said what you want done.
 Keep this file current: if a rule changes or the state moves, edit the prompt here
 rather than re-deriving it in chat.
 
+**Animation publication override — September 9, 2026:** the working checkout for
+this publication is `/Users/hs9hd/dl-book-html-release`, based on `304f3d4`.
+Kernel weighting (Chapter 12) and BERT's masking ledger (Chapter 15) are implemented
+locally and **author-approved for publication**. Chapter 12 is unchanged since
+approval. Chapter 15 has been redesigned with persistent original/input pairs,
+progressive paths, a delayed answer, and secondary collapsed flags; it awaits
+publication after local review. See `docs/kernel-bert-excerpts.md` for exact anchors
+and source receipts, and `docs/animation-authoring.md` for all three players and
+reusable conventions. Verify the containing commit's CI/live assets before claiming deployment.
+Backpropagation remains planned; the numerical-runtime migration stays paused.
+
 ---
 
 I'm Heman Shakeri (UVA School of Data Science). You're helping me with my
