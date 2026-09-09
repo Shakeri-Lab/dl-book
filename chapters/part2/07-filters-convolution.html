@@ -628,6 +628,241 @@ Figure&nbsp;7.1: A window of uniform weights, slid along a noisy signal, averagi
 <p>Read the markers and one thing stands out: steps 2 and 5 share a line. The plan moves one window at a time; <code>unfold</code> places <em>every</em> window at once, and the next line scores them all in parallel. That gap between a sequential plan and a vectorized kernel is where most tensor bugs live, which is why the last line checks this implementation against the framework’s own — the build-then-verify habit of this book.</p>
 <p>Also worth noticing before we move on: the output is smaller than the input. A <span class="math inline">\(k
 \times k\)</span> kernel on an <span class="math inline">\(n \times n\)</span> image produces <span class="math inline">\((n - k + 1) \times (n - k + 1)\)</span> outputs, because the window must stay inside the frame. What to do about that (and about sliding in bigger steps) is <a href="08-cnn.html" class="quarto-xref"><span>Chapter 8</span></a>’s business.</p>
+<style>
+.conv-excerpt {
+  border: 1px solid #d5dde5; border-radius: .4rem; margin: 1.4rem 0;
+  background: #fff; color: #263445;
+}
+.conv-excerpt > summary { padding: .85rem 1rem; cursor: pointer; font-weight: 600; }
+.conv-excerpt__body { padding: 0 1rem 1rem; }
+.conv-excerpt__question { font-size: 1.1rem; font-weight: 600; margin-top: .5rem; }
+.conv-excerpt__intro, .conv-excerpt__boundary { font-size: .9rem; }
+.conv-excerpt__player { border: 1px solid #d5dde5; border-radius: .4rem; padding: .85rem; background: #fff; }
+.conv-excerpt__controls {
+  display: grid; grid-template-columns: 44px minmax(20px, 1fr) auto 64px 44px;
+  align-items: center; gap: .25rem; margin: .5rem 0 0; padding-top: .2rem;
+  border-top: 1px solid #d5dde5; font-size: .8rem;
+}
+.conv-excerpt [hidden] { display: none !important; }
+.conv-excerpt button, .conv-excerpt select {
+  color: #263445; border: 1px solid #8898aa; border-radius: .25rem;
+  background: #fff; padding: .45rem .85rem; min-height: 44px; font: inherit;
+}
+.conv-excerpt__controls button {
+  width: 44px; height: 44px; padding: 0; border: 0; background: transparent;
+  display: grid; place-items: center;
+}
+.conv-excerpt__controls button:hover { background: #edf1f6; }
+.conv-excerpt__controls select { width: 100%; min-width: 0; padding: .25rem; border: 0; background-color: transparent; }
+.conv-excerpt__controls svg { width: 21px; height: 21px; display: none; }
+.conv-excerpt [data-state="play"] [data-icon="play"],
+.conv-excerpt [data-state="pause"] [data-icon="pause"],
+.conv-excerpt [data-state="replay"] [data-icon="replay"],
+.conv-excerpt [data-action="fullscreen"]:not([aria-pressed="true"]) [data-icon="expand"],
+.conv-excerpt [data-action="fullscreen"][aria-pressed="true"] [data-icon="contract"] { display: block; }
+.conv-excerpt button:disabled { opacity: .5; }
+.conv-excerpt :focus-visible { outline: 3px solid #2b6cb0; outline-offset: 3px; }
+.conv-excerpt__stages { display: flex; gap: .4rem; margin: 1rem 0; font-size: .85rem; }
+.conv-excerpt__stages span { flex: 1; text-align: center; border-bottom: 3px solid #d5dde5; padding-bottom: .35rem; }
+.conv-excerpt__stages .is-current { font-weight: 700; border-color: #232d4b; }
+.conv-excerpt__grids { position: relative; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 48px; max-width: 540px; margin: auto; }
+.conv-excerpt__card { border: 1px solid #d5dde5; border-radius: .3rem; padding: .6rem; min-width: 0; }
+.conv-excerpt__label { font-size: .85rem; font-weight: 600; margin-bottom: .75rem; min-height: 2.5em; }
+.conv-excerpt__input { color: #2b6cb0; }
+.conv-excerpt__output { color: #2f855a; }
+.conv-excerpt__matrix {
+  display: grid; grid-template-columns: repeat(3, 1fr); position: relative;
+  max-width: 140px; aspect-ratio: 1; margin: 0 auto; gap: 0;
+  font: 600 1.05rem/1.2 ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+.conv-excerpt__matrix[data-matrix="input"] { grid-template-columns: repeat(4, 1fr); }
+.conv-excerpt__matrix[data-matrix="output"] { grid-template-columns: repeat(2, 1fr); }
+.conv-excerpt__matrix > span { display: grid; place-items: center; border: 1px solid #e1e6ec; min-width: 0; }
+.conv-excerpt__input .conv-excerpt__matrix > span { background: #f0f6fc; }
+.conv-excerpt__matrix > span.is-active { outline: 2px solid currentColor; outline-offset: -3px; font-weight: 800; }
+.conv-excerpt__matrix > span.is-written { background: #edf7f0; }
+.conv-excerpt__matrix > span.is-component {
+  outline: 3px solid currentColor; outline-offset: -4px; background: #e9edf2;
+  text-decoration: underline; text-underline-offset: .15em;
+}
+.conv-excerpt__input .conv-excerpt__matrix > span.is-component { background: #dceaf7; }
+.conv-excerpt__rays { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; overflow: visible; }
+.conv-excerpt__rays [data-ray] { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; }
+.conv-excerpt__rays [data-ray="input"] { color: #2b6cb0; }
+.conv-excerpt__rays [data-ray="output"] { color: #2f855a; stroke-width: 2.2; }
+.conv-excerpt__rays [data-ray="term"] { stroke-width: 1.2; }
+.conv-excerpt__rays circle { fill: #fff; stroke: #263445; stroke-width: 1.5; }
+.conv-excerpt__rays text { fill: #263445; font: 600 20px sans-serif; text-anchor: middle; dominant-baseline: central; }
+.conv-excerpt__window {
+  position: absolute; width: 75%; height: 75%; left: 0; top: 0;
+  border: 3px solid #2b6cb0; pointer-events: none;
+}
+.conv-excerpt__calculation { margin: 1rem 0 .5rem; text-align: center; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.conv-excerpt__calculation strong { color: #2f855a; }
+.conv-excerpt__caption { background: #f3f5f8; padding: .6rem; border-left: 3px solid #232d4b; min-height: 3.5em; margin-bottom: .5rem; }
+.conv-excerpt__timeline { min-width: 0; display: flex; align-items: center; }
+.conv-excerpt__timeline input { width: 100%; min-width: 0; margin: 0; min-height: 44px; accent-color: #232d4b; }
+.conv-excerpt #convolution-time { font-variant-numeric: tabular-nums; white-space: nowrap; font-size: .75rem; }
+.conv-excerpt .conv-excerpt__sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+.conv-excerpt__notice:empty, .conv-excerpt__loading:empty { display: none; }
+.conv-excerpt__player:is(:fullscreen, .is-expanded) {
+  width: 100%; height: 100%; max-width: none; box-sizing: border-box;
+  padding: clamp(1rem, 4vw, 3rem); overflow: auto;
+  display: flex; flex-direction: column; justify-content: safe center;
+  color: #263445; background: #fff;
+}
+.conv-excerpt__player:is(:fullscreen, .is-expanded) > * { width: 100%; max-width: 1100px; margin-left: auto; margin-right: auto; }
+.conv-excerpt__player:is(:fullscreen, .is-expanded) .conv-excerpt__matrix { max-width: 240px; font-size: clamp(1rem, 2.4vw, 1.8rem); }
+.conv-excerpt__player::backdrop { background: #fff; }
+.conv-excerpt__dialog {
+  border: 0; border-radius: .4rem; padding: 0;
+  width: calc(100vw - 1rem); max-width: none;
+  height: calc(100dvh - 1rem); max-height: none;
+}
+.conv-excerpt__dialog::backdrop { background: #232d4b99; }
+.conv-excerpt__boundary { margin: .5rem 0 1rem; }
+.conv-excerpt__transcript > summary { cursor: pointer; min-height: 44px; padding: .5rem 0; }
+.conv-excerpt__transcript li { margin-bottom: .5rem; }
+@media (max-width: 400px) {
+  .conv-excerpt__body { padding: 0 .65rem .65rem; }
+  .conv-excerpt__player { padding: .5rem; }
+  .conv-excerpt__card { padding: .5rem; }
+  .conv-excerpt__grids { gap: 36px; }
+  .conv-excerpt__label { font-size: .8rem; }
+  .conv-excerpt__matrix { font-size: .95rem; }
+}
+@media (max-width: 480px) {
+  .conv-excerpt [data-duration] { display: none; }
+  .conv-excerpt__controls { grid-template-columns: 44px minmax(20px, 1fr) auto 58px 44px; gap: .15rem; }
+}
+@media (max-width: 360px) {
+  .conv-excerpt #convolution-time { display: none; }
+  .conv-excerpt__controls { grid-template-columns: 44px minmax(20px, 1fr) 58px 44px; }
+}
+
+</style>
+<details class="conv-excerpt" id="convolution-excerpt" data-player="../../interactives/convolution/player.js">
+  <summary>Watch the mechanism: one patch, one output</summary>
+  <div class="conv-excerpt__body">
+    <p class="conv-excerpt__question">Nine pixels under nine fixed weights: what single number comes out?</p>
+    <p class="conv-excerpt__intro">An optional walkthrough of Exercise 1. Predict where the detector will respond before playing. The kernel stays fixed throughout.</p>
+    <p class="conv-excerpt__loading" role="status"></p>
+    <div class="conv-excerpt__player" role="group" aria-label="Convolution animation player" tabindex="0" aria-describedby="convolution-keyboard">
+    <div class="conv-excerpt__stages" aria-hidden="true"><span>Place</span><span>Multiply</span><span>Sum</span><span>Slide</span></div>
+    <div class="conv-excerpt__grids">
+      <svg class="conv-excerpt__rays" aria-hidden="true" focusable="false" hidden=""></svg>
+      <div class="conv-excerpt__card conv-excerpt__input">
+        <div class="conv-excerpt__label">Input · 4 × 4</div>
+        <div class="conv-excerpt__matrix" data-matrix="input" role="img" aria-label="Input: four identical rows, each 0, 0, 1, 1. The top-left three by three patch is outlined.">
+          <span>0</span><span>0</span><span>1</span><span>1</span>
+          <span>0</span><span>0</span><span>1</span><span>1</span>
+          <span>0</span><span>0</span><span>1</span><span>1</span>
+          <span>0</span><span>0</span><span>1</span><span>1</span>
+          <div class="conv-excerpt__window" aria-hidden="true"></div>
+        </div>
+      </div>
+      <div class="conv-excerpt__card">
+        <div class="conv-excerpt__label">Fixed kernel · 3 × 3</div>
+        <div class="conv-excerpt__matrix" data-matrix="kernel" role="img" aria-label="Fixed kernel rows: minus 1, 0, 1; minus 2, 0, 2; minus 1, 0, 1.">
+          <span>−1</span><span>0</span><span>1</span>
+          <span>−2</span><span>0</span><span>2</span>
+          <span>−1</span><span>0</span><span>1</span>
+        </div>
+      </div>
+      <div class="conv-excerpt__card">
+        <div class="conv-excerpt__label">Multiply matching entries</div>
+        <div class="conv-excerpt__matrix" data-matrix="products" role="img" aria-label="Nine products, by row: 0, 0, 1; 0, 0, 2; 0, 0, 1.">
+          <span>0</span><span>0</span><span>1</span>
+          <span>0</span><span>0</span><span>2</span>
+          <span>0</span><span>0</span><span>1</span>
+        </div>
+      </div>
+      <div class="conv-excerpt__card conv-excerpt__output">
+        <div class="conv-excerpt__label">Output · 2 × 2</div>
+        <div class="conv-excerpt__matrix" data-matrix="output" role="img" aria-label="Completed output: 4, 4; 4, 4.">
+          <span>4</span><span>4</span><span>4</span><span>4</span>
+        </div>
+      </div>
+    </div>
+    <p class="conv-excerpt__calculation">0 + 0 + 1 + 0 + 0 + 2 + 0 + 0 + 1 = <strong>4</strong></p>
+    <p class="conv-excerpt__caption" aria-live="polite" aria-atomic="true">Every valid patch crosses the edge. The same fixed kernel produces 4 at each of the four output positions.</p>
+    <div class="conv-excerpt__controls" role="group" aria-label="Playback controls" hidden="">
+      <button type="button" data-action="play" data-state="play" aria-label="Play" title="Play">
+        <svg data-icon="play" viewbox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 5v14l11-7z" fill="currentColor"></path></svg>
+        <svg data-icon="pause" viewbox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M7 5h4v14H7zM14 5h4v14h-4z" fill="currentColor"></path></svg>
+        <svg data-icon="replay" viewbox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 8a8 8 0 1 1-1 8M5 3v6h6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        <span class="conv-excerpt__sr-only">Play</span>
+      </button>
+      <div class="conv-excerpt__timeline" hidden="">
+        <label for="convolution-step" class="conv-excerpt__sr-only">Playback position</label>
+        <input id="convolution-step" type="range" min="0" max="40" value="0" step="0.01" aria-describedby="convolution-step-label">
+        <span id="convolution-step-label" class="conv-excerpt__sr-only">1 of 16</span>
+      </div>
+      <span id="convolution-time" aria-hidden="true"><span data-elapsed="">0:00</span><span data-duration=""> / 0:40</span></span>
+        <select data-speed="" aria-label="Playback speed" title="Playback speed">
+          <option value="0.5">0.5×</option>
+          <option value="1">1×</option>
+          <option value="1.5" selected="">1.5×</option>
+          <option value="2">2×</option>
+        </select>
+      <button type="button" data-action="fullscreen" aria-label="Fullscreen" title="Fullscreen" hidden="">
+        <svg data-icon="expand" viewbox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 4H4v5M15 4h5v5M20 15v5h-5M9 20H4v-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        <svg data-icon="contract" viewbox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 9h5V4M20 9h-5V4M15 20v-5h5M4 15h5v5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        <span class="conv-excerpt__sr-only">Fullscreen</span>
+      </button>
+    </div>
+    <p class="conv-excerpt__notice" role="status"></p>
+    <p id="convolution-keyboard" class="conv-excerpt__keyboard conv-excerpt__sr-only" hidden="">Focus the player: Space to play or pause, arrow keys to seek, Home to restart, End to reach the end. Silent animation with on-screen explanations.</p>
+    </div>
+    <dialog class="conv-excerpt__dialog" aria-label="Expanded convolution animation"></dialog>
+    <p class="conv-excerpt__boundary">One-pixel steps, no padding, no kernel flip, and no learning. An unwritten output is shown as “·”, not zero.</p>
+    <details class="conv-excerpt__transcript">
+      <summary>Read the walkthrough</summary>
+      <ol>
+        <li><strong>Place.</strong> Start with the top-left 3 × 3 patch. Each row is (0, 0, 1). The input is blue; the hand-chosen kernel is neutral.</li>
+        <li><strong>Multiply.</strong> The rays trace the top-right pixel of the patch and the top-right kernel weight into a multiplication point: 1 × 1 = 1. Its outgoing ray reaches the top-right product. Apply the same rule at all nine matching positions. The three product rows are (0, 0, 1), (0, 0, 2), and (0, 0, 1).</li>
+        <li><strong>Sum.</strong> Nine rays bring all nine products, including zeros, to one addition point. Their sum is 1 + 2 + 1 = 4. The outgoing green ray writes that value into the top-left output cell.</li>
+        <li><strong>Slide.</strong> Move right, then down, then left. These visits fill the other three output cells. The weights never change. Each valid patch crosses the same vertical edge, so every sum is 4.</li>
+      </ol>
+      <p>Keyboard: focus the animation pane and use Space to play or pause, Left/Right to step, Home to return to the start, or End to reach the end. The animation is silent, with on-screen explanations.</p>
+      <p>The animation is a compact adaptation of the accompanying convolution demonstration. Its order is sequential; the <code>unfold</code> implementation above scores all patches together.</p>
+    </details>
+  </div>
+</details>
+
+<script>
+(() => {
+  const root = document.getElementById('convolution-excerpt');
+  if (!root || root.dataset.loader) return;
+  root.dataset.loader = 'ready';
+  let loading = false;
+  function load() {
+    if (!root.open || loading || root.dataset.ready) return;
+    loading = true;
+    const status = root.querySelector('.conv-excerpt__loading');
+    status.textContent = 'Loading animation controls…';
+    const script = document.createElement('script');
+    script.src = root.dataset.player;
+    script.onload = () => { status.textContent = ''; };
+    script.onerror = () => {
+      loading = false;
+      script.remove();
+      status.textContent = 'The player could not load. Read the static calculation and walkthrough below, or close and reopen to retry.';
+    };
+    document.head.append(script);
+  }
+  root.addEventListener('toggle', load);
+  function openTarget() {
+    if (location.hash === '#convolution-excerpt') { root.open = true; load(); }
+  }
+  window.addEventListener('hashchange', openTarget);
+  openTarget();
+})();
+
+</script>
 </section>
 <section id="the-filter-zoo" class="level2" data-number="7.4">
 <h2 data-number="7.4" class="anchored" data-anchor-id="the-filter-zoo"><span class="header-section-number">7.4</span> The filter zoo</h2>
