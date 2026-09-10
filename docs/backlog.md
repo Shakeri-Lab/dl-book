@@ -10,22 +10,34 @@ reprioritized **kernel weighting and BERT's masking ledger** for implementation;
 both are now **author-approved for publication**, including the revised BERT view.
 Confirm the containing commit's CI/live assets to establish deployment. Exact
 anchors, source receipts, and checks are in [the implementation record](kernel-bert-excerpts.md).
-The [animation guide](animation-authoring.md) explains all three implementations
+**Wave 1 was then built on 2026-09-10** — backpropagation, softmax shift, and the gate
+product — with its own record in [the Wave 1 receipt](wave1-excerpts.md). Those three are
+**built and fully checked but not committed, not pushed, and not author-approved**; a wave
+is authorized only by the author's browser-review note in its own receipt, and that note
+does not exist yet.
+The [animation guide](animation-authoring.md) explains all six implementations
 and the reusable authoring rules.
-Backpropagation remains planned. Obtain local review before publishing another
+Obtain local review before publishing another
 scene. Prioritize difficult mechanisms rather than animating every chapter.
 
 ### First wave (original priorities; current status explicit)
 
-1. **Backpropagation — planned (Chapter 5, “One neuron, one chain,” beside `fig-chain-graph`).**
-   Ask whether increasing the weight raises or lowers the loss. Trace the forward
-   values and cache, then reverse the rays to expose local derivatives and their
-   product. Reuse the manuscript's `micro-autograd-check` example (`w=0.7`, `x=2`,
-   `b=-0.5`, target `0.3`), preserving its full squared error, not half-squared error.
-   Test the factor of two and agreement with the example's hand derivative.
-   Differentiation is not a parameter update; one chain does not teach branch
-   accumulation. Source composition: `6050-Ch5/lecture.jsx`, `SOneChain`, and the
-   storyboard's **OneChain** scene. The book's fixture and loss definition govern.
+1. **Backpropagation — built in Wave 1 on 2026-09-10, awaiting author review**
+   (Chapter 5, “One neuron, one chain,” beside `fig-chain-graph`; panel id
+   `one-chain-excerpt`).
+   Asks whether increasing the weight raises or lowers the loss. Traces the forward
+   values and caches them, then reverses three rays to expose one local derivative each
+   and their product. Reuses the manuscript's `micro-autograd-check` example (`w=0.7`,
+   `x=2`, `b=-0.5`, target `0.3`) and its **full** squared error, not half-squared:
+   the factor-of-two test computes the 0.168900 counterfactual explicitly and pins the
+   scene off it. The product 0.337801 is bound to the chapter's own frozen stdout, and a
+   measured finite difference (0.338046) is what the chain rule has to reproduce.
+   Differentiation is not a parameter update, and one chain does not teach branch
+   accumulation; the panel says both. Source composition: `6050-Ch5/lecture.jsx`,
+   `SOneChain` L356–391, and the storyboard's **OneChain** scene, 0:46–1:30. The book's
+   fixture and loss definition govern. One open decision for the author, E1: the panel
+   draws the backward pass in wine and reserves orange for `w`, where the chapter's static
+   `fig-chain-graph` draws its backward arrows orange.
 2. **Kernel weighting — approved for publication (Chapter 12, beside `fig-kernel-lookup`).** Ask which
    observation gains influence as the query moves. Reveal distance, Gaussian
    affinity, normalized weights, weighted values, and their sum; then move only the
@@ -47,21 +59,81 @@ scene. Prioritize difficult mechanisms rather than animating every chapter.
    composition: `6050-Ch15/lecture.jsx`, `FourLedgers`, with storyboard
    **FourLedgers/CorruptionPolicy**; do not copy the lecture's alternative grouping.
 
+4. **Softmax shift — built in Wave 1 on 2026-09-10, awaiting author review**
+   (Chapter 2, beside `fig-softmax`; panel id `softmax-shift-excerpt`). Added to the wave
+   ahead of backpropagation on purpose: it is the smallest scene of the three, and its job
+   was to prove the new manifest entry, the scene template and the shared test harness
+   before a heavier scene depended on them. It did, without a change to any of them.
+   Asks which probability changes when 100 is added to every logit. Reuses the
+   `softmax-shift-audit` fixture — logits `(2.0, 0.5, −1.0, 1.0)`, shifts `(0.0, 100.0)` —
+   and the chapter's own shift-invariance claim. Tests hold positivity, normalisation,
+   equality with the `c = 0` vector to 1e-12 at every scrubbed shift, a constant argmax,
+   and — the one that matters numerically — that the largest score is subtracted before
+   exponentiating, proved by instrumenting `Math.exp` and by a `c = 1000` probe that would
+   otherwise return four `NaN`s. Source composition: `6050-Ch2/lecture.jsx`, `SSoftmax`
+   L1267–1354, storyboard **Softmax** 168–230 s; the lecture's three logits are not used,
+   the book's four govern.
+5. **Gate product — built in Wave 1 on 2026-09-10, rebuilt twice the same day from the
+   author's critique, awaiting author review**
+   (Chapter 10, beside `fig-highway-time`, under "Watch what that buys"; panel id
+   `gate-product-excerpt`). Asks how much of one word's gradient reaches step 80 through a
+   forget gate held at one value. Reuses `@eq-lstm-highway`, the chapter's `σ(0) = ½` with
+   `0.5^80 ≈ 10^−24`, its `+1` forget-bias recommendation, its "astronomically attenuated,
+   not exactly zero", and the two mean gates its diagnostic caption reports (quoted in the
+   boundary, never drawn). The picture, one SVG: a shared chart of `f^k` for `b_f = 0`
+   (dashed) and `b_f` at the slider (solid, +1 by default), linear first — both curves plunge
+   — then log (two straight lines, floor `10⁻²⁵`, a linear|log toggle in the plot); under it a
+   signal-retention river, two bands whose ink is the same mapping as the chart's `y`; one
+   token, the word `cat`, travelling both bands at once and drawn with its band's ink (`· · ·`
+   below .05); at step 80 a ratio badge, `× 1.6 × 10¹³`, *sixteen trillion times larger* — the
+   computed `(σ(1)/σ(0))^80 = 1.580 × 10¹³`, not the `10¹⁴` of subtracted roundings; and ONE
+   parameter control, a real `b_f` slider the timeline sweeps (0 → +1, then +2 and back) and
+   the reader may then drag, everything recomputing from the dragged value. The slider is the
+   author-requested amendment to the shared contract below, recorded in
+   `docs/animation-authoring.md` rule 1 on 2026-09-10; a test asserts the pane carries no
+   other control. Boundary: real gates vary per unit and per step, the chapter writes `≈` and
+   this panel makes the same approximation on purpose, the log floor and ink mapping are
+   stated, the word's legibility at 80 is on that mapping and never "intact", nothing is
+   trained, and the recall experiment remains the chapter's evidence. Source composition: `6050-Ch10/lecture.jsx`,
+   `SMemoryHighway` L487–520, storyboard **MemoryHighway** 5:34–6:30; `ch10-data.js`
+   `retentionByForgetGate` is used only as an independent arithmetic check, never as a
+   source, and the lecture's gradient-lag chart is a results plot and is not imported.
+   Note for whoever writes the audit next: this is the first scene whose printed witness
+   lives in another file (`chapters/appendices/a3-precision-performance.qmd` prints
+   `0.5^{80}=8.27\times10^{-25}`; Chapter 10 prints only the order of magnitude), and
+   `scripts/audit_excerpt_fixtures.py` can only bind literals to a scene's own chapter.
+   The binding is made in the scene's test instead.
+
 The scene paths above are relative to the read-only instructor source collection
 `Teaching/6050/Video_lectures/`. Inspect the current files and record exact source
 hashes in each excerpt's receipt before adaptation. They supply choreography, not
 authority to replace manuscript examples or colors.
 
-### Second-wave candidates, not implementation commitments
+### Wave 2 — candidates, not implementation commitments
 
-- **Chapter 10, LSTM retain/write/read:** distinguish stored cell state from exposed
-  output; closing the read gate does not erase memory. Adapt **LSTMDesign** without
-  inventing a trained gate trajectory from aggregate statistics.
+Nothing below is scheduled or approved. These are the next things that would be worth
+building **if** the author's review of Wave 1 says the format earns its place; any of them
+can be dropped without consequence.
+
+- **Chapter 3, three hinges form a bump:** sweep the existing `hinge-bump-values`
+  construction (`h1 − 2h2 + h3`, peak 2 at 0.5, zero outside `[−1.5, 2.5]`) and add its
+  weighted terms; the `−2` is a reveal with a slope ledger, not a knob. Adapt **Bump**;
+  no training claim.
 - **Chapter 8, pooling boundaries:** movement within a fixed bin versus crossing its
   boundary; show alignment-dependent tolerance, not general translation invariance.
-  Adapt **Pooling** using the existing `pool-invariance` fixture.
-- **Chapter 3, three hinges form a bump:** sweep the existing `hinge-bump-values`
-  construction and add its weighted terms. Adapt **Bump**; no training claim.
+  Adapt **Pooling** using the existing `pool-invariance` fixture, with the shifted-down
+  case as a declared computed variant. Reuses the convolution cell-measure and rays.
+- **Chapter 10, LSTM retain/write/read:** distinguish stored cell state from exposed
+  output; closing the read gate does not erase memory. Adapt **LSTMDesign** without
+  inventing a trained gate trajectory from aggregate statistics. It would be the second
+  scene in Chapter 10, so it must not re-teach the gate product built in Wave 1.
+- **Chapter 17, quantization grid:** eight weights onto a 3-bit grid; which survive
+  unchanged, which two pairs collide, and the maximum error against the step. The
+  lecture's nine schematic weights are not imported.
+- **Chapter 18, response mask:** whether a change at a prompt position moves the score,
+  given that the predictor sits one step before the scored target. Blocked on an author
+  decision (E5): either label the currently unlabelled audit cell, which changes the
+  chapter digest but no stdout, or anchor before the following heading.
 
 Defer training replays, diffusion, RoPE, and elaborate 3-D scenes until the smaller
 excerpts demonstrate useful teaching value.
@@ -71,7 +143,10 @@ excerpts demonstrate useful teaching value.
 - Follow the approved convolution player: optional and closed/paused initially,
   silent, compact on-pane controls, 1.5x default, keyboard/scrubbing/fullscreen,
   reduced-motion behavior, transcript, and static fallback. Aim for about forty
-  seconds, one prediction, and one mechanism per excerpt; no extra parameter knobs.
+  seconds, one prediction, and one mechanism per excerpt; no extra parameter knobs, with the
+  one-parameter-control amendment of 2026-09-10 — see `docs/animation-authoring.md` rule 1:
+  a scene may carry ONE parameter control when the mechanism IS that parameter's effect, and
+  the timeline sweeps it by default.
 - Use deferred local HTML/SVG/JavaScript. Do not import the lecture's React/Babel/
   KaTeX runtime, video payloads, or a general animation framework. Extract only
   demonstrably shared playback code when building the second player.
@@ -80,9 +155,34 @@ excerpts demonstrate useful teaching value.
 - Existing figures, prose, and code remain authoritative in both editions. Any new
   required example must enter the shared manuscript before publication. Optional
   motion does not excuse an HTML-only claim or an absent static explanation.
+- **The manifest and the fixture guard are required for any new scene, not optional
+  extras.** Index the scene in `interactives/manifest.json` — panel id, scene
+  directory, chapter, anchor, filter, transport, duration, beats, the fixture
+  literals its chapter must keep verbatim, any declared computed variants, and its
+  receipt — and require `scripts/audit_excerpt_fixtures.py` to pass. Declare the
+  fixture on the static panel and have the scene script read it; do not retype a
+  manuscript number in JavaScript. That is what makes a later manuscript edit fail
+  the build and force the receipt to be re-read, instead of leaving a panel quietly
+  disagreeing with the chapter it illustrates. The manifest entry is the whole
+  registration: the filter inserts every scene the manifest gives a document, so no
+  new scene should require an edit to `filters/mechanism-excerpts.lua`. Start from
+  `interactives/_template/` and satisfy all four of the registration points its README
+  names — manifest entry, `_quarto.yml` resource line, test file wired into
+  `scripts/html-tests/package.json`, and the wave receipt. Inherit the transport suite
+  through `registerTransportTests` in `scripts/html-tests/excerpt-harness.cjs` rather
+  than rewriting it, and keep the scene's own arithmetic in the scene's own suite.
+- **Every number the panel shows must be a manuscript literal or a declared computed
+  variant, described in the manifest and repeated in the receipt.** A number that is
+  neither does not belong in the scene. Two Wave 1 lessons are worth carrying forward:
+  the audit binds literals only to the scene's own chapter, so a witness printed in a
+  different file has to be bound in the scene's test until the schema grows an
+  `alsoIn`; and the audit reads receipt digests out of Markdown rows shaped
+  `| \`path\` | \`sha256\` |`, so a receipt that puts a descriptive column between the
+  path and the hash silently stops being checked rather than failing.
 - Independently test every arithmetic/Boolean state, deterministic scrubbing,
   pause/replay, resize/fullscreen, failed-script fallback, and direct anchors. Require
-  unchanged frozen stdout, structural/HTML audits, and narrow/desktop visual review.
+  unchanged frozen stdout, the fixture-drift audit, structural/HTML audits, and
+  narrow/desktop visual review.
 - Do not restart the paused numerical-runtime migration or scheduled monitor, add a
   new GPU workload, change a numerical tolerance, or cut a stable tag for this queue.
 

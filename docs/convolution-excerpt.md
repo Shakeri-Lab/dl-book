@@ -29,14 +29,22 @@ but never starts playback. One compact bar inside the animation pane contains a
 Play/Pause icon, time scrubber, clock, speed selector, and fullscreen icon. Play
 becomes Replay at the end. Separate Replay, Previous, Next, and Reset buttons are
 removed. Icon buttons retain accessible names, tooltips, visible focus, and
-44-pixel targets; the source's inline SVGs load no icon library. The step count and
-keyboard help are screen-reader-only; the latter is also in the closed transcript.
+44-pixel targets; the source's inline SVGs load no icon library. Play and Fullscreen
+are action buttons rather than toggles: their accessible names change with what
+pressing them does, they carry no `aria-pressed` state, and a `data-state` attribute
+(`play`/`pause`/`replay` and `expand`/`contract`) selects which inline icon shows.
+The scrubber's `aria-valuetext` is the only announcement of the step; the keyboard
+help is screen-reader-only and also in the closed transcript.
 At phone widths the total duration gives way to elapsed time, then the clock gives
 way to the scrubber on the narrowest view. The scrubber always announces the full
 time and stage. The 0.5x/1x/1.5x/2x speed selector shares one continuous clock. The default
 is 1.5x (the selected option in `panel.html`, read by `player.js`). The
-`player.js` timeline is 40 seconds at 1x: 16 phases of 2.5 seconds. These are
-presentation durations, not measurements. Keyboard arrows, Home, and the scrubber
+`player.js` timeline is 40 seconds at 1x: 16 phases of 2.5 seconds. `player.js`
+derives that length as `(lastStep + 1) * phaseSeconds` and writes it into the
+scrubber's range, the printed clock, the spoken total, and `data-duration` on the
+panel root, so the length is stated once in code; the `max="40"` and `/ 0:40` left
+in `panel.html` are the no-script fallback. These are presentation durations, not
+measurements. Keyboard arrows, Home, and the scrubber
 retain the discrete inspection and restart routes. Playback uses an absolute clock segment, not a sum of
 frame intervals, so phase boundaries do not drift with frame rate. A speed change
 or pause preserves fractional progress. Only the outlined window interpolates;
@@ -94,6 +102,15 @@ the vertical Sobel weights printed in the filter-zoo cell. Every valid sum is 4.
 the static fallback and every revealed state. The existing manuscript's framework
 check remains the canonical Python implementation; no experiment is re-executed.
 
+That chapter is hashed below so a later edit to it forces this receipt to be
+re-read instead of silently diverging from the panel.
+`interactives/manifest.json` names the two literals such an edit must preserve,
+and `scripts/audit_excerpt_fixtures.py` enforces both.
+
+| Manuscript source | SHA-256 |
+|---|---|
+| `chapters/part2/07-filters-convolution.qmd` | `ac06c09d7531bfdc7231c6a8c00bd3b78529bad731ce4e3dbbed42d5ad88b40d` |
+
 ## Integration and PDF boundary
 
 `filters/convolution-excerpt.lua` inserts the scoped HTML fragment and styles only
@@ -112,6 +129,7 @@ conversions. Do not assume Quarto will capture browser frames automatically.
 
 Review command: `quarto render --to html --no-clean` (committed freeze, no execution).
 DOM regression command: `npm test --prefix scripts/html-tests`.
+Fixture-drift command: `python scripts/audit_excerpt_fixtures.py`.
 The local anchor is `chapters/part2/07-filters-convolution.html#convolution-excerpt`.
 The author has approved this player. The `html_interactions` publishing job runs the
 test-only suite and is a required dependency of `build-deploy`, alongside the existing
@@ -120,6 +138,70 @@ pagination and content against the before-publication artifacts. Do not restart 
 paused numerical-runtime migration or scheduled monitor as part of this publication.
 The next-animation roadmap lives in [the existing backlog](backlog.md#focused-animation-roadmap--approved-september-9-2026).
 
+## Polish pass, September 9, 2026
+
+This player is no longer frozen. It still runs its own transport rather than
+`interactives/shared/playback.js`; a full retrofit remains deliberately out of
+scope, because the shared helper was extracted after this scene shipped and
+rewriting an approved player buys the reader nothing. But it has now taken two
+backports from that helper, and its wording, narrow-width styles, and test coverage
+changed with them. Read any earlier claim that `interactives/convolution/` is
+untouched as superseded by this list.
+
+- **One step announcement.** The range's `aria-describedby` and the
+  `#convolution-step-label` screen-reader span are gone, and `drawStep()` no longer
+  writes that span. The scrubber's `aria-valuetext`, unchanged in wording, is now
+  the single spoken source of time, step, phase, and patch.
+- **Action buttons, not toggles.** Play and Fullscreen no longer write
+  `aria-pressed`. CSS picks their icons from `data-state`, which the player sets in
+  the native-fullscreen handler, in the dialog fallback, and on exit.
+- **Backport 1 — ancestor-walking anchors.** `loader.js` used to open the panel only
+  when the hash was exactly the panel's id. It now resolves the hash to an element,
+  opens the panel when that element is the panel or sits inside it, and opens every
+  intervening `details`, matching `interactives/shared/loader.js`. The transcript
+  therefore has an id, `convolution-transcript`; a deep link to it opens both
+  disclosures, still paused.
+- **Backport 2 — one derived duration.** `(lastStep + 1) * phaseSeconds` fills the
+  scrubber's `max`, the printed clock, the spoken total, and `data-duration`. No
+  `40` or `0:40` is typed in JavaScript any more.
+- **The kernel is named where it is used.** The introduction now reads that the nine
+  weights are the vertical Sobel edge detector from the filter zoo below and stay
+  fixed throughout; the card label is `Fixed kernel: vertical Sobel · 3 × 3`, and the
+  matrix's accessible name matches. "Below" is literal: the filter returns the panel
+  and then the heading, so the panel sits immediately above **The filter zoo**, where
+  the chapter prints `"Sobel (vert.)"`. The fixed, unflipped, unlearned boundary is
+  unchanged.
+- **Narrow-width tightening (360 pixels and below).** The existing `max-width: 360px`
+  block — not a second query — gained smaller body, player, and card padding, a
+  30-pixel grid gap, a 0.75 rem label with a 4.2 em minimum height, and 0.8 rem
+  digits. The two-by-two arrangement is kept on purpose: ray endpoints are measured
+  from the card rectangles, and the multiplication and addition circles have radius
+  15 and sit in that gap, which makes 30 pixels the floor. The intent is input cells
+  of at least 24 pixels at a 320-pixel viewport. The arithmetic behind that figure is
+  a model of the padding cascade, not a measurement, and it is **pending the browser
+  pass**.
+- **Integration test.** `scripts/test_convolution_excerpt.cjs` now also reads
+  `filters/convolution-excerpt.lua` and `_quarto.yml` and checks that the non-HTML
+  guard is the first executable line, that the filter matches only
+  `07-filters-convolution`, keys on the exact heading `The filter zoo`, emits the
+  panel before that heading, and keeps `assert(inserted == 1`, and that `_quarto.yml`
+  lists `interactives/convolution/player.js` under `resources:` and both excerpt
+  filters under `filters:`. The two `_quarto.yml` sections are parsed separately, so
+  an entry in the wrong list fails.
+- **Indexed for the fixture guard.** `interactives/manifest.json` records this
+  scene's chapter, anchor, filter, transport, duration, beats, fixture literals, and
+  declared computed variant, and `scripts/audit_excerpt_fixtures.py` checks them
+  against the chapter, the panel markup, and this receipt. The beats are the one
+  entry the panel markup cannot answer for: this scene runs its own transport, so it
+  declares no `data-pane` and no `data-beats`, and the grid lives in the player. They
+  are bound twice instead — the audit requires the uniform sixteen-phase grid the
+  declared duration of 40 s implies, and the suite deep-equals them against
+  `Array.from({length: lastStep + 1}, (_, i) => i * phaseSeconds)`, with both
+  constants read out of `interactives/convolution/player.js`, beside the test that
+  the pane declares no beats.
+- **Counts.** This excerpt's suite grew from 30 to **41** checks; the whole
+  `scripts/html-tests` suite is **125**, up from 86.
+
 ## Local verification (September 9, 2026)
 
 - Complete frozen HTML render succeeded. `audit_html_assets.py`,
@@ -127,12 +209,14 @@ The next-animation roadmap lives in [the existing backlog](backlog.md#focused-an
   `audit_book_contract.py` pass.
 - The Node test report for `test_convolution_excerpt.cjs`,
   `test_plan_result_disclosure.cjs`, and `test_responsive_tables.cjs` passes all
-  43 tests, including independent arithmetic, all reveal states, fractional timing,
-  speed changes, sliding, reduced motion, keyboard isolation, and native/fullscreen
-  fallback controls. Ray tests check the matched pair in every patch, all nine
-  summands and each output destination, and layout remeasurement without starting
+  **54** tests — 43 before the polish pass above — including independent
+  arithmetic, all reveal states, fractional timing, speed changes, sliding,
+  reduced motion, keyboard isolation, and native/fullscreen fallback controls. Ray
+  tests check the matched pair in every patch, all nine summands and each output
+  destination, and layout remeasurement without starting
   a paused clock. The default remains 1.5x. Minimal-transport checks require exactly two icon buttons with
-  synchronized accessible names and keep the keyboard routes covered.
+  synchronized accessible names, no `aria-pressed` on either, and keep the keyboard
+  routes covered.
 - `audit_frozen_stdout.py --base HEAD` confirms all 133 output blocks unchanged
   against the baseline commit named above; HTML/TeX frozen pairs still agree.
 - Browser review of the original pilot confirmed four cards across on desktop and two columns on phones,
@@ -156,3 +240,25 @@ The next-animation roadmap lives in [the existing backlog](backlog.md#focused-an
 - A direct Pandoc LaTeX comparison of Chapter 7 with and without the new filter
   is byte-identical. The released PDFs were not rebuilt or changed; this is a
   format-scope check, not a new PDF certification.
+
+## Local verification of the polish pass (September 9, 2026)
+
+- `npm test --prefix scripts/html-tests`: **125 passing, 0 failing**, 41 of them this
+  excerpt's. Every item in the polish list that a DOM test can observe was
+  mutation-checked against an isolated copy of the tree: reverting it fails at least
+  one of the new checks. The narrow-width CSS is the exception — the harness has no
+  layout engine, so that item carries no test and rests entirely on the browser pass.
+- `python scripts/audit_excerpt_fixtures.py` passes — three scenes, twelve verbatim
+  fixture literals across three chapters, four declared computed variants, current
+  chapter digests in both receipts, live anchors, and one declared timeline each.
+- `audit_public_anchors.py`, `audit_plan_code.py`, `audit_python_sources.py`, and
+  `audit_book_contract.py` pass. `audit_frozen_stdout.py --base HEAD` still reports
+  133 unchanged blocks across 27 baseline units with all 27 HTML/TeX pairs matching,
+  which is the standing evidence that no `.qmd` changed.
+- **Pending for this pass, not yet verified:** the frozen HTML render and
+  `audit_html_assets.py`; the Pandoc LaTeX comparison with and without the filter;
+  and the browser review — input cells at least 24 pixels wide at 320 pixels, the
+  operation circles clear of the cards, the label's minimum height, no horizontal
+  page overflow at 1280, 390, 360, and 320 pixels, the deep link to
+  `#convolution-transcript`, fullscreen entry and exit on both routes, a clean
+  console, and a screen-reader check that the step is announced once.

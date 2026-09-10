@@ -2,15 +2,38 @@
   const root = document.getElementById('kernel-weighting-excerpt');
   if (!root || root.dataset.ready) return;
   const $ = selector => root.querySelector(selector);
-  const keys = [1, 3, 5], values = [1.5, 2.8, 1.8], bandwidth = 0.6;
+  // The panel is the one in-repo mirror of the manuscript fixture
+  // (chapters/part4/12-kernel-regression.qmd:231-234). interactives/manifest.json names those
+  // literals and scripts/audit_excerpt_fixtures.py keeps the chapter and this panel together,
+  // so nothing below retypes a number the manuscript owns.
+  const declared = name => root.dataset[name].trim().split(/\s+/).map(Number);
+  const keys = declared('keys'), values = declared('values');
+  const bandwidth = Number(root.dataset.bandwidth);
+  // The chapter's printed query, read once: while the transport runs, root.dataset.query
+  // publishes the moving query instead, returning to this value at rest.
+  const home = Number(root.dataset.query);
+  // Nonnegative weights summing to one keep the prediction inside this hull; never a typed literal.
+  const lowest = Math.min(...values), highest = Math.max(...values);
   const cards = [...root.querySelectorAll('[data-observation]')];
-  const svg = $('.kernel-plot svg'), drawing = $('[data-drawing]');
-  let lastTime = 0, reduced = false, previousKey = '';
+  // The stage strip is static markup; read its labels once so the scrubber can name the
+  // stage without borrowing the caption sentence (the caption is a live region).
+  const stageNodes = [...root.querySelectorAll('.mechanism-stages span')];
+  const stageNames = stageNodes.map(node => node.textContent.trim());
+  const svg = $('.kernel-plot svg'), drawing = $('[data-drawing]'), caption = $('[data-caption]');
+  let lastTime = 0, reduced = false, previousKey = '', plotWidth = 600;
+  // The transport runs render() every animation frame, so it must never measure.
+  // The plot width is read once here and refreshed only from the layout callback.
+  function measure() {
+    plotWidth = Math.max(180, Math.round($('[data-plot]').getBoundingClientRect().width || 600));
+  }
+  // The sweep leaves the printed query, visits the outermost keys, and comes back.
+  // Its endpoints are the fixture's; only the seconds below are choreography.
+  const first = keys[0], last = keys[keys.length - 1];
   function queryAt(t) {
-    if (t < 20 || t >= 36) return 3.5;
-    if (t < 22) return 3.5 - (t - 20) * 1.25;
-    if (t < 32) return 1 + (t - 22) * 0.4;
-    return 5 - (t - 32) * 0.375;
+    if (t < 20 || t >= 36) return home;
+    if (t < 22) return home - (t - 20) * ((home - first) / 2);
+    if (t < 32) return first + (t - 22) * ((last - first) / 10);
+    return last - (t - 32) * ((last - home) / 4);
   }
   function render(time, reducedMotion) {
     lastTime = time; reduced = reducedMotion;
@@ -38,33 +61,39 @@
       }
       card.querySelector('[data-bar]').style.width = `${stage >= 3 ? weights[i] * 100 : 0}%`;
     });
-    [...root.querySelectorAll('.mechanism-stages span')].forEach((node, i) => node.classList.toggle('is-current', i === Math.max(0, stage - 1)));
+    stageNodes.forEach((node, i) => node.classList.toggle('is-current', i === stage - 1));
     $('[data-formula]').textContent = stage < 2 ? 'First measure the distance from the query to each key.'
       : stage < 3 ? 'Affinity = exp(−distance² / (2h²)). Nearer keys receive larger affinities.'
       : `Weight = affinity / ${total.toFixed(5)} (the same denominator for all three).`;
     $('[data-invariant]').textContent = stage >= 3 ? `Weights sum to ${weights.reduce((a, b) => a + b, 0).toFixed(4)}.` : 'The normalization and weighted sum come next.';
-    $('[data-prediction]').textContent = stage >= 4 ? `Prediction = ${prediction.toFixed(4)}, within [1.5, 2.8].` : 'Prediction: not revealed yet.';
+    $('[data-prediction]').textContent = stage >= 4
+      ? `Prediction = ${prediction.toFixed(4)}, within the observed-value range [${lowest}, ${highest}].`
+      : 'Prediction: not revealed yet.';
+    // Every number in these sentences comes from the declared fixture or from the
+    // calculation above; none is retyped from the chapter.
     const captions = [
-      'Predict first: at q = 3.5, which of these three observations should have the most influence?',
+      `Predict first: at q = ${home}, which of these three observations should have the most influence?`,
       'Measure distances along the input axis, not the vertical differences between observed values.',
-      'Turn each distance into a positive Gaussian affinity. The bandwidth is fixed at 0.6.',
+      `Turn each distance into a positive Gaussian affinity. The bandwidth is fixed at ${bandwidth}.`,
       'Divide by one shared sum. These are fractions of influence, not three independent scores.',
       'Each normalized weight multiplies its observed value. The three products add to one prediction.',
-      time >= 36 ? 'Back at q = 3.5: the middle observation carries most of the influence, giving the printed prediction 2.7412.'
+      time >= 36 ? `Back at q = ${home}: the middle observation carries most of the influence, giving the printed prediction ${prediction.toFixed(4)}.`
         : 'Move only the query. Rays, weights, products, and prediction all use the same current calculation.'
     ];
-    $('[data-caption]').textContent = captions[stage];
-    const width = Math.max(180, Math.round($('[data-plot]').getBoundingClientRect().width || 600));
+    // A polite live region must be written only when it changes; render() runs every frame.
+    if (caption.textContent !== captions[stage]) caption.textContent = captions[stage];
+    const width = plotWidth;
     const stateKey = `${stage}/${query.toFixed(4)}/${width}`;
     if (stateKey !== previousKey) {
       previousKey = stateKey;
-      const left = 34, right = width - 18, top = 18, bottom = 151;
+      const left = 46, right = width - 18, top = 18, bottom = 151;
       const x = k => left + (k - 0.5) / 5 * (right - left);
       const y = v => bottom - (v - 1) / 2.1 * (bottom - top);
       svg.setAttribute('viewBox', `0 0 ${width} 190`);
-      svg.setAttribute('aria-label', `Query ${query.toFixed(2)}. Fixed observed values 1.5, 2.8, 1.8.${stage >= 4 ? ` Prediction ${prediction.toFixed(4)}.` : ''}`);
+      svg.setAttribute('aria-label', `Query ${query.toFixed(2)}. Fixed observed values ${values.join(', ')}.${stage >= 4 ? ` Prediction ${prediction.toFixed(4)}.` : ''}`);
       let markup = `<line x1="${left}" y1="${bottom}" x2="${right}" y2="${bottom}" stroke="#8994a2"/>`;
       [1.5, 2, 2.5].forEach(v => { markup += `<text x="${left - 6}" y="${y(v) + 4}" text-anchor="end" fill="#596778" font-size="11">${v}</text>`; });
+      markup += `<text x="12" y="85" transform="rotate(-90 12 85)" text-anchor="middle" fill="#596778" font-size="11">value</text>`;
       if (stage >= 4) keys.forEach((key, i) => { markup += `<line x1="${x(key)}" y1="${y(values[i])}" x2="${x(query)}" y2="${y(prediction)}" stroke="#2f855a" stroke-width="${1 + 6 * weights[i]}" opacity="${0.18 + 0.62 * weights[i]}"/>`; });
       markup += `<line x1="${x(query)}" y1="${top + 5}" x2="${x(query)}" y2="${bottom}" stroke="#2b6cb0" stroke-dasharray="4 4"/>`;
       if (stage >= 1 && stage <= 3) keys.forEach((key, i) => {
@@ -78,7 +107,10 @@
       markup += `<text x="${right}" y="187" text-anchor="end" fill="#2b6cb0" font-size="12">Key / query position</text>`;
       drawing.innerHTML = markup;
     }
-    return `${captions[stage]} Query ${query.toFixed(2)}.${stage >= 4 ? ` Prediction ${prediction.toFixed(4)}.` : ''}`;
+    // Scrubber-only wording: the caption sentence is already spoken by the live region,
+    // so aria-valuetext names the stage and the witness numbers instead of repeating it.
+    return `${stage === 0 ? 'Prediction question' : stageNames[stage - 1]}. Query ${query.toFixed(2)}.${stage >= 4 ? ` Prediction ${prediction.toFixed(4)}.` : ''}`;
   }
-  window.BookPlayback(root, render, () => { previousKey = ''; render(lastTime, reduced); });
+  measure();
+  window.BookPlayback(root, render, () => { measure(); previousKey = ''; render(lastTime, reduced); });
 })();

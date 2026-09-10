@@ -6,13 +6,27 @@ The convolution player shipped in `304f3d4`; kernel weighting and the revised BE
 ledger are approved for the next publication. Check the publishing run and live
 anchors before treating an approved source change as deployed.
 
-## The three examples
+Wave 1 added three more — softmax shift, one chain, gate product. The author rejected
+their first build on September 10, 2026 — a dashboard of stage tabs, framed cards,
+readout chips and caret-and-parenthesis math — and they are being rebuilt to the
+[visual grammar](#visual-grammar) below. They are **not yet author-approved**: they wait
+on the author's review note in [the Wave 1 receipt](wave1-excerpts.md). Nothing in this
+document authorizes them. The gate product was rebuilt a second time on the same day, from
+the author's critique of its rebuilt mock ("the human eye cannot visually process the
+difference between 10⁻²⁵ and 10⁻¹¹"); that critique added the one amendment to rule 1
+below. The per-scene sections describe the current builds; where anything differs, the
+receipt is authoritative.
+
+## The six examples
 
 | Location | What the reader follows | Teaching boundary |
 |---|---|---|
 | [Chapter 7: convolution](https://shakeri-lab.github.io/dl-book/chapters/part2/07-filters-convolution.html#convolution-excerpt) | Place a patch, multiply matching entries, add the products, write one output, then slide. | This is the existing Exercise 1 walkthrough. The kernel is fixed and unflipped; no training, padding, bias, or activation is added. |
 | [Chapter 12: kernel weighting](https://shakeri-lab.github.io/dl-book/chapters/part4/12-kernel-regression.html#kernel-weighting-excerpt) | Distance becomes Gaussian affinity, then normalized influence, weighted values, and one prediction. Only afterward does the query move. | Observations and bandwidth remain fixed. These are computed weights, not learned similarity or uncertainty. |
 | [Chapter 15: BERT masking](https://shakeri-lab.github.io/dl-book/chapters/part4/15-bert-pretraining.html#bert-ledger-excerpt) | Keep originals beside input copies; follow the input through prediction and the saved target separately into the loss. Compare masked, replaced, unchanged-selected, and unselected positions. | Selection, corruption, and attention visibility are distinct. No predicted token, probability, or measured loss is fabricated. |
+| Chapter 2: softmax shift — `02-logistic-softmax.html#softmax-shift-excerpt` *(built, not published)* | Exponentiate four scores, divide by one shared sum, then add 100 to every score and watch the ruler slide while the probability bars hold under dashed marks; the `e^c` is struck out of numerator and denominator. | Four fixed scores; no training, no data, no learned quantity. Invariance is to *adding* a constant, not to scaling one. The shift moves on the timeline, not under a knob. |
+| Chapter 5: one chain — `05-backpropagation.html#one-chain-excerpt` *(built, not published)* | Fill and cache `w → z → a → L`, turn the knob and measure a slope, then let three backward rays deliver one local derivative each and land their product beside the measurement. | One neuron, one example, one knob. Nothing is updated: no step, no learning rate, and `w` ends where it started. No `∂L/∂b`, no branch accumulation, no PyTorch. |
+| Chapter 10: gate product — `10-sequences-rnn.html#gate-product-excerpt` *(rebuilt twice, not published)* | One word, `cat`, enters at step 1 and travels eighty steps on two bands at once, `b_f = 0` and `b_f = +1`, while its gradient `f^k` is traced on one shared chart; the axis switches linear → log, a ratio badge names the gap (`× 1.6 × 10¹³`, sixteen trillion), and the timeline sweeps the `b_f` slider the reader may then drag. | One constant gate multiplied eighty times, the approximation the chapter's own `≈` makes. Real gates vary per unit and per step. The log axis has a stated floor, `10⁻²⁵`, and the word's legibility at step 80 is on that mapping, never "intact". Nothing is trained; the recall experiment remains the chapter's evidence. `b_f` is the one parameter control (rule 1's amendment). |
 
 ### Convolution: expose the multiply-and-add
 
@@ -58,7 +72,8 @@ rows. Keep the original above each input copy throughout. Corruption applies to
 the whole sequence together; moving the outline changes the explanatory focus,
 not the encoder's input. Masked `quiet`, randomly replaced `rose`, unchanged but
 selected `today`, and unselected `bank` expose the different cases. The visible
-replacement `bank` is explicitly illustrative, not an executed random sample.
+replacement `bank` is explicitly illustrative, not an executed random sample; the
+cell carries a marker and the caveat is footnoted directly beneath the rail.
 
 Within each case, reveal three forward paths: input to prediction, saved original
 to loss, and prediction to loss. Only after both loss routes arrive does the
@@ -80,21 +95,139 @@ source hashes, and checks are in the [kernel/BERT receipt](kernel-bert-excerpts.
 `chapters/part4/15-bert-pretraining.qmd`, and
 `scripts/test_mechanism_excerpts.cjs`.
 
+### Softmax shift: move the ruler, not the bars
+
+Reuse the `softmax-shift-audit` fixture from Chapter 2: logits `(2.0, 0.5, −1.0, 1.0)` and
+the chapter's own two cases, shift `0.0` and `100.0`. Ask which probability changes. Reveal
+the exponentials, then the one shared sum that divides them, and only then start the shift.
+The scores slide with the ruler so the markers hold still; dashed marks record the `c = 0`
+bar heights; the `e^c` is struck out of the numerator and of every denominator term.
+
+The scene evaluates softmax the way the chapter's numerical-landmine section prescribes —
+subtract the largest score first — and a test instruments `Math.exp` to prove `e^(o + c)` is
+never formed. The exponentials it displays are therefore `e^(o − m)`, a declared computed
+variant, and the panel says so.
+
+Fixture, source hashes, timing, and checks:
+[Wave 1 receipt](wave1-excerpts.md), `chapters/part1/02-logistic-softmax.qmd`, and
+`scripts/test_softmax_shift_excerpt.cjs`.
+
+### One chain: cache once, reuse three times
+
+Reuse the `micro-autograd-check` example from Chapter 5: `w = 0.7`, `x = 2`, `b = −0.5`,
+target `0.3`, and its **full** squared error — never half-squared, which is the mistake the
+factor-of-two test exists to catch. Ask whether turning `w` up raises or lowers the loss,
+and by how much per unit. Fill the chain forward and drop `z`, `a` and `a − y` onto a
+visible cache row. Then turn the knob and measure a real slope, so the chain rule has a
+number to reproduce rather than a claim to assert.
+
+`cache = forward(W0)` is computed once, outside the render, so the knob structurally cannot
+move it; the cache chips sit still on screen while the live values move. Each of the three
+local derivatives gets its own beat and fills only when its own ray arrives — which is what
+lets reduced motion reveal them one at a time. The product lands beside the measurement,
+never before it. The excerpt draws the backward pass in wine and reserves orange for `w`,
+which differs from the chapter's static `fig-chain-graph`; that divergence is stated in the
+panel and is an open decision in the receipt.
+
+Fixture, source hashes, timing, and checks:
+[Wave 1 receipt](wave1-excerpts.md), `chapters/part1/05-backpropagation.qmd`, and
+`scripts/test_one_chain_excerpt.cjs`.
+
+### Gate product: one word, eighty valves, one slider
+
+Reuse Chapter 10's `@eq-lstm-highway`, its `σ(0) = ½` with `0.5^80 ≈ 10^−24`, its `+1`
+forget-bias recommendation, and its "astronomically attenuated, not exactly zero". Ask how
+much of a word's gradient reaches step 80. One picture, three ways of seeing the same
+number `f^k`: a shared chart with a linear|log toggle (linear first — both curves plunge to
+the floor and "both look dead"; then log — two straight lines of different slope), two
+signal-retention bands under it whose ink IS the same mapping (linear ink `f^k`; log ink
+`1 + log₁₀(f^k)/25` clipped to [0, 1], floor `10⁻²⁵`, stated), and a ratio badge that is
+the largest number on the frame — `× 1.6 × 10¹³`, *sixteen trillion times larger*, the
+computed `(σ(1)/σ(0))^80 = 1.580 × 10¹³` and not the `10¹⁴` that subtracting rounded
+exponents gives. The one moving object is the word `cat`, in input blue, travelling both
+bands at once with each band's ink at its position: `· · ·` at step 80 above, a faint but
+legible `cat` below — legible on the log mapping, never "intact"; the caption says
+"attenuated, not exactly zero", the chapter's words.
+
+`b_f` is the one parameter control (rule 1's amendment): a real range, `[−2, +2]` in steps
+of 0.05, orange because `b_f` is the learnable parameter, with live `σ(b_f)` beside it. The
+timeline sweeps it — 0 → +1, then a brief excursion to +2 and back — so a passive viewer
+sees the sweep; dragging pauses playback and recomputes every mark (curves, river, word,
+endpoints, badge, labels, readout, formula highlight) from the dragged value; any timeline
+action resumes the timeline's own `b_f`. Arrow keys on the slider move `b_f` and never
+reach the pane's beat seeking. The measured means of the diagnostic caption are quoted in
+the boundary as the chapter's measurement and never drawn; the figure's "about ten orders
+of magnitude stronger" is a measured gradient norm at lag 60 against a vanilla RNN, a
+different quantity, and the boundary says so.
+
+Bindings: the published retention is `f^80` and the ratio `f^80 / 0.5^80` at every time;
+both curves are `f^k`, verified by parsing each path back through the drawn axis in both
+modes; every band cell's `fill-opacity` is the mapping; the word's opacity is its band's
+ink; the badge is `1.58e+13` to three figures with the words computed from it; the five
+slider ticks give `σ = 0.119203, 0.268941, 0.5, 0.731059, 0.880797` and `σ^80 = 1.27 × 10⁻⁷⁴
+… 3.89 × 10⁻⁵`, all recomputed.
+
+Four rules this scene added after its first review, each general enough to reuse. *A glide
+finishes at the beat it belongs to:* the linear → log glide runs the 0.6 s before 18 s, the
+curves, the band ink and both sets of axis labels (cross-faded) following one `mix`, so the
+frame an arrow-key seek parks on is the finished picture its caption describes. *A mark on
+a coloured field gets a luminance channel:* the word is drawn with a white halo under its
+strokes (`paint-order: stroke`), so its blue at ink *a* is read against white at ink *a*,
+not against wine at the same ink, and its contrast rises with the ink instead of falling.
+*A tie mark needs two ends:* the bracket between the endpoints is drawn only when they are
+visibly apart (≥ 2 px); the reference endpoint is a hollow ring and the live one a filled
+dot, so two endpoints at one height are still two marks, and neither is ever offset from
+its curve. *A static fallback that reflows ships two prints:* the final frame is drawn at
+the desktop page's own figure width (713 units) and again in the narrow layout at a
+phone's (296 units), both inside the one svg, the narrow print scaled into the wide viewBox
+and chosen by a container query on the figure's width, the svg's height following its
+viewBox; the player drops the narrow print when it mounts. Words for a number are spelt
+from the number's own thousands group ("five point three trillion", "one hundred thirty
+trillion"), never from a table that can run out.
+
+Fixture, source hashes, timing, and checks:
+[Wave 1 receipt](wave1-excerpts.md), `chapters/part3/10-sequences-rnn.qmd`,
+`chapters/appendices/a3-precision-performance.qmd` (which prints `8.27 × 10^−25`), and
+`scripts/test_gate_product_excerpt.cjs`.
+
 ## Reusable design rules
 
 1. **One question, one mechanism.** Begin with a prediction; reveal its answer
    through a visible operation. Aim for about forty content seconds, not a slide
    deck condensed onto a web page. Timing is presentation, never performance data.
+   No extra parameter knobs — with one amendment, requested by the author on
+   September 10, 2026 for the gate product: **A scene may carry ONE parameter control
+   when the mechanism IS that parameter's effect; the timeline sweeps it by default.**
+   The control is a real `<input type="range">` with its ticks, a live readout and an
+   `aria-valuetext` that says what the value does; it is inert (and hidden) until the
+   player mounts; the timeline drives it for the passive viewer; dragging it pauses
+   playback and recomputes the whole picture from the dragged value; any timeline action
+   — play from a pause, a scrub, an arrow-key beat — resumes the timeline's own value, so
+   the drag is a detour, not a new default; and its keys never reach the pane's beat
+   seeking (the transport ignores keydown events whose target is not the pane, and binds
+   its own scrubber inside `[data-controls]`, so a second range in the pane can never
+   become the clock). A second knob is still a second scene.
 2. **The manuscript owns meaning.** Reuse its fixture, notation, loss convention,
    and boundary. Instructor scenes can guide composition and reveal order; record
    their exact source receipts. Do not import their framework or off-page narration.
+   The manuscript fixture is bound by `scripts/audit_excerpt_fixtures.py`, which
+   requires each literal the manifest names to appear verbatim in its chapter and
+   each receipt to hold that chapter's current digest. The static panel is the only
+   in-repo mirror of the fixture: it declares the numbers as data attributes, scene
+   scripts read them instead of retyping them, and the tests take their reference
+   values from the same attributes.
 3. **Keep the book light.** Use local HTML/CSS/SVG and small scene scripts. No video
    payload, iframe, frontend framework, animation engine, fonts, or analytics are
-   needed. Load scene code only when the optional disclosure opens.
+   needed. Load scene code only when the optional disclosure opens. Typeset math in a
+   panel uses the MathJax the page already loads for the chapter's own equations, so
+   it is not a new payload (see the visual grammar's recipe).
 4. **Closed and paused initially.** Direct anchors open the relevant disclosure
    without autoplay. Keep one on-pane bar: Play/Pause (Replay at the end), scrubber,
    time, speed, and fullscreen. Default to 1.5x; retain keyboard navigation without
-   taking native controls' keys. Pause on close, tab hiding, page exit, or Escape.
+   taking native controls' keys. When the pane declares `data-beats`, the arrow keys
+   seek between those scene boundaries rather than by a fixed step, so inspection
+   lands where the mechanism changes; without them the fixed step stands. Pause on
+   close, tab hiding, page exit, or Escape.
 5. **Derive frames from time.** Scrubbing to a time must reconstruct the same values,
    focus, and geometry, regardless of playback history. Preserve fractional time
    through pause/speed changes. Use elapsed time, not an assumed frame rate.
@@ -103,28 +236,215 @@ source hashes, and checks are in the [kernel/BERT receipt](kernel-bert-excerpts.
    slide. Reserve gutters so lines and operator nodes do not cover text.
 7. **Keep meaning accessible.** Blue inputs, purple targets, green predictions,
    wine losses/errors, neutral fixed operators. Orange is reserved for learnable
-   parameters. Labels, shapes, signs, and geometry must work without color. Provide
+   parameters. The exact values are the book's MathJax macro colours (visual grammar,
+   rule 4). Labels, shapes, signs, and geometry must work without color. Provide
    named controls, focus visibility, reduced-motion discrete reveals, transcript,
-   and a readable static fallback if scripts fail.
+   and a readable static fallback if scripts fail. A button whose name changes with
+   what pressing it does — Play/Pause/Replay, Fullscreen/Exit — is an action, not a
+   toggle: give it no `aria-pressed`, and drive its icon from a `data-state`
+   attribute instead. Make the caption a polite, atomic live region so each change
+   is announced once and whole, and announce a value in one place only.
 8. **Keep the PDF complete.** These filters are HTML-only and return immediately
    for other formats. Existing static explanations and figures remain authoritative
    in both editions. A browser frame is not automatically converted into the PDF.
    If a future animation introduces required content, first add its complete static
    example to the shared manuscript.
 
+## Visual grammar
+
+Binding for every scene built or rebuilt from September 10, 2026, when the author
+rejected the first build of the three Wave 1 scenes: "too many boxes like a table … we
+need color coding, a better visualization, and simple things to track"; "non-LaTeX
+encoding" of the math; "very hard to read". It replaces the dashboard grammar those
+scenes inherited — stage tabs, framed cards, readout chips, side tables, Unicode-and-caret
+math — and it is what `interactives/_template` encodes and the harness's
+`registerGrammarTests()` checks.
+
+1. **One picture.** The pane is a single inline SVG, not a grid of cards. No tab or stage
+   strip, no side tables, no readout chips. A number that must be shown sits on the
+   picture, next to the mark it measures, in that mark's colour.
+2. **One object the eye tracks**, continuously, through the whole forty seconds: a nudge
+   travelling down a chain, a group of bars translating together, a packet shrinking
+   through gates. Everything else is scenery that stays put. If two things move at once
+   they must be the same thing seen twice.
+3. **Motion is the mechanism.** Adding a constant is a translation. Multiplying by a
+   shared factor is the whole group scaling together. A derivative is a small nudge that
+   is amplified or shrunk as it passes each stage. A product of gates is the same packet
+   passing through the same valve again and again. Show the operation before naming it;
+   then name it once.
+4. **Colour = meaning, everywhere at once.** Blue is the input `x`; orange is the
+   learnable parameter (`w`, and nothing else); green is a prediction or probability;
+   purple is the target `y`; wine is loss, error, blame. The same colour appears on the
+   picture, inside the typeset formula, and on the caption word. The values are the
+   book's own MathJax macros in `mathjax-config.html`: `\featurepart{}` blue `#2b6cb0`,
+   `\parameterpart{}` orange `#c05621`, `\predictionpart{}` green `#2f855a`,
+   `\targetpart{}` purple `#805ad5`, `\residualpart{}` wine `#722f37`. A shift or a
+   ghost that is none of these is drawn in the book's emphasis ink `#232d4b`; scenery is
+   grey. The shared `.target-role` and `.error-role` predate the grammar and differ
+   slightly; a scene overrides them within its own root so the caption word matches the
+   formula, rather than editing the shared sheet the older chapters also carry.
+5. **Math is typeset, never ASCII.** The page loads MathJax 4 with the book's macros; a
+   panel formula is written as `\( … \)` or `\[ … \]` and typesets like every other
+   equation in the chapter. Animate a formula by toggling CSS classes on sub-expressions
+   wrapped in `\class{name}{…}` — a wash, a strike — never by rewriting TeX during
+   playback, and never with a live-changing number inside the formula: a changing number
+   is plain `<text>` on the picture. The recipe is below.
+6. **Text budget.** On the picture: labels only (`w`, `x`, `y`, `z`, `a`, `L`, a unit, a
+   value). One typeset formula line under the picture. One caption line of at most twenty
+   words saying what is happening now. The question above the pane, the boundary
+   paragraph below it, and the transcript stay as they are: they are prose, not the
+   picture.
+7. **Stillness when the reader should read.** A reveal holds for at least two seconds.
+   Nothing flashes.
+8. **Reduced motion** is the same picture at each beat with the object jumped to its beat
+   position.
+9. **Static fallback** is the final frame drawn as static SVG inside the panel — what a
+   reader sees with scripts off — carrying the witness values.
+
+### Typeset math in a panel: the verified recipe
+
+Verified in the rendered page on September 10, 2026. The page loads MathJax 4.1.3
+(`tex-chtml`) with `ui/lazy` and the macros in `mathjax-config.html`, and its
+`lazyAlwaysTypeset` list includes `span[id^="eq-"]`. So:
+
+- Wrap every panel formula as `<span id="eq-<scene>-<n>">\( … \)</span>`. It is typeset
+  eagerly — no `<mjx-lazy>` placeholder — even inside the closed `<details>`. Probed:
+  `\class{shift}{e^{c}}` produced two targetable `.shift` elements, and
+  `\parameterpart{w}` produced the book's orange.
+- `filters/mechanism-excerpts.lua` inserts `panel.html` as a raw HTML block, so the
+  `\(` delimiters reach the page untouched.
+- After the disclosure opens the player may call `MathJax.typesetPromise([root])` once,
+  guarded by `window.MathJax` and only if no `mjx-container` exists yet, and publishes
+  `data-typeset="mathjax"` or `"none"`. If MathJax is absent or the promise rejects, the
+  TeX source stays readable — the no-JS behaviour everywhere else in the book.
+- Animate by toggling classes or styles on the `\class{}` elements: a pale wash of the
+  part's own colour, or a diagonal `::after` rule for a strike (`text-decoration` does not
+  reach MathJax's inline-block boxes), scoped under `[data-ready]` so the static fallback
+  is fully lit. Never mutate the TeX at runtime.
+- JSDOM cannot run MathJax: test the TeX source string, the `eq-` ids, the `\class{}`
+  names and the CSS toggles the player applies. The harness fixture's `mathjax` option
+  (`'stub'`, `'typeset'`, `'reject'`) lets a suite prove the one guarded call.
+
+This supersedes the earlier convention that panels carry Unicode-only text and no
+MathJax — the "no MathJax inside the panel" line of the Wave 1 brief and open decision
+E17 in the Wave 1 receipt, which is therefore **closed**: every rebuilt scene's formula is
+typeset by the page's MathJax with the book's macros, and the caret-and-parenthesis
+rendering E17 asked about no longer exists anywhere in a rebuilt panel. The MathJax is the
+page's own, so rule 3 above stands.
+
+### Scenes that predate the grammar
+
+The convolution, kernel-weighting and BERT-ledger scenes were built and reviewed before
+this grammar existed. They keep their stage strips, cards and Unicode text; their own
+suites keep testing that shape; `registerGrammarTests()` is not applied to them; and the
+`.mechanism-stages` rules stay in `interactives/shared/player.css` for them. They are
+candidates for a later retrofit, which is the author's decision — nothing in the Wave 1
+rebuild touches them.
+
 ## Implementation map
 
-- `interactives/convolution/`: the approved first player, left self-contained to
-  avoid an unnecessary retrofit.
+- `interactives/convolution/`: the approved first player. It keeps its own
+  transport rather than being retrofitted onto the shared helper, but it is not
+  frozen: it has taken that helper's ancestor-walking anchors and its
+  derive-the-duration behaviour, and the action-button rule applies to it too.
 - `interactives/kernel-weighting/` and `interactives/bert-ledger/`: each scene's
   static panel, scoped styles, and computation/reveal logic.
+- `interactives/softmax-shift/`, `interactives/one-chain/`, `interactives/gate-product/`:
+  the Wave 1 scenes, same three files each, all on the shared transport with no
+  transport change of any kind. Two of them define an orange `…-parameter` class in
+  their own stylesheet rather than in `shared/player.css`, deliberately: a rule added
+  to the shared sheet is emitted into every chapter that carries a panel, including
+  ones that do not use it.
 - `interactives/shared/`: only demonstrably shared transport, compact controls,
-  styles, and deferred loading for the second and third players. Each scene keeps
-  its own arithmetic or Boolean state. Nested-disclosure anchors open their target
-  as well as its ancestors.
-- `filters/convolution-excerpt.lua` and `filters/mechanism-excerpts.lua`: insert
-  the optional HTML at verified chapter locations and fail if a required insertion
-  point is absent or duplicated.
+  styles, and deferred loading for every scene on the shared transport. Each scene
+  keeps its own arithmetic or Boolean state. Nested-disclosure anchors open their
+  target as well as its ancestors. The transport finds its scrubber as
+  `[data-controls] input[type="range"]` — inside its own bar — since the gate
+  product's `b_f` slider put a second range in a pane (the one change the
+  one-parameter-control amendment needed in shared code; every scene on the shared
+  transport has exactly one range inside `[data-controls]`, so nothing else moved).
+- `interactives/manifest.json`: the index of shipped scenes — panel id, scene
+  directory, chapter, anchor (an executable cell's `cell-<label>` or an exact
+  heading), the filter that ships it, whether it uses the shared transport or its
+  own, duration, beats, the fixture literals its chapter must keep verbatim, any
+  declared computed variants, and the receipt that hashes the chapter. It is
+  repository build data — read from the project directory by the Lua filter, the
+  fixture audit and the interaction suite — not a file the reader's browser fetches,
+  so it is not listed as a published resource. A scene's entry is its whole
+  registration: adding the three Wave 1 scenes required no edit to the filter.
+- `scripts/audit_excerpt_fixtures.py`: the fixture-drift guard. It runs in the
+  manuscript-contract audit step of both the publishing and the execute-audit
+  workflow, ahead of any render or re-execution, and fails when a literal is no
+  longer verbatim
+  in its chapter, when a receipt's recorded chapter digest is stale, when an anchor
+  stops resolving, when a manifest-driven filter can no longer place an anchor of the
+  declared kind (or, for a filter that still hard-codes its scene, when it stops
+  mentioning that scene or target), when
+  a panel stops declaring its id, when the manifest's duration or beats disagree
+  with the panel markup, when a shared-transport pane stops declaring `data-beats`
+  at all, or when a scene-transport panel's manifest beats are not the uniform grid
+  its declared duration implies. Given `--lecture-tree` it also re-verifies the
+  recorded lecture digests. It reads both kinds of digest out of a receipt's Markdown
+  tables, and the row shape it recognises is `| \`path\` | \`sha256\` |` — the digest
+  must be the last column of a two-column row. A receipt that adds a third column
+  between them does not fail the audit; it silently stops being checked, so keep
+  descriptive columns in a separate table.
+- Timeline source of truth: the pane's `data-duration`, falling back to the
+  scrubber's `max`, and the pane's `data-beats`. The transport writes the duration
+  into the scrubber range, the printed clock, and `data-duration` on the panel root,
+  so the length is stated once; the manifest mirrors both and the audit keeps them
+  equal wherever the panel declares them. A scene-transport player — today only
+  convolution — runs its own transport, declares no `data-pane` and no `data-beats`,
+  and derives its grid from its own phase length. Its manifest beats are bound
+  instead by the audit, which requires the uniform grid the declared duration
+  implies, and by `scripts/test_convolution_excerpt.cjs`, which deep-equals them
+  against `(lastStep + 1)` phases of `phaseSeconds` read from the player source.
+- `filters/mechanism-excerpts.lua`: manifest-driven. It decodes
+  `interactives/manifest.json` with `pandoc.json.decode`, the same way
+  `filters/chapter-tools.lua` reads `scripts/notebook_manifest.json`, and inserts every
+  scene the manifest gives the document being rendered — after the div of an `after-cell`
+  anchor, immediately before the level-2 heading of a `before-heading` one — failing if a
+  required insertion point is absent or duplicated. The shared stylesheet is emitted once
+  per document, each scene adds its own `<style>`, and `shared/loader.js` is emitted once,
+  after the last panel on the page, so it sees every root there.
+  `filters/convolution-excerpt.lua` still names its own chapter and heading; it inserts
+  the same way and fails the same way.
+- `interactives/_template/`: the skeleton a new scene copies, in the visual grammar —
+  one inline SVG that is both the static fallback (the final frame, with its witness
+  values) and the drawing the player animates; one `eq-` formula line; one caption; a
+  player that looks each `[data-mark]` up once, moves it by attributes from
+  `render(time, reduced)`, toggles formula classes, measures only in `layout()`, and
+  makes one guarded typeset call after mount; scoped styles declaring the macro
+  colours; and a README naming the four places a scene must be registered (manifest
+  entry, `_quarto.yml` resources, its test file, the wave receipt). Nothing here is
+  rendered: no manifest entry names it. Run through the harness with placeholders
+  substituted, it passes the transport, beat-hold and grammar suites as it stands.
+- `scripts/html-tests/excerpt-harness.cjs`: test-only. The JSDOM fixture, the markup
+  canonicalisers, the per-scene rectangle stub, and `registerTransportTests(sceneId)` —
+  **21 transport checks** every shared-transport scene inherits, driven by the manifest's
+  duration and beats, including the checks that each declared beat is a boundary the
+  drawing crosses and that reduced motion holds each beat. It also exports
+  `registerBeatHoldTest(sceneId)`, the **strict** form of the reduced-motion rule: it walks
+  the whole reduced timeline at 0.05 s and requires exactly one drawn state per beat
+  interval, where the inherited check samples only `beat` and `beat + 0.01`. A quantity
+  quantised into several stops inside one beat passes the sampled check and fails this one.
+  Every scene written from `interactives/_template` calls it. It is opt-in because
+  `kernel-weighting` and `bert-ledger`, which shipped before this harness, do not hold
+  their beats (measured: kernel beats 5/6/7 render 11/17/7 states, BERT beats 2–7 render
+  4/4/4/2/2/2); making them hold is an author decision about two reviewed scenes, not a
+  side effect of a test helper. `registerGrammarTests(sceneId)` is the opt-in visual
+  grammar suite — one picture, one formula line, one caption, no strip and no tables;
+  TeX in `eq-<scene>-` wrappers whose `\class{}` names the scene's stylesheet styles;
+  playback that changes formula state without rewriting TeX; exactly one guarded
+  typeset call after mount and none when the page already typeset; captions within
+  the word budget and standing two seconds; a static fallback equal to the final frame.
+  The fixture's `mathjax` option (`'stub'`, `'typeset'`, `'reject'`) exists for that
+  suite, and `stageLabels()` returns `[]` for a panel without a strip: the stage strip
+  is not part of the harness contract. A scene's own arithmetic and
+  Boolean invariants stay in its own suite. One known gap: its deterministic-seek check
+  canonicalises the pane's inner markup only, so state a player publishes on the panel
+  root can drift with playback history undetected. `one-chain` covers its whole published
+  surface in its own suite; that check belongs in the harness.
 - `scripts/html-tests/package.json`: test-only dependencies; the publishing
   workflow requires this interaction suite alongside notebook validation.
 
@@ -132,12 +452,21 @@ source hashes, and checks are in the [kernel/BERT receipt](kernel-bert-excerpts.
 
 Independently test arithmetic or Boolean invariants, every important reveal state,
 deterministic seeking, pause/replay/speed, resize/fullscreen, keyboard isolation,
-reduced motion, direct anchors, failed-script fallback, and the non-HTML guard.
+reduced motion, direct anchors, failed-script fallback, and the non-HTML guard; for a
+scene written to the visual grammar, also its grammar suite.
 Inspect desktop and phone widths in a real browser. Run the HTML/structural audits
-and require unchanged frozen stdout. For publication, retain the existing complete
+and require unchanged frozen stdout. Index the scene in `interactives/manifest.json`
+and require the fixture-drift guard, `scripts/audit_excerpt_fixtures.py`, to pass, so
+a later manuscript edit forces its receipt to be re-read instead of letting the panel
+diverge in silence. For publication, retain the existing complete
 PDF-build and notebook-validation pipeline, compare PDF content and pagination,
 obtain author review, push normally, and verify the actual deployed assets.
 
-Current commands and source receipts live in the two linked implementation records.
+Current commands and source receipts live in the linked implementation records:
+[convolution](convolution-excerpt.md), [kernel and BERT](kernel-bert-excerpts.md), and
+[Wave 1](wave1-excerpts.md).
 Future candidates remain in [the existing animation roadmap](backlog.md#focused-animation-roadmap--approved-september-9-2026);
-this document does not authorize additional scenes or a new stable edition.
+**this document does not authorize additional scenes or a new stable edition.** A wave is
+authorized only by the author's browser-review note recorded in that wave's own receipt —
+which is why the three Wave 1 scenes appear in the table above marked *built, not
+published*.

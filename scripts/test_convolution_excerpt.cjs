@@ -205,7 +205,8 @@ function assertStopped(context, step = context.step) {
   const time = context.time;
   const windowPosition = context.query(".conv-excerpt__window").getAttribute("style");
   assert.equal(context.clock.size, 0, "paused playback leaves no pending animation frame");
-  assert.equal(context.button("play").getAttribute("aria-pressed"), "false");
+  assert.notEqual(context.button("play").dataset.state, "pause",
+    "a paused transport never shows the pause icon");
   context.clock.advance(100000);
   assert.equal(context.step, step, "paused playback cannot advance");
   assert.equal(context.time, time, "pause preserves fractional time");
@@ -222,6 +223,8 @@ function assertButtonName(button, name) {
   assert.equal(button.getAttribute("title"), name);
   assert.equal(button.querySelector(".conv-excerpt__sr-only").textContent, name);
   assert(button.querySelector('svg[aria-hidden="true"]'), "an icon never replaces the accessible button name");
+  assert.equal(button.getAttribute("aria-pressed"), null,
+    "a button whose accessible name changes is an action, not a toggle");
 }
 
 const displayTime = seconds => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
@@ -353,7 +356,7 @@ test("initial stage withholds products and unwritten outputs instead of showing 
   assert.equal(context.query('input[type="range"]').max, "40");
   assert.equal(context.query('input[type="range"]').step, "0.01");
   assert.equal(context.query("#convolution-time").textContent, "0:00 / 0:40");
-  assert.equal(context.query("#convolution-step-label").textContent, "1 of 16");
+  assert.match(context.query('input[type="range"]').getAttribute("aria-valuetext"), /Step 1 of 16/);
   assert.deepEqual(context.values("kernel"), ["−1", "0", "1", "−2", "0", "2", "−1", "0", "1"]);
   assertStopped(context, 0);
 });
@@ -373,7 +376,7 @@ test("one compact on-pane transport contains only named play and fullscreen icon
     assert(controls.contains(context.query(selector)), `${selector} belongs to the shared transport bar`);
   }
   assert.equal(context.query("select[data-speed]").value, "1.5");
-  for (const selector of ['label[for="convolution-step"]', "#convolution-step-label", "#convolution-keyboard"]) {
+  for (const selector of ['label[for="convolution-step"]', "#convolution-keyboard"]) {
     assert(context.query(selector).classList.contains("conv-excerpt__sr-only"),
       `${selector} stays available to assistive technology without crowding the diagram`);
   }
@@ -425,7 +428,6 @@ test("all sixteen stages agree with independent arithmetic and keep the kernel u
     assert.equal(context.query('input[type="range"]').getAttribute("aria-valuetext"),
       `${displayTime(seconds)} of 0:40. Step ${step + 1} of 16. ${phases[phase]}. Patch ${visit + 1} of 4.`);
     assert.equal(context.query("#convolution-time").textContent, `${displayTime(seconds)} / 0:40`);
-    assert.equal(context.query("#convolution-step-label").textContent, `${step + 1} of 16`);
     if (phase >= 2) {
       assert.equal(context.query(".conv-excerpt__calculation").textContent,
         `${patch.products.map(numberText).join(" + ")} = ${numberText(patch.sum)}`);
@@ -608,7 +610,7 @@ test("Play starts only on request, pauses, stops at the end, and Replay restarts
   assert.equal(context.step, 0, "Play leaves time to read the first stage");
   assert.equal(context.clock.size, 1);
   assertButtonName(context.button("play"), "Pause");
-  assert.equal(context.button("play").getAttribute("aria-pressed"), "true");
+  assert.equal(context.button("play").dataset.state, "pause");
   context.clock.advance(2499);
   assert.equal(context.step, 0);
   near(context.time, 2.499);
@@ -897,4 +899,217 @@ test("a rejected fullscreen request reports status without losing the readable p
   assert.equal(context.query(".conv-excerpt__controls").hidden, false);
   near(context.time, 13.25);
   assertStopped(context, 5);
+});
+
+test("the transport exposes no pressed state and follows data-state instead", async t => {
+  const context = await initialized(t);
+  const controls = context.query(".conv-excerpt__controls");
+  assert.equal(controls.querySelectorAll("[aria-pressed]").length, 0,
+    "buttons whose accessible name changes are actions, not toggles");
+  assert.equal(context.button("play").dataset.state, "play");
+  context.button("play").click();
+  assert.equal(context.button("play").dataset.state, "pause");
+  context.button("play").click();
+  assert.equal(context.button("play").dataset.state, "play");
+  context.seek(40);
+  assert.equal(context.button("play").dataset.state, "replay");
+  assert.equal(controls.querySelectorAll("[aria-pressed]").length, 0);
+});
+
+test("Expand flips the fullscreen button between data-state expand and contract", async t => {
+  const context = await initialized(t);
+  const button = context.button("fullscreen");
+  const dialog = context.query(".conv-excerpt__dialog");
+  assert.equal(button.dataset.state, "expand");
+  button.click();
+  assert.equal(dialog.open, true);
+  assert.equal(button.dataset.state, "contract");
+  assert.equal(button.getAttribute("aria-pressed"), null);
+  button.click();
+  assert.equal(dialog.open, false);
+  assert.equal(button.dataset.state, "expand");
+});
+
+test("native fullscreen flips the fullscreen button between expand and contract", async t => {
+  const context = await initialized(t, { fullscreen: "success" });
+  const button = context.button("fullscreen");
+  assert.equal(button.dataset.state, "expand");
+  button.click();
+  await Promise.resolve();
+  assert.equal(context.document.fullscreenElement, context.query(".conv-excerpt__player"));
+  assert.equal(button.dataset.state, "contract");
+  button.click();
+  await Promise.resolve();
+  assert.equal(context.document.fullscreenElement, null);
+  assert.equal(button.dataset.state, "expand");
+  assert.equal(button.getAttribute("aria-pressed"), null);
+});
+
+test("one declared duration fills the scrubber range, the clock, and the readout", async t => {
+  const context = await initialized(t);
+  const slider = context.query('input[type="range"]');
+  // 16 phases of 2.5 s. The player computes it; no literal 40 remains in the markup path.
+  assert.equal(context.root.dataset.duration, "40");
+  assert.equal(slider.max, context.root.dataset.duration);
+  assert.equal(context.query("[data-duration]").textContent, " / 0:40");
+  assert.equal(context.query("[data-elapsed]").textContent, "0:00");
+  context.seek(40);
+  assert.match(slider.getAttribute("aria-valuetext"), /^0:40 of 0:40\. /);
+  assert.equal(context.query("#convolution-time").textContent, "0:40 / 0:40");
+});
+
+test("the convolution pane declares no beats, so arrows keep the fixed 2.5 s step", async t => {
+  const context = await initialized(t);
+  assert.equal(context.query(".conv-excerpt__player").dataset.beats, undefined);
+  for (const expected of [2.5, 5, 7.5, 10]) {
+    context.key("ArrowRight");
+    near(context.time, expected);
+  }
+  for (const expected of [7.5, 5]) {
+    context.key("ArrowLeft");
+    near(context.time, expected);
+  }
+  assertStopped(context, 2);
+  // No `data-beats` means the fixture audit's beat comparison skips this scene, so the
+  // manifest's beat list is bound here instead: it must mirror the grid the player plays.
+  const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "interactives", "manifest.json"), "utf8"));
+  const scene = manifest.scenes.find(entry => entry.id === "convolution-excerpt");
+  assert(scene, "the manifest must still carry the convolution scene");
+  const constant = name => {
+    const found = player.match(new RegExp(`const ${name} = (\\d+(?:\\.\\d+)?);`));
+    assert(found, `interactives/convolution/player.js no longer defines ${name}`);
+    return Number(found[1]);
+  };
+  const lastStep = constant("lastStep");
+  const phaseSeconds = constant("phaseSeconds");
+  assert.deepEqual(scene.beats, Array.from({ length: lastStep + 1 }, (_, index) => index * phaseSeconds));
+  assert.equal(scene.duration, (lastStep + 1) * phaseSeconds);
+});
+
+test("the step is announced once, by the scrubber, with no second describing label", async t => {
+  const context = await initialized(t);
+  const slider = context.query('input[type="range"]');
+  assert.equal(slider.getAttribute("aria-describedby"), null,
+    "the scrubber's own aria-valuetext is the announcement; a description would repeat it");
+  assert.equal(context.document.getElementById("convolution-step-label"), null);
+  assert.equal(context.root.querySelectorAll("[aria-describedby]").length, 1,
+    "only the player pane still points at the keyboard help");
+  assert.equal(context.query(".conv-excerpt__player").getAttribute("aria-describedby"), "convolution-keyboard");
+  assert.equal(context.query('label[for="convolution-step"]').textContent, "Playback position");
+  for (const step of [0, 3, 7, 15]) {
+    context.seek(step * 2.5);
+    assert.match(slider.getAttribute("aria-valuetext"), /Step \d+ of 16/);
+    assert.equal(slider.getAttribute("aria-valuetext").match(/Step \d+ of 16/g).length, 1);
+    assert.match(slider.getAttribute("aria-valuetext"), new RegExp(`Step ${step + 1} of 16`));
+  }
+  assert.doesNotMatch(panel, /convolution-step-label/,
+    "the sr-only step label is gone from the static markup too");
+  assert.doesNotMatch(player, /convolution-step-label/);
+});
+
+test("a link to the transcript opens the excerpt and the transcript, still paused", async t => {
+  const context = fixture(t, "#convolution-transcript");
+  const transcript = context.query("#convolution-transcript");
+  assert.equal(transcript.tagName, "DETAILS");
+  assert.equal(transcript.open, false);
+  assert.equal(context.root.open, false);
+  // Assert synchronously, so a regression fails here instead of hanging on the toggle.
+  const toggled = new Promise(resolve => context.root.addEventListener("toggle", resolve, { once: true }));
+  context.evaluateLoader();
+  assert.equal(context.root.open, true);
+  assert.equal(transcript.open, true, "every details between the root and the target opens");
+  assert.equal(context.scripts().length, 1);
+  await toggled;
+  context.completeLoad();
+  assert.match(transcript.textContent, /weights never change/);
+  assertStopped(context, 0);
+});
+
+test("any hash inside the excerpt opens it; a hash outside or unresolved never does", async t => {
+  const context = fixture(t);
+  context.evaluateLoader();
+  const navigate = hash => {
+    context.window.history.replaceState(null, "", hash);
+    context.window.dispatchEvent(new context.window.HashChangeEvent("hashchange"));
+  };
+  for (const hash of ["#unrelated-section", "#convolution-step-label", "#"]) {
+    navigate(hash);
+    assert.equal(context.root.open, false, `${hash} resolves to nothing inside the excerpt`);
+    assert.equal(context.scripts().length, 0);
+  }
+  // A descendant that is not itself a disclosure still opens the root.
+  const toggled = new Promise(resolve => context.root.addEventListener("toggle", resolve, { once: true }));
+  navigate("#convolution-keyboard");
+  assert.equal(context.root.open, true);
+  await toggled;
+  assert.equal(context.query("#convolution-transcript").open, false,
+    "only the disclosures on the path to the target open");
+  assert.equal(context.scripts().length, 1);
+  context.completeLoad();
+  assertStopped(context, 0);
+});
+
+test("the panel names its fixed weights as the manuscript's vertical Sobel detector", async t => {
+  const context = fixture(t);
+  const kernelCard = context.query('[data-matrix="kernel"]').closest(".conv-excerpt__card");
+  const intro = context.query(".conv-excerpt__intro").textContent;
+  // Read before any script runs: the static fallback carries the name.
+  assert.match(intro, /vertical Sobel edge detector/);
+  assert.match(intro, /filter zoo below/, "the panel is injected above that section's heading");
+  assert.match(kernelCard.querySelector(".conv-excerpt__label").textContent, /vertical Sobel/);
+  assert.match(context.query('[data-matrix="kernel"]').getAttribute("aria-label"), /vertical Sobel/);
+  assert.doesNotMatch(intro + kernelCard.textContent, /learn|train/i,
+    "naming the detector must not imply the weights were learned");
+  // True to the manuscript: these are the nine weights the filter zoo prints.
+  const chapter = fs.readFileSync(path.join(__dirname, "..", "chapters", "part2", "07-filters-convolution.qmd"), "utf8");
+  assert(chapter.includes('"Sobel (vert.)": torch.tensor([[-1., 0., 1.], [-2., 0., 2.], [-1., 0., 1.]])'));
+  assert.deepEqual(context.values("kernel"), ["−1", "0", "1", "−2", "0", "2", "−1", "0", "1"]);
+  assert.match(chapter, /^## The filter zoo$/m);
+  // The player never rewrites either name while it runs.
+  const running = await initialized(t);
+  const label = () => running.query('[data-matrix="kernel"]').closest(".conv-excerpt__card")
+    .querySelector(".conv-excerpt__label").textContent;
+  const before = label();
+  running.seek(37.5);
+  assert.equal(label(), before);
+  assert.match(running.query('[data-matrix="kernel"]').getAttribute("aria-label"), /vertical Sobel/);
+});
+
+test("integration: the excerpt is HTML-only, keyed on one heading, and declared in the config", () => {
+  const filter = fs.readFileSync(path.join(__dirname, "..", "filters", "convolution-excerpt.lua"), "utf8");
+  assert.match(filter, /^(?:--[^\n]*\n)+if not FORMAT:match\("\^html"\) then return \{\} end/,
+    "the non-HTML guard is the first executable line, so the PDF is untouched");
+  assert.match(filter, /07%-filters%-convolution%.qmd\$/);
+  assert.match(filter, /== "The filter zoo"/);
+  assert.match(filter, /pandoc\.RawBlock\("html",[\s\S]*?\), header\}/,
+    "the panel is inserted above the heading it names");
+  assert.match(filter, /assert\(inserted == 1/);
+  const config = fs.readFileSync(path.join(__dirname, "..", "_quarto.yml"), "utf8");
+  const section = (key, text) => {
+    const start = text.indexOf(`\n${key}`);
+    assert(start >= 0, `${key} is missing from _quarto.yml`);
+    const rest = text.slice(start + 1 + key.length);
+    const end = rest.search(/\n\S/);
+    return end < 0 ? rest : rest.slice(0, end);
+  };
+  assert.match(section("  resources:", config), /^\s+- interactives\/convolution\/player\.js$/m);
+  const filters = section("filters:", config);
+  for (const name of ["filters/convolution-excerpt.lua", "filters/mechanism-excerpts.lua"])
+    assert.match(filters, new RegExp(`^\\s+- ${name.replace(/[/.]/g, "\\$&")}$`, "m"), `${name} must run`);
+});
+
+test("the scrubber names the step without repeating the live caption", async t => {
+  const context = await initialized(t);
+  const caption = context.query(".conv-excerpt__caption");
+  const slider = context.query('input[type="range"]');
+  for (let step = 0; step < 16; step++) {
+    for (const seconds of [step * 2.5, step * 2.5 + 1.25]) {
+      context.seek(seconds);
+      const spoken = caption.textContent.trim();
+      const valuetext = slider.getAttribute("aria-valuetext");
+      assert(spoken.length > 0, `no caption at ${seconds}s`);
+      assert(!valuetext.includes(spoken),
+        `aria-valuetext repeats the caption at ${seconds}s:\n  caption   ${spoken}\n  valuetext ${valuetext}`);
+    }
+  }
 });
