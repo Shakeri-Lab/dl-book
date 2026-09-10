@@ -2,24 +2,33 @@
   const root = document.getElementById('bert-ledger-excerpt');
   if (!root || root.dataset.ready) return;
   const $ = selector => root.querySelector(selector);
-  const original = ['[CLS]', 'the', 'quiet', 'bank', 'rose', 'after', 'the', 'rain', 'today', '[SEP]', '[PAD]', '[PAD]'];
-  const eligible = original.map((_, i) => i >= 1 && i <= 8);
-  const selected = original.map((_, i) => [2, 4, 7, 8].includes(i));
-  const mask_sites = original.map((_, i) => [2, 7].includes(i));
-  const random_sites = original.map((_, i) => i === 4);
-  const unchanged_sites = original.map((_, i) => i === 8);
+  // The rail is the one in-repo mirror of the manuscript fixture
+  // (chapters/part4/15-bert-pretraining.qmd:269-283): its cells carry the twelve tokens and its
+  // attributes carry the Boolean rows as position lists. interactives/manifest.json names those
+  // literals and scripts/audit_excerpt_fixtures.py keeps the chapter and this rail together.
+  const rail = $('[data-token-rail]');
+  const original = [...rail.querySelectorAll('[data-token] .bert-original')].map(cell => cell.textContent);
+  const row = name => {
+    const sites = new Set(rail.dataset[name].trim().split(/\s+/).filter(Boolean).map(Number));
+    return original.map((_, index) => sites.has(index));
+  };
+  const eligible = row('eligible'), selected = row('selected');
+  const mask_sites = row('maskSites'), random_sites = row('randomSites');
+  // Derived exactly as the chapter derives it: selected & ~mask_sites & ~random_sites.
+  const unchanged_sites = selected.map((bit, i) => bit && !mask_sites[i] && !random_sites[i]);
   const visible = original.map(token => token !== '[PAD]');
-  const corrupted = original.map((token, i) => mask_sites[i] ? '[MASK]' : random_sites[i] ? 'bank' : token);
+  const replacement = rail.dataset.randomReplacement;
+  const corrupted = original.map((token, i) => mask_sites[i] ? '[MASK]' : random_sites[i] ? replacement : token);
   const ledgers = {eligible, selected, mask_sites, random_sites, unchanged_sites};
   const scenes = [
     {start: 0, until: 4, index: 8, phase: 0, kind: 'ask', title: 'Predict before playing'},
     {start: 4, until: 8, index: 8, phase: 0, kind: 'setup', title: 'Change the input; save the originals'},
     {start: 8, until: 14, index: 2, phase: 1, kind: 'case', title: 'Masked: quiet becomes [MASK]'},
     {start: 14, until: 20, index: 4, phase: 2, kind: 'case', title: 'Replaced: rose becomes bank'},
-    {start: 20, until: 28, index: 8, phase: 3, kind: 'case', title: 'Unchanged, but chosen'},
-    {start: 28, until: 34, index: 3, phase: 4, kind: 'case', title: 'Also unchanged, but NOT chosen'},
-    {start: 34, until: 36, index: 9, phase: 4, kind: 'boundary', title: 'Special does not mean invisible'},
-    {start: 36, until: 38, index: 10, phase: 4, kind: 'boundary', title: 'Padding is a separate control'},
+    {start: 20, until: 26, index: 8, phase: 3, kind: 'case', title: 'Unchanged, but chosen'},
+    {start: 26, until: 32, index: 3, phase: 4, kind: 'case', title: 'Also unchanged, but NOT chosen'},
+    {start: 32, until: 35, index: 9, phase: 4, kind: 'boundary', title: 'Special does not mean invisible'},
+    {start: 35, until: 38, index: 10, phase: 4, kind: 'boundary', title: 'Padding is a separate control'},
     {start: 38, until: Infinity, index: 8, phase: 3, kind: 'recap', title: 'Chosen is what makes it count'}
   ];
   const clamp = n => Math.max(0, Math.min(1, n));
@@ -67,7 +76,10 @@
     const scene = scenes.find(s => time < s.until), i = scene.index;
     reduced = reducedMotion;
     const preparing = scene.kind === 'ask' || scene.kind === 'setup';
-    const fraction = scene.kind === 'case' ? (time - scene.start) / (scene.until - scene.start) : preparing ? 0 : 1;
+    // Boundary scenes draw their routes on the same ramp as the cases, so [SEP] and
+    // [PAD] arrive rather than appearing complete the instant the scene starts.
+    const timed = scene.kind === 'case' || scene.kind === 'boundary';
+    const fraction = timed ? (time - scene.start) / (scene.until - scene.start) : preparing ? 0 : 1;
     const beat = Math.min(3, Math.floor(fraction * 4));
     // Drawing order is explanatory, not separate forward passes or masks.
     progress = {
@@ -78,6 +90,11 @@
     if (reduced) Object.keys(progress).forEach(name => { progress[name] = progress[name] >= 1 ? 1 : 0; });
     const scored = !preparing && selected[i] && beat === 3;
     const outputReady = !preparing && beat >= 1;
+    // One branch clause, used by the ledger line and by the scrubber. The caption is a
+    // live region, so aria-valuetext must not carry the caption sentence as well.
+    const branch = scene.kind === 'ask' ? 'predict first.' : mask_sites[i] ? 'selected; masked.'
+      : random_sites[i] ? 'selected; randomly replaced.'
+        : unchanged_sites[i] ? 'selected; unchanged.' : 'not selected.';
     const key = `${scene.start}/${beat}`;
     root.dataset.position = String(i);
     root.dataset.selected = String(selected[i]);
@@ -86,19 +103,16 @@
     root.dataset.beat = String(beat);
     if (key !== previousKey) {
       previousKey = key;
-      root.dataset.ledgers = JSON.stringify(ledgers);
-      root.dataset.corrupted = JSON.stringify(corrupted);
-      root.dataset.original = JSON.stringify(original);
       [...root.querySelectorAll('[data-token]')].forEach((token, index) => {
         const input = scene.kind === 'ask' ? original[index] : corrupted[index];
         const chosen = scene.kind !== 'ask' && selected[index];
         token.querySelector('b').textContent = input;
         token.querySelector('.bert-change').textContent = input === original[index] ? '=' : '↓';
-        token.querySelector('[data-choice]').textContent = chosen ? 'chosen' : '';
+        token.querySelector('[data-choice]').textContent = chosen ? (random_sites[index] ? 'chosen*' : 'chosen') : '';
         token.classList.toggle('is-selected', chosen);
         token.classList.toggle('is-changed', input !== original[index]);
         token.classList.toggle('is-focus', index === i);
-        token.setAttribute('aria-label', `Position ${index}. Original ${original[index]}; input ${input}.${chosen ? ' Chosen for target selection.' : ''}${index === i ? ' Focused.' : ''}${!visible[index] ? ' Padding; blocked as attention key.' : ''}`);
+        token.setAttribute('aria-label', `Position ${index}. Original ${original[index]}; input ${input}.${chosen ? ' Chosen for target selection.' : ''}${random_sites[index] && input !== original[index] ? ' Input is one illustrative random replacement.' : ''}${index === i ? ' Focused.' : ''}${!visible[index] ? ' Padding; blocked as attention key.' : ''}`);
       });
       $('[data-case]').textContent = scene.title;
       $('[data-focus]').textContent = `Position ${i}: ${original[i]}`;
@@ -107,7 +121,7 @@
         bit.textContent = scene.kind === 'ask' ? '?' : String(Number(flags[i]));
         bit.dataset.value = scene.kind === 'ask' ? '' : String(Number(flags[i]));
       });
-      $('[data-branch]').textContent = `Position ${i}: ${scene.kind === 'ask' ? 'predict first.' : mask_sites[i] ? 'selected; masked.' : random_sites[i] ? 'selected; randomly replaced.' : unchanged_sites[i] ? 'selected; unchanged.' : 'not selected.'}`;
+      $('[data-branch]').textContent = `Position ${i}: ${branch}`;
       $('[data-input]').textContent = scene.kind === 'ask' ? original[i] : corrupted[i];
       $('[data-input-heading]').textContent = visible[i] ? 'In BERT’s input' : 'Padding token';
       $('[data-input-note]').textContent = visible[i] ? 'One position in the full corrupted context' : 'Blocked as an attention key';
@@ -140,11 +154,18 @@
       else if (selected[i]) caption = scored ? 'Unchanged AND chosen: today still counts.'
         : 'Today stays visible and was chosen. Follow its prediction to the loss.';
       else caption = 'Bank is unchanged but not chosen. It supplies context, not a direct loss.';
-      $('[data-caption]').textContent = caption;
+      // Same rule as the kernel scene: a polite live region is written only when it changes,
+      // and the beat guard above fires several times inside one scene.
+      const captionNode = $('[data-caption]');
+      if (captionNode.textContent !== caption) captionNode.textContent = caption;
       layout();
     }
     drawRays();
-    return `Position ${i}, ${original[i]}. ${$('[data-caption]').textContent}`;
+    return `Position ${i}, ${original[i]}: ${branch}`;
   }
+  // The fixture never changes while the scene runs; serialise the inspectable copy once.
+  root.dataset.ledgers = JSON.stringify(ledgers);
+  root.dataset.corrupted = JSON.stringify(corrupted);
+  root.dataset.original = JSON.stringify(original);
   window.BookPlayback(root, render, layout);
 })();

@@ -5,14 +5,20 @@
     if (root.dataset.ready) return;
     const $ = selector => root.querySelector(selector);
     const pane = $('[data-pane]'), play = $('[data-action="play"]');
-    const range = $('input[type="range"]'), rate = $('[data-speed]');
+    const range = $('[data-controls] input[type="range"]'), rate = $('[data-speed]');
     const fullscreen = $('[data-action="fullscreen"]'), dialog = $('dialog');
     const notice = $('[data-notice]');
     const motion = matchMedia('(prefers-reduced-motion: reduce)');
-    const duration = Number(range.max), step = 2.5;
+    const duration = Number(pane.dataset.duration || range.max), step = 2.5;
+    const beats = (pane.dataset.beats || '').trim().split(/\s+/)
+      .filter(Boolean).map(Number).filter(Number.isFinite);
     let time = 0, speed = Number(rate.value), playing = false, frame = null;
     let anchorTime = 0, anchorClock = 0;
     const clock = t => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
+    // One declared duration fills the scrubber range, the printed clock, and the readout.
+    range.max = String(duration);
+    $('[data-controls] [data-duration]').textContent = ` / ${clock(duration)}`;
+    root.dataset.duration = String(duration);
     const label = (button, text) => {
       button.setAttribute('aria-label', text);
       button.title = text;
@@ -30,7 +36,6 @@
       root.dataset.playing = String(playing);
       label(play, playing ? 'Pause' : time === duration ? 'Replay' : 'Play');
       play.dataset.state = playing ? 'pause' : time === duration ? 'replay' : 'play';
-      play.setAttribute('aria-pressed', String(playing));
     }
     function stop() {
       if (playing) advance(performance.now());
@@ -60,6 +65,12 @@
       time = Math.max(0, Math.min(duration, Number.isFinite(value) ? value : 0));
       draw();
     }
+    // Declared beats put Left/Right on scene boundaries; without them, one fixed step.
+    const beat = back => {
+      if (back) return beats.reduce((best, value) => value < time ? value : best, 0);
+      const next = beats.find(value => value > time);
+      return next === undefined ? duration : next;
+    };
     const toggle = () => playing ? stop() : start();
     play.addEventListener('click', toggle);
     range.addEventListener('input', () => seek(Number(range.value)));
@@ -84,7 +95,7 @@
           try { dialog.showModal(); }
           catch (error) { dialog.before(pane); pane.classList.remove('is-expanded'); throw error; }
           label(fullscreen, 'Exit expanded view');
-          fullscreen.setAttribute('aria-pressed', 'true');
+          fullscreen.dataset.state = 'contract';
           layout();
         }
       } catch (_) {
@@ -94,7 +105,7 @@
     dialog.addEventListener('close', () => {
       stop(); dialog.before(pane); pane.classList.remove('is-expanded');
       label(fullscreen, native ? 'Fullscreen' : 'Expand');
-      fullscreen.setAttribute('aria-pressed', 'false');
+      fullscreen.dataset.state = 'expand';
       layout();
       if (root.open) fullscreen.focus();
     });
@@ -103,7 +114,7 @@
     document.addEventListener('fullscreenchange', () => {
       const active = document.fullscreenElement === pane;
       label(fullscreen, active ? 'Exit fullscreen' : native ? 'Fullscreen' : 'Expand');
-      fullscreen.setAttribute('aria-pressed', String(active));
+      fullscreen.dataset.state = active ? 'contract' : 'expand';
       if (wasFullscreen && !active) stop();
       wasFullscreen = active; layout();
     });
@@ -122,7 +133,8 @@
       event.preventDefault();
       if (event.repeat && [' ', 'k', 'K'].includes(event.key)) return;
       if ([' ', 'k', 'K'].includes(event.key)) toggle();
-      else seek(event.key === 'Home' ? 0 : event.key === 'End' ? duration
+      else if (event.key === 'Home' || event.key === 'End') seek(event.key === 'Home' ? 0 : duration);
+      else seek(beats.length ? beat(event.key === 'ArrowLeft')
         : time + (event.key === 'ArrowLeft' ? -step : step));
     });
     document.addEventListener('visibilitychange', () => { if (document.hidden) stop(); });

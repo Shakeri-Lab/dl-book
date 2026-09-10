@@ -38,6 +38,10 @@
   const duration = (lastStep + 1) * phaseSeconds;
   const number = value => Object.is(value, -0) ? '0' : String(value);
   const formatTime = value => `${Math.floor(value / 60)}:${String(Math.floor(value % 60)).padStart(2, '0')}`;
+  // One declared duration fills the scrubber range, the printed clock, and the readout.
+  slider.max = String(duration);
+  root.querySelector('.conv-excerpt__controls [data-duration]').textContent = ` / ${formatTime(duration)}`;
+  root.dataset.duration = String(duration);
   function labelButton(button, label) {
     button.setAttribute('aria-label', label);
     button.title = label;
@@ -102,7 +106,7 @@
     ];
     caption.textContent = captions[phase];
     root.querySelectorAll('.conv-excerpt__stages span').forEach((node, i) => node.classList.toggle('is-current', i === phase));
-    root.querySelector('#convolution-step-label').textContent = `${step + 1} of 16`;
+    // The step is announced once, by the scrubber's aria-valuetext. No second label.
     root.dataset.step = String(step);
   }
   function drawRays() {
@@ -209,13 +213,12 @@
     windowBox.style.left = `${(col + (nextCol - col) * blend) * 25}%`;
     windowBox.style.top = `${(row + (nextRow - row) * blend) * 25}%`;
     slider.value = String(time);
-    slider.setAttribute('aria-valuetext', `${formatTime(time)} of 0:40. Step ${step + 1} of 16. ${['Place', 'Multiply', 'Sum', 'Slide'][phase]}. Patch ${visit + 1} of 4.`);
+    slider.setAttribute('aria-valuetext', `${formatTime(time)} of ${formatTime(duration)}. Step ${step + 1} of 16. ${['Place', 'Multiply', 'Sum', 'Slide'][phase]}. Patch ${visit + 1} of 4.`);
     root.querySelector('[data-elapsed]').textContent = formatTime(time);
     root.dataset.time = String(time);
     root.dataset.playing = String(playing);
     labelButton(play, playing ? 'Pause' : time === duration ? 'Replay' : 'Play');
     play.dataset.state = playing ? 'pause' : time === duration ? 'replay' : 'play';
-    play.setAttribute('aria-pressed', String(playing));
   }
   function tick(now) {
     frame = null;
@@ -263,7 +266,7 @@
       throw error;
     }
     labelButton(fullscreen, 'Exit expanded view');
-    fullscreen.setAttribute('aria-pressed', 'true');
+    fullscreen.dataset.state = 'contract';
     drawRays();
   }
   dialog.addEventListener('close', () => {
@@ -271,7 +274,7 @@
     dialog.before(stage);
     stage.classList.remove('is-expanded');
     labelButton(fullscreen, nativeFullscreen ? 'Fullscreen' : 'Expand');
-    fullscreen.setAttribute('aria-pressed', 'false');
+    fullscreen.dataset.state = 'expand';
     drawRays();
     if (root.open) fullscreen.focus();
   });
@@ -291,7 +294,7 @@
   document.addEventListener('fullscreenchange', () => {
     const active = document.fullscreenElement === stage;
     labelButton(fullscreen, active ? 'Exit fullscreen' : nativeFullscreen ? 'Fullscreen' : 'Expand');
-    fullscreen.setAttribute('aria-pressed', String(active));
+    fullscreen.dataset.state = active ? 'contract' : 'expand';
     if (wasFullscreen && !active) stop();
     wasFullscreen = active;
     drawRays();
