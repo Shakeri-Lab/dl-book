@@ -1,3 +1,22 @@
+# Rolling post-v1.3 — animation repairs and response-mask excerpt (September 11, 2026)
+
+Repair the LSTM equation links and give pooling, hinge-bump, quantization, and LSTM
+readable phone-width static fallbacks, including when JavaScript is unavailable.
+Enlarge quantization/LSTM narrow labels and keep the LSTM state and readout
+equations on separate, semantically complete rows.
+Update the animation inventory to the ten scenes in `0674cab` and distinguish
+softmax's displayed exponential geometry from its max-subtracted computation.
+Remove two machine-specific scratch scripts; they remain recoverable from Git.
+
+Chapter 18's author-approved excerpt follows a predictor to the next token's
+response mask. It distinguishes changing excluded output logits from changing the
+prompt context. This is an optional HTML explanation of the existing audit, not new
+numerical evidence. No manuscript, frozen stdout, PDF settings, or release tags change.
+The feedback pass adds explicitly illustrative word aliases, aligned shifted
+targets, target-attached ×0/×1 gates, and labeled symbolic scores. It keeps prompt
+context visible, uses one sequence at a time, and wraps into three-column strips
+on phones. No hover-only controls, distribution curves, or dependencies are added.
+
 # Rolling post-v1.3 — kernel weighting and BERT masking (September 9, 2026)
 
 Two optional HTML-only excerpts now accompany the existing Chapter 12 Gaussian

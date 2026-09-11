@@ -1,6 +1,13 @@
 # Wave 2 plan — mechanism excerpts, and how to build them cheaply
 
-Status: proposal, not authorization. `docs/animation-authoring.md` still says it does not
+Status update, September 11, 2026: four Wave 2 scenes are committed in `0674cab`.
+The author approved repairs and mask/predictor for publication after local review,
+then requested reference tilt as the next local-review scene. The other later
+wave entries remain proposals. The
+historical build-route discussion below does not authorize a new shared animation
+kit; reuse existing transport and only extract helpers when actual duplication warrants it.
+
+Original proposal status: `docs/animation-authoring.md` said it did not
 authorize additional scenes; the author approves each wave by reviewing it in a browser.
 Companion documents: `docs/wave1-excerpts.md` (what shipped and why), `docs/backlog.md`
 (the roadmap), `docs/animation-authoring.md` (the contract and the visual grammar).
@@ -60,11 +67,11 @@ Wave 2–4 scene that has a film counterpart (all but Ch11 greedy tree and A1 SV
    mostly mechanical (JSX → the player\'s `render(time)`), not a redesign.
 2. Bind numbers to the manuscript: replace the film\'s seeded values with the chapter\'s printed
    fixture, declare in the receipt what the film showed instead (e.g. softmax: 3 logits → 4).
-3. Draw with the shared kit, `interactives/shared/kit.js`, extracted from the three Wave 1
-   players: bars with dashed ghosts, chain with a travelling nudge, belt with valves, log axis,
-   colour band, token, parameter slider, ratio badge, formula class toggles. Each primitive is a
-   pure function state → SVG attributes, so `render(time)` stays deterministic and the static
-   fallback is the primitive\'s output at `t = duration` (`scripts/render_static_frames.cjs`).
+3. Reuse the existing shared transport and test harness; keep the scene renderer a
+   pure function of time and declared inputs. The proposed `shared/kit.js` was not
+   required for the four implemented ports and is not a prerequisite for the fifth.
+   Extract only demonstrably shared drawing code, not a general engine. Generate
+   wide and narrow final-frame fallbacks with `scripts/render_static_frames.cjs`.
 4. Typeset the film\'s KaTeX string through the book\'s MathJax with the book macros (the film
    already uses the same colour roles), wrapped in `<span id="eq-…">`.
 5. One visual check on rendered frames at 1280 and 390 px against the grammar, the fixture
@@ -81,11 +88,11 @@ Wave 2–4 scene that has a film counterpart (all but Ch11 greedy tree and A1 SV
 | 4 | Ch17 `quantization-grid` | B, port of `QuantGrid` (+ bit-width slider) | after `cell-fig-quantization-granularity` (17-peft-quantization.qmd:1123) | `6050-Ch17` `QuantGrid` | L1132–1134 eight values, `@eq-symmetric-quantization` |
 | 5 | Ch18 `mask-predictor` | B, port of `MaskReceipt` | before H2 "A preference is a measurement…" (18-alignment.qmd:237) unless the author labels the audit cell | `6050-Ch18` `MaskReceipt` | L193–200 tokens and masks (symbolic terms) |
 
-Open decisions carried from the plan: E1 (Ch5 figure orange vs excerpt wine — resolved in the
-receipt as a documented difference; the author may still ask for the figure's colour), E5 (Ch18
-anchor), and the new one above: whether film clips (Route A) are admissible.
+Resolved decisions: E1 (Ch5 figure orange vs excerpt wine) is a documented
+difference in the receipt. E5 uses the before-heading anchor without a QMD edit.
+Route A is rejected: the author wants native lightweight ports, not the film runtime.
 
-## 5. Waves 3–4 (unchanged from the approved plan)
+## 5. Waves 3–4 (shortlist, not implementation authorization)
 
 Wave 3: Ch18 `reference-tilt` (port of `GibbsTilt`, β slider), Ch19 `score-field` (port of
 `ScoreField`; needs the author's OK against the diffusion deferral), Ch16 `attention-bill` (port

@@ -26,6 +26,8 @@
   }
   const pane = $('[data-pane]'), figure = $('[data-figure]'), svg = figure.querySelector('svg');
   const drawing = svg.querySelector('[data-drawing]'), caption = $('[data-caption]');
+  // The no-script narrow print is not a second live drawing.
+  svg.querySelectorAll('[data-static-frame]').forEach(node => node.remove());
   const slider = $('[data-bits-slider]'), readout = $('[data-bits-readout]');
   const beats = pane.dataset.beats.trim().split(/\s+/).map(Number);
   const duration = Number(pane.dataset.duration || beats[beats.length - 1]);
@@ -121,16 +123,16 @@
   // matter written above it, the grid's two end ticks and its collided ticks written under it,
   // the error bars in lanes under those, then one grid line and, at the last beat, one payload
   // line. Wide is the desktop figure; narrow (phone widths) is the same line in a smaller box
-  // with the value labels staggered into two rows and the type stepped down by player.css.
+  // with staggered labels and extra vertical lanes, so phone type stays readable.
   const LAYOUT = {
     wide: {viewBox: '0 0 860 176', left: 50, right: 810, lineY: 70, labelY: [24, 24], ghostR: 4.5, dotR: 7, lift: 15,
       stackMax: 24, tickH: 16, fineTickH: 10, bandH: 6, basinPad: 4, bracketY: 32, bracketLeg: 9, bracketLabelY: 22,
       tickLabelY: 102, laneY: 116, laneGap: 9, errorGap: 14, statsGap: 20, payloadGap: 18, ringPad: 4, tieMin: 4,
       labelPx: 42, minTickPx: 2.2},
-    narrow: {viewBox: '0 0 360 166', left: 28, right: 332, lineY: 66, labelY: [22, 36], ghostR: 3.5, dotR: 5, lift: 11,
+    narrow: {viewBox: '0 0 360 292', left: 28, right: 332, lineY: 116, labelY: [55, 77], ghostR: 3.5, dotR: 5, lift: 11,
       stackMax: 16, tickH: 12, fineTickH: 8, bandH: 5, basinPad: 3, bracketY: 30, bracketLeg: 7, bracketLabelY: 20,
-      tickLabelY: 94, laneY: 106, laneGap: 8, errorGap: 12, statsGap: 23, payloadGap: 16, ringPad: 4, tieMin: 3,
-      labelPx: 30, minTickPx: 3}
+      tickLabelY: 150, laneY: 172, laneGap: 12, errorGap: 19, statsGap: 32, payloadGap: 24, ringPad: 4, tieMin: 3,
+      labelPx: 44, minTickPx: 3}
   };
   const num = value => Number(value.toFixed(2));
 
@@ -314,11 +316,16 @@
     // The grid, named once, under the picture; and at the closing beat what this grid costs
     // against the one that pulled the pairs apart.
     if (statsIn !== null) {
-      const payload = dragged ? ` · <tspan data-value="payload">${gb(grid)}</tspan> GB per billion weights` : '';
+      const payload = dragged ? (stagger
+        ? `<tspan x="${g.left}" dy="24"> · <tspan data-value="payload">${gb(grid)}</tspan> GB per billion weights</tspan>`
+        : ` · <tspan data-value="payload">${gb(grid)}</tspan> GB per billion weights`) : '';
       text(g.left, statsY, `<tspan data-value="ticks">${grid.ticks}</tspan> ticks · s = <tspan data-value="s">${fmtS(grid, grid.s)}</tspan>${payload}`, 'qg-stats', 'start', ` data-stats="grid" opacity="${num(statsIn)}"`);
     }
     if (payloadIn !== null) {
-      text(g.left, payloadY, `payload = <tspan data-value="payload">${gb(grid)}</tspan> GB per billion weights, against <tspan data-value="payload8">${gb(G8)}</tspan> GB at eight bits`, 'qg-payload', 'start', ` data-payload="" opacity="${num(payloadIn)}"`);
+      const comparison = stagger
+        ? `<tspan x="${g.left}" dy="24"> against <tspan data-value="payload8">${gb(G8)}</tspan> GB at eight bits</tspan>`
+        : ` against <tspan data-value="payload8">${gb(G8)}</tspan> GB at eight bits`;
+      text(g.left, payloadY, `payload = <tspan data-value="payload">${gb(grid)}</tspan> GB per billion weights,${comparison}`, 'qg-payload', 'start', ` data-payload="" opacity="${num(payloadIn)}"`);
     }
     return parts.join('');
   }

@@ -34,10 +34,10 @@ const WIDE = 780, NARROW = 360;
 const G = {left: 50, right: 810, lineY: 70, labelY: 24, ghostR: 4.5, dotR: 7, lift: 15, stackMax: 24,
   tickH: 16, basinPad: 4, bracketY: 32, bracketLeg: 9, bracketLabelY: 22, tickLabelY: 102, laneY: 116, laneGap: 9,
   errorGap: 14, statsGap: 20, payloadGap: 18, ringPad: 4, tieMin: 4, viewBox: '0 0 860 176'};
-const NG = {left: 28, right: 332, lineY: 66, labelY: 22, ghostR: 3.5, dotR: 5, lift: 11, stackMax: 16,
-  tickH: 12, basinPad: 3, bracketY: 30, bracketLeg: 7, bracketLabelY: 20, tickLabelY: 94, laneY: 106, laneGap: 8,
-  errorGap: 12, statsGap: 23, payloadGap: 16, ringPad: 4, tieMin: 3, viewBox: '0 0 360 166',
-  width: 360, height: 166};
+const NG = {left: 28, right: 332, lineY: 116, labelY: 77, ghostR: 3.5, dotR: 5, lift: 11, stackMax: 16,
+  tickH: 12, basinPad: 3, bracketY: 30, bracketLeg: 7, bracketLabelY: 20, tickLabelY: 150, laneY: 172, laneGap: 12,
+  errorGap: 19, statsGap: 32, payloadGap: 24, ringPad: 4, tieMin: 3, viewBox: '0 0 360 292',
+  width: 360, height: 292};
 // Two drawing rules this suite restates rather than reads from the player. A stack of dots
 // sharing one tick may not grow past `stackMax` units, so it never reaches the bound bracket
 // above the line. And the two rows under the line sit below however many lanes the error bars
@@ -865,10 +865,10 @@ test('quant: the static fallback prints the closing frame with every witness val
     `${MINUS}0.667`, `${MINUS}1.00`, '1.00', `${MINUS}0.79`, `${MINUS}0.54`, `${MINUS}0.11`, '0.08', '0.31', '0.72']) {
     assert(text.includes(witness), `static panel lacks ${witness}`);
   }
-  assert.equal(s.root.querySelectorAll('[data-mark="dot"]').length, 8);
-  assert.equal(s.root.querySelectorAll('text[data-w]').length, 6, 'the six weights the ruler does not name are written as ghosts');
-  assert.equal(s.root.querySelectorAll('[data-ring]').length, 2);
-  assert.equal(s.root.querySelectorAll('[data-error]').length, 0, 'the bars belong to a beat that is over');
+  assert.equal(s.$('[data-drawing]').querySelectorAll('[data-mark="dot"]').length, 8);
+  assert.equal(s.$('[data-drawing]').querySelectorAll('text[data-w]').length, 6, 'the six weights the ruler does not name are written as ghosts');
+  assert.equal(s.$('[data-drawing]').querySelectorAll('[data-ring]').length, 2);
+  assert.equal(s.$('[data-drawing]').querySelectorAll('[data-error]').length, 0, 'the bars belong to a beat that is over');
   assert.equal(s.$('[data-bits-readout]').textContent.replace(/\s+/g, ' '), 'b = 3 bits');
   assert.equal(s.$('[data-figure] svg').getAttribute('viewBox'), G.viewBox);
   assert.equal(s.root.className, 'mechanism-excerpt show-formula stage-4');
@@ -883,7 +883,11 @@ test('quant: the static fallback prints the closing frame with every witness val
   // copy of the witness numbers.
   for (const witness of [`${MINUS}0.667`, '255 ticks', '0.375 GB']) assert(title.includes(witness), `the svg title lacks ${witness}`);
   // The whole pane minus the control bar and the live aria-valuetext is byte-equal to that render.
-  const strip = f => drawnMarkup(f).replace(/ aria-valuetext="[^"]*"/g, '');
+  const strip = f => {
+    const pane = f.$('[data-pane]').cloneNode(true);
+    pane.querySelectorAll('[data-controls], [data-notice], [data-static-frame]').forEach(node => node.remove());
+    return canonicalMarkup(pane.innerHTML).replace(/ aria-valuetext="[^"]*"/g, '');
+  };
   const clean = fixture(t, NAME, {width: WIDE});
   const staticPane = strip(clean);
   clean.load(); clean.open(); clean.seek(scene.duration);
@@ -919,6 +923,50 @@ test('quant: below 600 px the same picture reflows into a smaller line with stag
   assert.equal(w.root.dataset.layout, 'wide'); assert.equal(new Set(labels(w).map(n => n.getAttribute('y'))).size, 1);
   w.resize(NARROW); assert.equal(w.root.dataset.layout, 'narrow'); assert.equal(w.$('[data-figure] svg').getAttribute('viewBox'), NG.viewBox);
   assert.equal(w.time, scene.duration); assert(!w.playing);
+});
+
+test('quant: the script-free phone frame keeps its witness and narrow type without loading a player', t => {
+  const f = fixture(t, NAME), svg = f.$('.qg-figure svg');
+  const narrow = svg.querySelector('[data-static-frame="narrow"]');
+  assert(narrow, 'a phone fallback must exist before the scene script loads');
+  assert.equal(svg.getAttribute('preserveAspectRatio'), 'xMinYMin meet');
+  assert.equal(narrow.dataset.width, '360'); assert.equal(narrow.dataset.height, '292');
+  assert.equal(narrow.getAttribute('transform'), `scale(${(860 / 360).toFixed(4)})`);
+  assert.equal(narrow.querySelectorAll('[data-mark="dot"]').length, 8);
+  assert.equal(narrow.querySelectorAll('[data-ring]').length, 2);
+  assert.equal(new Set([...narrow.querySelectorAll('text[data-w]')].map(node => node.getAttribute('y'))).size, 2);
+  assert.equal(narrow.querySelector('[data-value="payload"]').textContent, '0.375');
+  const n = fixture(t, NAME, {width: NARROW}); n.load(); n.open(); n.seek(scene.duration);
+  assert.equal(canonicalMarkup(narrow.innerHTML), canonicalMarkup(n.$('[data-drawing]').innerHTML));
+  assert.match(css, /\.qg-figure \{ container-type: inline-size; \}/);
+  assert.match(css, /@container \(max-width: 599px\)/);
+  assert.match(css, /:not\(\[data-ready\]\) \.qg-figure svg \{ aspect-ratio: 360 \/ 292; \}/);
+  assert.match(css, /:not\(\[data-ready\]\) \.qg-figure \[data-drawing\] \{ display: none; \}/);
+  assert.match(css, /:not\(\[data-ready\]\) \.qg-figure \[data-static-frame="narrow"\] \{ display: block; \}/);
+  assert.match(css, /\.qg-figure \[data-static-frame="narrow"\] \.qg-value \{ font-size: 15px; \}/);
+  f.load(); f.open();
+  assert.equal(f.root.querySelectorAll('[data-static-frame]').length, 0);
+  assert.equal(f.root.querySelectorAll('[data-drawing]').length, 1);
+});
+
+test('quant: phone labels stay above twelve CSS pixels and long readouts use extra rows', t => {
+  const width = 296;
+  const f = fixture(t, NAME, {width}); f.load(); f.open(); f.seek(scene.duration);
+  for (const name of ['value', 'tick-label', 'bracket-label', 'longest', 'stats', 'payload']) {
+    const rule = css.match(new RegExp(`\\.qg-figure \\[data-static-frame="narrow"\\] \\.qg-${name} \\{ font-size: ([\\d.]+)px;`));
+    assert(rule, `missing shared active/static phone type for ${name}`);
+    assert(Number(rule[1]) * width / NG.width >= 12, `${name} is too small in a 296 px phone pane`);
+  }
+  const payload = f.root.querySelector('[data-payload]');
+  assert.equal(payload.querySelector('tspan[x]').getAttribute('dy'), '24');
+  assert.equal(payload.textContent, 'payload = 0.375 GB per billion weights, against 1 GB at eight bits');
+  for (const bits of [0, 1, 2, 3]) {
+    drag(f, bits);
+    const stats = f.root.querySelector('[data-stats="grid"]');
+    const secondRow = stats.querySelector('tspan[x]');
+    assert(secondRow, 'dragged payload must wrap rather than shrink');
+    assert(Number(stats.getAttribute('y')) + Number(secondRow.getAttribute('dy')) < NG.height);
+  }
 });
 
 test('quant: the panel is the only fixture copy -- moving it moves every number', t => {

@@ -25,6 +25,22 @@ const NARROW = /(<!-- static-frame-narrow[^>]*-->\s*)<g data-static-frame="narro
 // one user unit is one CSS pixel on that page and the fallback is not a shrunken picture.
 const VIEWBOX = /<svg\b[^>]*\bviewBox="0 0 (\d+(?:\.\d+)?) (\d+(?:\.\d+)?)"/;
 
+// A second SVG print must not reuse the live drawing's IDs: otherwise its clip paths
+// can resolve to the wide geometry even while that drawing is hidden. Rename only
+// IDs declared inside this print and their local references; external links stay put.
+function narrowIds(markup) {
+  const ids = new Map([...markup.matchAll(/\sid=["']([^"']+)["']/g)]
+    .map(match => [match[1], `${match[1]}--static-narrow`]));
+  return markup
+    .replace(/(\sid=)(["'])([^"']+)\2/g, (_, prefix, quote, id) => `${prefix}${quote}${ids.get(id)}${quote}`)
+    .replace(/url\(\s*(["']?)#([^)'"\s]+)\1\s*\)/g,
+      (match, quote, id) => ids.has(id) ? `url(${quote}#${ids.get(id)}${quote})` : match)
+    .replace(/(\s(?:xlink:)?href=)(["'])#([^"']+)\2/g,
+      (match, prefix, quote, id) => ids.has(id) ? `${prefix}${quote}#${ids.get(id)}${quote}` : match)
+    .replace(/(\saria-(?:labelledby|describedby)=)(["'])([^"']*)\2/g,
+      (_, prefix, quote, value) => `${prefix}${quote}${value.split(/\s+/).map(id => ids.get(id) || id).join(' ')}${quote}`);
+}
+
 async function staticFrame(name) {
   const scene = entry(name);
   const file = path.join(ROOT, 'interactives', scene.scene, 'panel.html');
@@ -60,7 +76,7 @@ async function staticFrame(name) {
     const [, , nw, nh] = n.$('[data-figure] svg').getAttribute('viewBox').split(/\s+/).map(Number);
     const [, , ww] = viewBox.split(/\s+/).map(Number);
     const group = `<g data-static-frame="narrow" data-width="${nw}" data-height="${nh}" transform="scale(${(ww / nw).toFixed(4)})">`;
-    after = after.replace(NARROW, (_, open, close) => `${open}${group}${n.$('[data-drawing]').innerHTML}${close}`);
+    after = after.replace(NARROW, (_, open, close) => `${open}${group}${narrowIds(n.$('[data-drawing]').innerHTML)}${close}`);
   }
   for (const fn of cleanups) await fn();
   return {file, before: panel, after};

@@ -29,8 +29,8 @@ const WIDE = 700, NARROW = 360;
 const G = {viewBox: '0 0 712 376', beltY: 92, branchY: 250, unit: 56, barW: 26, port: 54, plusR: 18,
   inlet: 76, fValve: 172, mid: 252, plus: 352, tap: 424, ctOut: 508, ctilde: 76, iValve: 232,
   riser: 352, oValve: 576, hOut: 664, valueGap: 11};
-const NARROW_G = {viewBox: '0 0 360 330', width: 360, height: 330, beltY: 70, branchY: 204,
-  unit: 38, barW: 18, inlet: 36, mid: 124, ctOut: 252, hOut: 336, ctilde: 36, valueGap: 9};
+const NARROW_G = {viewBox: '0 0 360 350', width: 360, height: 350, beltY: 70, branchY: 204,
+  unit: 38, barW: 18, inlet: 36, mid: 124, ctOut: 252, hOut: 328, ctilde: 36, valueGap: 12};
 
 // Read the declared fixture from the closed panel. The panel is the one in-repo mirror of
 // this scene's numbers; everything below is computed from it, so no value is typed twice.
@@ -522,6 +522,8 @@ test('valves: the two formulas are TeX in eq- wrappers with the book\'s macros, 
     assert.match(span.textContent.trim(), /^\\\([\s\S]+\\\)$/, `${id} is not \\( … \\)`);
   }
   const line = tex(f, 1);
+  assert(line.includes('\\begin{aligned}') && line.includes('\\\\ \\featurepart{\\vect{h}_t}'),
+    'separate the complete state and read equations instead of wrapping inside a product');
   // The formula is @eq-lstm's last two lines: every carried quantity in \featurepart, every
   // valve in a \class{} the player can wash, and the chapter's own \odot and \tanh.
   for (const part of ['\\featurepart{\\vect{c}_t}', '\\featurepart{\\vect{c}_{t-1}}', '\\featurepart{\\tilde{\\vect{c}}_t}', '\\featurepart{\\vect{h}_t}']) assert(line.includes(part), `${part} missing from the formula`);
@@ -583,7 +585,7 @@ test('valves: the static fallback prints the final frame with every witness valu
   assert.equal(value(f, 'h'), two(hiddenState(fx, fx.stops.f[1], fx.stops.i[1], fx.stops.o[2])));
   assert.deepEqual([value(f, 'belt'), value(f, 'h'), value(f, 'carry')], ['1.00', '0.00', '1.00']);
   assert(f.root.querySelector('[data-held]') && mark(f, 'h-ghost') && mark(f, 'inlet-ghost') && mark(f, 'packet'));
-  assert.equal(f.root.querySelectorAll('[data-valve]').length, 3);
+  assert.equal(f.$('[data-drawing]').querySelectorAll('[data-valve]').length, 3);
   assert(!drawing(f).includes('·'), 'the final frame withholds nothing');
   assert.match(f.root.className, /\bstage-7\b/); assert.match(f.root.className, /\bshow-formula\b/);
   for (const wash of ['wash-f', 'wash-i', 'wash-o']) assert.doesNotMatch(f.root.className, new RegExp(`\\b${wash}\\b`));
@@ -610,7 +612,7 @@ test('valves: the static panel differs from the t = 40 render only where script 
   const strip = html => {
     const box = f.w.document.createElement('div');
     box.innerHTML = html;
-    box.querySelectorAll('[data-controls]').forEach(node => node.remove());
+    box.querySelectorAll('[data-controls], [data-static-frame]').forEach(node => node.remove());
     return canonicalMarkup(box.innerHTML);
   };
   const before = strip(pane.innerHTML);
@@ -624,6 +626,58 @@ test('valves: the static frame in panel.html is the player\'s own t = 40 drawing
   const {file, before, after} = await staticFrame(NAME);
   assert.equal(after, before, `${path.relative(path.join(__dirname, '..'), file)} is stale: run node scripts/render_static_frames.cjs ${scene.scene}`);
   assert.match(before, /<!-- static-frame[^>]*-->\s*<g data-drawing>[\s\S]*?<\/g>\s*<!-- \/static-frame -->/);
+});
+
+test('valves: the script-free narrow print matches the live phone frame and is removed on mount', t => {
+  const f = fixture(t, NAME);
+  const svg = f.$('.lv-figure svg'), narrow = svg.querySelector('[data-static-frame="narrow"]');
+  assert(narrow, 'a phone fallback must exist before the scene script loads');
+  assert.equal(svg.getAttribute('preserveAspectRatio'), 'xMinYMin meet');
+  assert.equal(narrow.dataset.width, '360'); assert.equal(narrow.dataset.height, '350');
+  assert.equal(narrow.getAttribute('transform'), `scale(${(712 / 360).toFixed(4)})`);
+  assert.equal(narrow.querySelectorAll('[data-valve]').length, 3);
+  assert.equal(narrow.querySelector('[data-value="belt"]').textContent, '1.00');
+  assert.equal(narrow.querySelector('[data-value="h"]').textContent, '0.00');
+  const n = fixture(t, NAME, {width: NARROW}); n.load(); n.open(); n.seek(scene.duration);
+  assert.equal(canonicalMarkup(narrow.innerHTML), canonicalMarkup(drawing(n)));
+  assert.match(css, /\.lv-figure \{ container-type: inline-size; \}/);
+  assert.match(css, /@container \(max-width: 599px\)/);
+  assert.match(css, /:not\(\[data-ready\]\) \.lv-figure svg \{ aspect-ratio: 360 \/ 350; \}/);
+  assert.match(css, /:not\(\[data-ready\]\) \.lv-figure \[data-drawing\] \{ display: none; \}/);
+  assert.match(css, /:not\(\[data-ready\]\) \.lv-figure \[data-static-frame="narrow"\] \{ display: block; \}/);
+  assert.match(css, /\.lv-figure \[data-static-frame="narrow"\] \.lv-value \{ font-size: 15px;/);
+  // Keep one math tag/id, at the active narrow geometry, scaled with the narrow drawing.
+  assert.equal(svg.querySelectorAll('#eq-lstm-valves-2').length, 1);
+  assert.match(css, /:not\(\[data-ready\]\) \.lv-figure \[data-tag="learned"\] \{\s*x: 12px; y: 284px; width: 300px; height: 30px;\s*transform: scale\(1\.9778\); transform-origin: 0 0;/);
+  f.load(); f.open();
+  assert.equal(f.root.querySelectorAll('[data-static-frame]').length, 0);
+  assert.equal(f.root.querySelectorAll('[data-drawing]').length, 1);
+});
+
+test('valves: public equation pointers are native links, not unresolved Quarto source', t => {
+  const f = fixture(t, NAME);
+  assert.doesNotMatch(f.root.textContent, /@(eq|fig|sec|tbl)-[\w-]+/);
+  const links = [...f.root.querySelectorAll('a[href="#eq-lstm"]')];
+  assert.equal(links.length, 2);
+  for (const link of links) assert.equal(link.textContent, 'the LSTM update equations');
+  assert(chapterSource(NAME).includes('{#eq-lstm}'), 'the native link target remains in the manuscript');
+});
+
+test('valves: substantive phone labels retain readable type and the footer has its own lane', t => {
+  const width = 296;
+  const f = fixture(t, NAME, {width}); f.load(); f.open(); f.seek(scene.duration);
+  for (const name of ['op-label', 'gate-name', 'gate-value', 'value', 'name', 'held']) {
+    const rule = css.match(new RegExp(`\\.lv-figure \\[data-static-frame="narrow"\\] \\.lv-${name} \\{ font-size: ([\\d.]+)px;`));
+    assert(rule, `missing shared active/static phone type for ${name}`);
+    assert(Number(rule[1]) * width / NARROW_G.width >= 12, `${name} is too small in a 296 px phone pane`);
+  }
+  for (const name of ['role', 'note']) {
+    const rule = css.match(new RegExp(`\\.lv-figure \\[data-static-frame="narrow"\\] \\.lv-${name} \\{ font-size: ([\\d.]+)px;`));
+    assert(Number(rule[1]) * width / NARROW_G.width >= 11.5, `${name} cannot disappear into tiny furniture`);
+  }
+  const tag = f.root.querySelector('[data-tag="learned"]');
+  assert(Number(tag.getAttribute('y')) > Math.max(...[...f.root.querySelectorAll('.lv-gate-value')].map(n => Number(n.getAttribute('y')))) + 15);
+  assert(Number(tag.getAttribute('y')) + Number(tag.getAttribute('height')) < Number(f.root.querySelector('.lv-note').getAttribute('y')) - 10);
 });
 
 test('valves: below 600 px the same picture reflows with nothing outside the viewBox', t => {

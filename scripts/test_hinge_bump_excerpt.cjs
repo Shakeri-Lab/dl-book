@@ -67,7 +67,7 @@ const slopes = f => JSON.parse(f.root.dataset.slopes);
 const texts = (f, selector) => [...f.root.querySelectorAll(selector)].map(node => node.textContent);
 const value = (f, name) => { const node = f.root.querySelector(`[data-value="${name}"]`); return node ? node.textContent : null; };
 // What the picture writes as a slope, in the order it writes it: [piece, text] per entry.
-const written = f => [...f.root.querySelectorAll('[data-slope]')].map(node => [node.dataset.piece, node.textContent.replace(/^slope\s*/, '')]);
+const written = f => [...f.root.querySelectorAll('[data-drawing] [data-slope]')].map(node => [node.dataset.piece, node.textContent.replace(/^slope\s*/, '')]);
 const tex = (f, n) => f.d.getElementById(`eq-hinge-bump-${n}`).textContent;
 const drawing = f => f.$('[data-drawing]').innerHTML;
 const classes = f => new Set([...f.root.classList]);
@@ -537,7 +537,7 @@ test('bump: the static fallback prints the final frame with every witness value'
   assert.deepEqual(written(f), [['0', '0']]);
   assert.equal(value(f, 'peak'), String(bump(fx, fx.breaks[1]))); assert.equal(value(f, 'peak'), '2');
   assert.equal(value(f, 'coef'), signed(fx.coefs[1]));
-  assert(f.root.querySelector('[data-bracket]') && f.root.querySelector('[data-mark="sum"]') && f.root.querySelectorAll('[data-hinge]').length === 3);
+  assert(f.root.querySelector('[data-bracket]') && f.root.querySelector('[data-mark="sum"]') && f.root.querySelectorAll('[data-drawing] [data-hinge]').length === 3);
   assert(!f.root.querySelector('[data-silhouette]'), 'the target has been consumed by the final frame');
   // The sentence the bare numeral stands for is in the title and the description, so a
   // script-free reader is still told what 2 is the value of.
@@ -569,7 +569,7 @@ test('bump: the static panel differs from the final render only where script mus
   const strip = html => {
     const box = f.w.document.createElement('div');
     box.innerHTML = html;
-    box.querySelectorAll('[data-controls]').forEach(node => node.remove());
+    box.querySelectorAll('[data-controls], [data-static-frame]').forEach(node => node.remove());
     return canonicalMarkup(box.innerHTML);
   };
   const before = strip(pane.innerHTML);
@@ -583,6 +583,39 @@ test('bump: the static frame in panel.html is the player\'s own final drawing', 
   const {file, before, after} = await staticFrame(NAME);
   assert.equal(after, before, `${path.relative(path.join(__dirname, '..'), file)} is stale: run node scripts/render_static_frames.cjs ${scene.scene}`);
   assert.match(before, /<!-- static-frame[^>]*-->\s*<g data-drawing>[\s\S]*?<\/g>\s*<!-- \/static-frame -->/);
+});
+
+test('bump: scripts-off phones receive the narrow plot with its own clip paths and unchanged witness', t => {
+  const f = fixture(t, NAME), svg = f.$('.hb-figure svg');
+  const narrow = svg.querySelector('[data-static-frame="narrow"]');
+  assert(narrow, 'the complete narrow print ships without executing a player');
+  assert.equal(narrow.dataset.width, '360'); assert.equal(narrow.dataset.height, '192');
+  assert.equal(narrow.getAttribute('transform'), 'scale(2.3889)');
+  assert.equal(svg.getAttribute('preserveAspectRatio'), 'xMinYMin meet');
+  const n = fixture(t, NAME, {width: NARROW}); n.load(); n.seek(scene.duration);
+  assert.equal(canonicalMarkup(narrow.innerHTML.replaceAll('--static-narrow', '')), canonicalMarkup(drawing(n)));
+  assert.equal(narrow.querySelector('[data-value="peak"]').textContent, '2');
+  assert.equal(narrow.querySelector('[data-value="coef"]').textContent, '−2');
+  const ids = [...f.root.querySelectorAll('[id]')].map(node => node.id);
+  assert.equal(new Set(ids).size, ids.length, 'wide and narrow prints cannot duplicate SVG IDs');
+  assert.equal(narrow.querySelector('clipPath').id, 'hb-plot--static-narrow');
+  assert.equal(narrow.querySelector('clipPath rect').getAttribute('width'), '304');
+  assert.equal(svg.querySelector('[data-drawing] clipPath rect').getAttribute('width'), '754');
+  for (const node of narrow.querySelectorAll('[clip-path]')) {
+    const id = node.getAttribute('clip-path').match(/^url\(#([^)]*)\)$/)[1];
+    assert(id.endsWith('--static-narrow'));
+    assert(narrow.contains(f.d.getElementById(id)), `${id} must resolve to this print's geometry`);
+  }
+  assert.match(css, /\.hb-figure \{ container-type: inline-size; \}/);
+  assert.match(css, /@container \(max-width: 599px\)/);
+  assert.match(css, /:not\(\[data-ready\]\) \.hb-figure svg \{ aspect-ratio: 360 \/ 192; \}/);
+  assert.match(css, /:not\(\[data-ready\]\) \[data-drawing\] \{ display: none; \}/);
+  assert.match(css, /:not\(\[data-ready\]\) \[data-static-frame="narrow"\] \{ display: block; \}/);
+  assert.equal(svg.querySelectorAll('foreignObject').length, 1, 'the x label retains its unique MathJax ID');
+  assert.match(css, /foreignObject\[data-tag="x"\] \{ x: 797\.8889px; y: 258px; width: 52\.5556px/);
+  f.load();
+  assert.equal(f.root.querySelectorAll('[data-static-frame]').length, 0);
+  assert.equal(svg.querySelectorAll('[data-drawing]').length, 1);
 });
 
 test('bump: below 600 px the same picture reflows into a smaller plot with nothing outside the viewBox', t => {

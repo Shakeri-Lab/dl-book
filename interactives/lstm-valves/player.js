@@ -21,6 +21,8 @@
   if (!(CARRY >= 0 && CAND >= 0)) throw Error('lstm-valves: the declared carried values are not numbers in range');
   const pane = $('[data-pane]'), figure = $('[data-figure]'), svg = figure.querySelector('svg');
   const drawing = svg.querySelector('[data-drawing]'), caption = $('[data-caption]');
+  // The no-script narrow print is not a second live drawing.
+  svg.querySelectorAll('[data-static-frame]').forEach(node => node.remove());
   const tags = {};
   for (const node of svg.querySelectorAll('foreignObject[data-tag]')) tags[node.dataset.tag] = node;
   // Beats are declared on the pane, so the timeline is stated once, and every stage boundary
@@ -68,7 +70,7 @@
   // One picture in drawing units: the belt across the top with the carried value standing on
   // it, the write branch below left, the read branch below right, each valve a port on its own
   // lane. Wide is the desktop figure; narrow is the same topology in a smaller box, with the
-  // type stepped down by player.css.
+  // readable phone type and a separate footer lane for the learned-parameter tag.
   const LAYOUT = {
     wide: {
       viewBox: '0 0 712 376', beltY: 92, branchY: 250, unit: 56, barW: 26, port: [54, 50], plusR: 18,
@@ -79,12 +81,12 @@
       valueGap: 11, note: [700, 366], tags: {learned: [26, 326, 254, 30]}
     },
     narrow: {
-      viewBox: '0 0 360 330', beltY: 70, branchY: 204, unit: 38, barW: 18, port: [40, 38], plusR: 13,
+      viewBox: '0 0 360 350', beltY: 70, branchY: 204, unit: 38, barW: 18, port: [40, 38], plusR: 13,
       belt: [12, 300], inlet: 36, fValve: 86, mid: 124, plus: 168, tap: 208, ctOut: 252,
       write: [46, 168], ctilde: 36, iValve: 112, riser: 168,
-      read: [208, 336], tanhBox: [244, 42, 26], oValve: 292, hOut: 336,
+      read: [208, 328], tanhBox: [244, 44, 28], oValve: 292, hOut: 328,
       beltNameY: 92, branchNameY: 226, beltValve: [109, 127], branchValve: [243, 261],
-      valueGap: 9, note: [348, 314], tags: {learned: [12, 274, 212, 28]}
+      valueGap: 12, note: [348, 334], tags: {learned: [12, 284, 300, 30]}
     }
   };
   const num = value => Number(value.toFixed(2));

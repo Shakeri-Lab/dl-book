@@ -5,24 +5,18 @@ them or a chapter naturally touches them.
 
 ## Focused animation roadmap — approved September 9, 2026
 
-The approved Chapter 7 convolution player shipped in `304f3d4`. The author then
-reprioritized **kernel weighting and BERT's masking ledger** for implementation;
-both are now **author-approved for publication**, including the revised BERT view.
-Confirm the containing commit's CI/live assets to establish deployment. Exact
-anchors, source receipts, and checks are in [the implementation record](kernel-bert-excerpts.md).
-**Wave 1 was then built on 2026-09-10** — backpropagation, softmax shift, and the gate
-product — with its own record in [the Wave 1 receipt](wave1-excerpts.md). Those three are
-**built and fully checked but not committed, not pushed, and not author-approved**; a wave
-is authorized only by the author's browser-review note in its own receipt, and that note
-does not exist yet.
-The [animation guide](animation-authoring.md) explains all six implementations
-and the reusable authoring rules.
-Obtain local review before publishing another
-scene. Prioritize difficult mechanisms rather than animating every chapter.
+**Updated September 11, 2026:** ten scenes are committed on `main` at `0674cab`.
+The [animation guide](animation-authoring.md) is the current inventory; the
+[Wave 1](wave1-excerpts.md) and [Wave 2](wave2-excerpts.md) receipts preserve their
+review history. Source state is not deployment: verify the publishing run and live
+anchors independently. The author approved the small repair pass and Chapter 18
+mask/predictor for publication after review. Reference tilt in Chapter 18 is next,
+with local review before its separate publication.
+Prioritize difficult mechanisms rather than animating every chapter.
 
 ### First wave (original priorities; current status explicit)
 
-1. **Backpropagation — built in Wave 1 on 2026-09-10, awaiting author review**
+1. **Backpropagation — committed in `ab041af`**
    (Chapter 5, “One neuron, one chain,” beside `fig-chain-graph`; panel id
    `one-chain-excerpt`).
    Asks whether increasing the weight raises or lowers the loss. Traces the forward
@@ -59,7 +53,7 @@ scene. Prioritize difficult mechanisms rather than animating every chapter.
    composition: `6050-Ch15/lecture.jsx`, `FourLedgers`, with storyboard
    **FourLedgers/CorruptionPolicy**; do not copy the lecture's alternative grouping.
 
-4. **Softmax shift — built in Wave 1 on 2026-09-10, awaiting author review**
+4. **Softmax shift — committed in `ab041af`**
    (Chapter 2, beside `fig-softmax`; panel id `softmax-shift-excerpt`). Added to the wave
    ahead of backpropagation on purpose: it is the smallest scene of the three, and its job
    was to prove the new manifest entry, the scene template and the shared test harness
@@ -73,8 +67,7 @@ scene. Prioritize difficult mechanisms rather than animating every chapter.
    otherwise return four `NaN`s. Source composition: `6050-Ch2/lecture.jsx`, `SSoftmax`
    L1267–1354, storyboard **Softmax** 168–230 s; the lecture's three logits are not used,
    the book's four govern.
-5. **Gate product — built in Wave 1 on 2026-09-10, rebuilt twice the same day from the
-   author's critique, awaiting author review**
+5. **Gate product — committed in `ab041af` after the author's revisions**
    (Chapter 10, beside `fig-highway-time`, under "Watch what that buys"; panel id
    `gate-product-excerpt`). Asks how much of one word's gradient reaches step 80 through a
    forget gate held at one value. Reuses `@eq-lstm-highway`, the chapter's `σ(0) = ½` with
@@ -109,11 +102,11 @@ The scene paths above are relative to the read-only instructor source collection
 hashes in each excerpt's receipt before adaptation. They supply choreography, not
 authority to replace manuscript examples or colors.
 
-### Wave 2 — candidates, not implementation commitments
+### Wave 2 — four committed, mask/predictor approved for publication
 
-Nothing below is scheduled or approved. These are the next things that would be worth
-building **if** the author's review of Wave 1 says the format earns its place; any of them
-can be dropped without consequence.
+Hinge bump, pooling bins, LSTM valves, and quantization grid are in `0674cab`.
+The author approved mask/predictor after its shifted-target revision. Static figures remain the
+shared HTML/PDF authority; these excerpts explain their mechanisms optionally.
 
 - **Chapter 3, three hinges form a bump:** sweep the existing `hinge-bump-values`
   construction (`h1 − 2h2 + h3`, peak 2 at 0.5, zero outside `[−1.5, 2.5]`) and add its
@@ -125,15 +118,27 @@ can be dropped without consequence.
   case as a declared computed variant. Reuses the convolution cell-measure and rays.
 - **Chapter 10, LSTM retain/write/read:** distinguish stored cell state from exposed
   output; closing the read gate does not erase memory. Adapt **LSTMDesign** without
-  inventing a trained gate trajectory from aggregate statistics. It would be the second
-  scene in Chapter 10, so it must not re-teach the gate product built in Wave 1.
+  inventing a trained gate trajectory from aggregate statistics. Keep this second
+  Chapter 10 scene: state retention and gradient retention answer different questions.
 - **Chapter 17, quantization grid:** eight weights onto a 3-bit grid; which survive
   unchanged, which two pairs collide, and the maximum error against the step. The
   lecture's nine schematic weights are not imported.
-- **Chapter 18, response mask:** whether a change at a prompt position moves the score,
-  given that the predictor sits one step before the scored target. Blocked on an author
-  decision (E5): either label the currently unlabelled audit cell, which changes the
-  chapter digest but no stdout, or anchor before the following heading.
+- **Chapter 18, response mask — reviewed and approved for publication:**
+  follow predictor position `i` to the mask on target `i+1`. Change excluded output
+  logits, not input tokens; keep the scored symbolic terms fixed. Anchor before
+  “A preference is a measurement, not a value” without editing the QMD. The original
+  two token/mask rows govern; the film's different numerical scores are not imported.
+  See [the receipt](mask-predictor-excerpt.md).
+
+### Next scene and later shortlist
+
+Reference tilt (Chapter 18) is authorized for local implementation and review next.
+The attention bill (Chapter 16) also has manuscript-bound fixtures, but remains a
+candidate. Score field remains subject to the diffusion deferral below; the film's
+time-varying mixture must not replace the book's static mixture silently. Mask before
+softmax (Chapter 13) needs a decision on seeded rather than printed scores; greedy
+tree (Chapter 11) needs a shared-manuscript example first. Wave 4 remains a shortlist,
+not permission to implement. See [the source plan](wave2-plan.md).
 
 Defer training replays, diffusion, RoPE, and elaborate 3-D scenes until the smaller
 excerpts demonstrate useful teaching value.

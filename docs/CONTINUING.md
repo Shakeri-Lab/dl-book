@@ -10,7 +10,69 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 
 ---
 
-> **Approved for publication — September 9, 2026.** After the approved
+> **Current animation work — September 11, 2026.** Work in
+> `/Users/hs9hd/dl-book-html-release`. The author's `main` commit `0674cab` contains
+> ten scenes, including backpropagation and four Wave 2 additions; the older status
+> blocks below are historical. A review found two raw LSTM equation references and
+> four unreadable phone-width no-JavaScript fallbacks. The author authorized their
+> repair, handoff cleanup, and Chapter 18's mask/predictor excerpt. After reviewing
+> the shifted-target revision, the author approved publication on September 11.
+> Chapter 18 reference tilt is next, for local review before a separate publication.
+> Keep both Chapter 10 scenes: one
+> explains direct-path derivatives over time; the other distinguishes stored state
+> from exposed output. See [the authoring guide](animation-authoring.md) and
+> [the new scene receipt](mask-predictor-excerpt.md). No QMD, frozen evidence,
+> numerical tolerances, PDF settings, or release tags change. The runtime migration
+> and its monitor remain paused. Verify CI/live assets separately from source state.
+
+> **Local acceptance:** the complete interaction command in
+> `scripts/html-tests/package.json` passes **539/539** tests. The full frozen HTML
+> render and HTML-assets, public-anchor, Plan-to-Code, Python-source, book-contract,
+> and fixture-receipt audits pass. The fixture audit covers **11** scenes and
+> **60** manuscript literals; **27** lecture-source digests were rechecked.
+> `audit_frozen_stdout.py --base 0674cab --policy exact` confirms **133** unchanged
+> stdout blocks across **27** units, with all HTML/TeX pairs matching. No QMD or
+> freeze file is changed. Pandoc-only comparisons for Chapters 3, 8, 10, 17, and 18
+> are byte-identical with and without both excerpt filters. The publication rebuild
+> subsequently verified both PDF editions as recorded below. Browser inspection covered 1280/390-pixel layouts,
+> direct-anchor paused opening, absent deferred scene script while closed, real
+> playback/pause, scrubbing, expanded-view controls/geometry, semantic equation
+> wrapping, and no page overflow. Static fallback selection and parity are covered
+> by CSS/source regressions and deterministic generated-SVG checks; visual review
+> inspected their matching active final frames, not a browser-wide JavaScript-off run.
+> Two machine-specific `.scratch-sbqg` scripts were removed; recover them from
+> `0674cab` if needed. This pass is approved for commit and normal push to main;
+> verify the containing commit and live deployment independently.
+
+> **September 11 publication validation:** both PDF profiles reached the outline/ToC
+> fixpoint on attempt 2. Print remains **548 pages**, continuous **519 pages**, each
+> with the same **390** outline entries. Complete and per-page extracted text, media
+> boxes, and all **1,067** page raster hashes at 36 dpi match the pre-build baseline.
+> Both full PDF audits pass, including glyphs, text layer, geometry, outline,
+> accessible icon text, and retained logs. Ordinary pre-existing overfull-box log
+> diagnostics remain; unchanged raster comparisons and representative visual review
+> show no new clipping or crowding. Evidence: `/tmp/dl-book-pdf-approval.moTMAv/`.
+> Canonical HTML was rendered last from the unchanged freeze. The prior `0674cab`
+> publishing run failed only on the two raw `@eq-lstm` references repaired here;
+> the new commit must pass the complete publishing pipeline before being called live.
+
+> **Mask/predictor feedback pass:** the author asked us to incorporate only fair
+> suggestions. The scene now uses explicit illustrative word aliases for unchanged
+> IDs, six aligned predictor/shifted-target columns, target-attached ×0/×1 gates,
+> and labeled symbolic log-probabilities. One sequence appears at a time; B stays
+> fixed during the excluded-output intervention. The narrower view reflows into
+> two three-column strips below a 520-pixel pane, with regression cases at
+> 519/520/553 pixels. Inputs remain blue context; only excluded score branches
+> are muted. No hover-only attention paths or invented distribution curves were
+> added. The scene's **38** tests, source receipts, and independent score/negative
+> controls pass (`scripts/test_mask_predictor_excerpt.cjs`); the complete command
+> above passes 539 tests. The full frozen HTML was rebuilt, its asset/anchor
+> audits passed, and browser review at measured 390/1119 CSS-pixel viewports
+> confirmed the phone/desktop arrangement, stable B intervention, zero-change
+> receipt, no page overflow after math layout, and no MathJax errors. See
+> [the updated receipt](mask-predictor-excerpt.md). The author approved this version.
+
+> **Historical publication record — September 9, 2026.** After the approved
 > convolution release `304f3d4`, the author requested the kernel-weighting and
 > BERT-ledger candidates next. Both are implemented in `/Users/hs9hd/dl-book-html-release`
 > at `12-kernel-regression.html#kernel-weighting-excerpt` and

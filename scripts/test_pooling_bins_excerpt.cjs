@@ -85,7 +85,7 @@ const witnessOf = fx => fx.clues.find(clue =>
 const pooled = f => JSON.parse(f.root.dataset.pooled);
 const offset = f => numbers(f.root.dataset.offset);
 const texts = (f, selector) => [...f.root.querySelectorAll(selector)].map(node => node.textContent);
-const values = (f, prefix) => texts(f, `[data-value^="${prefix}"]`);
+const values = (f, prefix) => texts(f, `[data-drawing] [data-value^="${prefix}"]`);
 const tex = (f, n) => f.d.getElementById(`eq-pooling-bins-${n}`).textContent;
 const drawing = f => f.$('[data-drawing]').innerHTML;
 const classes = f => new Set([...f.root.classList]);
@@ -584,7 +584,7 @@ test('pooling: the static fallback prints the final frame with every witness val
   // Both verdicts on the one printed frame: the down map differs, the right one did not.
   assert.equal(f.$('[data-retired]').dataset.retired, 'equal');
   assert.equal(f.$('[data-record-label]').textContent, 'before = after one pixel right');
-  assert.equal(f.root.querySelectorAll('[data-path]').length, 2, 'the print carries both annotated paths');
+  assert.equal(f.root.querySelectorAll('[data-drawing] [data-path]').length, 2, 'the wide print carries both annotated paths');
   assert(!drawing(f).includes('·') && !drawing(f).includes('>?<'), 'the final frame withholds nothing');
   assert.match(f.root.className, /\bstage-6\b/); assert.match(f.root.className, /\bshow-record\b/); assert.match(f.root.className, /\bwash-crossed\b/);
 });
@@ -610,7 +610,7 @@ test('pooling: the static panel differs from the t = 40 render only where script
   const strip = html => {
     const box = f.w.document.createElement('div');
     box.innerHTML = html;
-    box.querySelectorAll('[data-controls]').forEach(node => node.remove());
+    box.querySelectorAll('[data-controls], [data-static-frame]').forEach(node => node.remove());
     return canonicalMarkup(box.innerHTML);
   };
   const before = strip(pane.innerHTML);
@@ -624,6 +624,34 @@ test('pooling: the static frame in panel.html is the player\'s own t = 40 drawin
   const {file, before, after} = await staticFrame(NAME);
   assert.equal(after, before, `${path.relative(path.join(__dirname, '..'), file)} is stale: run node scripts/render_static_frames.cjs ${scene.scene}`);
   assert.match(before, /<!-- static-frame[^>]*-->\s*<g data-drawing>[\s\S]*?<\/g>\s*<!-- \/static-frame -->/);
+});
+
+test('pooling: scripts-off phones receive the generated narrow witness, not the wide frame shrunk', t => {
+  const f = fixture(t, NAME), svg = f.$('.pb-figure svg');
+  const narrow = svg.querySelector('[data-static-frame="narrow"]');
+  assert(narrow, 'the complete narrow print ships without executing a player');
+  assert.equal(narrow.dataset.width, '360'); assert.equal(narrow.dataset.height, '314');
+  assert.equal(narrow.getAttribute('transform'), 'scale(1.7778)');
+  assert.equal(svg.getAttribute('preserveAspectRatio'), 'xMinYMin meet');
+  const n = fixture(t, NAME, {width: NARROW}); n.load(); n.seek(scene.duration);
+  assert.equal(canonicalMarkup(narrow.innerHTML), canonicalMarkup(drawing(n)));
+  assert.deepEqual([...narrow.querySelectorAll('[data-value^="h"]')].map(node => node.textContent), ['0', '0', '9', '3']);
+  assert.deepEqual([...narrow.querySelectorAll('[data-value^="g"]')].map(node => node.textContent), ['9', '0', '0', '3']);
+  assert.equal(narrow.querySelector('[data-sign]').textContent, '≠');
+  assert.match(css, /\.pb-figure \{ container-type: inline-size; \}/);
+  assert.match(css, /@container \(max-width: 599px\)/);
+  assert.match(css, /:not\(\[data-ready\]\) \.pb-figure svg \{ aspect-ratio: 360 \/ 314; \}/);
+  assert.match(css, /:not\(\[data-ready\]\) \[data-drawing\] \{ display: none; \}/);
+  assert.match(css, /:not\(\[data-ready\]\) \[data-static-frame="narrow"\] \{ display: block; \}/);
+  // Map labels remain single typeset objects, positioned in the same scaled units.
+  assert.equal(svg.querySelectorAll('foreignObject').length, 2);
+  assert.match(css, /foreignObject\[data-tag="x"\] \{ x: 56\.8889px; y: 0px; width: 170\.6667px/);
+  assert.match(css, /foreignObject\[data-tag="h"\] \{ x: 405\.3333px; y: 0px; width: 170\.6667px/);
+  const ids = [...f.root.querySelectorAll('[id]')].map(node => node.id);
+  assert.equal(new Set(ids).size, ids.length);
+  f.load();
+  assert.equal(f.root.querySelectorAll('[data-static-frame]').length, 0);
+  assert.equal(svg.querySelectorAll('[data-drawing]').length, 1);
 });
 
 test('pooling: each declared beat advances the stage and toggles exactly its classes', t => {

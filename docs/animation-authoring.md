@@ -2,31 +2,47 @@
 
 Author-approved September 9, 2026. These are optional HTML explanations of existing
 book examples, not videos, new experiments, or a replacement for the static book.
-The convolution player shipped in `304f3d4`; kernel weighting and the revised BERT
-ledger are approved for the next publication. Check the publishing run and live
-anchors before treating an approved source change as deployed.
+**Current source state — September 11, 2026:** ten scenes are committed on `main`
+at `0674cab`, including the author's Wave 1 and four Wave 2 additions. Their earlier
+review history lives in the [Wave 1](wave1-excerpts.md) and [Wave 2](wave2-excerpts.md)
+receipts. Check the publishing run and live anchors before treating committed source
+as deployed. The current repair pass fixes LSTM equation links and four narrow-screen
+static fallbacks. The author approved Chapter 18's mask/predictor for publication
+after the shifted-target revision, then requested the next scene: reference tilt
+in Chapter 18, for local review. The remaining roadmap is not blanket authorization.
 
-Wave 1 added three more — softmax shift, one chain, gate product. The author rejected
-their first build on September 10, 2026 — a dashboard of stage tabs, framed cards,
-readout chips and caret-and-parenthesis math — and they are being rebuilt to the
-[visual grammar](#visual-grammar) below. They are **not yet author-approved**: they wait
-on the author's review note in [the Wave 1 receipt](wave1-excerpts.md). Nothing in this
-document authorizes them. The gate product was rebuilt a second time on the same day, from
-the author's critique of its rebuilt mock ("the human eye cannot visually process the
-difference between 10⁻²⁵ and 10⁻¹¹"); that critique added the one amendment to rule 1
-below. The per-scene sections describe the current builds; where anything differs, the
-receipt is authoritative.
+The author's rejection of dashboard-like first drafts established the
+[one-picture visual grammar](#visual-grammar) below. The gate-product revision added
+the parameter-control exception and the requirement to make tiny values visually
+distinguishable before naming their numerical gap.
 
-## The six examples
+## The ten committed examples
 
 | Location | What the reader follows | Teaching boundary |
 |---|---|---|
 | [Chapter 7: convolution](https://shakeri-lab.github.io/dl-book/chapters/part2/07-filters-convolution.html#convolution-excerpt) | Place a patch, multiply matching entries, add the products, write one output, then slide. | This is the existing Exercise 1 walkthrough. The kernel is fixed and unflipped; no training, padding, bias, or activation is added. |
 | [Chapter 12: kernel weighting](https://shakeri-lab.github.io/dl-book/chapters/part4/12-kernel-regression.html#kernel-weighting-excerpt) | Distance becomes Gaussian affinity, then normalized influence, weighted values, and one prediction. Only afterward does the query move. | Observations and bandwidth remain fixed. These are computed weights, not learned similarity or uncertainty. |
 | [Chapter 15: BERT masking](https://shakeri-lab.github.io/dl-book/chapters/part4/15-bert-pretraining.html#bert-ledger-excerpt) | Keep originals beside input copies; follow the input through prediction and the saved target separately into the loss. Compare masked, replaced, unchanged-selected, and unselected positions. | Selection, corruption, and attention visibility are distinct. No predicted token, probability, or measured loss is fabricated. |
-| Chapter 2: softmax shift — `02-logistic-softmax.html#softmax-shift-excerpt` *(built, not published)* | Exponentiate four scores, divide by one shared sum, then add 100 to every score and watch the ruler slide while the probability bars hold under dashed marks; the `e^c` is struck out of numerator and denominator. | Four fixed scores; no training, no data, no learned quantity. Invariance is to *adding* a constant, not to scaling one. The shift moves on the timeline, not under a knob. |
-| Chapter 5: one chain — `05-backpropagation.html#one-chain-excerpt` *(built, not published)* | Fill and cache `w → z → a → L`, turn the knob and measure a slope, then let three backward rays deliver one local derivative each and land their product beside the measurement. | One neuron, one example, one knob. Nothing is updated: no step, no learning rate, and `w` ends where it started. No `∂L/∂b`, no branch accumulation, no PyTorch. |
-| Chapter 10: gate product — `10-sequences-rnn.html#gate-product-excerpt` *(rebuilt twice, not published)* | One word, `cat`, enters at step 1 and travels eighty steps on two bands at once, `b_f = 0` and `b_f = +1`, while its gradient `f^k` is traced on one shared chart; the axis switches linear → log, a ratio badge names the gap (`× 1.6 × 10¹³`, sixteen trillion), and the timeline sweeps the `b_f` slider the reader may then drag. | One constant gate multiplied eighty times, the approximation the chapter's own `≈` makes. Real gates vary per unit and per step. The log axis has a stated floor, `10⁻²⁵`, and the word's legibility at step 80 is on that mapping, never "intact". Nothing is trained; the recall experiment remains the chapter's evidence. `b_f` is the one parameter control (rule 1's amendment). |
+| Chapter 2: softmax shift — `02-logistic-softmax.html#softmax-shift-excerpt` | Exponentiate four scores, divide by one shared sum, then add 100 to every score and watch the ruler slide while the probability bars hold under dashed marks; the `e^c` is struck out of numerator and denominator. | Four fixed scores; no training, no data, no learned quantity. Invariance is to *adding* a constant, not to scaling one. The shift moves on the timeline, not under a knob. |
+| Chapter 5: one chain — `05-backpropagation.html#one-chain-excerpt` | Fill and cache `w → z → a → L`, turn the knob and measure a slope, then let three backward rays deliver one local derivative each and land their product beside the measurement. | One neuron, one example, one knob. Nothing is updated: no step, no learning rate, and `w` ends where it started. No `∂L/∂b`, no branch accumulation, no PyTorch. |
+| Chapter 10: gate product — `10-sequences-rnn.html#gate-product-excerpt` | One word, `cat`, enters at step 1 and travels eighty steps on two bands at once, `b_f = 0` and `b_f = +1`, while its gradient `f^k` is traced on one shared chart; the axis switches linear → log, a ratio badge names the gap (`× 1.6 × 10¹³`, sixteen trillion), and the timeline sweeps the `b_f` slider the reader may then drag. | One constant gate multiplied eighty times, the approximation the chapter's own `≈` makes. Real gates vary per unit and per step. The log axis has a stated floor, `10⁻²⁵`, and the word's legibility at step 80 is on that mapping, never "intact". Nothing is trained; the recall experiment remains the chapter's evidence. `b_f` is the one parameter control (rule 1's amendment). |
+| Chapter 3: hinge bump — `03-nonlinearity-mlp.html#hinge-bump-excerpt` | Add three weighted ramps to a faint target silhouette; the negative middle term turns the sum back down. | The existing fixed circuit is evaluated, not trained. |
+| Chapter 8: pooling bins — `08-cnn.html#pooling-bins-excerpt` | Shift clues inside pooling bins, then across a boundary; compare the resulting maps. | Local tolerance is not general translation invariance. |
+| Chapter 10: LSTM valves — `10-sequences-rnn.html#lstm-valves-excerpt` | Retain, write, and expose a carried scalar; close the read valve while the stored value survives. | Illustrative gate openings, not measured trajectories. Complements the gradient-over-time scene rather than repeating it. |
+| Chapter 17: quantization grid — `17-peft-quantization.html#quantization-grid-excerpt` | Round fixed weights onto a coarse grid, then separate collisions by increasing bit width. | Rounding-error bounds and ideal payload are not task accuracy or runtime speed. |
+
+The four later scenes' fixtures, computed variants, and source hashes are in the
+[Wave 2 receipt](wave2-excerpts.md). The mask/predictor excerpt for Chapter 18 is
+approved for publication; see [its receipt](mask-predictor-excerpt.md). Its single
+question is whether the last prompt predictor contributes to the response score.
+The picture aligns predictor `i` above supplied target `i+1`, attaches ×0/×1 to
+that target's score, then perturbs only excluded outputs. Readable words are
+explicit illustrative aliases for the book's unchanged ID fixtures. One sequence
+appears at a time; the phone layout wraps into two three-column strips. Counts
+three and four remain earned receipts, and log-probability terms stay symbolic.
+The helper's sequence sum is not the SFT objective's negative mean. No token is
+removed from context. Timeline highlighting carries the mechanism without adding
+hover-only attention paths or a fabricated distribution plot.
 
 ### Convolution: expose the multiply-and-add
 
@@ -103,10 +119,12 @@ the exponentials, then the one shared sum that divides them, and only then start
 The scores slide with the ruler so the markers hold still; dashed marks record the `c = 0`
 bar heights; the `e^c` is struck out of the numerator and of every denominator term.
 
-The scene evaluates softmax the way the chapter's numerical-landmine section prescribes —
-subtract the largest score first — and a test instruments `Math.exp` to prove `e^(o + c)` is
-never formed. The exponentials it displays are therefore `e^(o − m)`, a declared computed
-variant, and the panel says so.
+The probabilities are computed after subtracting the largest score, as the chapter
+prescribes. The displayed exponentials are instead the raw `e^o`, so the shared
+scale change is visible. During the shift their geometry is capped; it is not a
+linear measurement of arbitrarily large exponentials. Tests instrument `Math.exp`
+to verify that the unsafe shifted exponentials are never evaluated. Displayed
+geometry and numerical evaluation have different jobs here; the receipt records both.
 
 Fixture, source hashes, timing, and checks:
 [Wave 1 receipt](wave1-excerpts.md), `chapters/part1/02-logistic-softmax.qmd`, and
@@ -298,8 +316,16 @@ math — and it is what `interactives/_template` encodes and the harness's
    Nothing flashes.
 8. **Reduced motion** is the same picture at each beat with the object jumped to its beat
    position.
-9. **Static fallback** is the final frame drawn as static SVG inside the panel — what a
-   reader sees with scripts off — carrying the witness values.
+9. **Static fallback** is the final frame drawn as static SVG inside the panel,
+   carrying the witness values. A reflowing scene ships both wide and narrow prints,
+   selected by scoped CSS without JavaScript; active playback removes the unused
+   print. Generate them with `scripts/render_static_frames.cjs`. Local SVG IDs and
+   references in the narrow print must be namespaced, including clip paths. Keep
+   MathJax label IDs unique and give their existing labels narrow static geometry.
+   Inspect actual phone-width type, not only the presence of a narrow group.
+10. **Native links inside raw panels.** HTML inserted by the excerpt filter does not
+    resolve Quarto `@eq-…` references. Use a descriptive `<a href="#eq-…">` link and
+    verify its target in the rendered chapter. Never print a guessed equation number.
 
 ### Typeset math in a panel: the verified recipe
 

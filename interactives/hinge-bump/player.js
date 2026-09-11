@@ -13,6 +13,9 @@
   if (BREAKS.length !== 3 || COEFS.length !== 3 || !(X0 < X1)) throw Error('hinge-bump: the declared fixture is not three hinges on a domain');
   const pane = $('[data-pane]'), figure = $('[data-figure]'), svg = figure.querySelector('svg');
   const drawing = svg.querySelector('[data-drawing]'), caption = $('[data-caption]');
+  // Scripts-off readers get a second, narrow print. Live playback draws once at its
+  // measured layout, so discard that print before collecting any scene marks.
+  svg.querySelectorAll('[data-static-frame]').forEach(node => node.remove());
   const tags = {};
   for (const node of svg.querySelectorAll('foreignObject[data-tag]')) tags[node.dataset.tag] = node;
   // Beats are declared on the pane, so the timeline is stated once. Every stage boundary is a
