@@ -2,9 +2,9 @@
 
 Author-approved September 9, 2026. These are optional HTML explanations of existing
 book examples, not videos, new experiments, or a replacement for the static book.
-**Current source state — September 11, 2026:** twelve scenes are committed on `main`
-at `bc1133f`, including the author's Wave 1, Wave 2, approved mask/predictor and
-reference tilt. Their earlier
+**Current source state — September 11, 2026:** thirteen scenes are committed on `main`
+at `ec2e0f6`, including the author's Wave 1, Wave 2, approved mask/predictor,
+reference tilt, and score field. Their earlier
 review history lives in the [Wave 1](wave1-excerpts.md) and [Wave 2](wave2-excerpts.md)
 receipts. Check the publishing run and live anchors before treating committed source
 as deployed. The current repair pass fixes LSTM equation links and four narrow-screen
@@ -13,8 +13,10 @@ after the shifted-target revision, then requested the next scene: reference tilt
 in Chapter 18. That separate scene follows Figure 18.4 and is documented in
 [its receipt](reference-tilt-excerpt.md). It was pushed in `bc1133f`; publishing run
 `34586598964` is the independent deployment receipt. The analytic score-field
-scene in Chapter 19 is now author-approved for separate publication; see
-[its receipt](score-field-excerpt.md). Chapter 16's attention bill is next for local review.
+scene in Chapter 19 was separately pushed in `ec2e0f6`; see
+[its receipt](score-field-excerpt.md) and publishing run `34589132667`.
+Chapter 16's linked-patch attention bill is separately approved for publication;
+see [its receipt](attention-bill-excerpt.md).
 Do not expand it into a full diffusion/training replay. The remaining roadmap is
 not blanket authorization.
 
@@ -50,6 +52,23 @@ three and four remain earned receipts, and log-probability terms stay symbolic.
 The helper's sequence sum is not the SFT objective's negative mean. No token is
 removed from context. Timeline highlighting carries the mechanism without adding
 hover-only attention paths or a fabricated distribution plot.
+
+### Attention bill: count pairs before naming complexity
+
+The approved revision at `16-vit-scaling.html#attention-bill-excerpt` follows the
+chapter's 224-by-224 image example. Halving patch width from 32 to 16 multiplies
+patch tokens by four. Show the image grid and trace one patch to a query row and
+key column before counting pairs. Switch patch configurations discretely; the
+timeline is not a patch-size control. One score square uses a fixed side scale,
+revealing sixteen times as many entries. Stamp equal-area reference tiles and
+label each as the entire original grid's area, not a token, attention window,
+or duplicated score values. Pair that area with a token-length bar to distinguish
+`O(N²d)` attention mixing from `O(Nd²)` block-projection/feedforward terms at fixed
+width. The count excludes `[CLS]`, includes diagonal pairs, and is per head;
+patch embedding is not part of the linear-work comparison. None of these factors
+is a measured wall-clock ratio. The fixed manuscript owns the endpoints and argument;
+the film supplies only composition and reveal order. See
+[the receipt](attention-bill-excerpt.md) for scope and source hashes.
 
 ### Score field: local derivative, not a sample path
 

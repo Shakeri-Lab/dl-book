@@ -5,7 +5,7 @@ them or a chapter naturally touches them.
 
 ## Focused animation roadmap — approved September 9, 2026
 
-**Updated September 11, 2026:** twelve scenes are committed on `main` at `bc1133f`.
+**Updated September 11, 2026:** thirteen scenes are committed on `main` at `ec2e0f6`.
 The [animation guide](animation-authoring.md) is the current inventory; the
 [Wave 1](wave1-excerpts.md) and [Wave 2](wave2-excerpts.md) receipts preserve their
 review history. Source state is not deployment: verify the publishing run and live
@@ -14,9 +14,10 @@ mask/predictor for publication after review; both were pushed in `d08c41f`.
 Reference tilt in Chapter 18 was separately pushed as `bc1133f`, beside
 Figure 18.4 at `#reference-tilt-excerpt`; see [its receipt](reference-tilt-excerpt.md).
 Check publishing run `34586598964` independently. Chapter 19's analytic score field
-is author-approved for separate publication; see [its receipt](score-field-excerpt.md).
+was separately pushed in `ec2e0f6`; see [its receipt](score-field-excerpt.md) and
+publishing run `34589132667`.
 It is not a full diffusion/training replay. Chapter 16's attention bill is the next
-requested local-review scene; later entries remain candidates.
+approved publication; see [its receipt](attention-bill-excerpt.md). Later entries remain candidates.
 Prioritize difficult mechanisms rather than animating every chapter.
 
 ### First wave (original priorities; current status explicit)
@@ -137,10 +138,15 @@ shared HTML/PDF authority; these excerpts explain their mechanisms optionally.
 
 ### Next scene and later shortlist
 
-Reference tilt (Chapter 18) is authorized for local implementation and review next.
-The attention bill (Chapter 16) also has manuscript-bound fixtures, but remains a
-candidate. Score field remains subject to the diffusion deferral below; the film's
-time-varying mixture must not replace the book's static mixture silently. Mask before
+Reference tilt (Chapter 18) and the bounded score field (Chapter 19) are pushed.
+The linked-patch attention bill (Chapter 16) is approved for separate publication.
+Its follow-up revision connects image patches to both score axes, switches patch
+states discretely, and labels the area tiles explicitly. A compact length bar
+compares block projection/FFN work with mixing; patch embedding is excluded.
+The movie transport remains the only control. No P=8 or hover-only mechanism is
+part of this revision.
+A full diffusion replay remains deferred; the film's time-varying mixture must not
+replace the book's static mixture silently. Mask before
 softmax (Chapter 13) needs a decision on seeded rather than printed scores; greedy
 tree (Chapter 11) needs a shared-manuscript example first. Wave 4 remains a shortlist,
 not permission to implement. See [the source plan](wave2-plan.md).

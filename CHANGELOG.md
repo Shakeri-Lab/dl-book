@@ -1,3 +1,25 @@
+# Rolling post-v1.3 — attention bill (September 11, 2026)
+
+- Adds a separate, optional Chapter 16 score-grid animation using the existing
+  224-pixel / 32-to-16-pixel-patch example. Four times as many tokens require
+  sixteen times as many query-key pairs per head, excluding `[CLS]`.
+- The follow-up review replaces cosmetic continuous resizing with discrete image
+  patch states, traces a patch into both score axes, labels each area tile as the
+  entire old grid's area, and compares fourfold token-wise work with sixteenfold
+  mixing work. Compact movie controls remain. This is not a time benchmark.
+- Reuses shared deferred playback with no new dependency. Source and acceptance
+  record: `docs/attention-bill-excerpt.md`. The author approved publication after
+  reviewing the linked-patch revision.
+- Score field was separately committed and pushed as `ec2e0f6`; this draft changes
+  no manuscript, frozen evidence, PDF configuration, numerical gate, or stable tag.
+- Local acceptance passes 664 interaction tests, including 42 independent scene
+  tests, all existing source/HTML audits, and desktop/phone review. The first
+  draft's moiré-prone raster was removed; exact counts and scale are unchanged.
+  All 133 stdout blocks remain exact and filtered Chapter 16 LaTeX is unchanged.
+- Publication rebuilds retain 548 print / 519 continuous pages and 390 outline
+  entries each. Text, geometry, outlines, and every page raster match the baseline;
+  both PDF audits pass. HTML remains canonical and is rendered last.
+
 # Rolling post-v1.3 — analytic score field (September 11, 2026)
 
 - Adds an optional Chapter 19 inspection sweep beside the existing fixed

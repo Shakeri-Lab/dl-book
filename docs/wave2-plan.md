@@ -5,8 +5,8 @@ The author approved repairs and mask/predictor for publication after local revie
 then requested reference tilt as the next local-review scene. The approved pass
 was pushed in `d08c41f`; reference tilt is now separately author-approved for push
 ([receipt](reference-tilt-excerpt.md)). Chapter 19's analytic score field is now
-author-approved for publication, not a full diffusion/training replay. Chapter 16's
-attention bill is the next requested local-review scene. The other later
+separately pushed as `ec2e0f6`, not a full diffusion/training replay. Chapter 16's
+attention bill is approved for publication ([receipt](attention-bill-excerpt.md)). The other later
 wave entries remain proposals. The
 historical build-route discussion below does not authorize a new shared animation
 kit; reuse existing transport and only extract helpers when actual duplication warrants it.
@@ -102,8 +102,14 @@ Current exception, September 11: reference tilt is pushed as `bc1133f` (verify
 publishing run `34586598964`); the author approved score field after local
 review. Its [receipt](score-field-excerpt.md) restricts the port to the fixed
 analytic mixture and prescribed inspection sweep, omitting the film's time slices.
-Chapter 16's attention bill is next for local review. Later candidates are not
-authorized by this request.
+Score field was separately pushed in `ec2e0f6`; check run `34589132667` for deployment.
+Chapter 16's linked-patch attention bill is approved for separate publication. The
+author requested the next scene afterward; resolve its fixture before implementation
+and keep its local review separate. This is not blanket approval for later candidates.
+The author's follow-up review replaces elastic resizing with two discrete patch
+states, links the image grid to query/key axes, identifies the sixteen reference
+tiles as old-grid areas, and puts a token-length comparison beside the score area.
+Keep the existing compact movie transport rather than adding architectural controls.
 
 Wave 3: Ch18 `reference-tilt` (port of `GibbsTilt`, β slider), Ch19 `score-field` (port of
 `ScoreField`; the author authorized the bounded analytic picture on September 11,

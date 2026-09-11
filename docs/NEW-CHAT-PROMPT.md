@@ -8,21 +8,28 @@ Keep this file current: if a rule changes or the state moves, edit the prompt he
 rather than re-deriving it in chat.
 
 **Animation work override — September 11, 2026:** use
-`/Users/hs9hd/dl-book-html-release`. Twelve scenes are committed and pushed to
-`main` at `bc1133f`, including the approved reference tilt. Check publishing run
-`34586598964` and live assets before calling it deployed. The preceding run
+`/Users/hs9hd/dl-book-html-release`. Thirteen scenes are committed and pushed to
+`main` at `ec2e0f6`, including the approved score field. Publishing run
+`34589132667` passed all jobs; the live anchor and deferred player match source.
+Reference tilt is also verified live. The earlier run
 `34578589278` failed Chapter 18's exact notebook stdout check on signed zero;
 do not bypass that gate or resume the paused numerical migration here.
-Current approved publication: Chapter 19's analytic score field, not a
-diffusion training or sampling replay. Next: Chapter 16's attention bill for
-separate local review. Keep the publications separate.
+Current approved revision: Chapter 16's attention bill. It counts
+the existing example's query-key pairs, not wall-clock time. The author requested
+a linked patch-to-token view, discrete patch states, explicitly labeled old-grid
+area tiles, and a visible linear-versus-quadratic work comparison. Keep the compact
+movie controls; do not add a P=8 example or hover-only interaction. The author
+approved this revision with “push. Do next.” Keep publications separate and resolve
+the next scene's manuscript fixture before implementation; do not treat that request
+as permission for every remaining wave.
 The follow-up feedback redesign uses illustrative word aliases, aligned shifted
 targets, target-attached gates, and one sequence at a time; it preserves exact IDs
 and masks and adds no attention interaction or numerical evidence.
 See `docs/animation-authoring.md` for the current inventory and conventions,
 `docs/mask-predictor-excerpt.md` for the published revision,
 `docs/reference-tilt-excerpt.md` for the pushed scene,
-`docs/score-field-excerpt.md` for the approved scene, and `docs/CONTINUING.md` for checks.
+`docs/score-field-excerpt.md` for the pushed scene,
+`docs/attention-bill-excerpt.md` for the local draft, and `docs/CONTINUING.md` for checks.
 Do not treat historical approval labels or committed source as proof of deployment;
 verify CI and live assets. QMD, freeze, PDF settings, and stable tags stay unchanged.
 The numerical-runtime migration and its monitor remain paused.

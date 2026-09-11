@@ -10,6 +10,52 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 
 ---
 
+> **Current approved work — attention bill, September 11, 2026.**
+> The approved score field was normally pushed as **`ec2e0f6`**, with local and
+> remote `main` confirmed equal. Publishing run **34589132667** subsequently
+> passed all jobs, including build-deploy and link-check. The live Chapter 19
+> anchor and deferred score-field player match the approved source (SHA-256
+> `e978ac842453763eee823369e732f7709b227931dc2ffff9a516806035e9a122`).
+> Reference tilt is also verified live.
+> The approved revision is Chapter 16's attention bill, before “A Fashion
+> rematch, not a referendum,” at `16-vit-scaling.html#attention-bill-excerpt`.
+> See [its source and acceptance receipt](attention-bill-excerpt.md). Follow-up
+> author feedback calls for linked image patches, discrete patch states, explicit
+> original-grid area tiles, and a length-versus-area work comparison. Exact
+> patch/token/pair counts come from the existing paragraph. No timings, model training, QMD, freeze,
+> PDF settings, numerical gates, or tags change. Later candidates and the paused
+> runtime migration remain out of scope. The author approved this linked-patch
+> revision with “push. Do next.” Publish it separately before editing the next scene.
+
+> **Attention-bill local acceptance:** **664/664** interaction tests pass,
+> including **42** scene checks. All existing HTML asset/anchor, manuscript
+> structure/source, and fixture audits pass: 37 pages, 152 assets, 14 scenes,
+> 79 fixture literals, and 36 reverified lecture digests. All 133 stdout blocks /
+> 27 units remain exact against `ec2e0f6`. Plain-Pandoc Chapter 16 LaTeX is
+> unchanged by the HTML filters (`/tmp/dl-book-attention-discrete-latex.ySNzmQ/`).
+> Full frozen HTML was rebuilt after the discrete patch-grid revision. Actual
+> desktop/390-CSS-pixel browser views verify the trace and final comparison, math,
+> no clipping or page overflow, delayed loading, and paused direct anchors.
+> Real playback reaches the end; pause holds through expanded-view entry/exit.
+> The viewport was reset and the local deliverable left paused at its opening.
+> Wide/narrow fallback parity is tested. The first draft's fine score raster stays
+> removed; the new image grid represents actual patches, not score texture.
+> Logs: `/tmp/dl-book-attention-discrete-tests.log`,
+> `/tmp/dl-book-attention-discrete-final-html.log`. Local review URL:
+> `http://127.0.0.1:8770/chapters/part4/16-vit-scaling.html?preview=linked-patches-final#attention-bill-excerpt`.
+> Publication is authorized; the remote commit and CI/live verification remain
+> separate gates. Score-field run **34589132667** is
+> fully successful and its live player hash matches source, as recorded above.
+> No retry, bypass, scheduled monitor, or new publishing shortcut was created.
+
+> **Attention-bill publication build:** the complete PDF loop passes at unchanged
+> **548 print / 519 continuous pages**, **390 outline entries** each. Complete
+> and per-page text, geometry, outlines, and all 1,067 page raster hashes match
+> the baseline. Both PDF audits and representative visual checks pass; receipt
+> `/tmp/dl-book-attention-pdf-approval.enT0K2/`. Canonical HTML is rendered last.
+> The full interaction suite was rerun: 664/664 pass
+> (`/tmp/dl-book-attention-publication-tests.log`).
+
 > **Current approved work — score field, September 11, 2026.** Reference
 > tilt was committed and normally pushed as **`bc1133f`**, with local and remote
 > `main` confirmed equal. Its publishing receipt is run **34586598964**; check
