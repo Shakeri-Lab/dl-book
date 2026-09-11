@@ -10,6 +10,52 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 
 ---
 
+> **Current approved work — reference tilt, September 11, 2026.** The approved
+> mask/predictor and responsive repairs were committed and pushed to `main` as
+> `d08c41f`; publishing run **34578589278** is the deployment receipt to check.
+> The author approved the separate reference-tilt draft for publication after Figure 18.4:
+> `18-alignment.html#reference-tilt-excerpt`. It ports the film's four bars and
+> beta dial using the book's exact finite-response fixture, not a training replay.
+> See [its source and acceptance receipt](reference-tilt-excerpt.md). No shared
+> manuscript, freeze, PDF setting, stable tag, or numerical gate changes. Next is
+> Chapter 19's analytic score-field picture, for local review before a separate
+> publication. This does not authorize a full diffusion/training replay or the
+> remaining candidates.
+
+> **Reference-tilt local acceptance:** the full interaction command passes
+> **580/580** tests, including **41** independent scene tests. After a final CSS
+> contrast fix, the 41 scene tests and HTML-assets/public-anchor/fixture audits
+> pass again. The full frozen HTML build is complete; Plan-to-Code, Python-source,
+> and book-contract audits pass. Fixture coverage is **12** scenes, **65** manuscript
+> literals and **30** reverified lecture digests. All **133** stdout blocks across
+> **27** units and all HTML/TeX pairs remain exact against `d08c41f`. A plain-Pandoc
+> Chapter 18 LaTeX comparison is byte-identical with and without both HTML-only
+> filters (`/tmp/dl-book-reference-tilt-latex.iJZh39/`). Publication validation then
+> rebuilt both PDF profiles to the outline fixpoint on attempt 2: **548** print and
+> **519** continuous pages, **390** outline entries each. Full/per-page text, media
+> boxes, outlines, and all **1,067** page raster hashes match the pre-build snapshots;
+> both full PDF audits and representative visual checks pass. Evidence:
+> `/tmp/dl-book-reference-pdf-approval.ughbcd/`. Browser review at measured **1119** and **390**
+> CSS-pixel viewports checked the opening, beta-one and final witnesses, no page
+> overflow, no MathJax errors, native beta-arrow control without time seeking,
+> real playback/pause and restoration of timeline beta, and expanded-view entry/exit.
+> Only the opened scene's deferred script loads; Chapter 18's mask player remains
+> unloaded. Static parity and script-free layout are tested through generated SVG
+> and CSS, not a browser-wide JavaScript-off run. Probability labels carry a white
+> stroke so a crossing dashed reference outline cannot obscure their digits.
+> Logs: `/tmp/dl-book-reference-tilt-full-tests.log`,
+> `/tmp/dl-book-reference-tilt-final-tests.log`, and
+> `/tmp/dl-book-reference-tilt-final-html.log`. Preview:
+> `http://127.0.0.1:8770/chapters/part5/18-alignment.html?preview=reference-tilt-final#reference-tilt-excerpt`.
+> Author review is complete. Prior publishing run **34578589278** failed in
+> notebook shard 4: Chapter 18's public/reference executions printed opposite signs
+> for rounded zero in `recovered centered scores`, tripping exact stdout checks.
+> Other notebook jobs and HTML interactions passed; deployment was skipped.
+> Source: that run's failed-job log and `notebook-validation-evidence-4-1` artifact.
+> Do not normalize frozen output, widen a tolerance, bypass CI, or resume the
+> numerical-runtime migration as part of this HTML-only publication. A fresh push
+> rechecks the existing contract; record its result independently.
+
 > **Current animation work — September 11, 2026.** Work in
 > `/Users/hs9hd/dl-book-html-release`. The author's `main` commit `0674cab` contains
 > ten scenes, including backpropagation and four Wave 2 additions; the older status

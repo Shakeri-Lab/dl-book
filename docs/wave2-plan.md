@@ -2,7 +2,10 @@
 
 Status update, September 11, 2026: four Wave 2 scenes are committed in `0674cab`.
 The author approved repairs and mask/predictor for publication after local review,
-then requested reference tilt as the next local-review scene. The other later
+then requested reference tilt as the next local-review scene. The approved pass
+was pushed in `d08c41f`; reference tilt is now separately author-approved for push
+([receipt](reference-tilt-excerpt.md)). The next requested local-review scene is
+Chapter 19's analytic score field, not a full diffusion/training replay. The other later
 wave entries remain proposals. The
 historical build-route discussion below does not authorize a new shared animation
 kit; reuse existing transport and only extract helpers when actual duplication warrants it.
@@ -95,7 +98,8 @@ Route A is rejected: the author wants native lightweight ports, not the film run
 ## 5. Waves 3–4 (shortlist, not implementation authorization)
 
 Wave 3: Ch18 `reference-tilt` (port of `GibbsTilt`, β slider), Ch19 `score-field` (port of
-`ScoreField`; needs the author's OK against the diffusion deferral), Ch16 `attention-bill` (port
+`ScoreField`; the author authorized the bounded analytic picture on September 11,
+not a diffusion/training replay), Ch16 `attention-bill` (port
 of `AttentionBill`), Ch13 `mask-before-softmax` (port of `MaskBefore`; needs the pre-mask scores
 decision), Ch11 `greedy-tree` (no manuscript numbers — needs a manuscript addition first). Wave 4:
 PCA interlude `same-subspace` (port of `SSameSubspace`), A1 `svd-circle` (no film — Route C),

@@ -1,3 +1,18 @@
+# Rolling post-v1.3 — reference tilt (September 11, 2026)
+
+Add the author-approved optional Chapter 18 reference-tilt player after Figure 18.4.
+Four exact policy probabilities move against fixed reference outlines as beta varies;
+expected proxy reward and KL are recomputed from the manuscript's existing fixture.
+The compact slider pauses playback, and timeline actions restore the authored sweep.
+An explicit static beta label and white-backed probability digits keep the phone and
+script-free views readable. Shared transport, generated fallbacks, transcript, and
+41 independent tests require no new runtime dependency. The complete interaction
+suite passes 580 tests. Manuscript, frozen evidence, PDF settings, and tags are unchanged.
+
+The previous publishing run failed an existing Chapter 18 notebook signed-zero
+comparison. This revision neither changes that numerical gate nor bypasses CI;
+publication status must be checked separately from the source commit.
+
 # Rolling post-v1.3 — animation repairs and response-mask excerpt (September 11, 2026)
 
 Repair the LSTM equation links and give pooling, hinge-bump, quantization, and LSTM

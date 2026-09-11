@@ -2,21 +2,25 @@
 
 Author-approved September 9, 2026. These are optional HTML explanations of existing
 book examples, not videos, new experiments, or a replacement for the static book.
-**Current source state — September 11, 2026:** ten scenes are committed on `main`
-at `0674cab`, including the author's Wave 1 and four Wave 2 additions. Their earlier
+**Current source state — September 11, 2026:** eleven scenes are committed on `main`
+at `d08c41f`, including the author's Wave 1, Wave 2, and approved mask/predictor. Their earlier
 review history lives in the [Wave 1](wave1-excerpts.md) and [Wave 2](wave2-excerpts.md)
 receipts. Check the publishing run and live anchors before treating committed source
 as deployed. The current repair pass fixes LSTM equation links and four narrow-screen
 static fallbacks. The author approved Chapter 18's mask/predictor for publication
 after the shifted-target revision, then requested the next scene: reference tilt
-in Chapter 18, for local review. The remaining roadmap is not blanket authorization.
+in Chapter 18. That separate scene follows Figure 18.4 and is documented in
+[its receipt](reference-tilt-excerpt.md). The author has now approved its push and
+requested the next analytic score-field scene in Chapter 19 for local review.
+Do not expand it into a full diffusion/training replay. The remaining roadmap is
+not blanket authorization.
 
 The author's rejection of dashboard-like first drafts established the
 [one-picture visual grammar](#visual-grammar) below. The gate-product revision added
 the parameter-control exception and the requirement to make tiny values visually
 distinguishable before naming their numerical gap.
 
-## The ten committed examples
+## The first ten committed examples
 
 | Location | What the reader follows | Teaching boundary |
 |---|---|---|
