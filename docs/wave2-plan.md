@@ -4,8 +4,9 @@ Status update, September 11, 2026: four Wave 2 scenes are committed in `0674cab`
 The author approved repairs and mask/predictor for publication after local review,
 then requested reference tilt as the next local-review scene. The approved pass
 was pushed in `d08c41f`; reference tilt is now separately author-approved for push
-([receipt](reference-tilt-excerpt.md)). The next requested local-review scene is
-Chapter 19's analytic score field, not a full diffusion/training replay. The other later
+([receipt](reference-tilt-excerpt.md)). Chapter 19's analytic score field is now
+author-approved for publication, not a full diffusion/training replay. Chapter 16's
+attention bill is the next requested local-review scene. The other later
 wave entries remain proposals. The
 historical build-route discussion below does not authorize a new shared animation
 kit; reuse existing transport and only extract helpers when actual duplication warrants it.
@@ -96,6 +97,13 @@ difference in the receipt. E5 uses the before-heading anchor without a QMD edit.
 Route A is rejected: the author wants native lightweight ports, not the film runtime.
 
 ## 5. Waves 3–4 (shortlist, not implementation authorization)
+
+Current exception, September 11: reference tilt is pushed as `bc1133f` (verify
+publishing run `34586598964`); the author approved score field after local
+review. Its [receipt](score-field-excerpt.md) restricts the port to the fixed
+analytic mixture and prescribed inspection sweep, omitting the film's time slices.
+Chapter 16's attention bill is next for local review. Later candidates are not
+authorized by this request.
 
 Wave 3: Ch18 `reference-tilt` (port of `GibbsTilt`, β slider), Ch19 `score-field` (port of
 `ScoreField`; the author authorized the bounded analytic picture on September 11,

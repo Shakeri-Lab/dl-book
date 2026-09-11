@@ -8,18 +8,21 @@ Keep this file current: if a rule changes or the state moves, edit the prompt he
 rather than re-deriving it in chat.
 
 **Animation work override — September 11, 2026:** use
-`/Users/hs9hd/dl-book-html-release`. Eleven scenes and the approved LSTM/fallback
-repairs are committed and pushed to `main` at `d08c41f`; publishing run
-`34578589278` failed Chapter 18's exact notebook stdout check on signed zero, so
-its deployment did not run. Chapter 18 reference tilt is now **author-approved
-for publication**. Next: Chapter 19's analytic score field, for local review only,
-not a diffusion training or sampling replay. Keep the publications separate.
+`/Users/hs9hd/dl-book-html-release`. Twelve scenes are committed and pushed to
+`main` at `bc1133f`, including the approved reference tilt. Check publishing run
+`34586598964` and live assets before calling it deployed. The preceding run
+`34578589278` failed Chapter 18's exact notebook stdout check on signed zero;
+do not bypass that gate or resume the paused numerical migration here.
+Current approved publication: Chapter 19's analytic score field, not a
+diffusion training or sampling replay. Next: Chapter 16's attention bill for
+separate local review. Keep the publications separate.
 The follow-up feedback redesign uses illustrative word aliases, aligned shifted
 targets, target-attached gates, and one sequence at a time; it preserves exact IDs
 and masks and adds no attention interaction or numerical evidence.
 See `docs/animation-authoring.md` for the current inventory and conventions,
 `docs/mask-predictor-excerpt.md` for the published revision,
-`docs/reference-tilt-excerpt.md` for the newly approved scene, and `docs/CONTINUING.md` for checks.
+`docs/reference-tilt-excerpt.md` for the pushed scene,
+`docs/score-field-excerpt.md` for the approved scene, and `docs/CONTINUING.md` for checks.
 Do not treat historical approval labels or committed source as proof of deployment;
 verify CI and live assets. QMD, freeze, PDF settings, and stable tags stay unchanged.
 The numerical-runtime migration and its monitor remain paused.

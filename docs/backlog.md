@@ -5,16 +5,18 @@ them or a chapter naturally touches them.
 
 ## Focused animation roadmap — approved September 9, 2026
 
-**Updated September 11, 2026:** eleven scenes are committed on `main` at `d08c41f`.
+**Updated September 11, 2026:** twelve scenes are committed on `main` at `bc1133f`.
 The [animation guide](animation-authoring.md) is the current inventory; the
 [Wave 1](wave1-excerpts.md) and [Wave 2](wave2-excerpts.md) receipts preserve their
 review history. Source state is not deployment: verify the publishing run and live
 anchors independently. The author approved the small repair pass and Chapter 18
 mask/predictor for publication after review; both were pushed in `d08c41f`.
-Reference tilt in Chapter 18 is now separately approved for publication, beside
+Reference tilt in Chapter 18 was separately pushed as `bc1133f`, beside
 Figure 18.4 at `#reference-tilt-excerpt`; see [its receipt](reference-tilt-excerpt.md).
-It is not included in that earlier push. Next is Chapter 19's analytic score field
-for local review, not a full diffusion/training replay; later entries remain candidates.
+Check publishing run `34586598964` independently. Chapter 19's analytic score field
+is author-approved for separate publication; see [its receipt](score-field-excerpt.md).
+It is not a full diffusion/training replay. Chapter 16's attention bill is the next
+requested local-review scene; later entries remain candidates.
 Prioritize difficult mechanisms rather than animating every chapter.
 
 ### First wave (original priorities; current status explicit)

@@ -2,16 +2,19 @@
 
 Author-approved September 9, 2026. These are optional HTML explanations of existing
 book examples, not videos, new experiments, or a replacement for the static book.
-**Current source state — September 11, 2026:** eleven scenes are committed on `main`
-at `d08c41f`, including the author's Wave 1, Wave 2, and approved mask/predictor. Their earlier
+**Current source state — September 11, 2026:** twelve scenes are committed on `main`
+at `bc1133f`, including the author's Wave 1, Wave 2, approved mask/predictor and
+reference tilt. Their earlier
 review history lives in the [Wave 1](wave1-excerpts.md) and [Wave 2](wave2-excerpts.md)
 receipts. Check the publishing run and live anchors before treating committed source
 as deployed. The current repair pass fixes LSTM equation links and four narrow-screen
 static fallbacks. The author approved Chapter 18's mask/predictor for publication
 after the shifted-target revision, then requested the next scene: reference tilt
 in Chapter 18. That separate scene follows Figure 18.4 and is documented in
-[its receipt](reference-tilt-excerpt.md). The author has now approved its push and
-requested the next analytic score-field scene in Chapter 19 for local review.
+[its receipt](reference-tilt-excerpt.md). It was pushed in `bc1133f`; publishing run
+`34586598964` is the independent deployment receipt. The analytic score-field
+scene in Chapter 19 is now author-approved for separate publication; see
+[its receipt](score-field-excerpt.md). Chapter 16's attention bill is next for local review.
 Do not expand it into a full diffusion/training replay. The remaining roadmap is
 not blanket authorization.
 
@@ -47,6 +50,19 @@ three and four remain earned receipts, and log-probability terms stay symbolic.
 The helper's sequence sum is not the SFT objective's negative mean. No token is
 removed from context. Timeline highlighting carries the mechanism without adding
 hover-only attention paths or a fabricated distribution plot.
+
+### Score field: local derivative, not a sample path
+
+The approved scene lives at `19-generative.html#score-field-excerpt`,
+after the existing Gaussian-mixture score figure. One blue inspection coordinate
+moves across a fixed field. Computed responsibilities weight two signed pulls;
+the pulls add to the local score. A quiet density strip shares the coordinate,
+not the score's vertical units. The midpoint hold shows equal opposing pulls in
+a density valley, so a zero derivative is not mistaken for high probability.
+The scene evaluates the manuscript's means, standard deviation, and priors
+continuously; it does not animate learning or follow a generated sample. The
+lecture film's diffusion-time phase is deliberately omitted. See
+[the source receipt](score-field-excerpt.md) for the analytic oracle and source hashes.
 
 ### Convolution: expose the multiply-and-add
 

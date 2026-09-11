@@ -1,3 +1,25 @@
+# Rolling post-v1.3 — analytic score field (September 11, 2026)
+
+- Adds an optional Chapter 19 inspection sweep beside the existing fixed
+  Gaussian-mixture score figure. Responsibilities weight two signed pulls; a
+  midpoint hold shows their cancellation in a low-density valley.
+- Keeps density and score vertically distinct, with shared input coordinates and
+  an unclipped score range. The prescribed probe motion is not sampling or a
+  diffusion replay. The film's changing-noise phase is not ported.
+- Uses the existing deferred SVG/JavaScript transport, keyboard playback,
+  reduced-motion beats, transcript, and generated responsive static fallbacks.
+  The source/acceptance receipt is `docs/score-field-excerpt.md`.
+- This author-approved scene is separate from reference tilt, pushed as `bc1133f`.
+  No manuscript, freeze, PDF configuration, numerical gate, or release tag changes.
+- Local acceptance passes 622 interaction tests (42 specific to this scene),
+  frozen HTML/source/fixture audits, and desktop/phone browser review. All
+  133 stdout blocks remain exact; Chapter 19's filtered LaTeX is unchanged.
+  The author approved publication after browser review. Chapter 16's attention
+  bill remains a separate next local-review task.
+- Complete publication PDF rebuilds preserve 548 print / 519 continuous pages,
+  with identical text, outlines, geometry, and all-page raster comparisons.
+  Final frozen HTML and all existing structural/asset audits pass.
+
 # Rolling post-v1.3 — reference tilt (September 11, 2026)
 
 Add the author-approved optional Chapter 18 reference-tilt player after Figure 18.4.

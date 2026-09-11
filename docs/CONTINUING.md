@@ -10,6 +10,63 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 
 ---
 
+> **Current approved work — score field, September 11, 2026.** Reference
+> tilt was committed and normally pushed as **`bc1133f`**, with local and remote
+> `main` confirmed equal. Its publishing receipt is run **34586598964**; check
+> that run and live assets before calling it deployed. The approved separate scene is
+> Chapter 19's bounded analytic score-field picture, immediately after
+> `cell-fig-score-mixture`, at `19-generative.html#score-field-excerpt`.
+> See [its source and acceptance receipt](score-field-excerpt.md). One prescribed
+> coordinate reveals how two responsibility-weighted pulls add; the midpoint
+> demonstrates cancellation in a low-density valley. It is not a sample trajectory,
+> a learned field, or a diffusion replay. No QMD, freeze, PDF settings, numerical
+> gates, or stable tags change. The runtime migration and its monitor remain paused.
+
+> **Score-field local acceptance:** **622/622** interaction tests pass, including
+> **42** independent scene tests. The latter compare three arithmetic paths and
+> inspect signed arrow endpoints on a common ruler, not just displayed numbers.
+> A browser-discovered defect, white text halos accidentally repainting arrows,
+> was corrected by text-only selectors and a dedicated regression. Full frozen
+> HTML, assets/public anchors, Plan-to-Code, Python-source, book-contract, and
+> fixture audits pass. The fixture ledger now covers **13** scenes, **72** literals,
+> and **33** reverified lecture digests. All **133** stdout blocks across **27** units
+> and their HTML/TeX pairs remain exact against `bc1133f`. Chapter 19's plain-Pandoc
+> LaTeX is byte-identical with/without both HTML excerpt filters:
+> `/tmp/dl-book-score-latex.W16Xu9/`. Approval now triggers full publication PDF
+> checks; the completed receipt below supersedes the local-draft build boundary.
+> Actual **1280**- and **390**-pixel browser views verified midpoint cancellation,
+> density/score alignment, unclipped tails, readable labels, semantic math, real
+> replay/pause, expanded view, and no page overflow or MathJax errors. A closed
+> chapter view has neither loaded player script nor mounted scene; the direct
+> anchor opens it paused. Generated static wide/narrow parity is tested; do not
+> claim a browser-wide JavaScript-off test. Preview server was restarted on 8770.
+> Logs: `/tmp/dl-book-score-field-final-tests.log`,
+> `/tmp/dl-book-score-field-final-html.log`. Local review:
+> `http://127.0.0.1:8770/chapters/part5/19-generative.html?preview=score-field#score-field-excerpt`.
+> The author approved score field for publication. Chapter 16's attention bill is
+> next for separate local review; later candidates are not authorized by this request.
+
+> **Score-field publication checks:** both complete PDFs stabilized on attempt 2:
+> **548 print / 519 continuous pages**, **390 outline entries** each. Full and
+> per-page text, media boxes, outlines, and all **1,067** page raster hashes at
+> 36 dpi match the pre-build baseline exactly. Full PDF audits and representative
+> visual checks pass, including the static score figure (print 455 / continuous 428).
+> Receipt: `/tmp/dl-book-score-pdf-approval.CC5B76/`, especially
+> `baseline-fingerprint.json`, `comparison.json`, and both audit logs. The final
+> frozen HTML render ran after both PDFs; its asset/metadata and public-anchor
+> audits pass (37 pages, 151 assets). All 133 stdout blocks / 27 units remain exact;
+> **622/622** tests pass. Logs: `/tmp/dl-book-score-publish-tests.log` and
+> `/tmp/dl-book-score-publish-html.log`. A fresh direct-anchor browser load opens
+> paused at the initial coordinate, with no page overflow or MathJax errors.
+
+> **Reference-tilt publishing handoff:** the September 11 publication check of
+> run **34586598964** showed `in_progress`: HTML interactions, notebook export,
+> and all six notebook shards passed. Build/deploy was running, with no failure
+> reported. `bc1133f` is pushed but **not yet verified live**.
+> No retry, bypass, recurring monitor, or automation was created. Recheck this
+> run before publication claims; the preceding signed-zero failure is not assumed
+> to recur or to be fixed without a result.
+
 > **Current approved work — reference tilt, September 11, 2026.** The approved
 > mask/predictor and responsive repairs were committed and pushed to `main` as
 > `d08c41f`; publishing run **34578589278** is the deployment receipt to check.
