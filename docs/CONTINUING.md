@@ -10,6 +10,55 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 
 ---
 
+> **Current approved publication — mask before softmax, September 11, 2026.**
+> Chapter 16's approved attention bill was committed and normally pushed as
+> **`061eff3`**; local/remote `main` matched. Publishing run **34595314339** is
+> passed all jobs; the live player matches source and both live PDFs match their
+> deployed blobs and the prior content/pagination baseline.
+> The author approved Chapter 13 with “push and do next”:
+> `13-attention.html#mask-before-softmax-excerpt`, after `cell-fig-padding-mask`.
+> Its old seeded-fixture concern is resolved by reconstructing the exact existing
+> figure's second-example/second-query row, not adding a new example.
+> See [the source and review receipt](mask-before-softmax-excerpt.md).
+> No QMD, freeze, PDF settings, numerical gates, tags, or runtime migration change.
+> Later scenes still require individual local review; the still-unwritten
+> greedy-tree fixture remains blocked under the HTML-only boundary.
+
+> **Mask-before-softmax acceptance:** 41/41 scene tests and 705/705 full tests
+> pass. Full frozen HTML, assets/anchors, structure/source/Plan, and fixture audits
+> pass; all 133 stdout blocks / 27 units remain exact against `061eff3`. Filtered
+> Chapter 13 LaTeX is unchanged. The served HTTP page has a unique closed panel,
+> working local links, and a deferred player matching source. Direct SVG raster
+> inspection at 296/713 widths shows clear wrong/correct normalization diagrams.
+> The Mac is now unlocked: actual 1280/390-CSS-pixel browser review confirms no
+> overflow or clipped labels, MathJax, playback/pause/scrubbing/expanded view,
+> default closed/deferred loading, and direct-anchor opening paused at zero.
+> Local URL:
+> `http://127.0.0.1:8770/chapters/part4/13-attention.html?preview=mask-before-softmax#mask-before-softmax-excerpt`.
+> The author has approved publication. Verify the new publishing run separately.
+> See the receipt for exact test, HTML, diagram, and LaTeX paths.
+> Both complete PDF builds retain 548/519 pages and 390 outlines each; full text,
+> per-page text/geometry, outlines, and all 1,067 low-resolution rasters are exact.
+> Receipt: `/tmp/dl-book-mask-softmax-pdf-approval.6XHtCD/`. HTML was rendered last.
+
+> **Resolved attention-bill deployment handoff:** run **34595314339** subsequently
+> passed every job; live player and both PDFs were verified. The receipt is
+> `/tmp/dl-book-mask-softmax-pdf-approval.6XHtCD/attention-live-comparison.json`.
+> Historical handoff: the run was still
+> running at 11:56 UTC on September 11. Export and interaction contracts and
+> notebook shards 1–3 had passed; shards 0, 4, and 5 were still executing.
+> No failure was observed. The preceding comparable run took about 34 minutes;
+> this wait is not a reason to alter or bypass publishing. At handoff, remote
+> source is pushed but the new live HTML/PDF deployment is **not yet verified**.
+> Resume by checking that run, then compare the deployed Chapter 16 anchor/player
+> with `061eff3`, and both live PDFs with
+> `/tmp/dl-book-attention-pdf-approval.enT0K2/` (548/519 pages, unchanged text,
+> geometry and outlines). No scheduled monitor was created or resumed; CI itself
+> continues normally. Chapter 13 has since received review and approval.
+> Final snapshot before stopping this turn's monitor: shards **0–3 passed**;
+> **4–5 executing**, build/deploy not started. The attention player to verify has
+> SHA-256 `a6af0140c400eab31281979772fcc642e12cee7a738d525bac1c25b7a6599f48`.
+
 > **Current approved work — attention bill, September 11, 2026.**
 > The approved score field was normally pushed as **`ec2e0f6`**, with local and
 > remote `main` confirmed equal. Publishing run **34589132667** subsequently

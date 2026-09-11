@@ -6,7 +6,11 @@ then requested reference tilt as the next local-review scene. The approved pass
 was pushed in `d08c41f`; reference tilt is now separately author-approved for push
 ([receipt](reference-tilt-excerpt.md)). Chapter 19's analytic score field is now
 separately pushed as `ec2e0f6`, not a full diffusion/training replay. Chapter 16's
-attention bill is approved for publication ([receipt](attention-bill-excerpt.md)). The other later
+attention bill was separately pushed in `061eff3` ([receipt](attention-bill-excerpt.md),
+publishing run `34595314339`, passed and verified live). Mask before softmax is
+author-approved for publication after local desktop/phone review;
+its seeded-fixture gate is closed by the existing figure's exact source row.
+See [its receipt](mask-before-softmax-excerpt.md). The other later
 wave entries remain proposals. The
 historical build-route discussion below does not authorize a new shared animation
 kit; reuse existing transport and only extract helpers when actual duplication warrants it.
@@ -103,9 +107,10 @@ publishing run `34586598964`); the author approved score field after local
 review. Its [receipt](score-field-excerpt.md) restricts the port to the fixed
 analytic mixture and prescribed inspection sweep, omitting the film's time slices.
 Score field was separately pushed in `ec2e0f6`; check run `34589132667` for deployment.
-Chapter 16's linked-patch attention bill is approved for separate publication. The
-author requested the next scene afterward; resolve its fixture before implementation
-and keep its local review separate. This is not blanket approval for later candidates.
+Chapter 16's linked-patch attention bill was separately pushed as `061eff3`. The
+author requested the next scene afterward: mask before softmax. Its fixture is now
+resolved against the source code of the adjacent figure; keep its local review
+separate. This is not blanket approval for later candidates.
 The author's follow-up review replaces elastic resizing with two discrete patch
 states, links the image grid to query/key axes, identifies the sixteen reference
 tiles as old-grid areas, and puts a token-length comparison beside the score area.
@@ -114,8 +119,9 @@ Keep the existing compact movie transport rather than adding architectural contr
 Wave 3: Ch18 `reference-tilt` (port of `GibbsTilt`, β slider), Ch19 `score-field` (port of
 `ScoreField`; the author authorized the bounded analytic picture on September 11,
 not a diffusion/training replay), Ch16 `attention-bill` (port
-of `AttentionBill`), Ch13 `mask-before-softmax` (port of `MaskBefore`; needs the pre-mask scores
-decision), Ch11 `greedy-tree` (no manuscript numbers — needs a manuscript addition first). Wave 4:
+of `AttentionBill`), Ch13 `mask-before-softmax` (port of `MaskBefore`; source-bound
+intermediate scores resolved, approved for publication), Ch11 `greedy-tree`
+(no manuscript numbers — needs a manuscript addition first). Wave 4:
 PCA interlude `same-subspace` (port of `SSameSubspace`), A1 `svd-circle` (no film — Route C),
 Ch18 `preference-ruler` (port of `BradleyTerry`), Ch17 `scale-granularity` (port of
 `GranularityDesign`), Ch14 `layernorm-axis` (port of `LayerNormAxis`), Ch5 `derivative-gates`

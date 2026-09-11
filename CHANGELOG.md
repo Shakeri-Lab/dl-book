@@ -1,3 +1,23 @@
+# Rolling post-v1.3 — mask before softmax (September 11, 2026)
+
+- Prepares a separate optional Chapter 13 normalization walkthrough from the
+  exact four-key row already behind the source-padding-mask figure. Zeroed padded
+  logits still contribute to the denominator; negative-infinity masking excludes
+  them. The all-masked-row guard remains explicit.
+- Closes the earlier seeded-fixture concern with an extraction recipe and exact
+  source/snapshot receipts. No new example, training run, numerical gate, QMD,
+  freeze, PDF configuration, or release tag is introduced.
+- Reuses lightweight shared playback and responsive SVG. The author approved
+  publication; `docs/mask-before-softmax-excerpt.md` tracks checks.
+- Attention bill was separately pushed as `061eff3`; publishing run `34595314339`
+  passed all jobs, with live player and both PDFs independently verified.
+- Local verification passes 705 interaction tests (41 scene-specific), all
+  existing source/HTML audits, and exact frozen stdout. Filtered Chapter 13 LaTeX
+  is unchanged. Actual desktop and 390-CSS-pixel browser review verified layout,
+  playback, pause, scrubbing, expanded view, and closed/deferred/direct-link states.
+- Both complete PDF profiles were rebuilt with unchanged text, geometry, outlines,
+  and every low-resolution page raster: 548 print / 519 continuous pages.
+
 # Rolling post-v1.3 — attention bill (September 11, 2026)
 
 - Adds a separate, optional Chapter 16 score-grid animation using the existing

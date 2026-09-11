@@ -8,20 +8,31 @@ Keep this file current: if a rule changes or the state moves, edit the prompt he
 rather than re-deriving it in chat.
 
 **Animation work override — September 11, 2026:** use
-`/Users/hs9hd/dl-book-html-release`. Thirteen scenes are committed and pushed to
-`main` at `ec2e0f6`, including the approved score field. Publishing run
+`/Users/hs9hd/dl-book-html-release`. Fourteen scenes are committed and pushed to
+`main` at `061eff3`, including the approved attention bill. Its publishing run
+is `34595314339`; it passed all jobs and the live player and both PDFs are verified.
+The earlier score-field run
 `34589132667` passed all jobs; the live anchor and deferred player match source.
 Reference tilt is also verified live. The earlier run
 `34578589278` failed Chapter 18's exact notebook stdout check on signed zero;
 do not bypass that gate or resume the paused numerical migration here.
-Current approved revision: Chapter 16's attention bill. It counts
+Published-source revision: Chapter 16's attention bill. It counts
 the existing example's query-key pairs, not wall-clock time. The author requested
 a linked patch-to-token view, discrete patch states, explicitly labeled old-grid
 area tiles, and a visible linear-versus-quadratic work comparison. Keep the compact
 movie controls; do not add a P=8 example or hover-only interaction. The author
 approved this revision with “push. Do next.” Keep publications separate and resolve
 the next scene's manuscript fixture before implementation; do not treat that request
-as permission for every remaining wave.
+as permission for every remaining wave. Current approved publication: Chapter 13's
+`#mask-before-softmax-excerpt`. Its fixture gate is resolved against the existing
+`padding-mask-audit` and adjacent figure, second example/second query. The source
+receipt records the exact extraction, not new frozen evidence. The author approved
+it with “push and do next.” The Mac was unlocked and actual 1280/390-CSS-pixel
+review verified layout, playback, pause, scrubbing, expanded view, and deferred
+loading/direct anchors. All 705 tests pass. Verify this scene's new publishing run
+separately; prior CI success is not its deployment receipt. No scheduled monitor
+was created or resumed. Greedy tree remains blocked on a shared-manuscript fixture;
+the next eligible candidate is the PCA interlude's schematic basis change.
 The follow-up feedback redesign uses illustrative word aliases, aligned shifted
 targets, target-attached gates, and one sequence at a time; it preserves exact IDs
 and masks and adds no attention interaction or numerical evidence.
@@ -29,7 +40,8 @@ See `docs/animation-authoring.md` for the current inventory and conventions,
 `docs/mask-predictor-excerpt.md` for the published revision,
 `docs/reference-tilt-excerpt.md` for the pushed scene,
 `docs/score-field-excerpt.md` for the pushed scene,
-`docs/attention-bill-excerpt.md` for the local draft, and `docs/CONTINUING.md` for checks.
+`docs/attention-bill-excerpt.md` for the pushed scene,
+`docs/mask-before-softmax-excerpt.md` for the approved scene, and `docs/CONTINUING.md` for checks.
 Do not treat historical approval labels or committed source as proof of deployment;
 verify CI and live assets. QMD, freeze, PDF settings, and stable tags stay unchanged.
 The numerical-runtime migration and its monitor remain paused.

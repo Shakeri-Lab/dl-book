@@ -1,0 +1,166 @@
+# Mask before softmax: source and review receipt
+
+September 11, 2026. **Author-approved for publication** with “push and do next.”
+Attention bill was separately pushed as `061eff3`; its run `34595314339` passed
+all jobs and the live player and both PDFs were verified before this publication.
+
+## One question, one normalization
+
+Does giving a padded key a score of zero exclude it?
+
+Placement: `chapters/part4/13-attention.qmd`, after `cell-fig-padding-mask`, at
+`13-attention.html#mask-before-softmax-excerpt`. Four columns retain the two real
+keys and two padded keys throughout. Follow their scores into exponentials, one
+shared denominator, and normalized weights. Compare zeroed padded logits with
+negative-infinity masking before softmax. The final witness is the existing
+figure's second query, not a new architecture or training result.
+
+The source-padding mask is not a target-loss mask and not a causal triangle. The
+entire source is available to this recurrent decoder. An all-masked row must be
+rejected before normalization; four zero weights are not a distribution.
+
+## Closing the old fixture gate
+
+The roadmap previously flagged seeded rather than printed pre-mask scores. The
+selected inputs are now tied to the exact code already behind the adjacent
+figure: `padding-mask-audit` at Chapter 13 lines 518–560, seed `6050133`, and
+zero-based batch/query indices `[1,1]`. The chapter prints the final row inside
+the heatmap, to two decimals. Intermediate scores and the zeroed-score
+counterexample are explicitly computed variants, not new frozen stdout.
+
+The tiny forward-only extraction below was executed on September 11 with
+`/Users/hs9hd/.venvs/dl-book/bin/python` (torch `2.12.1`, one thread). No training,
+rendered notebook, or frozen artifact was changed. The lecture snapshot records
+the same chapter/frozen-HTML hashes and exactly matches these float32 scores and
+weights despite its torch `2.13.0` runtime. This narrow check does not claim
+general equivalence of those runtimes.
+
+```python
+import math
+import torch
+
+torch.set_num_threads(1)
+g = torch.Generator().manual_seed(6050133)
+Q = torch.randn(2, 2, 4, generator=g)
+K = torch.randn(2, 4, 4, generator=g)
+V = torch.randn(2, 4, 3, generator=g)
+valid = torch.tensor([True, True, False, False])
+scores = (Q @ K.transpose(-2, -1) / math.sqrt(K.shape[-1]))[1, 1]
+correct = torch.softmax(scores.masked_fill(~valid, -torch.inf), dim=-1)
+wrong = torch.softmax(scores.masked_fill(~valid, 0.0), dim=-1)
+print(Q[1, 1].tolist(), K[1].tolist())
+print(scores.tolist(), correct.tolist(), wrong[~valid].sum().item())
+```
+
+Source-derived float32 witnesses:
+
+| Quantity | Values |
+|---|---|
+| Scaled scores | `[-0.3497923016548157, 0.018254060298204422, -0.23989452421665192, -0.25538283586502075]` |
+| Correct weights | `[0.40901318192481995, 0.5909868478775024, 0.0, 0.0]` |
+| Wrong padded mass, padded logits set to zero | `0.5371642708778381` |
+
+The panel stores the selected float32 query and four keys once. JavaScript uses
+double-precision arithmetic to derive the dot products and all following
+quantities; it does not interpolate a table of weights. At display precision the
+correct weights are `0.4090, 0.5910, 0, 0`, and the wrong padded mass is `0.5372`.
+Independent checks use a float32 witness allowance of `1e-7`, separately from
+double-precision algebraic checks at `1e-12`. These are local scene tests, not
+changes to any numerical portability gate.
+
+The verify-math SymPy helper confirmed that the two correctly normalized
+exponentials sum to one, and that two zeroed padded logits contribute
+`2 / (exp(a) + exp(b) + 2)` mass. The zero-pad counterexample changes logits, not
+weights after softmax.
+
+## Composition and timeline
+
+Port the four-score mechanism from `6050-Ch13/lecture.jsx`, function `MaskBefore`
+(scene name `MaskBeforeSoftmax`, source indices `MASK_B=1`, `MASK_Q=1`), and its
+storyboard row. The film's longer shape-ledger/code-panel sequence is omitted.
+Use the book's own semantic palette and compact shared transport, not React,
+KaTeX, a video payload, or a general animation engine.
+
+| Time | Reveal |
+|---|---|
+| 0 s | Predict from four existing scores and validity marks. |
+| 5 s | Set the two padded scores to zero. |
+| 10 s | Their exponentials are one, not zero. |
+| 15 s | Normalize: padding still receives positive mass. |
+| 20 s | Use negative infinity for padded scores instead. |
+| 25 s | Their zero contributions leave the denominator. |
+| 30 s | Normalize the real keys; padded weights are zero, row sum one. |
+| 35 s | Retain the final witness and state the at-least-one-real-key guard. |
+
+Source/key labels are blue, probabilities green, operators neutral, and the
+wrong padded contribution wine. Meaning also appears in labels and geometry.
+Four columns remain aligned at phone widths; calculation levels reflow instead
+of shrinking an entire slide. No hover-only interaction or new parameter control.
+Default closed, paused, silent, 1.5× playback, keyboard/scrubbing/expanded view,
+reduced-motion holds, transcript, and generated wide/narrow static fallback.
+
+## Verification status
+
+Implementation and automated acceptance pass: **41/41** independent scene tests
+and **705/705** full interaction tests. The suite independently recomputes scores,
+wrong/correct normalization and geometry, rejects all-masked input before any
+exponential is evaluated, checks alternate fixtures and common shifts, and covers
+deferred loading, deterministic scrubbing, pause/replay, resize/expanded view,
+reduced motion, and generated wide/narrow fallback parity. A caught misuse of the
+shared `data-value` marker was repaired in source, not by weakening the test.
+
+Full frozen HTML was rendered last. HTML assets (37 pages, 153 assets), public
+anchors, book/source/Plan contracts, and excerpt fixtures pass (15 scenes,
+89 literals, 39 reverified lecture digests). All **133 stdout blocks / 27 units**
+remain exact against `061eff3`, with matching HTML/TeX output pairs. Plain-Pandoc
+Chapter 13 LaTeX is byte-identical with and without both excerpt filters; SHA-256
+`f6d7d1db3ca41ccc41677136fdf2bc3642cd822f6c46dd13b41864eb88c998cf`, saved as
+`/tmp/dl-book-mask-before-{plain,filtered}.tex`.
+
+The publication pass rebuilt both complete PDF profiles, each stabilized on the
+second pass: **548 print / 519 continuous pages**, 390 outline entries each.
+Complete and per-page extracted text, page geometry, outlines, and all 1,067
+36-dpi page rasters match the pre-publication baseline. The comparison and retained
+build logs are in `/tmp/dl-book-mask-softmax-pdf-approval.6XHtCD/`.
+Both PDF audits pass with retained LaTeX logs (no print loss or missing glyphs).
+Rebuilt cover, contents, long-title samples and the Chapter 13 padding-mask pages
+(print 283 / continuous 262) were visually inspected without new layout defects.
+Canonical HTML was rendered last; log `/tmp/dl-book-mask-publication-html.log`.
+No PDF page-count ledger requires repagination.
+
+Isolated SVGs were rasterized directly, not through a browser, at widths 296 and
+713 for opening, exponentiation, wrong-result, exclusion, and final frames.
+The wrong/final phone drawings and desktop wrong-result drawing were visually
+inspected: columns, values, sums, and labels are clear. These checks use an isolated
+Arial rendering and do not substitute for actual chapter/browser layout.
+The Mac was subsequently unlocked. Actual chapter review at 1280 and 390 CSS
+pixels verified clear wrong/correct normalization, no horizontal overflow or
+clipped SVG labels, working MathJax, real play/pause/replay and scrub endpoints.
+Playback held at 19 seconds while paused through entering and exiting fullscreen.
+A fresh chapter visit leaves the panel closed and its player unloaded; the direct
+anchor opens it paused at zero. The viewport override was reset after review.
+The publication rerun passed all 705 tests; log:
+`/tmp/dl-book-mask-publication-tests.log`.
+
+Local HTTP checks confirm the unique closed disclosure after the existing figure,
+transcript and local links, deferred script, and exact served asset. Preview:
+`http://127.0.0.1:8770/chapters/part4/13-attention.html?preview=mask-before-softmax#mask-before-softmax-excerpt`.
+Logs: `/tmp/mask-before-softmax-tests-final.log`,
+`/tmp/dl-book-mask-before-full-tests.log`, `/tmp/dl-book-mask-before-final-html.log`.
+Isolated diagram frames: `/tmp/dl-book-mask-before-{296,713}-{0,10,15,25,40}.png`.
+Manuscript, freeze, numerical tolerances, PDF configuration, tags, and paused
+runtime migration stay unchanged. Attention-bill publication is tracked separately.
+
+## Source digests
+
+Lecture paths below are relative to
+`/Users/hs9hd/Library/CloudStorage/Box-Box/Teaching/6050/Video_lectures/`.
+
+| Source | SHA-256 |
+|---|---|
+| `chapters/part4/13-attention.qmd` | `09040b69747b7b6ac758bfc4693847e1ecd256a50151bd2676b88173dbc879df` |
+| `_freeze/chapters/part4/13-attention/execute-results/html.json` | `bd3430e8768748960c9c4cfaac055d3aea351f218fe919937725392b398b7d85` |
+| `6050-Ch13/lecture.jsx` | `9e6a849eeffad1b5e0e367a5b3aa5b4489136093e3979152e03c7b469f4f6501` |
+| `6050-Ch13/storyboard.md` | `2a932bf1b8eafe5e029f20562a3091a54e4e3943373a0528947d271cb53e1dc8` |
+| `6050-Ch13/ch13-data.js` | `9c6da18e1816c503809c6c89556d475868d5ecb44756ee0dcf761e1776137b75` |
+| `audit-ch13-attention.py` | `59b18b88eb8db3de8ba4bfcc223bc24a01b96f33f6c9cd172a76958ebd6ce419` |

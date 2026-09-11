@@ -2,9 +2,9 @@
 
 Author-approved September 9, 2026. These are optional HTML explanations of existing
 book examples, not videos, new experiments, or a replacement for the static book.
-**Current source state — September 11, 2026:** thirteen scenes are committed on `main`
-at `ec2e0f6`, including the author's Wave 1, Wave 2, approved mask/predictor,
-reference tilt, and score field. Their earlier
+**Current source state — September 11, 2026:** fourteen scenes are committed on `main`
+at `061eff3`, including the author's Wave 1, Wave 2, approved mask/predictor,
+reference tilt, score field, and attention bill. Their earlier
 review history lives in the [Wave 1](wave1-excerpts.md) and [Wave 2](wave2-excerpts.md)
 receipts. Check the publishing run and live anchors before treating committed source
 as deployed. The current repair pass fixes LSTM equation links and four narrow-screen
@@ -15,8 +15,10 @@ in Chapter 18. That separate scene follows Figure 18.4 and is documented in
 `34586598964` is the independent deployment receipt. The analytic score-field
 scene in Chapter 19 was separately pushed in `ec2e0f6`; see
 [its receipt](score-field-excerpt.md) and publishing run `34589132667`.
-Chapter 16's linked-patch attention bill is separately approved for publication;
-see [its receipt](attention-bill-excerpt.md).
+Chapter 16's linked-patch attention bill was separately pushed in `061eff3`;
+see [its receipt](attention-bill-excerpt.md) and publishing run `34595314339`.
+Chapter 13's mask-before-softmax scene is author-approved for publication after
+local review; see [its receipt](mask-before-softmax-excerpt.md).
 Do not expand it into a full diffusion/training replay. The remaining roadmap is
 not blanket authorization.
 
@@ -52,6 +54,19 @@ three and four remain earned receipts, and log-probability terms stay symbolic.
 The helper's sequence sum is not the SFT objective's negative mean. No token is
 removed from context. Timeline highlighting carries the mechanism without adding
 hover-only attention paths or a fabricated distribution plot.
+
+### Mask before softmax: zero score is not exclusion
+
+The approved scene at `13-attention.html#mask-before-softmax-excerpt` uses the exact
+four-key row already behind `fig-padding-mask`. Track two padded logits through
+exponentiation and the common denominator. Setting those logits to zero leaves
+two contributions of one; negative infinity instead leaves zero contribution.
+The correct witness normalizes over the real keys. Keep four aligned key columns,
+not a causal matrix or dashboard. An all-masked row is rejected, never illustrated
+as a valid row of zero weights. Source-padding visibility and target-loss grading
+remain distinct. Previously unprinted intermediates must have an exact source
+extraction recipe, fixture checks, and a receipt; a seeded example alone is not
+permission to invent a different mask. See [the receipt](mask-before-softmax-excerpt.md).
 
 ### Attention bill: count pairs before naming complexity
 
