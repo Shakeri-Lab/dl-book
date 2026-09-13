@@ -84,7 +84,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../../site_libs/bootstrap/bootstrap-e88ffde22e128a86f75eb1bef48f2912.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../../site_libs/bootstrap/bootstrap-bc55088f08c18b79f1a53b1d30aa7b5a.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -502,7 +502,10 @@ window.Quarto = {
   <li><a href="#two-rnns-and-a-handoff" id="toc-two-rnns-and-a-handoff" class="nav-link active" data-scroll-target="#two-rnns-and-a-handoff"><span class="header-section-number">11.1</span> Two RNNs and a handoff</a></li>
   <li><a href="#the-padding-trap" id="toc-the-padding-trap" class="nav-link" data-scroll-target="#the-padding-trap"><span class="header-section-number">11.2</span> The padding trap</a></li>
   <li><a href="#teacher-forcing-training-on-the-gold-rail" id="toc-teacher-forcing-training-on-the-gold-rail" class="nav-link" data-scroll-target="#teacher-forcing-training-on-the-gold-rail"><span class="header-section-number">11.3</span> Teacher forcing: training on the gold rail</a></li>
-  <li><a href="#getting-answers-out-search" id="toc-getting-answers-out-search" class="nav-link" data-scroll-target="#getting-answers-out-search"><span class="header-section-number">11.4</span> Getting answers out: search</a></li>
+  <li><a href="#getting-answers-out-search" id="toc-getting-answers-out-search" class="nav-link" data-scroll-target="#getting-answers-out-search"><span class="header-section-number">11.4</span> Getting answers out: search</a>
+  <ul class="collapse">
+  <li><a href="#search-exposes-alternatives" id="toc-search-exposes-alternatives" class="nav-link" data-scroll-target="#search-exposes-alternatives">Search exposes alternatives</a></li>
+  </ul></li>
   <li><a href="#the-fixed-size-state-in-the-middle" id="toc-the-fixed-size-state-in-the-middle" class="nav-link" data-scroll-target="#the-fixed-size-state-in-the-middle"><span class="header-section-number">11.5</span> The fixed-size state in the middle</a></li>
   <li><a href="#okay-so-the-fixed-size-handoff-is-the-bottleneck" id="toc-okay-so-the-fixed-size-handoff-is-the-bottleneck" class="nav-link" data-scroll-target="#okay-so-the-fixed-size-handoff-is-the-bottleneck"><span class="header-section-number">11.6</span> Okay, so — the fixed-size handoff is the bottleneck</a></li>
   <li><a href="#sources-and-further-reading" id="toc-sources-and-further-reading" class="nav-link" data-scroll-target="#sources-and-further-reading">Sources and further reading</a></li>
@@ -936,7 +939,69 @@ Figure&nbsp;11.3: Learning curves on a fixed subset of 400 unambiguous validatio
 <h2 data-number="11.4" class="anchored" data-anchor-id="getting-answers-out-search"><span class="header-section-number">11.4</span> Getting answers out: search</h2>
 <p>Training is settled; now the neglected half. At inference the decoder defines a probability for every possible output sequence, and we want the best one. That is a <em>search problem</em> over a tree where every node branches <span class="math inline">\(V_{\text{tgt}}\)</span> ways; exhaustive search is <span class="math inline">\(V^{T}\)</span>, hopeless. Everything practical is a heuristic walk through that tree.</p>
 <p><strong>Greedy search</strong>, which <code>translate</code> above already performs, takes the single most probable token at each step and never looks back. Complexity <span class="math inline">\(O(V \cdot T)\)</span>, quality: usually fine, occasionally myopic. The failure mode is structural: a token that looks best <em>right now</em> can commit the decoder to a mediocre continuation, when a slightly worse token now would have opened a much better path. Maximizing each step is not maximizing the sequence. You met this exact gap in <a href="../part1/02-logistic-softmax.html" class="quarto-xref"><span>Chapter 2</span></a>, where the hard max’s stepwise confidence hid the alternatives softmax kept alive.</p>
+<!-- lecture-source: Video_lectures/6050-Ch11/lecture.jsx, SGreedyTree;
+     Video_lectures/audit-ch11-encoder-decoder.py, toy_search_tree_evidence.
+     Author-approved shared toy fixture; not a trained-model measurement. -->
+<p>Can winning the first step lose the sequence? Consider this tiny decoder. Each row in <a href="#tbl-greedy-tree" class="quarto-xref">Table&nbsp;<span>11.1</span></a> is a conditional distribution over the next token; <code>other</code> collects every alternative not named in that row. <code>&lt;eos&gt;</code> ends the sequence.</p>
+<div id="tbl-greedy-tree" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-greedy-tree-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;11.1: A tiny decoder with normalized next-token choices at each listed prefix.
+</figcaption>
+<div aria-describedby="tbl-greedy-tree-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th style="text-align: left;">Prefix</th>
+<th style="text-align: left;">Named choice</th>
+<th style="text-align: left;">Alternative</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;"><code>&lt;bos&gt;</code></td>
+<td style="text-align: left;"><code>A</code>: 0.60</td>
+<td style="text-align: left;"><code>B</code>: 0.40</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><code>A</code></td>
+<td style="text-align: left;"><code>x</code>: 0.55</td>
+<td style="text-align: left;"><code>other</code>: 0.45</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><code>B</code></td>
+<td style="text-align: left;"><code>y</code>: 0.95</td>
+<td style="text-align: left;"><code>other</code>: 0.05</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><code>A x</code></td>
+<td style="text-align: left;"><code>&lt;eos&gt;</code>: 0.80</td>
+<td style="text-align: left;"><code>other</code>: 0.20</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><code>B y</code></td>
+<td style="text-align: left;"><code>&lt;eos&gt;</code>: 0.95</td>
+<td style="text-align: left;"><code>other</code>: 0.05</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<p>Greedy chooses <code>A</code>, then <code>x</code>, then <code>&lt;eos&gt;</code>. Multiply along that path before looking at the alternative:</p>
+<p><span class="math display">\[
+\begin{gathered}
+\predictionpart{P(\texttt{A x &lt;eos&gt;})}\\
+= \predictionpart{0.60}\times\predictionpart{0.55}\times\predictionpart{0.80}
+  = \predictionpart{0.264},\\[4pt]
+\predictionpart{P(\texttt{B y &lt;eos&gt;})}\\
+= \predictionpart{0.40}\times\predictionpart{0.95}\times\predictionpart{0.95}
+  = \predictionpart{0.361}.
+\end{gathered}
+\]</span></p>
+<p>The best complete sequence begins with the less likely first token. No hidden continuation overturns this result: the largest probability mass entering an <code>other</code> branch is <span class="math inline">\(0.60\times0.45=0.27\)</span>, and multiplying by further probabilities cannot increase it. This is a specified toy decoder, not a measured model.</p>
 <p><strong>Beam search</strong> widens the walk: carry the <span class="math inline">\(k\)</span> best partial sequences (the <em>beam</em>), expand each by all <span class="math inline">\(V\)</span> tokens, keep the top <span class="math inline">\(k\)</span> by <em>cumulative</em> log-probability, repeat. Complexity <span class="math inline">\(O(k \cdot V \cdot T)\)</span>, a small multiple of greedy, nothing like exhaustive.</p>
+<p>In this tree, a beam of width two keeps both <code>A</code> and <code>B</code>. At the next step it keeps <code>B y</code> (0.38) and <code>A x</code> (0.33). Every omitted prefix has probability at most its branch’s total mass (0.27 or 0.02), so none can displace those two. The retained <code>&lt;eos&gt;</code> continuations finish at 0.361 and 0.264. The beam recovers the winner here; a finite beam does not guarantee the best sequence in every tree.</p>
 <div class="plan-code">
 <div class="plan">
 <ol type="1">
@@ -971,6 +1036,213 @@ Figure&nbsp;11.3: Learning curves on a fixed subset of 400 unambiguous validatio
 <span id="cb12-25"><a href="#cb12-25" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> seq, lp, _, _ <span class="kw">in</span> beams]</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
 </div>
+<style>
+.mechanism-excerpt { color: #263445; background: #fff; border: 1px solid #d5dde5; border-radius: .4rem; margin: 1.4rem 0; }
+.mechanism-excerpt > summary { font-weight: 600; padding: .85rem 1rem; cursor: pointer; }
+.mechanism-body { padding: 0 1rem 1rem; }
+.mechanism-question { font-weight: 600; margin: .5rem 0; }
+.mechanism-boundary, .mechanism-intro { font-size: .9rem; }
+.mechanism-excerpt [data-pane] { border: 1px solid #d5dde5; border-radius: .4rem; padding: .8rem; background: #fff; min-width: 0; }
+.mechanism-excerpt [hidden] { display: none !important; }
+.mechanism-excerpt :focus-visible { outline: 3px solid #2b6cb0; outline-offset: 3px; }
+.mechanism-excerpt .input-role { color: #2b6cb0; }
+.mechanism-excerpt .target-role { color: #7950b8; }
+.mechanism-excerpt .prediction-role { color: #2f855a; }
+.mechanism-excerpt .error-role { color: #9b2c4c; }
+.mechanism-stages { display: flex; gap: .3rem; font-size: .8rem; margin: .2rem 0 .8rem; }
+.mechanism-stages span { flex: 1; text-align: center; border-bottom: 3px solid #d5dde5; padding-bottom: .3rem; }
+.mechanism-stages .is-current { font-weight: 700; border-color: #232d4b; }
+.mechanism-caption { background: #f3f5f8; border-left: 3px solid #232d4b; padding: .6rem; font-size: .9rem; min-height: 3.4em; margin: .6rem 0; }
+.mechanism-controls { display: grid; grid-template-columns: 44px minmax(20px, 1fr) auto 64px 44px; gap: .2rem; align-items: center; border-top: 1px solid #d5dde5; font-size: .8rem; }
+.mechanism-controls button, .mechanism-controls select { color: #263445; font: inherit; background: transparent; border: 0; border-radius: .25rem; min-height: 44px; }
+.mechanism-controls button { display: grid; place-items: center; padding: 0; width: 44px; height: 44px; }
+.mechanism-controls button:hover { background: #edf1f6; }
+.mechanism-controls select { width: 100%; min-width: 0; padding: .2rem; }
+.mechanism-controls svg { width: 21px; height: 21px; display: none; }
+.mechanism-controls [data-state="play"] [data-icon="play"], .mechanism-controls [data-state="pause"] [data-icon="pause"], .mechanism-controls [data-state="replay"] [data-icon="replay"],
+.mechanism-controls [data-state="expand"] [data-icon="expand"], .mechanism-controls [data-state="contract"] [data-icon="contract"] { display: block; }
+.mechanism-scrubber { display: flex; min-width: 0; margin: 0; }
+.mechanism-scrubber input { width: 100%; min-width: 0; min-height: 44px; accent-color: #232d4b; margin: 0; }
+.mechanism-clock { white-space: nowrap; font-size: .75rem; font-variant-numeric: tabular-nums; }
+.mechanism-sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+.mechanism-excerpt [data-notice]:empty, .mechanism-excerpt [data-load-status]:empty { display: none; }
+.mechanism-excerpt [data-pane]:is(:fullscreen, .is-expanded) { width: 100%; height: 100%; max-width: none; box-sizing: border-box; overflow: auto; padding: clamp(1rem, 4vw, 3rem); display: flex; flex-direction: column; justify-content: safe center; color: #263445; background: #fff; }
+.mechanism-excerpt [data-pane]:is(:fullscreen, .is-expanded) > * { width: 100%; max-width: 1000px; margin-left: auto; margin-right: auto; }
+.mechanism-excerpt dialog { border: 0; border-radius: .4rem; padding: 0; width: calc(100vw - 1rem); height: calc(100dvh - 1rem); max-width: none; max-height: none; }
+.mechanism-excerpt dialog::backdrop { background: #232d4b99; }
+.mechanism-transcript > summary { cursor: pointer; min-height: 44px; padding: .5rem 0; }
+.mechanism-transcript li { margin-bottom: .5rem; }
+@media (max-width: 480px) { .mechanism-controls [data-duration] { display: none; } .mechanism-controls { grid-template-columns: 44px minmax(20px, 1fr) auto 58px 44px; gap: .1rem; } }
+@media (max-width: 360px) { .mechanism-clock { display: none; } .mechanism-controls { grid-template-columns: 44px minmax(20px, 1fr) 58px 44px; } }
+@media (max-width: 360px) { .mechanism-stages { font-size: .68rem; gap: .15rem; } }
+@media (max-width: 400px) { .mechanism-body { padding: 0 .65rem .65rem; } .mechanism-excerpt [data-pane] { padding: .5rem; } }
+
+#greedy-tree-excerpt {
+  --gt-input: #2b6cb0;
+  --gt-probability: #2f855a;
+  --gt-ink: #232d4b;
+  --gt-muted: #586474;
+  --gt-line: #677383;
+}
+.gt-figure { container-type: inline-size; }
+.gt-figure svg { display: block; width: 100%; height: auto; font-family: inherit; overflow: visible; }
+.gt-figure text { font-size: 13px; fill: var(--gt-ink); font-variant-numeric: tabular-nums; }
+.gt-figure .gt-small { font-size: 12px; }
+.gt-figure .gt-heading { font-size: 14px; font-weight: 600; }
+.gt-figure .gt-muted { fill: var(--gt-muted); }
+.gt-figure .gt-probability { fill: var(--gt-probability); }
+.gt-figure .gt-input { fill: var(--gt-input); }
+.gt-figure .gt-depth { fill: var(--gt-muted); }
+.gt-figure .gt-depth[data-current="yes"] { fill: var(--gt-ink); font-weight: 700; text-decoration: underline; }
+.gt-wire, .gt-arrow { fill: none; stroke: var(--gt-line); stroke-width: 1.4; }
+.gt-wire[data-state="kept"], .gt-wire[data-state="winner"] { stroke: var(--gt-probability); stroke-width: 2.6; }
+.gt-wire[data-state="pruned"], .gt-wire[data-state="counterfactual"] { stroke-dasharray: 4 3; }
+.gt-node { fill: white; stroke: var(--gt-line); stroke-width: 1.4; }
+.gt-root { fill: #edf4fc; stroke: var(--gt-input); stroke-width: 1.6; }
+.gt-node-group[data-state="kept"] .gt-node, .gt-node-group[data-state="winner"] .gt-node { fill: #edf7f1; stroke: var(--gt-probability); stroke-width: 2.2; }
+.gt-node-group[data-state="pruned"] .gt-node, .gt-node-group[data-state="counterfactual"] .gt-node { fill: #f4f6f8; stroke-dasharray: 4 3; }
+.gt-node-group[data-prefix="yes"] .gt-node { fill: #edf4fc; stroke: var(--gt-input); }
+.gt-wire[data-prefix="yes"] { stroke: var(--gt-input); }
+.gt-node-group[data-selected="yes"] .gt-node { stroke-width: 3; }
+.gt-eos-inner { fill: none; stroke: var(--gt-line); stroke-width: 1; }
+.gt-frontier { fill: none; stroke: var(--gt-probability); stroke-width: 2.2; }
+.gt-frontier[data-branch="1"] { stroke-dasharray: 3 2; }
+.gt-frontier[data-selected="yes"] { stroke-dasharray: none; stroke-width: 3; }
+.gt-other-wire { fill: none; stroke: var(--gt-line); stroke-width: 1.2; stroke-dasharray: 3 3; }
+.gt-formula { display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline; gap: .2rem .7rem; min-height: 3em; margin: .3rem 0 0; text-align: center; font-size: .94rem; }
+#greedy-tree-excerpt[data-ready] .gt-formula:not(.gt-product-shown) #eq-greedy-tree-1,
+#greedy-tree-excerpt[data-ready] .gt-formula:not(.gt-log-shown) #eq-greedy-tree-2 { visibility: hidden; }
+#greedy-tree-excerpt[data-ready] .gt-product-shown .gt-product,
+#greedy-tree-excerpt[data-ready] .gt-log-shown .gt-log { background: rgba(47,133,90,.09); border-radius: 3px; }
+.gt-figure [data-static-frame="narrow"] { display: none; }
+@container (max-width: 559px) {
+  #greedy-tree-excerpt:not([data-ready]) .gt-figure svg { aspect-ratio: 296 / 650; }
+  #greedy-tree-excerpt:not([data-ready]) .gt-figure [data-drawing] { display: none; }
+  #greedy-tree-excerpt:not([data-ready]) .gt-figure [data-static-frame="narrow"] { display: inline; }
+}
+
+</style>
+<!--
+  Author-approved. The shared Chapter 11 toy-search example owns this fixture.
+  The instructor's SGreedyTree and SBeamSearch supply the two-rail composition.
+  Only the declared conditional probabilities and their complements are used.
+  The branch stubs have no invented continuations. No training result is implied.
+-->
+<details id="greedy-tree-excerpt" class="mechanism-excerpt" data-player="../../interactives/greedy-tree/player.js" data-playback="../../interactives/shared/playback.js" data-fixture="{&quot;root&quot;:[0.60,0.40],&quot;next&quot;:[0.55,0.95],&quot;eos&quot;:[0.80,0.95]}">
+  <summary>Watch the mechanism: winning a step can lose the sequence</summary>
+  <div class="mechanism-body">
+    <p class="mechanism-question">If A is the more likely first token, must the most likely complete sequence start with A?</p>
+    <p class="mechanism-intro">Follow the chapter's fixed probability tree twice. Greedy keeps one continuation; beam width two keeps two partial sequences. Each edge probability belongs to the prefix that reaches it. Node values are their products, including EOS at a completed sequence.</p>
+    <div data-pane="" data-duration="40" data-beats="0 5 10 15 20 25 30 35" tabindex="0" role="group" aria-label="Greedy and beam search on the same probability tree" aria-describedby="greedy-tree-playback-help">
+      <div class="gt-figure" data-figure="">
+        <svg viewbox="0 0 713 490" role="img" aria-label="Include EOS and compare. Fixed next-token probabilities. Retained: ByEOS, AxEOS. Beam width 2; depth 3. If one answer is requested: B y EOS. Greedy joint 0.264; alternative joint 0.361. Every other-branch bound is at most 0.270.">
+          <title>The same probability tree, two search frontiers</title>
+          <!-- static-frame -->
+          <g data-drawing=""><text class="gt-heading" text-anchor="middle" data-picture-title="" x="356.5" y="20">Beam 2: one requested answer</text><text class="gt-small gt-muted" text-anchor="middle" data-edge-legend="" x="206.77" y="42">edges: next-token probability</text><text class="gt-small gt-muted" text-anchor="middle" data-node-legend="" x="520.49" y="42">nodes: joint probability</text><text class="gt-small gt-depth" text-anchor="middle" data-depth-guide="1" x="171.12" y="70" data-current="no">depth 1</text><text class="gt-small gt-depth" text-anchor="middle" data-depth-guide="2" x="406.41" y="70" data-current="no">depth 2</text><text class="gt-small gt-depth" text-anchor="middle" data-depth-guide="3" x="647" y="70" data-current="yes">depth 3</text><circle r="22" class="gt-root" data-root-node="" cx="44" cy="220"></circle><text class="gt-input" text-anchor="middle" x="44" y="224">BOS</text><g class="gt-node-group" data-node="A" transform="translate(171.12 120)" data-position="[171.12,120]" data-state="kept" data-prefix="yes" data-selected="no"><rect x="-26" y="-17" width="52" height="34" rx="8" class="gt-node"></rect><text class="" text-anchor="middle" x="0" y="4">A</text></g><text class="gt-probability" text-anchor="middle" data-cumulative="A" data-value="A" x="171.12" y="91">p 0.600</text><text class="gt-small gt-muted" text-anchor="middle" data-node-status="A" x="171.12" y="161" hidden=""></text><g class="gt-node-group" data-node="Ax" transform="translate(406.41 120)" data-position="[406.41,120]" data-state="kept" data-prefix="yes" data-selected="no"><rect x="-26" y="-17" width="52" height="34" rx="8" class="gt-node"></rect><text class="" text-anchor="middle" x="0" y="4">x</text></g><text class="gt-probability" text-anchor="middle" data-cumulative="Ax" data-value="Ax" x="406.41" y="91">p 0.330</text><text class="gt-small gt-muted" text-anchor="middle" data-node-status="Ax" x="406.41" y="161" hidden=""></text><g class="gt-node-group" data-node="AxEOS" transform="translate(647 120)" data-position="[647,120]" data-state="kept" data-prefix="no" data-selected="no"><rect x="-26" y="-17" width="52" height="34" rx="3" class="gt-node"></rect><rect x="-22" y="-13" width="44" height="26" rx="1" class="gt-eos-inner"></rect><text class="" text-anchor="middle" x="0" y="4">EOS</text></g><text class="gt-probability" text-anchor="middle" data-cumulative="AxEOS" data-value="AxEOS" x="647" y="91">#2 p 0.264</text><text class="gt-small gt-muted" text-anchor="middle" data-node-status="AxEOS" x="647" y="161">runner-up</text><g class="gt-node-group" data-node="B" transform="translate(171.12 320)" data-position="[171.12,320]" data-state="winner" data-prefix="yes" data-selected="no"><rect x="-26" y="-17" width="52" height="34" rx="8" class="gt-node"></rect><text class="" text-anchor="middle" x="0" y="4">B</text></g><text class="gt-probability" text-anchor="middle" data-cumulative="B" data-value="B" x="171.12" y="291">p 0.400</text><text class="gt-small gt-muted" text-anchor="middle" data-node-status="B" x="171.12" y="361" hidden=""></text><g class="gt-node-group" data-node="By" transform="translate(406.41 320)" data-position="[406.41,320]" data-state="winner" data-prefix="yes" data-selected="no"><rect x="-26" y="-17" width="52" height="34" rx="8" class="gt-node"></rect><text class="" text-anchor="middle" x="0" y="4">y</text></g><text class="gt-probability" text-anchor="middle" data-cumulative="By" data-value="By" x="406.41" y="291">p 0.380</text><text class="gt-small gt-muted" text-anchor="middle" data-node-status="By" x="406.41" y="361" hidden=""></text><g class="gt-node-group" data-node="ByEOS" transform="translate(647 320)" data-position="[647,320]" data-state="winner" data-prefix="no" data-selected="yes"><rect x="-26" y="-17" width="52" height="34" rx="3" class="gt-node"></rect><rect x="-22" y="-13" width="44" height="26" rx="1" class="gt-eos-inner"></rect><text class="" text-anchor="middle" x="0" y="4">EOS</text></g><text class="gt-probability" text-anchor="middle" data-cumulative="ByEOS" data-value="ByEOS" x="647" y="291">#1 p 0.361</text><text class="gt-small gt-muted" text-anchor="middle" data-node-status="ByEOS" x="647" y="361">top choice</text><path class="gt-wire" data-edge="A" d="M 61.291070921 206.397835966 L 149.5096 137" data-state="kept" data-prefix="yes" data-from="BOS" data-to="A"></path><path class="gt-arrow" data-arrow="A" d="M 146.648693935 143.067554408 L 149.5096 137 L 142.939012835 138.351807793"></path><text class="gt-probability gt-small" text-anchor="middle" data-conditional="A" x="105.40033546" y="159.698917983">0.60</text><text class="gt-input gt-small" text-anchor="middle" data-context="A" x="105.40033546" y="191.698917983" hidden="">given BOS</text><path class="gt-wire" data-edge="Ax" d="M 197.12 120 L 380.41 120" data-state="kept" data-prefix="yes" data-from="A" data-to="Ax"></path><path class="gt-arrow" data-arrow="Ax" d="M 374.41 123 L 380.41 120 L 374.41 117"></path><text class="gt-probability gt-small" text-anchor="middle" data-conditional="Ax" x="288.765" y="108">0.55</text><text class="gt-input gt-small" text-anchor="middle" data-context="Ax" x="288.765" y="140">given A</text><path class="gt-wire" data-edge="AxEOS" d="M 432.41 120 L 621 120" data-state="kept" data-prefix="no" data-from="Ax" data-to="AxEOS"></path><path class="gt-arrow" data-arrow="AxEOS" d="M 615 123 L 621 120 L 615 117"></path><text class="gt-probability gt-small" text-anchor="middle" data-conditional="AxEOS" x="526.705" y="108">0.80</text><text class="gt-input gt-small" text-anchor="middle" data-context="AxEOS" x="526.705" y="140">given A x</text><path class="gt-wire" data-edge="B" d="M 61.291070921 233.602164034 L 149.5096 303" data-state="winner" data-prefix="yes" data-from="BOS" data-to="B"></path><path class="gt-arrow" data-arrow="B" d="M 142.939012835 301.648192207 L 149.5096 303 L 146.648693935 296.932445592"></path><text class="gt-probability gt-small" text-anchor="middle" data-conditional="B" x="105.40033546" y="256.301082017">0.40</text><text class="gt-input gt-small" text-anchor="middle" data-context="B" x="105.40033546" y="288.301082017" hidden="">given BOS</text><path class="gt-wire" data-edge="By" d="M 197.12 320 L 380.41 320" data-state="winner" data-prefix="yes" data-from="B" data-to="By"></path><path class="gt-arrow" data-arrow="By" d="M 374.41 323 L 380.41 320 L 374.41 317"></path><text class="gt-probability gt-small" text-anchor="middle" data-conditional="By" x="288.765" y="308">0.95</text><text class="gt-input gt-small" text-anchor="middle" data-context="By" x="288.765" y="340">given B</text><path class="gt-wire" data-edge="ByEOS" d="M 432.41 320 L 621 320" data-state="winner" data-prefix="no" data-from="By" data-to="ByEOS"></path><path class="gt-arrow" data-arrow="ByEOS" d="M 615 323 L 621 320 L 615 317"></path><text class="gt-probability gt-small" text-anchor="middle" data-conditional="ByEOS" x="526.705" y="308">0.95</text><text class="gt-input gt-small" text-anchor="middle" data-context="ByEOS" x="526.705" y="340">given B y</text><g data-other="Aother"><path class="gt-other-wire" data-other-edge="Aother" d="M 171.12 137 L 223.12 178" data-from="A" data-to="Aother"></path><text class="gt-small gt-muted" text-anchor="middle" data-other-label="Aother" x="223.12" y="193">other 0.45</text><text class="gt-small gt-probability" text-anchor="middle" data-other-bound="Aother" x="223.12" y="210">≤ 0.270</text></g><g data-other="Axother"><path class="gt-other-wire" data-other-edge="Axother" d="M 406.41 137 L 458.41 178" data-from="Ax" data-to="Axother"></path><text class="gt-small gt-muted" text-anchor="middle" data-other-label="Axother" x="458.41" y="193">other 0.20</text><text class="gt-small gt-probability" text-anchor="middle" data-other-bound="Axother" x="458.41" y="210">≤ 0.066</text></g><g data-other="Bother"><path class="gt-other-wire" data-other-edge="Bother" d="M 171.12 337 L 223.12 378" data-from="B" data-to="Bother"></path><text class="gt-small gt-muted" text-anchor="middle" data-other-label="Bother" x="223.12" y="393">other 0.05</text><text class="gt-small gt-probability" text-anchor="middle" data-other-bound="Bother" x="223.12" y="410">≤ 0.020</text></g><g data-other="Byother"><path class="gt-other-wire" data-other-edge="Byother" d="M 406.41 337 L 458.41 378" data-from="By" data-to="Byother"></path><text class="gt-small gt-muted" text-anchor="middle" data-other-label="Byother" x="458.41" y="393">other 0.05</text><text class="gt-small gt-probability" text-anchor="middle" data-other-bound="Byother" x="458.41" y="410">≤ 0.019</text></g><circle r="27" class="gt-frontier" data-frontier="0" data-branch="0" cx="647" cy="120" data-selected="no" hidden=""></circle><circle r="27" class="gt-frontier" data-frontier="1" data-branch="1" cx="647" cy="320" data-selected="yes"></circle><text class="gt-probability" text-anchor="middle" data-comparison="" x="356.5" y="450">0.361 &gt; 0.264</text><text class="gt-small gt-muted" text-anchor="middle" data-bound-summary="" x="356.5" y="473">other branches ≤ 0.270</text></g>
+          <!-- /static-frame -->
+          <!-- static-frame-narrow -->
+          <g data-static-frame="narrow" data-width="296" data-height="650" transform="scale(2.4088)"><text class="gt-heading" text-anchor="middle" data-picture-title="" x="148" y="20">Beam 2: one requested answer</text><text class="gt-small gt-muted" text-anchor="middle" data-edge-legend="" x="148" y="42">edges: next-token probability</text><text class="gt-small gt-muted" text-anchor="middle" data-node-legend="" x="148" y="59">nodes: joint probability</text><text class="gt-small gt-depth" text-anchor="middle" data-depth-guide="1" x="148" y="194" data-current="no">depth 1</text><text class="gt-small gt-depth" text-anchor="middle" data-depth-guide="2" x="148" y="369" data-current="no">depth 2</text><text class="gt-small gt-depth" text-anchor="middle" data-depth-guide="3" x="148" y="544" data-current="yes">depth 3</text><circle r="22" class="gt-root" data-root-node="" cx="148" cy="92"></circle><text class="gt-input" text-anchor="middle" x="148" y="96">BOS</text><g class="gt-node-group" data-node="A" transform="translate(74 190)" data-position="[74,190]" data-state="kept" data-prefix="yes" data-selected="no"><rect x="-26" y="-17" width="52" height="34" rx="8" class="gt-node"></rect><text class="" text-anchor="middle" x="0" y="4">A</text></g><text class="gt-probability" text-anchor="middle" data-cumulative="A" data-value="A" x="74" y="161">p 0.600</text><text class="gt-small gt-muted" text-anchor="middle" data-node-status="A" x="74" y="231" hidden=""></text><g class="gt-node-group" data-node="Ax" transform="translate(74 365)" data-position="[74,365]" data-state="kept" data-prefix="yes" data-selected="no"><rect x="-26" y="-17" width="52" height="34" rx="8" class="gt-node"></rect><text class="" text-anchor="middle" x="0" y="4">x</text></g><text class="gt-probability" text-anchor="middle" data-cumulative="Ax" data-value="Ax" x="74" y="336">p 0.330</text><text class="gt-small gt-muted" text-anchor="middle" data-node-status="Ax" x="74" y="406" hidden=""></text><g class="gt-node-group" data-node="AxEOS" transform="translate(74 540)" data-position="[74,540]" data-state="kept" data-prefix="no" data-selected="no"><rect x="-26" y="-17" width="52" height="34" rx="3" class="gt-node"></rect><rect x="-22" y="-13" width="44" height="26" rx="1" class="gt-eos-inner"></rect><text class="" text-anchor="middle" x="0" y="4">EOS</text></g><text class="gt-probability" text-anchor="middle" data-cumulative="AxEOS" data-value="AxEOS" x="74" y="511">#2 p 0.264</text><text class="gt-small gt-muted" text-anchor="middle" data-node-status="AxEOS" x="74" y="581">runner-up</text><g class="gt-node-group" data-node="B" transform="translate(222 190)" data-position="[222,190]" data-state="winner" data-prefix="yes" data-selected="no"><rect x="-26" y="-17" width="52" height="34" rx="8" class="gt-node"></rect><text class="" text-anchor="middle" x="0" y="4">B</text></g><text class="gt-probability" text-anchor="middle" data-cumulative="B" data-value="B" x="222" y="161">p 0.400</text><text class="gt-small gt-muted" text-anchor="middle" data-node-status="B" x="222" y="231" hidden=""></text><g class="gt-node-group" data-node="By" transform="translate(222 365)" data-position="[222,365]" data-state="winner" data-prefix="yes" data-selected="no"><rect x="-26" y="-17" width="52" height="34" rx="8" class="gt-node"></rect><text class="" text-anchor="middle" x="0" y="4">y</text></g><text class="gt-probability" text-anchor="middle" data-cumulative="By" data-value="By" x="222" y="336">p 0.380</text><text class="gt-small gt-muted" text-anchor="middle" data-node-status="By" x="222" y="406" hidden=""></text><g class="gt-node-group" data-node="ByEOS" transform="translate(222 540)" data-position="[222,540]" data-state="winner" data-prefix="no" data-selected="yes"><rect x="-26" y="-17" width="52" height="34" rx="3" class="gt-node"></rect><rect x="-22" y="-13" width="44" height="26" rx="1" class="gt-eos-inner"></rect><text class="" text-anchor="middle" x="0" y="4">EOS</text></g><text class="gt-probability" text-anchor="middle" data-cumulative="ByEOS" data-value="ByEOS" x="222" y="511">#1 p 0.361</text><text class="gt-small gt-muted" text-anchor="middle" data-node-status="ByEOS" x="222" y="581">top choice</text><path class="gt-wire" data-edge="A" d="M 134.742741341 109.556910116 L 86.836734694 173" data-state="kept" data-prefix="yes" data-from="BOS" data-to="A"></path><path class="gt-arrow" data-arrow="A" d="M 88.058226585 166.403943787 L 86.836734694 173 L 92.846474799 170.019559785"></path><text class="gt-probability gt-small" text-anchor="middle" data-conditional="A" x="110.789738017" y="129.278455058">0.60</text><text class="gt-input gt-small" text-anchor="middle" data-context="A" x="110.789738017" y="161.278455058" hidden="">given BOS</text><path class="gt-wire" data-edge="Ax" d="M 74 207 L 74 348" data-state="kept" data-prefix="yes" data-from="A" data-to="Ax"></path><path class="gt-arrow" data-arrow="Ax" d="M 71 342 L 74 348 L 77 342"></path><text class="gt-probability gt-small" text-anchor="middle" data-conditional="Ax" x="49" y="281.5">0.55</text><text class="gt-input gt-small" text-anchor="middle" data-context="Ax" x="49" y="298.5">given A</text><path class="gt-wire" data-edge="AxEOS" d="M 74 382 L 74 523" data-state="kept" data-prefix="no" data-from="Ax" data-to="AxEOS"></path><path class="gt-arrow" data-arrow="AxEOS" d="M 71 517 L 74 523 L 77 517"></path><text class="gt-probability gt-small" text-anchor="middle" data-conditional="AxEOS" x="49" y="456.5">0.80</text><text class="gt-input gt-small" text-anchor="middle" data-context="AxEOS" x="49" y="473.5">given A x</text><path class="gt-wire" data-edge="B" d="M 161.257258659 109.556910116 L 209.163265306 173" data-state="winner" data-prefix="yes" data-from="BOS" data-to="B"></path><path class="gt-arrow" data-arrow="B" d="M 203.153525201 170.019559785 L 209.163265306 173 L 207.941773415 166.403943787"></path><text class="gt-probability gt-small" text-anchor="middle" data-conditional="B" x="185.210261983" y="129.278455058">0.40</text><text class="gt-input gt-small" text-anchor="middle" data-context="B" x="185.210261983" y="161.278455058" hidden="">given BOS</text><path class="gt-wire" data-edge="By" d="M 222 207 L 222 348" data-state="winner" data-prefix="yes" data-from="B" data-to="By"></path><path class="gt-arrow" data-arrow="By" d="M 219 342 L 222 348 L 225 342"></path><text class="gt-probability gt-small" text-anchor="middle" data-conditional="By" x="247" y="281.5">0.95</text><text class="gt-input gt-small" text-anchor="middle" data-context="By" x="247" y="298.5">given B</text><path class="gt-wire" data-edge="ByEOS" d="M 222 382 L 222 523" data-state="winner" data-prefix="no" data-from="By" data-to="ByEOS"></path><path class="gt-arrow" data-arrow="ByEOS" d="M 219 517 L 222 523 L 225 517"></path><text class="gt-probability gt-small" text-anchor="middle" data-conditional="ByEOS" x="247" y="456.5">0.95</text><text class="gt-input gt-small" text-anchor="middle" data-context="ByEOS" x="247" y="473.5">given B y</text><g data-other="Aother"><path class="gt-other-wire" data-other-edge="Aother" d="M 74 207 L 130 240" data-from="A" data-to="Aother"></path><text class="gt-small gt-muted" text-anchor="middle" data-other-label="Aother" x="130" y="255">other 0.45</text><text class="gt-small gt-probability" text-anchor="middle" data-other-bound="Aother" x="130" y="272">≤ 0.270</text></g><g data-other="Axother"><path class="gt-other-wire" data-other-edge="Axother" d="M 74 382 L 130 415" data-from="Ax" data-to="Axother"></path><text class="gt-small gt-muted" text-anchor="middle" data-other-label="Axother" x="130" y="430">other 0.20</text><text class="gt-small gt-probability" text-anchor="middle" data-other-bound="Axother" x="130" y="447">≤ 0.066</text></g><g data-other="Bother"><path class="gt-other-wire" data-other-edge="Bother" d="M 222 207 L 166 280" data-from="B" data-to="Bother"></path><text class="gt-small gt-muted" text-anchor="middle" data-other-label="Bother" x="166" y="295">other 0.05</text><text class="gt-small gt-probability" text-anchor="middle" data-other-bound="Bother" x="166" y="312">≤ 0.020</text></g><g data-other="Byother"><path class="gt-other-wire" data-other-edge="Byother" d="M 222 382 L 166 455" data-from="By" data-to="Byother"></path><text class="gt-small gt-muted" text-anchor="middle" data-other-label="Byother" x="166" y="470">other 0.05</text><text class="gt-small gt-probability" text-anchor="middle" data-other-bound="Byother" x="166" y="487">≤ 0.019</text></g><circle r="27" class="gt-frontier" data-frontier="0" data-branch="0" cx="74" cy="540" data-selected="no" hidden=""></circle><circle r="27" class="gt-frontier" data-frontier="1" data-branch="1" cx="222" cy="540" data-selected="yes"></circle><text class="gt-probability" text-anchor="middle" data-comparison="" x="148" y="610">0.361 &gt; 0.264</text><text class="gt-small gt-muted" text-anchor="middle" data-bound-summary="" x="148" y="633">other branches ≤ 0.270</text></g>
+          <!-- /static-frame-narrow -->
+        </svg>
+      </div>
+      <p class="gt-formula" data-formula="">
+        <span id="eq-greedy-tree-1">\( \predictionpart{P(y\mid \featurepart{c})}=\prod_{t=1}^{T}\class{gt-product}{\predictionpart{p(y_t\mid \featurepart{y_{&lt;t},c})}} \)</span>
+        <span id="eq-greedy-tree-2">\( \log P(y\mid \featurepart{c})=\sum_{t=1}^{T}\class{gt-log}{\log p(y_t\mid \featurepart{y_{&lt;t},c})} \)</span>
+      </p>
+      <p class="mechanism-caption" data-caption="" aria-live="polite" aria-atomic="true">Ask for one answer: choose the best completed candidate. Keeping two candidates does not join their tokens.</p>
+      <div class="mechanism-controls" data-controls="" role="group" aria-label="Playback controls" hidden="">
+  <button type="button" data-action="play" data-state="play" aria-label="Play" title="Play">
+    <svg data-icon="play" viewbox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"></path></svg>
+    <svg data-icon="pause" viewbox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7zM14 5h4v14h-4z" fill="currentColor"></path></svg>
+    <svg data-icon="replay" viewbox="0 0 24 24" aria-hidden="true"><path d="M5 8a8 8 0 1 1-1 8M5 3v6h6" fill="none" stroke="currentColor" stroke-width="2"></path></svg>
+    <span class="mechanism-sr" data-button-label="">Play</span>
+  </button>
+  <label class="mechanism-scrubber"><span class="mechanism-sr">Playback position</span><input type="range" min="0" max="40" value="0" step="0.01"></label>
+  <span class="mechanism-clock" aria-hidden="true"><span data-elapsed="">0:00</span><span data-duration=""> / 0:40</span></span>
+  <select data-speed="" aria-label="Playback speed" title="Playback speed"><option value="0.5">0.5×</option><option value="1">1×</option><option value="1.5" selected="">1.5×</option><option value="2">2×</option></select>
+  <button type="button" data-action="fullscreen" data-state="expand" aria-label="Fullscreen" title="Fullscreen">
+    <svg data-icon="expand" viewbox="0 0 24 24" aria-hidden="true"><path d="M9 4H4v5M15 4h5v5M20 15v5h-5M9 20H4v-5" fill="none" stroke="currentColor" stroke-width="2"></path></svg>
+    <svg data-icon="contract" viewbox="0 0 24 24" aria-hidden="true"><path d="M4 9h5V4M20 9h-5V4M15 20v-5h5M4 15h5v5" fill="none" stroke="currentColor" stroke-width="2"></path></svg>
+    <span class="mechanism-sr" data-button-label="">Fullscreen</span>
+  </button>
+</div>
+<p data-notice="" role="status"></p>
+
+    </div>
+    <dialog aria-label="Expanded greedy and beam search animation"></dialog>
+    <p data-load-status="" role="status">The calculation is readable without playback. Opening this panel loads the optional controls.</p>
+    <p class="mechanism-boundary">The predictor stays fixed; its next-token probabilities depend on the prefix. Blue marks the supplied history, green the model's probabilities. Width counts alternatives at one depth, not tokens generated at once. One requested answer uses the best candidate; the chapter's code keeps the ranked list for inspection. An <em>other</em> stub groups unexpanded alternatives; its mass bounds every completion below it. All such bounds are below this example's winner. EOS contributes to the joint score and stops that sequence. Scores are not renormalized over the beam. Finite-width beam search need not find the global optimum. This picture shows search decisions, not computation time.</p>
+    <details class="mechanism-transcript" id="greedy-tree-transcript"><summary>Transcript and keyboard help</summary>
+      <ol>
+        <li>The same fixed tree supports both searches. At its root, A has probability 0.60 and B has probability 0.40. Predict whether winning that first decision guarantees the better complete sequence.</li>
+        <li>Greedy keeps A and discards B. The discarded branch stays visible with dashed geometry and readable labels; the decoder does not return to it.</li>
+        <li>After A, greedy chooses x with probability 0.55 rather than the complementary other branch at 0.45. The prefix A x has joint probability 0.330.</li>
+        <li>After A x, EOS has probability 0.80. The complete joint probability is 0.264. Inspect the discarded counterfactual B y EOS: its three factors give 0.361. The model favored a completion greedy never visited.</li>
+        <li>Reset the search frontier, not the predictor. Every edge is unchanged. This time allow two partial sequences to remain alive.</li>
+        <li>The two root candidates A and B both survive, with joint probabilities 0.600 and 0.400. They are two alternatives at depth one, not two consecutive tokens. Width and depth measure different directions in the tree.</li>
+        <li>Extend each prefix by one token. Blue history A supplies the context for x at 0.55; B supplies the context for y at 0.95. You cannot move that 0.95 to the A branch. The named prefixes B y and A x have joint probabilities 0.380 and 0.330. Every omitted prefix is bounded by its branch's total mass: 0.270 below A, or 0.020 below B. None can displace the two named prefixes. An omitted completion cannot gain probability by adding more conditional factors.</li>
+        <li>Include EOS and rank the completions: B y EOS scores 0.361; A x EOS scores 0.264. The remaining new other masses are 0.066 and 0.019. All omitted-branch bounds are below 0.361, so the illustrated winner is certified without inventing the omitted subtrees. Both named candidates finish. If we request one answer, choose B y EOS; the chapter's code returns the ranked list so we can inspect alternatives. This success is specific to the fixed example, not a general optimality theorem for beam search. Keep two questions separate: how many alternatives to retain, and how far ahead to compute.</li>
+      </ol>
+      <p id="greedy-tree-playback-help">Silent; paused initially; 1.5× playback. Focus the animation pane: Space or K plays/pauses, arrows seek between beats, Home/End jump, Escape pauses. The scrubber and speed menu also work by keyboard. Reduced-motion mode holds each beat's state instead of moving between them.</p>
+    </details>
+  </div>
+</details>
+
+<script>
+(() => {
+  document.querySelectorAll('.mechanism-excerpt[data-player]').forEach(root => {
+    if (root.dataset.loader) return;
+    root.dataset.loader = 'ready';
+    let loading = false;
+    const status = root.querySelector('[data-load-status]');
+    function request(src, success) {
+      const script = document.createElement('script');
+      script.src = src;
+      function fail() {
+        script.remove(); loading = false;
+        status.textContent = 'The player could not load. The static diagram and walkthrough remain available. Close and reopen to retry.';
+      }
+      script.onerror = fail;
+      script.onload = () => { if (!success()) fail(); };
+      document.head.append(script);
+    }
+    function loadScene() {
+      request(root.dataset.player, () => {
+        if (!root.dataset.ready) return false;
+        status.textContent = ''; return true;
+      });
+    }
+    function load() {
+      if (!root.open || loading || root.dataset.ready) return;
+      loading = true; status.textContent = 'Loading animation controls…';
+      if (window.BookPlayback) loadScene();
+      else request(root.dataset.playback, () => {
+        if (!window.BookPlayback) return false;
+        loadScene(); return true;
+      });
+    }
+    root.addEventListener('toggle', load);
+    function openTarget() {
+      const id = location.hash.slice(1);
+      const target = document.getElementById(id);
+      if (target && (target === root || root.contains(target))) {
+        root.open = true;
+        let ancestor = target;
+        while (ancestor && ancestor !== root) {
+          if (ancestor.tagName === 'DETAILS') ancestor.open = true;
+          ancestor = ancestor.parentElement;
+        }
+        load();
+      }
+    }
+    window.addEventListener('hashchange', openTarget);
+    openTarget();
+  });
+})();
+
+</script>
+<section id="search-exposes-alternatives" class="level3">
+<h3 class="anchored" data-anchor-id="search-exposes-alternatives">Search exposes alternatives</h3>
 <p>Now the payoff, and it is exactly where we buried it: the ambiguous dates. For <code>03/05/2021</code>, “the one best answer” is the wrong question. The training world itself was split 70/30 between two readings. Greedy silently hands you one sequence; beam search shows which complete alternatives the model ranks highly:</p>
 <div class="plan-code">
 <div class="plan">
@@ -1044,6 +1316,7 @@ Figure&nbsp;11.3: Learning curves on a fixed subset of 400 unambiguous validatio
 <p>Summed log-probabilities shrink as sequences grow <span class="math inline">\(\rightarrow\)</span> a raw beam quietly favors short outputs. The standard correction divides the score by <span class="math inline">\(L^{\alpha}\)</span> with <span class="math inline">\(\alpha \approx 0.6\)</span>–<span class="math inline">\(0.75\)</span>. Our dates all have the same length, so the bias is largely invisible for correct outputs here (Exercise 4 makes you check the remaining error cases); in free-length generation it matters enormously.</p>
 </div>
 </div>
+</section>
 </section>
 <section id="the-fixed-size-state-in-the-middle" class="level2" data-number="11.5">
 <h2 data-number="11.5" class="anchored" data-anchor-id="the-fixed-size-state-in-the-middle"><span class="header-section-number">11.5</span> The fixed-size state in the middle</h2>
@@ -2268,7 +2541,7 @@ Figure&nbsp;11.3: Learning curves on a fixed subset of 400 unambiguous validatio
 </div>   
     <div class="nav-footer-center">
 <!-- dlbook-edition-stamp:start -->
-<p class="edition-stamp">Rolling manuscript · content updated September 2, 2026 · stable edition v1.3 · <a href="https://shakeri-lab.github.io/dl-book/#revision-notes">Revision notes</a></p>
+<p class="edition-stamp">Rolling manuscript · content updated September 13, 2026 · stable edition v1.3 · <a href="https://shakeri-lab.github.io/dl-book/#revision-notes">Revision notes</a></p>
 <!-- dlbook-edition-stamp:end --><div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/Shakeri-Lab/dl-book/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
 <p>Companion to <a href="https://shakeri-lab.github.io/dl-course-site/">DS 6050 Deep Learning</a></p>
