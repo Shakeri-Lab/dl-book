@@ -5,10 +5,14 @@ them or a chapter naturally touches them.
 
 ## Focused animation roadmap — approved September 9, 2026
 
-**Updated September 13, 2026:** sixteen scenes are committed on `main` at `2439557`.
-Same-subspace is deployed and verified (run `34727889922`). A1's existing
-[SVD circle](svd-circle-excerpt.md) is author-approved for separate publication.
-Chapter 18's preference ruler is the next local-review candidate.
+**Updated September 13, 2026:** seventeen scenes are pushed through `9730659`.
+Same-subspace is deployed and verified (run `34727889922`). A1's
+[SVD circle](svd-circle-excerpt.md) was pushed in `4fb86d4`; `9730659` fixes its
+Linux static-SVG serialization failure. Run `34761906820` passed interactions but
+failed the existing Chapter 18 notebook gate on signed zero; deployment is unverified.
+Chapter 18's [preference ruler](preference-ruler-excerpt.md) is author-approved for
+separate publication. Next: Chapter 17 scale granularity, local review only, using
+the manuscript's quiet-row range rather than the film's invented sample dots.
 The [animation guide](animation-authoring.md) is the current inventory; the
 [Wave 1](wave1-excerpts.md) and [Wave 2](wave2-excerpts.md) receipts preserve their
 review history. Source state is not deployment: verify the publishing run and live

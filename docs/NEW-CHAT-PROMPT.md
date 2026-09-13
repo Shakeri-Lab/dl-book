@@ -8,6 +8,22 @@ Keep this file current: if a rule changes or the state moves, edit the prompt he
 rather than re-deriving it in chat.
 
 **Animation work override — September 13, 2026:** use
+`/Users/hs9hd/dl-book-html-release`. Seventeen scenes are pushed through `9730659`.
+SVD shipped in `4fb86d4`; Linux CI caught last-bit static SVG coordinate strings.
+The isolated hotfix serializes only pixel coordinates and adds a regression;
+794 SVD publication tests pass. Run `34761906820` passed interaction contracts
+but failed the existing Chapter 18 notebook gate on signed zero. Do not assume
+deployment or bypass numerical checks. Local PDFs retain 548/519 pages and unchanged content.
+Chapter 18's `#preference-ruler-excerpt` is author-approved for a separate push.
+See `docs/preference-ruler-excerpt.md` for source and acceptance receipts. Existing
+scores 1/-1 shift by37; gap/probability stay fixed. The publication regression
+stabilizes SVG coordinate serialization, not probabilities or numerical gates.
+Next build only Chapter 17 scale granularity as an uncommitted local preview.
+Preference publication acceptance: 840 tests, exact 133-block frozen stdout, all
+source/HTML checks and both complete PDFs with identical text/rasters/outlines.
+No new fixture, QMD/freeze edit, numerical gate, tag or scheduled task.
+
+Prior September 13 checkpoint:
 `/Users/hs9hd/dl-book-html-release`. Sixteen scenes are committed and pushed to
 `main` at `2439557`, including approved same-subspace. Publishing run `34727889922`
 passed all jobs; live HTML/player/PDFs match `gh-pages` at `3a65f955`, with unchanged

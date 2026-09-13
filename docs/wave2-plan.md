@@ -1,10 +1,13 @@
 # Wave 2 plan — mechanism excerpts, and how to build them cheaply
 
-Current work, September 13: same-subspace is separately pushed as `2439557`
-(publishing run `34727889922`, passed and verified live). A1's
-[SVD circle](svd-circle-excerpt.md) is author-approved for separate publication,
-using the existing `fig-a1-svd` factors and static composition. Chapter 18's
-preference ruler is next for local review.
+Current work, September 13: A1's [SVD circle](svd-circle-excerpt.md) is pushed in
+`4fb86d4`, with pixel-serialization hotfix `9730659`. Publishing run `34761906820`
+passed interactions but failed the existing Chapter 18 notebook signed-zero gate.
+Chapter 18's [preference ruler](preference-ruler-excerpt.md)
+is author-approved for separate publication. It reuses the existing transitive A/C
+scores and common shift, not a new experiment or another control. Next local
+preview: Chapter 17 scale granularity at fixed bit width, using the quiet-row
+range from the manuscript rather than the film's illustrative sample values.
 
 Prior status, September 11, 2026: four Wave 2 scenes are committed in `0674cab`.
 The author approved repairs and mask/predictor for publication after local review,

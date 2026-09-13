@@ -1,3 +1,15 @@
+# Rolling post-v1.3 — preference ruler (September 13, 2026)
+
+- Adds one author-approved Chapter 18 replay of its existing Bradley–Terry witness:
+  move two scores together, track their unchanged gap, and read the same preference
+  probability. The ruler follows the pair without changing its unit spacing.
+- Keeps absolute goodness, scaling and cyclic preferences outside the invariant.
+  No new experiment, control, dependency, manuscript, freeze or numerical gate.
+- Stabilizes probability-derived drawing coordinates without rounding the raw
+  probability; a controlled ULP regression protects both static fallbacks.
+- Source, browser and publication receipts: `docs/preference-ruler-excerpt.md`.
+  Chapter 17 scale granularity is next for separate local review, not this push.
+
 # Rolling post-v1.3 — SVD circle (September 13, 2026)
 
 - Adds one optional Appendix A view of the existing SVD fixture: follow two marked

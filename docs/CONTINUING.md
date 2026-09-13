@@ -10,6 +10,33 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 
 ---
 
+> **Current work — preference ruler approved publication, September 13, 2026.**
+> SVD was pushed separately as `4fb86d4`, followed by serialization fix `9730659`.
+> Local and remote main match. Run `34761426323` failed exact static-SVG parity
+> on Linux last-bit coordinates; the fix keeps full-precision arithmetic and
+> rounds only drawing serialization. 794 publication tests pass, including the
+> regression. Run `34761906820` passed interaction checks but failed the existing
+> Chapter 18 exact notebook gate on negative versus positive zero. Do not call it
+> deployed or bypass that gate. No background automation was created.
+> The local PDF builds
+> remain 548/519 pages with unchanged text, outlines, geometry and page rasters.
+> Chapter 18's [preference ruler](preference-ruler-excerpt.md) is author-approved
+> with “push and do the next.” Publish it alone. It uses existing A/C scores 1/-1
+> and common shift 37; gap 2 and probability 0.881 remain fixed. Preview acceptance
+> passed 45 scene tests and 839 full-suite tests; source/HTML/freeze/LaTeX checks and
+> desktop/phone playback/fullscreen review pass. Full-suite receipt:
+> `/tmp/preference-ruler-final-all-tests.log`. No manuscript/freeze/numerical-contract/PDF-setting/tag
+> changes, and no scheduled task. Server 8770 serves this working tree's `_book`.
+> Review: `http://127.0.0.1:8770/chapters/part5/18-alignment.html?preview=preference-ruler#preference-ruler-excerpt`.
+> Publication adds a controlled ULP regression and nine-decimal serialization of
+> probability-derived SVG coordinates (46 scene tests); arithmetic is unchanged.
+> Full PDF comparison receipt: `/tmp/dl-book-preference-pdf-approval.ueOB4R/`.
+> Publication acceptance passes 840/840 tests and all source/HTML audits. Both
+> complete PDFs retain 548/519 pages, 390 outlines each, and identical text,
+> geometry and all 1,067 page rasters. Frozen stdout remains 133 blocks/27 units.
+> Next: Chapter 17 scale granularity, a separate local preview using the existing
+> quiet-row range and global/per-row scales. Do not invent the film's sample dots.
+
 > **Current work — SVD approved publication, September 13, 2026.**
 > The approved same-subspace scene was normally pushed as `2439557`; local and
 > remote `main` match. Publishing run `34727889922` passed all jobs, and the live

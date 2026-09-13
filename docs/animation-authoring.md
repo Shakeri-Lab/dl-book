@@ -2,11 +2,12 @@
 
 Author-approved September 9, 2026. These are optional HTML explanations of existing
 book examples, not videos, new experiments, or a replacement for the static book.
-**Current source state — September 12, 2026:** sixteen scenes are committed on `main`
-at `2439557`, including the author's Wave 1, Wave 2, approved mask/predictor,
-reference tilt, score field, attention bill, mask-before-softmax and same-subspace.
-A1's [SVD circle](svd-circle-excerpt.md) is author-approved for separate publication
-on September 13; Chapter 18's preference ruler is next for local review. Their earlier
+**Current source state — September 13, 2026:** seventeen scenes are pushed on `main`
+through `9730659`, including A1's [SVD circle](svd-circle-excerpt.md) and its
+static-SVG serialization follow-up. Run `34761906820` passed interaction tests but
+failed the existing Chapter 18 exact notebook gate on signed zero; do not bypass it.
+Chapter 18's [preference ruler](preference-ruler-excerpt.md) is author-approved for
+a separate publication. Chapter 17 scale granularity is next for local review. Their earlier
 review history lives in the [Wave 1](wave1-excerpts.md) and [Wave 2](wave2-excerpts.md)
 receipts. Check the publishing run and live anchors before treating committed source
 as deployed. The current repair pass fixes LSTM equation links and four narrow-screen
