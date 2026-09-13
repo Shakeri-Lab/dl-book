@@ -1,10 +1,12 @@
 # Wave 2 plan — mechanism excerpts, and how to build them cheaply
 
 Current work, September 13: [scale granularity](scale-granularity-excerpt.md) is
-author-approved for a separate publication. Fixed 8 bits, source-owned quiet-row
-interval, no invented film samples. Chapter 14 LayerNorm axis is the next local
-preview; derivative gates remain later. Preference ruler was pushed separately
-as `7aba6ea`; run `34762857399` completed successfully.
+pushed as `e5827cb`, run `34764538563` succeeded. [Chapter 14 LayerNorm axis](layernorm-axis-excerpt.md)
+is author-approved for separate publication, including the requested temporal
+and spatial BatchNorm contrast. Variable length is a padding/pooling concern,
+not a prohibition on BatchNorm. Chapter 5 derivative gates is next for local review.
+Preference ruler was
+pushed separately as `7aba6ea`; run `34762857399` succeeded and is live-verified.
 
 Prior checkpoint: A1's [SVD circle](svd-circle-excerpt.md) was pushed in
 `4fb86d4`, with pixel-serialization hotfix `9730659`. Publishing run `34761906820`

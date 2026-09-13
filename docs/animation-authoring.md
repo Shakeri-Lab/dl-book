@@ -2,12 +2,12 @@
 
 Author-approved September 9, 2026. These are optional HTML explanations of existing
 book examples, not videos, new experiments, or a replacement for the static book.
-**Current source state — September 13, 2026:** eighteen scenes are pushed through
-`7aba6ea`, including the [preference ruler](preference-ruler-excerpt.md). Its run
-`34762857399` completed successfully.
-[Scale granularity](scale-granularity-excerpt.md) is author-approved for a separate
-publication. It keeps bit width fixed and uses the chapter's quiet-row range, not
-the film's sample dots. Chapter 14 LayerNorm axis is next for local review only.
+**Current source state — September 13, 2026:** nineteen scenes are pushed through
+`e5827cb`, including [scale granularity](scale-granularity-excerpt.md). Run
+`34764538563` is in progress. The preceding preference/SVD publication is verified
+live after successful run `34762857399`. Chapter 14 [LayerNorm axis](layernorm-axis-excerpt.md)
+is the next separate local preview, using the existing four-token audit and its
+approximately-unit-variance boundary. It is not publication-approved.
 
 Prior source checkpoint: seventeen scenes were pushed on `main`
 through `9730659`, including A1's [SVD circle](svd-circle-excerpt.md) and its
@@ -68,6 +68,28 @@ three and four remain earned receipts, and log-probability terms stay symbolic.
 The helper's sequence sum is not the SFT objective's negative mean. No token is
 removed from context. Timeline highlighting carries the mechanism without adding
 hover-only attention paths or a fabricated distribution plot.
+
+### LayerNorm versus BatchNorm: show who shares the statistics
+
+The local Chapter 14 preview uses its existing two-example, two-token, four-feature
+audit. The author-requested contrast first groups a feature column across examples
+and token positions (temporal BatchNorm in training), then selects one complete
+row (tokenwise LayerNorm). A separate schematic recalls CNN BatchNorm's per-channel
+pool over images and spatial positions; the sequence tensor is not relabeled as
+image data. No invented BatchNorm output is needed. Translate the token profile by its own mean, then divide
+all four centered features by one local scale on a fixed ruler. Other rows remain
+visible as excluded inputs to those statistics. Only their independently normalized
+outputs later enter the plot. Do not jitter the nearly coincident marks.
+
+The normalized variance is `v/(v+epsilon)`, not exactly one; the illustrated call
+has no affine transform. Keep this boundary separate from learning gamma/beta,
+RMSNorm and pre/post-normalization architecture. The formula must be visible while
+its centering term is highlighted, and endpoint value labels need horizontal
+clearance from the plot axis. See [the receipt](layernorm-axis-excerpt.md).
+
+Explain variable-length inconvenience through padding and pooling, not by saying
+BatchNorm requires fixed-size data or cannot handle sequences. Name default running
+statistics at evaluation and retain the need for attention/loss padding masks.
 
 ### SVD circle: keep the ruler fixed
 

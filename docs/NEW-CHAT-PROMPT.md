@@ -7,7 +7,36 @@ it from editing before you have said what you want done.
 Keep this file current: if a rule changes or the state moves, edit the prompt here
 rather than re-deriving it in chat.
 
-**Animation work override — scale publication, September 13, 2026:** use
+**Animation work override — LayerNorm contrast approved, September 13, 2026:**
+Use `/Users/hs9hd/dl-book-html-release`. The author approved the comparison with
+“push and do next.” Publish only Chapter 14's scene, then prepare Chapter 5
+derivative gates locally. Read `docs/layernorm-axis-excerpt.md`. Scale run
+`34764538563` has succeeded. Normalization publication receipt:
+`/tmp/dl-book-normalization-pdf-approval.mQ7NMn/`. Verify its own CI and live files;
+source state alone is not deployment. Preserve QMD/freeze/numerical contracts,
+PDF settings, tags, stopped scheduled task and paused runtime migration.
+
+Prior checkpoint — LayerNorm preview, September 13, 2026:
+`/Users/hs9hd/dl-book-html-release`. Nineteen scenes are pushed through `e5827cb`,
+including scale granularity. Run `34764538563` is in progress; source is not
+deployment. Prior preference/SVD publication is live-verified after successful
+run `34762857399`. Build only Chapter 14 `#layernorm-axis-excerpt` locally for
+review; read `docs/layernorm-axis-excerpt.md`. No affine transform or new sample:
+reuse the exact four-token audit. Preserve manuscript/freeze/numerical contracts,
+PDF settings, tags, paused migration and stopped scheduled task.
+Current author revision: contrast BN's cross-example/position grouping with LN's
+within-token grouping. Include CNN channel/spatial schematic and accurate padding
+explanation; do not claim BN requires fixed sizes or cannot handle sequences. No
+new BN numeric fixture. Contrast verified locally, not committed or pushed.
+LayerNorm contrast acceptance: 929 full-suite tests, 47 focused checks; source/HTML/
+fixture audits pass, all stdout exact, Ch14 filtered/unfiltered LaTeX identical.
+Desktop/phone/fullscreen reviewed; see its receipt for the local URL and logs.
+Historical scale CI snapshot, not rechecked during the contrast pass:
+interaction/export/shards 2/3 passed; 0/1/4/5 were running without failures;
+build-deploy had not started. Monitoring is stopped.
+Live checker: `/tmp/dl-book-scale-pdf-approval.MKXd82/scale-live.ZFLK0L/`.
+
+Prior scale publication checkpoint — September 13, 2026:
 `/Users/hs9hd/dl-book-html-release`. The author approved scale granularity with
 “push and do the next.” Publish that scene alone; prepare Chapter 14 LayerNorm
 axis separately for local review. Read `docs/scale-granularity-excerpt.md`.

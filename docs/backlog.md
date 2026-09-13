@@ -5,12 +5,16 @@ them or a chapter naturally touches them.
 
 ## Focused animation roadmap — approved September 9, 2026
 
-**Updated September 13, 2026:** eighteen scenes are pushed through `7aba6ea`.
-[Scale granularity](scale-granularity-excerpt.md) is now author-approved for its
-own publication: fixed 8-bit grid and the Chapter 17 quiet-row interval.
-Next local-only preview: Chapter 14 LayerNorm axis. Derivative gates remain later;
-greedy tree still requires a manuscript fixture. Preference run `34762857399`
-completed successfully; verify each new publication's deployment separately.
+**Updated September 13, 2026:** nineteen scenes are pushed through `e5827cb`,
+including [scale granularity](scale-granularity-excerpt.md); run `34764538563`
+succeeded. [Chapter 14 LayerNorm axis](layernorm-axis-excerpt.md) is author-approved
+for separate publication. It adds the requested BatchNorm grouping contrast and the
+padding/length boundary; no new training study or PDF change. At the next shared
+manuscript cut, clarify Chapter 9's “one image” evaluation explanation: spatial
+positions can still supply BatchNorm2d statistics; running statistics are the
+usual evaluation protocol, not a mathematical necessity caused by batch size one.
+Chapter 5 derivative gates is next for local review; greedy tree still requires a manuscript fixture.
+Preference run `34762857399` succeeded and its live publication is verified.
 
 Prior checkpoint: seventeen scenes were pushed through `9730659`.
 Same-subspace is deployed and verified (run `34727889922`). A1's

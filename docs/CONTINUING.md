@@ -10,7 +10,41 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 
 ---
 
-> **Current work — scale granularity approved publication, September 13, 2026.**
+> **Current work — LayerNorm contrast approved publication, September 13, 2026.**
+> The author approved the BatchNorm–LayerNorm comparison with “push and do next.”
+> Publish only this scene; Chapter 5 derivative gates is next for separate local
+> review. Scale run `34764538563` has now succeeded across all jobs. Full PDF
+> publication checks for the normalization scene are recorded in
+> `/tmp/dl-book-normalization-pdf-approval.mQ7NMn/`; do not claim deployment until
+> its own publishing run and live files are verified. No scheduled task or tag.
+>
+> **Prior checkpoint — LayerNorm axis local preview, September 13, 2026.**
+> Scale granularity is pushed normally as `e5827cb`; local and remote `main`
+> match. Publishing run `34764538563` is in progress. The previous preference
+> run `34762857399` succeeded and its live HTML/players/PDFs are verified.
+> Next local scene: Chapter 14 [LayerNorm axis](layernorm-axis-excerpt.md), after
+> `fig-transformer-block`, using its exact 2×2×4 audit tensor. Keep the final
+> feature axis, no affine transform, default epsilon and approximately-unit
+> variance explicit. No manuscript/freeze/numerical gate/PDF setting/tag changes.
+> No scheduled task. This preview is not part of the scale publication.
+> Current author review: contrast BatchNorm and LayerNorm through their reduction
+> groups. Temporal BN groups a feature across examples/positions; CNN BN's separate
+> schematic pools one channel across images/spatial positions; LN groups one token's
+> features. Fixed image size is convenient, not required. Explain padding/length,
+> default BN running statistics at evaluation, and the remaining attention/loss masks.
+> No new BatchNorm numerical example. Contrast acceptance: 929 full-suite tests,
+> 47 LayerNorm tests, all source/HTML audits, 52 lecture receipts, unchanged stdout
+> and byte-identical Ch14 LaTeX. Desktop/phone and expanded mode pass. The narrow
+> ray is omitted to avoid the axis key; fixed-token-input wording avoids confusing
+> local normalization with the attention operation that may precede it. Review:
+> `http://127.0.0.1:8770/chapters/part4/14-self-attention-transformer.html?preview=batchnorm-contrast#layernorm-axis-excerpt`.
+> Local-only, no commit or push. Historical scale CI snapshot (not rechecked during
+> the comparison pass): interactions/export/shards 2/3 pass; 0/1/4/5 were running
+> without failures. PDF publication had not started. Monitoring is stopped;
+> live scale verification remains outstanding. Resume with
+> `/tmp/dl-book-scale-pdf-approval.MKXd82/scale-live.ZFLK0L/`.
+
+> **Prior checkpoint — scale granularity approved publication, September 13, 2026.**
 > The author reviewed the final Chapter 17 scene and requested “push and do the
 > next.” Publish only scale granularity; Chapter 14 LayerNorm axis is the next
 > separate local preview. Preference run `34762857399` has passed interactions,
