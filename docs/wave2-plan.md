@@ -8,9 +8,13 @@ was pushed in `d08c41f`; reference tilt is now separately author-approved for pu
 separately pushed as `ec2e0f6`, not a full diffusion/training replay. Chapter 16's
 attention bill was separately pushed in `061eff3` ([receipt](attention-bill-excerpt.md),
 publishing run `34595314339`, passed and verified live). Mask before softmax is
-author-approved for publication after local desktop/phone review;
+author-approved and pushed as `6cde283` (run `34601697930`) after desktop/phone review;
 its seeded-fixture gate is closed by the existing figure's exact source row.
-See [its receipt](mask-before-softmax-excerpt.md). The other later
+See [its receipt](mask-before-softmax-excerpt.md). The author approved
+[same-subspace](same-subspace-excerpt.md) on September 12, using the existing
+projector identity as a labeled schematic. A1's SVD is next for local review.
+Greedy tree still has no manuscript branching fixture.
+The other later
 wave entries remain proposals. The
 historical build-route discussion below does not authorize a new shared animation
 kit; reuse existing transport and only extract helpers when actual duplication warrants it.
@@ -122,7 +126,8 @@ not a diffusion/training replay), Ch16 `attention-bill` (port
 of `AttentionBill`), Ch13 `mask-before-softmax` (port of `MaskBefore`; source-bound
 intermediate scores resolved, approved for publication), Ch11 `greedy-tree`
 (no manuscript numbers — needs a manuscript addition first). Wave 4:
-PCA interlude `same-subspace` (port of `SSameSubspace`), A1 `svd-circle` (no film — Route C),
+PCA interlude `same-subspace` (port of `SSameSubspace`; author-approved,
+schematic `VQ` basis with `Q^T z` coordinates), A1 `svd-circle` (no film — Route C),
 Ch18 `preference-ruler` (port of `BradleyTerry`), Ch17 `scale-granularity` (port of
 `GranularityDesign`), Ch14 `layernorm-axis` (port of `LayerNormAxis`), Ch5 `derivative-gates`
 (port of `SGates`; reuses Wave 1's log axis).

@@ -1,3 +1,18 @@
+# Rolling post-v1.3 — same subspace, different coordinates (September 12, 2026)
+
+- Adds one author-approved optional autoencoder-interlude view of the existing orthogonal
+  change-of-basis identity. Rotate the basis, read new coordinates, and add the
+  new coordinate-weighted vectors back to the same reconstruction.
+- Explicitly schematic, not the later rank-one training experiment. No new
+  dependency, numerical experiment, manuscript fixture, PDF content or frozen output.
+- Mask before softmax was separately approved and pushed as `6cde283`; publishing
+  run `34601697930` passed and its live HTML/player/PDFs are verified.
+- Greedy tree remains deferred: its per-token probability fixture is not in the
+  manuscript. See `docs/same-subspace-excerpt.md` for source and review receipts.
+- Local verification: 748 interaction tests, all source/HTML audits, unchanged
+  frozen stdout and interlude LaTeX. Desktop/phone diagrams and playback inspected;
+  native fullscreen entry/exit and layout also pass in the fresh in-app session.
+
 # Rolling post-v1.3 — mask before softmax (September 11, 2026)
 
 - Prepares a separate optional Chapter 13 normalization walkthrough from the

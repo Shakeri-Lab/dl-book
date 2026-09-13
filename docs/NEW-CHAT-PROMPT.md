@@ -7,9 +7,20 @@ it from editing before you have said what you want done.
 Keep this file current: if a rule changes or the state moves, edit the prompt here
 rather than re-deriving it in chat.
 
-**Animation work override — September 11, 2026:** use
-`/Users/hs9hd/dl-book-html-release`. Fourteen scenes are committed and pushed to
-`main` at `061eff3`, including the approved attention bill. Its publishing run
+**Animation work override — September 12, 2026:** use
+`/Users/hs9hd/dl-book-html-release`. Fifteen scenes are committed and pushed to
+`main` at `6cde283`, including approved mask-before-softmax. Its publishing run is
+`34601697930`; all jobs passed and live HTML/player/PDFs are verified. The author has approved the autoencoder
+interlude's `#same-subspace-excerpt`, an explicitly schematic basis change from
+the existing projector identity, not the later rank-one experiment. It requires
+separate publication; see `docs/same-subspace-excerpt.md`. The next scene is A1's
+existing circle-to-ellipse SVD example, for local review only.
+748 interaction tests and all source/HTML/fixture audits pass; frozen stdout is
+unchanged. Desktop/phone diagrams, playback and deferred/direct-anchor behavior
+are verified. Native fullscreen entry/exit and layout pass in a fresh in-app
+session on September 12; the earlier manual verification limit is closed.
+Greedy tree still needs a shared-manuscript fixture first.
+The preceding attention bill was pushed as `061eff3`. Its publishing run
 is `34595314339`; it passed all jobs and the live player and both PDFs are verified.
 The earlier score-field run
 `34589132667` passed all jobs; the live anchor and deferred player match source.
@@ -23,7 +34,7 @@ area tiles, and a visible linear-versus-quadratic work comparison. Keep the comp
 movie controls; do not add a P=8 example or hover-only interaction. The author
 approved this revision with “push. Do next.” Keep publications separate and resolve
 the next scene's manuscript fixture before implementation; do not treat that request
-as permission for every remaining wave. Current approved publication: Chapter 13's
+as permission for every remaining wave. Most recent pushed publication: Chapter 13's
 `#mask-before-softmax-excerpt`. Its fixture gate is resolved against the existing
 `padding-mask-audit` and adjacent figure, second example/second query. The source
 receipt records the exact extraction, not new frozen evidence. The author approved

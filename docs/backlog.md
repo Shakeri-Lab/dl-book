@@ -5,7 +5,7 @@ them or a chapter naturally touches them.
 
 ## Focused animation roadmap — approved September 9, 2026
 
-**Updated September 11, 2026:** fourteen scenes are committed on `main` at `061eff3`.
+**Updated September 11, 2026:** fifteen scenes are committed on `main` at `6cde283`.
 The [animation guide](animation-authoring.md) is the current inventory; the
 [Wave 1](wave1-excerpts.md) and [Wave 2](wave2-excerpts.md) receipts preserve their
 review history. Source state is not deployment: verify the publishing run and live
@@ -19,7 +19,10 @@ publishing run `34589132667`.
 It is not a full diffusion/training replay. Chapter 16's attention bill was pushed
 separately as `061eff3` (run `34595314339`); see [its receipt](attention-bill-excerpt.md).
 Chapter 13's mask-before-softmax is now author-approved for publication after
-desktop/phone review and 705 passing tests.
+desktop/phone review and 705 passing tests, pushed as `6cde283` (run `34601697930`).
+The autoencoder interlude's [same-subspace identity](same-subspace-excerpt.md) is
+author-approved on September 12. A1's existing SVD example is next for local review.
+Greedy tree remains blocked.
 Later entries remain candidates.
 Prioritize difficult mechanisms rather than animating every chapter.
 
@@ -154,8 +157,12 @@ softmax (Chapter 13) is approved for publication. Its previous fixture gate is
 closed by reconstructing the exact existing padding-mask figure's second query;
 the new [receipt](mask-before-softmax-excerpt.md) records the computed intermediates.
 No new manuscript fixture is introduced. Greedy
-tree (Chapter 11) needs a shared-manuscript example first. Wave 4 remains a shortlist,
-not permission to implement. See [the source plan](wave2-plan.md).
+tree (Chapter 11) needs a shared-manuscript example first. The author requested
+one next scene after approving mask-before-softmax: the next eligible candidate is
+Wave 4's same-subspace identity, now author-approved. It uses a labeled schematic
+rotation to illustrate the existing identity, not a new numerical experiment.
+Other Wave 4 entries remain a shortlist, not permission to implement. See
+[the source plan](wave2-plan.md).
 
 Defer training replays, diffusion, RoPE, and elaborate 3-D scenes until the smaller
 excerpts demonstrate useful teaching value.

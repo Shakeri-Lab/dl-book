@@ -2,9 +2,9 @@
 
 Author-approved September 9, 2026. These are optional HTML explanations of existing
 book examples, not videos, new experiments, or a replacement for the static book.
-**Current source state — September 11, 2026:** fourteen scenes are committed on `main`
-at `061eff3`, including the author's Wave 1, Wave 2, approved mask/predictor,
-reference tilt, score field, and attention bill. Their earlier
+**Current source state — September 11, 2026:** fifteen scenes are committed on `main`
+at `6cde283`, including the author's Wave 1, Wave 2, approved mask/predictor,
+reference tilt, score field, attention bill, and mask-before-softmax. Their earlier
 review history lives in the [Wave 1](wave1-excerpts.md) and [Wave 2](wave2-excerpts.md)
 receipts. Check the publishing run and live anchors before treating committed source
 as deployed. The current repair pass fixes LSTM equation links and four narrow-screen
@@ -18,7 +18,11 @@ scene in Chapter 19 was separately pushed in `ec2e0f6`; see
 Chapter 16's linked-patch attention bill was separately pushed in `061eff3`;
 see [its receipt](attention-bill-excerpt.md) and publishing run `34595314339`.
 Chapter 13's mask-before-softmax scene is author-approved for publication after
-local review; see [its receipt](mask-before-softmax-excerpt.md).
+local review and pushed as `6cde283` (run `34601697930`); see
+[its receipt](mask-before-softmax-excerpt.md).
+The author approved [same subspace](same-subspace-excerpt.md) in the autoencoder
+interlude on September 12. Publish it separately, then prepare A1's existing SVD
+example for local review. Greedy tree remains gated on a shared-manuscript fixture.
 Do not expand it into a full diffusion/training replay. The remaining roadmap is
 not blanket authorization.
 
@@ -54,6 +58,17 @@ three and four remain earned receipts, and log-probability terms stay symbolic.
 The helper's sequence sum is not the SFT objective's negative mean. No token is
 removed from context. Timeline highlighting carries the mechanism without adding
 hover-only attention paths or a fabricated distribution plot.
+
+### Same subspace: coordinates are not the reconstructed object
+
+The approved scene at `making-pca-learnable.html#same-subspace-excerpt` illustrates
+the existing orthogonal-basis identity. Retain one point and one plane; turn only
+the basis, read the changed projections, and add the new coordinate-weighted
+vectors head to tail. The basis becomes `VQ`, so the encoder gives `Q^T z` and the
+decoder uses `VQ`. Do not mix that convention with the film's opposite labeling.
+Call the arrows a basis of the retained subspace, not necessarily individual
+principal eigenvectors. This is a labeled schematic, not the following rank-one
+experiment or optimizer motion. No new data or measured coordinates are supplied.
 
 ### Mask before softmax: zero score is not exclusion
 

@@ -10,6 +10,39 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 
 ---
 
+> **Current approved publication — same subspace, September 12, 2026.**
+> Mask before softmax was normally pushed as **`6cde283`**, local/remote `main`
+> confirmed equal. Publishing run **34601697930** passed all jobs; its live player
+> and both PDF artifacts were verified on September 12. The approved scene is the autoencoder
+> interlude's `making-pca-learnable.html#same-subspace-excerpt`, before “What if the
+> map could bend?” See [its receipt](same-subspace-excerpt.md).
+> It illustrates the existing projector identity: basis `VQ`, coordinates `Q^T z`,
+> paired decoding back to the same point. The drawing is schematic, not the later
+> `k=1` study. Greedy tree remains blocked on a shared-manuscript numerical fixture.
+> The author approved this scene with “push and do the next.” No QMD, freeze,
+> numerical gate, PDF setting, stable tag or paused migration change is authorized.
+> Acceptance: 748/748 full tests, 43/43 scene tests, all source/HTML/fixture audits,
+> exact 133-block/27-unit stdout, and a byte-identical interlude LaTeX filter no-op.
+> Desktop/390-CSS-pixel review confirms clean diagrams/math, playback, scrubbing,
+> and closed/deferred/direct-anchor states. Fresh in-app fullscreen entry/exit and
+> layout pass on September 12, closing the earlier manual verification limit.
+> Shared controls stay unchanged. The source receipt records logs and hashes.
+> Next eligible candidate: Appendix A's existing circle-to-ellipse SVD fixture;
+> build one separate local preview, not the rest of the wave.
+> **Resolved prior deployment:** mask run `34601697930` passed on exact
+> head `6cde283aff69dabe6a71f103f818713dfbbcabbb`. Live HTML/player/PDFs match
+> `gh-pages` commit `76e930b7`; PDFs retain 548/519 pages and 390 outlines each,
+> with unchanged complete/per-page text and geometry. Receipt:
+> `/tmp/dl-book-mask-softmax-pdf-approval.6XHtCD/mask-live.TPl0vH/provenance.json`.
+> No scheduled monitor was created or resumed.
+
+> **PCA publication checks:** both full PDF profiles stabilize at unchanged
+> 548/519 pages and 390 outlines each. Complete/per-page text, page geometry,
+> outlines and all 1,067 low-resolution rasters are identical to the baseline.
+> Receipt: `/tmp/dl-book-pca-pdf-approval.aNzhwp/`. The final frozen HTML render
+> (`/tmp/pca-publication-final-html.log`) restores and passes all asset/anchor
+> audits; 748 tests and 133-block/27-unit frozen stdout checks pass.
+
 > **Current approved publication — mask before softmax, September 11, 2026.**
 > Chapter 16's approved attention bill was committed and normally pushed as
 > **`061eff3`**; local/remote `main` matched. Publishing run **34595314339** is
