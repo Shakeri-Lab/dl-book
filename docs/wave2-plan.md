@@ -1,6 +1,14 @@
 # Wave 2 plan — mechanism excerpts, and how to build them cheaply
 
-Current work, September 13: the approved [LayerNorm/BatchNorm scene](layernorm-axis-excerpt.md)
+Current work, September 13: [derivative gates](derivative-gates-excerpt.md) is
+pushed as `00c0730`. Its publishing run `34770754602` has a bootstrap HTTP 503 and
+the known Chapter 18 signed-zero failure; no contract was relaxed.
+[Greedy tree](greedy-tree-excerpt.md) is now publication-approved: the author
+authorized its missing fixture in the shared manuscript first. Both editions
+receive a normalized conditional table and complete-path comparison; the optional
+player follows the same bounded tree. No re-execution or changed date results.
+
+Prior checkpoint: the approved [LayerNorm/BatchNorm scene](layernorm-axis-excerpt.md)
 is pushed as `e00d3c5`; publishing run `34766825371` succeeded.
 [Chapter 5 derivative gates](derivative-gates-excerpt.md) is a separate
 network-first redesign approved by the author. Keep the forward sigmoid output
@@ -161,7 +169,8 @@ Wave 3: Ch18 `reference-tilt` (port of `GibbsTilt`, β slider), Ch19 `score-fiel
 not a diffusion/training replay), Ch16 `attention-bill` (port
 of `AttentionBill`), Ch13 `mask-before-softmax` (port of `MaskBefore`; source-bound
 intermediate scores resolved, approved for publication), Ch11 `greedy-tree`
-(no manuscript numbers — needs a manuscript addition first). Wave 4:
+(shared-manuscript fixture authorized September 13; static example and player
+now prepared locally for review, not yet pushed). Wave 4:
 PCA interlude `same-subspace` (port of `SSameSubspace`; author-approved,
 schematic `VQ` basis with `Q^T z` coordinates), A1 `svd-circle` (no film — Route C;
 author-approved existing constructed factors, scales 3 and 1),

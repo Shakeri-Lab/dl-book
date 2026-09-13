@@ -1,3 +1,28 @@
+# Rolling post-v1.3 — Chapter 11 greedy versus beam (September 13, 2026)
+
+- Adds the author-approved shared probability table and complete-sequence
+  counterexample before its optional animation. The static example belongs to
+  HTML and both derived PDF profiles; the player is HTML-only.
+- Keeps the predictor fixed, includes EOS in path probabilities, and bounds
+  unspecified alternatives without inventing continuations. The existing date
+  experiment remains separate and its numerical evidence unchanged.
+- Reuses the compact deferred SVG player and native-width phone layout. No new
+  browser dependency, training, numerical tolerance, runtime migration or tag.
+- Plants later decoding lessons through visible prefix conditioning, distinct
+  width/depth labels, and a top choice among two completed candidates when one
+  answer is requested (the chapter code retains its ranked-list return contract).
+  Keeps later architecture names in the research/arc notes, not the early scene;
+  beam ranking is never relabeled as speculative verification. This follow-up
+  does not alter the shared manuscript, numerical evidence or derived PDFs.
+- Source and acceptance receipt: `docs/greedy-tree-excerpt.md`. Author-approved
+  for publication; verify the publishing run before claiming deployment.
+- Marks the derived PDFs as rolling and advances the deterministic content date
+  to September 13. The stable v1.3 citation, archive, and tag remain unchanged.
+- Full local repagination: print 548 → 548 pages; continuous 519 → 520.
+  The new search subsection adds one outline entry (390 → 391 in each profile).
+  Updates the rolling download count and that exact outline invariant; stable
+  v1.3 artifacts and historical release counts remain untouched.
+
 # Rolling post-v1.3 — scale granularity (September 13, 2026)
 
 - Adds the author-approved Chapter 17 fixed-8-bit replay: the source audit's quiet

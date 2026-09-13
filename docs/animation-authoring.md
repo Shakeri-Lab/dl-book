@@ -2,7 +2,16 @@
 
 Author-approved September 9, 2026. These are optional HTML explanations of existing
 book examples, not videos, new experiments, or a replacement for the static book.
-**Current source state — September 13, 2026:** twenty scenes are pushed through
+**Current source state — September 13, 2026:** twenty-one scenes are pushed through
+`00c0730` (network-first derivative gates). Its publish run `34770754602` is
+blocked by a bootstrap HTTP 503 and the known Chapter 18 signed-zero gate.
+The twenty-second scene, [greedy versus beam](greedy-tree-excerpt.md), is
+author-approved for publication. Its missing static fixture was authorized and added to
+the shared manuscript before the animation. All historical numerical evidence
+is unchanged. Shared content additions must rebuild both PDF profiles; an
+HTML-only player does not make its prerequisite example HTML-only.
+
+Prior checkpoint: twenty scenes were pushed through
 `e00d3c5`, including the author-approved [LayerNorm/BatchNorm contrast](layernorm-axis-excerpt.md).
 Its publishing run `34766825371` succeeded; verify live assets separately.
 Scale run `34764538563` succeeded. Chapter 5 [derivative gates](derivative-gates-excerpt.md)
@@ -65,7 +74,32 @@ The continuation isolates best-case sigmoid factors in connected multiplier
 components, with integer counts and explicit numerical readouts. This is not a
 simulated ten-layer forward network or a bound on the complete gradient. Weight
 matrices and branching are omitted from that calculation, not assumed harmless.
+
+### Greedy versus beam: search changes the frontier, not the predictor
+
+One fixed tree supports two walks. The frontier first commits to the locally
+stronger edge; only after its factors are traversed does the complete-path product
+appear. Reset the frontier and carry two prefixes instead. Expansion exposes the
+prefix ranking before pruning, so the winner is earned rather than announced.
+The phone layout rotates the two rails into columns at native label size.
+
+The shared table owns every conditional probability. An `other` branch aggregates
+unspecified alternatives: show its mass as an upper bound on each omitted prefix
+or completion, not as one invented token. Include EOS in each completed score,
+sum conditional log scores, and do not renormalize over the displayed beam.
+This tree certifies its winner; finite-width beam search has no such guarantee
+in general. No claim about the date model is inferred from the constructed example.
 Use the common transport, no extra parameter controls, and native-size phone reflow.
+
+For later-topic seeds, expose a dependency already present rather than import the
+later algorithm's vocabulary. Chapter 11 now colors supplied prefixes blue,
+labels conditional edges with their own history, separates width from depth,
+and distinguishes retained candidates from the top choice for one requested answer.
+Keep the chapter helper's ranked-list return contract explicit. Those cues
+prepare multi-token and speculative-decoding discussions without naming them in
+the scene. Beam keep/prune is not draft accept/reject; a joint sequence score is
+not an acceptance probability. Record the future harvest and primary sources in
+the scene receipt and arc ledger, not in an extra dashboard or premature lecture.
 
 ## The first ten committed examples
 

@@ -7,7 +7,32 @@ it from editing before you have said what you want done.
 Keep this file current: if a rule changes or the state moves, edit the prompt here
 rather than re-deriving it in chat.
 
-**Animation work override — derivative gates approved publication, September 13, 2026:**
+**Animation work override — Chapter 11 approved publication, September 13, 2026:**
+Use `/Users/hs9hd/dl-book-html-release`. Derivative gates is pushed as `00c0730`.
+Run `34770754602` has a Chapter 8 download HTTP 503 and the known Chapter 18
+same-runtime signed-zero failure; do not claim deployment or weaken gates.
+Read `docs/greedy-tree-excerpt.md`. The author authorized a shared static example
+before its animation: Chapter 11's normalized conditional table and path products
+belong to both HTML and PDF. The new deferred player changes the search frontier,
+never the decoder; unknown continuations remain bounded aggregates.
+The author reviewed the prefix-lessons revision and requested “push.” Preserve
+all executable cells, frozen stdout, numerical contracts, stopped schedule,
+paused runtime migration, and tags. The retained frozen Markdown has a guarded
+prose refresh, not new training evidence. Publish through the existing checks.
+The latest author feedback asks for subtle later-topic seeds. The player now
+shows prefix ownership, width versus depth, and two candidates versus one result.
+No early architecture names or speculative-acceptance rule; see the receipt's
+primary-source mapping and the arc ledger's still-unwritten future harvest.
+Preview: `http://127.0.0.1:8770/chapters/part3/11-encoder-decoder.html?preview=prefix-lessons#greedy-tree-excerpt`.
+Full local PDFs retain 548 print pages and increase continuous 519 → 520; both
+outlines now contain 391 entries. The rolling download count and exact outline
+invariant are updated; stable-release metadata remains historical and unchanged.
+Receipt: `/tmp/dl-book-greedy-pdfs.3sJY0U/`.
+Publication receipt: `/tmp/dl-book-greedy-publication.VqOPxU/`. Both PDFs are marked
+rolling with the September 13 content date; the v1.3 citation and tag stay fixed.
+Verify deployment separately from the source push; do not relax a numerical gate.
+
+Prior checkpoint — derivative gates approved publication, September 13, 2026:
 Use `/Users/hs9hd/dl-book-html-release`. Twenty scenes are pushed through `e00d3c5`,
 including the approved LayerNorm/BatchNorm comparison. Run `34766825371` succeeded;
 its live HTML/player/PDF verification also passes (receipt below). Full local PDF checks retain

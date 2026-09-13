@@ -5,7 +5,25 @@ them or a chapter naturally touches them.
 
 ## Focused animation roadmap — approved September 9, 2026
 
-**Updated September 13, 2026:** twenty scenes are pushed through `e00d3c5`, including
+**Updated September 13, 2026:** twenty-one scenes are pushed through `00c0730`,
+including network-first derivative gates. Run `34770754602` is blocked by the
+Chapter 8 support-download HTTP 503 and known Chapter 18 signed-zero check;
+the numerical gates are unchanged. The next [greedy-tree scene](greedy-tree-excerpt.md)
+is author-approved for publication. Its former source gate is resolved: the author
+explicitly approved the small shared Chapter 11 table and path calculation before
+the animation. Both editions carry that example; historical date-model outputs
+are retained. This closes the ready candidate list, not permission to begin
+deferred training replays or additional scenes.
+
+**Future harvest, not an implementation commitment:** the author's multi-token,
+EAGLE and DSpark request is planted in the Chapter 11 replay through prefix
+ownership, width versus depth, and alternatives versus one requested answer.
+A later serving discussion must separately establish proposal/target roles,
+verification with correction, and measured useful work; beam pruning is not that
+verification rule. Primary-source mapping and boundaries live in
+`docs/greedy-tree-excerpt.md`. No new architecture scene is authorized by this seed.
+
+Prior checkpoint: twenty scenes were pushed through `e00d3c5`, including
 the approved [LayerNorm/BatchNorm contrast](layernorm-axis-excerpt.md). Verify its
 publishing run `34766825371` succeeded. [Chapter 5 derivative gates](derivative-gates-excerpt.md)
 is author-approved after the requested network-first redesign: a large forward

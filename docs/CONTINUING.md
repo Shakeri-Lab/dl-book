@@ -10,7 +10,35 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 
 ---
 
-> **Current work — derivative gates approved publication, September 13, 2026.**
+> **Current work — Chapter 11 approved publication, September 13, 2026.**
+> Derivative gates is pushed as `00c0730`; publishing run `34770754602` is blocked
+> by a Chapter 8 bootstrap HTTP 503 and the known Chapter 18 exact-output signed-zero
+> difference (`-0.0` versus `0.0`). No numerical gate or runtime change; no scheduled
+> task. Do not claim live deployment. Publication receipts:
+> `/tmp/dl-book-derivative-pdf-approval.j8b72q/derivative-live.KO8Jo9/`.
+> The author explicitly chose “Add the shared example, then animate it” for
+> [Chapter 11 greedy versus beam](greedy-tree-excerpt.md), then approved the
+> prefix-lessons revision with “push.” A normalized table
+> and complete-path calculation now belong to both editions. The player keeps
+> the decoder fixed and changes only the search frontier. Omitted branches are
+> probability-mass bounds, not invented tokens or continuations. The existing
+> date-model code and all 133 stdout blocks remain unchanged; frozen Markdown was
+> refreshed for prose only, not presented as a new execution. No release tag.
+> Full local PDFs: print 548 → 548 pages; continuous 519 → 520. Both have 391
+> verified outline entries, including the new search subsection. The current
+> download count and outline invariant follow this local build; historical stable
+> release counts do not change. Receipt: `/tmp/dl-book-greedy-pdfs.3sJY0U/`.
+> Author follow-up: plant later multi-token/EAGLE/DSpark lessons, without naming
+> those methods early. The local player now marks prefix ownership, width versus
+> depth, and two candidates versus one requested answer. Research receipts and
+> a future harvest are recorded; no speculative-verification mode or shared-source
+> change. Preview: `http://127.0.0.1:8770/chapters/part3/11-encoder-decoder.html?preview=prefix-lessons#greedy-tree-excerpt`.
+> Publication receipt: `/tmp/dl-book-greedy-publication.VqOPxU/`. Both PDF profiles
+> are now marked rolling, with September 13 as the deterministic content date.
+> Preserve the stable v1.3 citation and tag. Verify CI and live assets separately
+> from the source push; known prior-run failures are not permission to relax gates.
+>
+> **Prior checkpoint — derivative gates approved publication, September 13, 2026.**
 > The approved LayerNorm/BatchNorm comparison is pushed as `e00d3c5`; local and
 > remote `main` matched after the ordinary push. Run `34766825371` completed
 > successfully. Its live HTML/player/PDF verification now passes, with receipts in

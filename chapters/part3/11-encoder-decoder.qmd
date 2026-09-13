@@ -546,10 +546,52 @@ path. Maximizing each step is not maximizing the sequence. You met this exact
 gap in @sec-02-logistic-softmax, where the hard max's stepwise confidence hid the
 alternatives softmax kept alive.
 
+<!-- lecture-source: Video_lectures/6050-Ch11/lecture.jsx, SGreedyTree;
+     Video_lectures/audit-ch11-encoder-decoder.py, toy_search_tree_evidence.
+     Author-approved shared toy fixture; not a trained-model measurement. -->
+Can winning the first step lose the sequence? Consider this tiny decoder.
+Each row in @tbl-greedy-tree is a conditional distribution over the next token;
+`other` collects every alternative not named in that row. `<eos>` ends the sequence.
+
+| Prefix | Named choice | Alternative |
+|:--|:--|:--|
+| `<bos>` | `A`: 0.60 | `B`: 0.40 |
+| `A` | `x`: 0.55 | `other`: 0.45 |
+| `B` | `y`: 0.95 | `other`: 0.05 |
+| `A x` | `<eos>`: 0.80 | `other`: 0.20 |
+| `B y` | `<eos>`: 0.95 | `other`: 0.05 |
+
+: A tiny decoder with normalized next-token choices at each listed prefix. {#tbl-greedy-tree}
+
+Greedy chooses `A`, then `x`, then `<eos>`. Multiply along that path before
+looking at the alternative:
+
+$$
+\begin{gathered}
+\predictionpart{P(\texttt{A x <eos>})}\\
+= \predictionpart{0.60}\times\predictionpart{0.55}\times\predictionpart{0.80}
+  = \predictionpart{0.264},\\[4pt]
+\predictionpart{P(\texttt{B y <eos>})}\\
+= \predictionpart{0.40}\times\predictionpart{0.95}\times\predictionpart{0.95}
+  = \predictionpart{0.361}.
+\end{gathered}
+$$
+
+The best complete sequence begins with the less likely first token. No hidden
+continuation overturns this result: the largest probability mass entering an
+`other` branch is $0.60\times0.45=0.27$, and multiplying by further probabilities
+cannot increase it. This is a specified toy decoder, not a measured model.
+
 **Beam search** widens the walk: carry the $k$ best partial sequences (the
 *beam*), expand each by all $V$ tokens, keep the top $k$ by *cumulative*
 log-probability, repeat. Complexity $O(k \cdot V \cdot T)$, a small multiple of
 greedy, nothing like exhaustive.
+
+In this tree, a beam of width two keeps both `A` and `B`. At the next step it
+keeps `B y` (0.38) and `A x` (0.33). Every omitted prefix has probability at
+most its branch's total mass (0.27 or 0.02), so none can displace those two.
+The retained `<eos>` continuations finish at 0.361 and 0.264. The beam recovers the
+winner here; a finite beam does not guarantee the best sequence in every tree.
 
 :::: {.plan-code}
 ::: {.plan}
@@ -587,6 +629,9 @@ def beam_search(model: Seq2Seq, src: str, k: int = 5,
             for seq, lp, _, _ in beams]
 ```
 ::::
+
+### Search exposes alternatives
+
 Now the payoff, and it is exactly where we buried it: the ambiguous dates. For
 `03/05/2021`, "the one best answer" is the wrong question. The training world
 itself was split 70/30 between two readings. Greedy silently hands you one
