@@ -405,6 +405,10 @@ math — and it is what `interactives/_template` encodes and the harness's
    references in the narrow print must be namespaced, including clip paths. Keep
    MathJax label IDs unique and give their existing labels narrow static geometry.
    Inspect actual phone-width type, not only the presence of a narrow group.
+   Serialize computed drawing coordinates at an explicit subpixel precision before
+   requiring byte-identical SVG fallbacks. Platform math libraries can differ in
+   their last bits. Keep the underlying arithmetic unrounded and test it separately;
+   a rendering precision contract must not loosen numerical-evidence gates.
 10. **Native links inside raw panels.** HTML inserted by the excerpt filter does not
     resolve Quarto `@eq-…` references. Use a descriptive `<a href="#eq-…">` link and
     verify its target in the rendered chapter. Never print a guessed equation number.

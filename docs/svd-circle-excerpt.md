@@ -89,9 +89,9 @@ retains over 23 CSS pixels between the right marker label and the SVG edge; the
 page has no horizontal overflow. The rank-one endpoint and math are legible.
 The review tab is left paused at zero with its temporary viewport override reset.
 
-The three local scene assets total 85,460 bytes before compression; the player is
-14,371 bytes, SHA-256
-`6fa76d601ba7c1db8a5b19252b490700261568466ff0a31f6980f70a031ce3f0`.
+After the serialization fix below, the three local scene assets total 71,846
+bytes before compression; the player is 14,746 bytes, SHA-256
+`1cbc36a8082c305c0ef4a33f95e98896430fe4a7765d9b41415be72167578ea2`.
 Preview: `http://127.0.0.1:8770/chapters/appendices/a1-linear-algebra.html?preview=svd-circle-final#svd-circle-excerpt`.
 
 Publication verification on September 13 rebuilt both complete PDF profiles. Each
@@ -108,6 +108,24 @@ The final full frozen HTML render is `/tmp/svd-approved-publication-html.log`;
 HTML asset and rendered-anchor audits pass. The publication suite remains 793/793
 (`/tmp/svd-publication-all-tests.log`). Existing scheduled monitoring, runtime
 migration, numerical tolerances, release tags and PDF configuration stay untouched.
+
+## Publication follow-up: SVG serialization
+
+Commit `4fb86d4` was normally pushed to `main`. Run `34761426323` caught one
+interaction failure (792/793 passing): unrestricted SVG coordinate strings differ
+in their last bits across macOS and Linux. The exact fallback comparison remained
+blocking; no bypass or numerical-ledger change was made. Log:
+`/tmp/dl-book-svd-pdf-approval.ztG1Xr/svd-live.LJzjc5/interaction-job.log`.
+
+A regression test first reproduced unequal final SVG strings with identical
+fixtures/layouts and four-ulp perturbations of `sin`, `cos` and `hypot`. The fix
+serializes drawing coordinates to nine decimal places (at most half a billionth
+of a pixel rounding). Mathematical matrices, singular values and errors remain
+unrounded and retain their original checks. Exact fallback equality remains the
+contract; both static frames are regenerated. The scene suite now has 46 tests,
+including the perturbation test. The scoped publication suite is recorded at
+`/tmp/svd-hotfix-publication-tests.log`; the final frozen HTML render is
+`/tmp/svd-hotfix-preference-final-html.log` (also includes the uncommitted next preview).
 
 ## Source digests
 

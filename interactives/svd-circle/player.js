@@ -63,12 +63,16 @@
   const drawing=svg.querySelector('[data-drawing]'),formula=$('[data-formula]'),caption=$('[data-caption]');
   drawing.replaceChildren();
   const NS='http://www.w3.org/2000/svg';
+  // Serialize display coordinates to nine decimal places (at most 0.5e-9 CSS
+  // pixel rounding). libm last bits differ across platforms; they must not turn
+  // an identical picture into different SVG bytes. Model state stays unrounded.
+  const pixel=value=>Number(value.toFixed(9));
   const make=(tag,attributes,text='',parent=drawing)=>{
     const node=document.createElementNS(NS,tag);
-    for(const[key,value]of Object.entries(attributes))node.setAttribute(key,String(value));
+    for(const[key,value]of Object.entries(attributes))node.setAttribute(key,String(typeof value==='number'?pixel(value):value));
     node.textContent=text;parent.appendChild(node);return node;
   };
-  const attrs=(node,values)=>{for(const[key,value]of Object.entries(values))node.setAttribute(key,String(value));};
+  const attrs=(node,values)=>{for(const[key,value]of Object.entries(values))node.setAttribute(key,String(typeof value==='number'?pixel(value):value));};
   const show=(node,visible)=>visible?node.removeAttribute('hidden'):node.setAttribute('hidden','');
   const label=(value,cls='',attributes={})=>make('text',{'text-anchor':'middle','font-size':13,class:cls,...attributes},value);
   const heading=label('', 'svd-muted',{'data-context':'','font-size':13});
@@ -99,7 +103,7 @@
     const state=buildState(time,reducedMotion),{stage}=state;
     const rulerExtent=Math.max(1,fixture.singularValues[0])+.4;
     const unit=Math.min(46,(width-40)/(2*rulerExtent)),center=[width/2,184],extent=rulerExtent*unit;
-    const screen=point=>[center[0]+unit*point[0],center[1]-unit*point[1]];
+    const screen=point=>[pixel(center[0]+unit*point[0]),pixel(center[1]-unit*point[1])];
     const path=points=>points.map((point,index)=>{const p=screen(point);return`${index?'L':'M'} ${p[0]} ${p[1]}`;}).join(' ')+' Z';
     const complete=state.outputProgress===1;
     Object.assign(root.dataset,{

@@ -9,6 +9,9 @@ const {ROOT,read,entry,chapterSource,numbers,close,canonicalMarkup,fixture,
 const {staticFrame}=require('./render_static_frames.cjs');
 
 const NAME='svd-circle-excerpt',scene=entry(NAME),widths=[240,296,360,519,520,553,713];
+// SVG pixels are serialized at nine decimal places. This bound applies only to
+// drawn coordinates, never to model matrices, singular values, ranks or errors.
+const PIXEL_EPSILON=5.1e-10;
 const dot=(a,b)=>a.reduce((total,value,j)=>total+value*b[j],0);
 const columns=a=>a[0].map((_,j)=>a.map(row=>row[j]));
 const product=(a,b)=>a.map(row=>columns(b).map(column=>dot(row,column)));
@@ -88,6 +91,38 @@ function verifyState(state,source,time,reduced=false) {
 registerTransportTests(NAME,{witness:/one retained direction/i,anchors:['svd-circle-playback-help'],width:713});
 registerBeatHoldTest(NAME);
 registerGrammarTests(NAME);
+
+test('SVD circle: serialized final geometry ignores a few libm ulps, without rounding model state',t=>{
+  // Exercise the exact SVG string comparison that failed between macOS and CI.
+  // Each JSDOM realm gets its own Math object; no host or shared helper changes.
+  const nearby=(value,direction)=>{
+    if(!Number.isFinite(value)||value===0||Math.abs(value)===1)return value;
+    const view=new DataView(new ArrayBuffer(8));view.setFloat64(0,value);
+    const bits=view.getBigUint64(0),step=BigInt(direction*(value>0?1:-1))*4n;
+    view.setBigUint64(0,bits+step);return view.getFloat64(0);
+  };
+  for(const width of [296,713]) {
+    const baseline=fixture(t,NAME,{width});baseline.load();baseline.open();baseline.seek(40);
+    const expected=drawing(baseline).innerHTML,baseState=baseline.w.BookSVDCircle.buildState(40);
+    for(const direction of [-1,1]) {
+      const varied=fixture(t,NAME,{width});
+      for(const name of ['sin','cos','hypot']) {
+        const original=varied.w.Math[name].bind(varied.w.Math);
+        varied.w.Math[name]=(...args)=>nearby(original(...args),direction);
+      }
+      varied.load();varied.open();varied.seek(40);
+      const actual=drawing(varied).innerHTML;
+      const at=[...actual].findIndex((character,index)=>character!==expected[index]);
+      assert.equal(actual===expected,true,
+        `SVG bytes differ at width ${width}, ulp direction ${direction}: `+
+        `${actual.slice(Math.max(0,at-35),at+55)} != ${expected.slice(Math.max(0,at-35),at+55)}`);
+      const variedState=varied.w.BookSVDCircle.buildState(40);
+      assert.notEqual(JSON.stringify(variedState.fullMap),JSON.stringify(baseState.fullMap),
+        'model matrices retain full arithmetic precision rather than pixel serialization');
+      closeTree(variedState.fullMap,baseState.fullMap,1e-12);
+    }
+  }
+});
 
 test('SVD circle: the fixture is the existing A1 map, not a new fitted example',t=>{
   const f=fixture(t,NAME),source=declared(f),chapter=chapterSource(NAME);
@@ -211,8 +246,8 @@ test('SVD circle: the actual curve and two marker rays follow the computed map a
       closeTree(pathPoints(f.$('[data-full-ghost]')),want.input.map(point=>screen(f,apply(want.full,point))),1e-9);
       for(let j=0;j<2;j++) {
         const marker=f.$(`[data-marker="${j}"]`),ray=f.$(`[data-ray="${j}"]`),point=screen(f,state.markerOutputs[j]);
-        closeTree(markerPosition(marker),point);closeTree(JSON.parse(marker.dataset.position),point);
-        closeTree([attr(ray,'x1'),attr(ray,'y1')],origin);closeTree([attr(ray,'x2'),attr(ray,'y2')],point);
+        closeTree(markerPosition(marker),point,PIXEL_EPSILON);closeTree(JSON.parse(marker.dataset.position),point,PIXEL_EPSILON);
+        closeTree([attr(ray,'x1'),attr(ray,'y1')],origin,PIXEL_EPSILON);closeTree([attr(ray,'x2'),attr(ray,'y2')],point,PIXEL_EPSILON);
       }
     }
   }
@@ -223,9 +258,10 @@ test('SVD circle: the error segment measures the discarded short direction witho
   for(const width of widths) {
     f.resize(width);f.seek(40);const state=f.w.BookSVDCircle.buildState(40),ray=f.$('[data-error-ray]');
     assert(visible(ray));const start=[attr(ray,'x1'),attr(ray,'y1')],end=[attr(ray,'x2'),attr(ray,'y2')];
-    closeTree(start,screen(f,state.fullMarkerOutputs[1]));closeTree(end,data(f,'origin'));
-    close(norm(start.map((value,j)=>value-end[j]))/Number(f.root.dataset.pixelsPerUnit),state.operatorError);
-    closeTree(markerPosition(f.$('[data-marker="1"]')),data(f,'origin'));
+    closeTree(start,screen(f,state.fullMarkerOutputs[1]),PIXEL_EPSILON);closeTree(end,data(f,'origin'),PIXEL_EPSILON);
+    close(norm(start.map((value,j)=>value-end[j]))/Number(f.root.dataset.pixelsPerUnit),state.operatorError,
+      2*Math.SQRT2*PIXEL_EPSILON/Number(f.root.dataset.pixelsPerUnit));
+    closeTree(markerPosition(f.$('[data-marker="1"]')),data(f,'origin'),PIXEL_EPSILON);
     const parsed=numericTokens(f.$('[data-value="error"]').textContent);assert(parsed.includes(1));
   }
 });

@@ -12,6 +12,10 @@
 - September 13 acceptance: 793 interaction tests, all source/HTML/fixture audits,
   unchanged frozen stdout/LaTeX, and desktop/phone playback and fullscreen checks.
 - Source/verification receipt: `docs/svd-circle-excerpt.md`.
+- Publication follow-up: Linux CI caught last-bit coordinate differences in the
+  exact static-SVG comparison. Quantize drawing serialization, not SVD arithmetic;
+  retain exact fallback equality and add a perturbed-math regression test. No
+  manuscript or numerical-tolerance change.
 
 # Rolling post-v1.3 — same subspace, different coordinates (September 12, 2026)
 
