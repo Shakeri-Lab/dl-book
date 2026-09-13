@@ -1512,6 +1512,125 @@ Figure&nbsp;17.5: Quantization is a grid plus a granularity decision. A 3-bit sy
   </div>
 </details>
 
+<p>The global 8-bit grid has only <span class="math inline">\(2.13\%\)</span> relative output error overall, which sounds reassuring until we inspect rows—the median relative row error is <span class="math inline">\(22.13\%\)</span>, and the quietest rows are reconstructed as all zeros. Per-row scales lower overall output error to <span class="math inline">\(0.689\%\)</span> and maximum row error below <span class="math inline">\(0.964\%\)</span>. At 4 bits, per-row scales improve output error from <span class="math inline">\(26.95\%\)</span> to <span class="math inline">\(12.23\%\)</span>, but do not make the approximation exact.</p>
+<p>The packed 4-bit codes require 8,192 bytes. One FP32 scale brings the global total to 8,196 bytes; 64 row scales bring it to 8,448. The live <code>torch.int8</code> tensor in this teaching cell occupies one byte per code—it is <strong>not</strong> physically packed into nibbles. <a href="#eq-quant-payload" class="quarto-xref">Equation&nbsp;<span>17.9</span></a> is the payload a packing format could achieve.</p>
+<div class="callout callout-style-default callout-warning callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Warning</span>A smaller checkpoint is not automatically faster
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>Bit count does not determine latency by itself. Real speed depends on supported kernels, hardware, packing, dequantization, memory bandwidth, batch shape, and which tensors remain in higher precision. Dettmers and colleagues even reported cases where LLM.int8() overhead made smaller models slower than FP16. Measure the target system; do not turn a file-size ratio into a runtime claim. The Roofline and measurement contracts in <a href="../appendices/a3-precision-performance.html" class="quarto-xref"><span>Appendix C</span></a> make that distinction explicit.</p>
+</div>
+</div>
+<style>
+#scale-granularity-excerpt {
+  --sg-weight: #c05621;
+  --sg-error: #722f37;
+  --sg-ink: #232d4b;
+  --sg-muted: #586474;
+  --sg-line: #aab4c0;
+}
+.sg-figure { container-type: inline-size; }
+.sg-figure svg { display: block; width: 100%; height: auto; overflow: visible; font-family: inherit; }
+.sg-figure text { fill: var(--sg-ink); font-size: 13px; font-variant-numeric: tabular-nums; }
+.sg-figure .sg-weight { fill: var(--sg-weight); }
+.sg-figure .sg-error { fill: var(--sg-error); }
+.sg-figure .sg-muted { fill: var(--sg-muted); }
+.sg-ruler, .sg-tick { stroke: var(--sg-line); stroke-width: 1; }
+.sg-ray { fill: none; stroke: var(--sg-line); stroke-width: 1.4; }
+.sg-zero-bin { fill: #d7dde5; opacity: .75; }
+.sg-original { fill: none; stroke: var(--sg-weight); stroke-width: 1.7; stroke-dasharray: 3 2; }
+.sg-weight-interval { stroke: var(--sg-weight); stroke-width: 4; stroke-linecap: butt; }
+.sg-weight-point { fill: var(--sg-weight); stroke: white; stroke-width: 1.2; }
+.sg-mapping-ray { stroke: var(--sg-line); stroke-width: 1.3; stroke-dasharray: 3 2; }
+.sg-row-tick { stroke: var(--sg-weight); stroke-width: 1.2; }
+.sg-formula { display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline; gap: .3rem .8rem; min-height: 4em; margin: .4rem 0 0; text-align: center; font-size: .96rem; }
+#scale-granularity-excerpt[data-ready] .sg-formula:not(.sg-global-shown) #eq-scale-granularity-1,
+#scale-granularity-excerpt[data-ready] .sg-formula:not(.sg-row-shown) #eq-scale-granularity-2,
+#scale-granularity-excerpt[data-ready] .sg-formula:not(.sg-error-shown) #eq-scale-granularity-3 { visibility: hidden; }
+#scale-granularity-excerpt:not([data-ready]) [data-static-frame="narrow"] { display: none; }
+@container (max-width: 519px) {
+  #scale-granularity-excerpt:not([data-ready]) [data-drawing] { display: none; }
+  #scale-granularity-excerpt:not([data-ready]) [data-static-frame="narrow"] { display: inline; }
+  #scale-granularity-excerpt:not([data-ready]) .sg-figure svg { aspect-ratio: 296 / 375; }
+}
+@media (max-width: 560px) { .sg-formula { font-size: .9rem; } }
+
+</style>
+<!--
+  HTML-only range argument from Chapter 17's quantization-audit: 64 by 256,
+  row_ranges = torch.logspace(-2, 1, 64), fixed 8-bit symmetric grid and FP32
+  scales. These are analytic declared range endpoints, not sampled matrix rows
+  or a re-execution of the output-error experiment. GranularityDesign supplies
+  the shared-grid collapse, local-grid reveal, and metadata ending. Its GPAT
+  samples and Q=7 are deliberately not transplanted into the book.
+-->
+<details id="scale-granularity-excerpt" class="mechanism-excerpt" data-player="../../interactives/scale-granularity/player.js" data-playback="../../interactives/shared/playback.js" data-fixture="{&quot;bits&quot;:8,&quot;rows&quot;:64,&quot;cols&quot;:256,&quot;quietMax&quot;:0.01,&quot;loudMax&quot;:10,&quot;scaleBytes&quot;:4}">
+  <summary>Watch the mechanism: one scale can erase a quiet row</summary>
+  <div class="mechanism-body">
+    <p class="mechanism-question">Can an 8-bit grid erase every weight in a row without clipping any weight?</p>
+    <p class="mechanism-intro">Keep the audit's bit width fixed. Follow its quietest row's range while the loudest row sets a shared scale, then give the quiet row its own scale.</p>
+    <div data-pane="" data-duration="40" data-beats="0 5 10 15 20 25 30 35" tabindex="0" role="group" aria-label="Scale granularity animation" aria-describedby="scale-granularity-playback-help">
+      <div class="sg-figure" data-figure="">
+        <svg viewbox="0 0 713 375" role="img" aria-label="Keep the boundary. Quiet-row magnitudes are at most 0.01. Row scale 0.00007874. The shared grid maps the entire quiet row to zero. Per-row rounding error is bounded by 0.00003937. Scale metadata rises from 4 to 256 bytes; code payload stays 16384 bytes.">
+          <title>Scale sharing determines which weight differences a grid can keep</title>
+          <!-- static-frame -->
+          <g data-drawing=""><text text-anchor="middle" class="sg-muted" data-context="" x="356.5" y="23">8-bit · Q = 127 · 64 × 256</text><text text-anchor="middle" class="" data-scale-source="" x="356.5" y="49">this row: max |w| = 0.01</text><path class="sg-ray" data-scale-ray="" d="M 356.5 57 L 356.5 70 M 353.5 66 L 356.5 70 L 359.5 66"></path><text text-anchor="middle" class="" data-scale-value="" data-value="scale" x="356.5" y="89">row spacing = 0.00007874</text><text text-anchor="middle" class="sg-weight" data-quiet-label="" x="356.5" y="123">quiet range: −0.01 to 0.01</text><path class="sg-original" data-quiet-range="" d="M 283.060869565 141 L 283.060869565 151 M 283.060869565 146 L 429.939130435 146 M 429.939130435 141 L 429.939130435 151"></path><rect class="sg-zero-bin" data-zero-bin="" x="356.210869565" y="164" width="0.57826087" height="48"></rect><line class="sg-ruler" data-ruler="" x1="24" y1="190" x2="689" y2="190"></line><line class="sg-tick" data-axis-tick="" x1="67.369565217" y1="186" x2="67.369565217" y2="194" data-weight="-0.03937007874015748"></line><text text-anchor="middle" class="sg-muted" data-axis-label="" x="67.369565217" y="229" data-weight="-0.03937007874015748">-0.039</text><line class="sg-tick" data-axis-tick="" x1="211.934782609" y1="186" x2="211.934782609" y2="194" data-weight="-0.01968503937007874"></line><text text-anchor="middle" class="sg-muted" data-axis-label="" x="211.934782609" y="229" data-weight="-0.01968503937007874">-0.02</text><line class="sg-tick" data-axis-tick="" x1="356.5" y1="186" x2="356.5" y2="194" data-weight="0"></line><text text-anchor="middle" class="sg-muted" data-axis-label="" x="356.5" y="229" data-weight="0">0</text><line class="sg-tick" data-axis-tick="" x1="501.065217391" y1="186" x2="501.065217391" y2="194" data-weight="0.01968503937007874"></line><text text-anchor="middle" class="sg-muted" data-axis-label="" x="501.065217391" y="229" data-weight="0.01968503937007874">0.02</text><line class="sg-tick" data-axis-tick="" x1="645.630434783" y1="186" x2="645.630434783" y2="194" data-weight="0.03937007874015748"></line><text text-anchor="middle" class="sg-muted" data-axis-label="" x="645.630434783" y="229" data-weight="0.03937007874015748">0.039</text><line class="sg-weight-interval" data-active-interval="" x1="356.5" y1="190" x2="356.5" y2="190" hidden=""></line><line class="sg-mapping-ray" data-collapse-ray="-1" x1="283.060869565" y1="153" x2="356.5" y2="185" hidden=""></line><line class="sg-mapping-ray" data-collapse-ray="1" x1="429.939130435" y1="153" x2="356.5" y2="185" hidden=""></line><circle r="4.5" class="sg-weight-point" data-zero-point="" cx="356.5" cy="190" hidden=""></circle><line class="sg-row-tick" data-row-tick="" x1="283.060869565" y1="183" x2="283.060869565" y2="197" data-code="-127" data-weight="-0.01"></line><line class="sg-row-tick" data-row-tick="" x1="300.986956522" y1="183" x2="300.986956522" y2="197" data-code="-96" data-weight="-0.007559055118110235"></line><line class="sg-row-tick" data-row-tick="" x1="319.491304348" y1="183" x2="319.491304348" y2="197" data-code="-64" data-weight="-0.005039370078740157"></line><line class="sg-row-tick" data-row-tick="" x1="337.995652174" y1="183" x2="337.995652174" y2="197" data-code="-32" data-weight="-0.0025196850393700786"></line><line class="sg-row-tick" data-row-tick="" x1="356.5" y1="183" x2="356.5" y2="197" data-code="0" data-weight="0"></line><line class="sg-row-tick" data-row-tick="" x1="375.004347826" y1="183" x2="375.004347826" y2="197" data-code="32" data-weight="0.0025196850393700786"></line><line class="sg-row-tick" data-row-tick="" x1="393.508695652" y1="183" x2="393.508695652" y2="197" data-code="64" data-weight="0.005039370078740157"></line><line class="sg-row-tick" data-row-tick="" x1="412.013043478" y1="183" x2="412.013043478" y2="197" data-code="96" data-weight="0.007559055118110235"></line><line class="sg-row-tick" data-row-tick="" x1="429.939130435" y1="183" x2="429.939130435" y2="197" data-code="127" data-weight="0.01"></line><line class="sg-row-tick" data-row-tick="" hidden=""></line><line class="sg-row-tick" data-row-tick="" hidden=""></line><polygon points="0,-6 6,0 0,6 -6,0" class="sg-weight-point" data-endpoint="" transform="translate(429.939130435 190)" data-position="[429.939130435,190]"></polygon><line class="sg-mapping-ray" data-endpoint-ray="" x1="429.939130435" y1="153" x2="429.939130435" y2="183"></line><text text-anchor="middle" class="" data-bin-label="" x="356.5" y="270">local zero bin: much narrower</text><text text-anchor="middle" class="sg-muted" data-resolution-label="" x="356.5" y="249">ticks: 32-code stride + endpoints</text><text text-anchor="middle" class="sg-weight" data-witness-label="" data-value="witness" x="356.5" y="291">magnitude endpoint: 0.01</text><text text-anchor="middle" class="sg-error" data-error-label="" data-value="error-bound" x="356.5" y="312">error bound ≈ 0.00003937</text><text text-anchor="middle" class="" data-metadata-label="" data-value="metadata" x="356.5" y="338">FP32 scales: 4 B → 256 B</text><text text-anchor="middle" class="sg-muted" data-payload-label="" data-value="payload" x="356.5" y="360">codes unchanged: 16,384 B</text></g>
+          <!-- /static-frame -->
+          <!-- static-frame-narrow -->
+          <g data-static-frame="narrow" data-width="296" data-height="375" transform="scale(2.4088)"><text text-anchor="middle" class="sg-muted" data-context="" x="148" y="23">8-bit · Q = 127 · 64 × 256</text><text text-anchor="middle" class="" data-scale-source="" x="148" y="49">this row: max |w| = 0.01</text><path class="sg-ray" data-scale-ray="" d="M 148 57 L 148 70 M 145 66 L 148 70 L 151 66"></path><text text-anchor="middle" class="" data-scale-value="" data-value="scale" x="148" y="89">row spacing = 0.00007874</text><text text-anchor="middle" class="sg-weight" data-quiet-label="" x="148" y="123">quiet range: −0.01 to 0.01</text><path class="sg-original" data-quiet-range="" d="M 120.612173913 141 L 120.612173913 151 M 120.612173913 146 L 175.387826087 146 M 175.387826087 141 L 175.387826087 151"></path><rect class="sg-zero-bin" data-zero-bin="" x="147.892173913" y="164" width="0.215652174" height="48"></rect><line class="sg-ruler" data-ruler="" x1="24" y1="190" x2="272" y2="190"></line><line class="sg-tick" data-axis-tick="" x1="40.173913043" y1="186" x2="40.173913043" y2="194" data-weight="-0.03937007874015748"></line><text text-anchor="middle" class="sg-muted" data-axis-label="" x="40.173913043" y="229" data-weight="-0.03937007874015748">-0.039</text><line class="sg-tick" data-axis-tick="" x1="94.086956522" y1="186" x2="94.086956522" y2="194" data-weight="-0.01968503937007874"></line><text text-anchor="middle" class="sg-muted" data-axis-label="" x="94.086956522" y="229" data-weight="-0.01968503937007874">-0.02</text><line class="sg-tick" data-axis-tick="" x1="148" y1="186" x2="148" y2="194" data-weight="0"></line><text text-anchor="middle" class="sg-muted" data-axis-label="" x="148" y="229" data-weight="0">0</text><line class="sg-tick" data-axis-tick="" x1="201.913043478" y1="186" x2="201.913043478" y2="194" data-weight="0.01968503937007874"></line><text text-anchor="middle" class="sg-muted" data-axis-label="" x="201.913043478" y="229" data-weight="0.01968503937007874">0.02</text><line class="sg-tick" data-axis-tick="" x1="255.826086957" y1="186" x2="255.826086957" y2="194" data-weight="0.03937007874015748"></line><text text-anchor="middle" class="sg-muted" data-axis-label="" x="255.826086957" y="229" data-weight="0.03937007874015748">0.039</text><line class="sg-weight-interval" data-active-interval="" x1="148" y1="190" x2="148" y2="190" hidden=""></line><line class="sg-mapping-ray" data-collapse-ray="-1" x1="120.612173913" y1="153" x2="148" y2="185" hidden=""></line><line class="sg-mapping-ray" data-collapse-ray="1" x1="175.387826087" y1="153" x2="148" y2="185" hidden=""></line><circle r="4.5" class="sg-weight-point" data-zero-point="" cx="148" cy="190" hidden=""></circle><line class="sg-row-tick" data-row-tick="" x1="120.612173913" y1="183" x2="120.612173913" y2="197" data-code="-127" data-weight="-0.01"></line><line class="sg-row-tick" data-row-tick="" x1="127.297391304" y1="183" x2="127.297391304" y2="197" data-code="-96" data-weight="-0.007559055118110235"></line><line class="sg-row-tick" data-row-tick="" x1="134.19826087" y1="183" x2="134.19826087" y2="197" data-code="-64" data-weight="-0.005039370078740157"></line><line class="sg-row-tick" data-row-tick="" x1="141.099130435" y1="183" x2="141.099130435" y2="197" data-code="-32" data-weight="-0.0025196850393700786"></line><line class="sg-row-tick" data-row-tick="" x1="148" y1="183" x2="148" y2="197" data-code="0" data-weight="0"></line><line class="sg-row-tick" data-row-tick="" x1="154.900869565" y1="183" x2="154.900869565" y2="197" data-code="32" data-weight="0.0025196850393700786"></line><line class="sg-row-tick" data-row-tick="" x1="161.80173913" y1="183" x2="161.80173913" y2="197" data-code="64" data-weight="0.005039370078740157"></line><line class="sg-row-tick" data-row-tick="" x1="168.702608696" y1="183" x2="168.702608696" y2="197" data-code="96" data-weight="0.007559055118110235"></line><line class="sg-row-tick" data-row-tick="" x1="175.387826087" y1="183" x2="175.387826087" y2="197" data-code="127" data-weight="0.01"></line><line class="sg-row-tick" data-row-tick="" hidden=""></line><line class="sg-row-tick" data-row-tick="" hidden=""></line><polygon points="0,-6 6,0 0,6 -6,0" class="sg-weight-point" data-endpoint="" transform="translate(175.387826087 190)" data-position="[175.387826087,190]"></polygon><line class="sg-mapping-ray" data-endpoint-ray="" x1="175.387826087" y1="153" x2="175.387826087" y2="183"></line><text text-anchor="middle" class="" data-bin-label="" x="148" y="270">local zero bin: much narrower</text><text text-anchor="middle" class="sg-muted" data-resolution-label="" x="148" y="249">ticks: 32-code stride + endpoints</text><text text-anchor="middle" class="sg-weight" data-witness-label="" data-value="witness" x="148" y="291">magnitude endpoint: 0.01</text><text text-anchor="middle" class="sg-error" data-error-label="" data-value="error-bound" x="148" y="312">error bound ≈ 0.00003937</text><text text-anchor="middle" class="" data-metadata-label="" data-value="metadata" x="148" y="338">FP32 scales: 4 B → 256 B</text><text text-anchor="middle" class="sg-muted" data-payload-label="" data-value="payload" x="148" y="360">codes unchanged: 16,384 B</text></g>
+          <!-- /static-frame-narrow -->
+        </svg>
+      </div>
+      <p class="sg-formula" data-formula="">
+        <span id="eq-scale-granularity-1">\( s_{\mathrm{tensor}}=\dfrac{\max_{ij}|\parameterpart{W_{ij}}|}{Q} \)</span>
+        <span id="eq-scale-granularity-2">\( s_i=\dfrac{\max_j|\parameterpart{W_{ij}}|}{Q} \)</span>
+        <span id="eq-scale-granularity-3">\( |\residualpart{w-\widehat w}|\leq\dfrac{s_i}{2} \)</span>
+      </p>
+      <p class="mechanism-caption" data-caption="" aria-live="polite" aria-atomic="true">Per-row scaling protects this quiet range. It does not guarantee exact weights, accuracy, or faster inference.</p>
+      <div class="mechanism-controls" data-controls="" role="group" aria-label="Playback controls" hidden="">
+  <button type="button" data-action="play" data-state="play" aria-label="Play" title="Play">
+    <svg data-icon="play" viewbox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"></path></svg>
+    <svg data-icon="pause" viewbox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7zM14 5h4v14h-4z" fill="currentColor"></path></svg>
+    <svg data-icon="replay" viewbox="0 0 24 24" aria-hidden="true"><path d="M5 8a8 8 0 1 1-1 8M5 3v6h6" fill="none" stroke="currentColor" stroke-width="2"></path></svg>
+    <span class="mechanism-sr" data-button-label="">Play</span>
+  </button>
+  <label class="mechanism-scrubber"><span class="mechanism-sr">Playback position</span><input type="range" min="0" max="40" value="0" step="0.01"></label>
+  <span class="mechanism-clock" aria-hidden="true"><span data-elapsed="">0:00</span><span data-duration=""> / 0:40</span></span>
+  <select data-speed="" aria-label="Playback speed" title="Playback speed"><option value="0.5">0.5×</option><option value="1">1×</option><option value="1.5" selected="">1.5×</option><option value="2">2×</option></select>
+  <button type="button" data-action="fullscreen" data-state="expand" aria-label="Fullscreen" title="Fullscreen">
+    <svg data-icon="expand" viewbox="0 0 24 24" aria-hidden="true"><path d="M9 4H4v5M15 4h5v5M20 15v5h-5M9 20H4v-5" fill="none" stroke="currentColor" stroke-width="2"></path></svg>
+    <svg data-icon="contract" viewbox="0 0 24 24" aria-hidden="true"><path d="M4 9h5V4M20 9h-5V4M15 20v-5h5M4 15h5v5" fill="none" stroke="currentColor" stroke-width="2"></path></svg>
+    <span class="mechanism-sr" data-button-label="">Fullscreen</span>
+  </button>
+</div>
+<p data-notice="" role="status"></p>
+
+    </div>
+    <dialog aria-label="Expanded scale granularity animation"></dialog>
+    <p data-load-status="" role="status">The range argument is readable without playback. Opening this panel loads the optional controls.</p>
+    <p class="mechanism-boundary">This is the audit's declared range argument, not a plot of sampled weights or a new error measurement. The ruler keeps a fixed quiet-row zoom. Local ticks show every 32nd code plus endpoints, not every grid level. The traced positive endpoint denotes maximum magnitude, not an assumed signed sample. A local scale does not reconstruct every weight exactly; the rounding bound assumes no clipping. FP32 scale metadata grows while the 8-bit code payload stays fixed. Storage savings do not establish runtime speed.</p>
+    <details class="mechanism-transcript" id="scale-granularity-transcript"><summary>Transcript and keyboard help</summary>
+      <ol>
+        <li>Predict whether a shared 8-bit grid can erase the quiet row without clipping. The audit has 64 rows of 256 weights.</li>
+        <li>The loudest row reaches magnitude 10. With Q equal to 127, its shared scale is 10 divided by 127, approximately 0.07874.</li>
+        <li>The quiet row lies between minus 0.01 and plus 0.01. Its entire range is strictly inside the zero bin, whose half-width is approximately 0.03937.</li>
+        <li>The interval contracts to zero: every quiet weight receives integer code zero, even though the row is within the calibrated range.</li>
+        <li>Keep eight bits but use the quiet row's own maximum. Its scale is 0.01 divided by 127. The zero bin becomes one thousand times narrower on the same ruler.</li>
+        <li>The maximum-magnitude endpoint maps to code 127 and back to 0.01. This endpoint is exact, but other weights generally still round; their error is at most half the local spacing, approximately 0.00003937.</li>
+        <li>One FP32 scale costs 4 bytes. Sixty-four row scales cost 256 bytes. The 16,384-byte 8-bit code payload is unchanged.</li>
+        <li>The mechanism explains the quiet-row failure and repair. It does not replace the audit's measured output errors or promise faster inference.</li>
+      </ol>
+      <p id="scale-granularity-playback-help">Silent; paused initially; 1.5× playback. Focus the animation pane: Space or K plays/pauses, arrows seek between beats, Home/End jump, Escape pauses. The scrubber and speed menu also work by keyboard. Reduced-motion mode holds each beat's state instead of moving between them.</p>
+    </details>
+  </div>
+</details>
+
 <script>
 (() => {
   document.querySelectorAll('.mechanism-excerpt[data-player]').forEach(root => {
@@ -1565,21 +1684,6 @@ Figure&nbsp;17.5: Quantization is a grid plus a granularity decision. A 3-bit sy
 })();
 
 </script>
-<p>The global 8-bit grid has only <span class="math inline">\(2.13\%\)</span> relative output error overall, which sounds reassuring until we inspect rows—the median relative row error is <span class="math inline">\(22.13\%\)</span>, and the quietest rows are reconstructed as all zeros. Per-row scales lower overall output error to <span class="math inline">\(0.689\%\)</span> and maximum row error below <span class="math inline">\(0.964\%\)</span>. At 4 bits, per-row scales improve output error from <span class="math inline">\(26.95\%\)</span> to <span class="math inline">\(12.23\%\)</span>, but do not make the approximation exact.</p>
-<p>The packed 4-bit codes require 8,192 bytes. One FP32 scale brings the global total to 8,196 bytes; 64 row scales bring it to 8,448. The live <code>torch.int8</code> tensor in this teaching cell occupies one byte per code—it is <strong>not</strong> physically packed into nibbles. <a href="#eq-quant-payload" class="quarto-xref">Equation&nbsp;<span>17.9</span></a> is the payload a packing format could achieve.</p>
-<div class="callout callout-style-default callout-warning callout-titled">
-<div class="callout-header d-flex align-content-center">
-<div class="callout-icon-container">
-<i class="callout-icon"></i>
-</div>
-<div class="callout-title-container flex-fill">
-<span class="screen-reader-only">Warning</span>A smaller checkpoint is not automatically faster
-</div>
-</div>
-<div class="callout-body-container callout-body">
-<p>Bit count does not determine latency by itself. Real speed depends on supported kernels, hardware, packing, dequantization, memory bandwidth, batch shape, and which tensors remain in higher precision. Dettmers and colleagues even reported cases where LLM.int8() overhead made smaller models slower than FP16. Measure the target system; do not turn a file-size ratio into a runtime claim. The Roofline and measurement contracts in <a href="../appendices/a3-precision-performance.html" class="quarto-xref"><span>Appendix C</span></a> make that distinction explicit.</p>
-</div>
-</div>
 </section>
 <section id="what-a-quantization-workflow-protects" class="level3">
 <h3 class="anchored" data-anchor-id="what-a-quantization-workflow-protects">What a quantization workflow protects</h3>
