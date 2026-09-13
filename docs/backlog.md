@@ -5,7 +5,22 @@ them or a chapter naturally touches them.
 
 ## Focused animation roadmap — approved September 9, 2026
 
-**Updated September 13, 2026:** nineteen scenes are pushed through `e5827cb`,
+**Updated September 13, 2026:** twenty scenes are pushed through `e00d3c5`, including
+the approved [LayerNorm/BatchNorm contrast](layernorm-axis-excerpt.md). Verify its
+publishing run `34766825371` succeeded. [Chapter 5 derivative gates](derivative-gates-excerpt.md)
+is author-approved after the requested network-first redesign: a large forward
+activation remains visible as its local backward probe shrinks. Small activation
+curves support the component picture; a ten-factor path isolates the sigmoid
+ceiling with weights omitted, not set to one. Fresh validation passes 974 tests,
+the six source/HTML audits, exact frozen stdout and desktop/phone inspection.
+The earlier plot/log-ruler acceptance is superseded. Publish only this approved
+scene after full checks; preserve the static manuscript and numerical evidence.
+This finishes the ready Wave 4 queue. The author separately authorized adding a
+small shared-manuscript greedy-versus-beam example, then animating it for local
+review. Keep that Chapter 11 work out of the derivative-gates publication. This
+does not authorize the deferred scenes or their training replays.
+
+Prior checkpoint: nineteen scenes are pushed through `e5827cb`,
 including [scale granularity](scale-granularity-excerpt.md); run `34764538563`
 succeeded. [Chapter 14 LayerNorm axis](layernorm-axis-excerpt.md) is author-approved
 for separate publication. It adds the requested BatchNorm grouping contrast and the

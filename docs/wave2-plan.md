@@ -1,6 +1,23 @@
 # Wave 2 plan — mechanism excerpts, and how to build them cheaply
 
-Current work, September 13: [scale granularity](scale-granularity-excerpt.md) is
+Current work, September 13: the approved [LayerNorm/BatchNorm scene](layernorm-axis-excerpt.md)
+is pushed as `e00d3c5`; publishing run `34766825371` succeeded.
+[Chapter 5 derivative gates](derivative-gates-excerpt.md) is a separate
+network-first redesign approved by the author. Keep the forward sigmoid output
+visible while the backward unit probe shrinks: large activity is not large local
+sensitivity. The two small insets show actual activation functions, not derivative
+plots. A brief active-ReLU substitution precedes a ten-component, best-case sigmoid
+factor path. Weight contributions are omitted, not set to one; filled area encodes
+sensitivity without a floor and the hollow ring locates a subpixel signal only.
+The network-first redesign passes 974 tests, the six source/HTML audits, exact
+frozen stdout and desktop/phone inspection. The old plot/log-ruler acceptance is
+superseded. The author approved publication with “good. Push and do next.”
+Rebuild and verify before pushing this scene. This finishes the ready Wave 4
+queue. The author then authorized a small shared-manuscript greedy-versus-beam
+example followed by its local animation; keep that work out of this publication.
+Do not import the film's measured 30-layer training replay.
+
+Prior checkpoint: [scale granularity](scale-granularity-excerpt.md) is
 pushed as `e5827cb`, run `34764538563` succeeded. [Chapter 14 LayerNorm axis](layernorm-axis-excerpt.md)
 is author-approved for separate publication, including the requested temporal
 and spatial BatchNorm contrast. Variable length is a padding/pooling concern,
@@ -77,7 +94,7 @@ Three routes, cheapest first:
 |---|---|---|---|
 | **A. Embed the film scene** | The chapter\'s `<details>` disclosure (question, intro, boundary, transcript from `Video_lectures/transcripts/`), the book transport bar, and inside the pane the film itself, mounted in an `<iframe>` from `interactives/films/<chapter>/excerpt.html` with `?scene=<Name>`; the iframe seeks on every tick, shows only that scene\'s window, and hides the film\'s own transport. Fallback: a poster frame (PNG captured at the scene\'s witness beat) plus the transcript. | ≈ 0 authoring tokens (one manifest entry: film, scene, anchor, question, boundary). One-time infrastructure ≈ 1 workflow. | Relaxes two rules the author wrote: (1) *no framework import* — React + ReactDOM (≈ 130 KB) + KaTeX (≈ 1.4 MB with fonts; a subset is possible) + the film\'s compiled scene code (100–300 KB) load **only when the disclosure opens**; Babel is avoided by precompiling the JSX once; (2) *the manuscript owns every number* — the film\'s seeded data differs from the printed fixture in some scenes (softmax: 3 logits vs 4; pooling: a different tensor; quantization: nine schematic weights vs eight printed values), so each embed declares the difference in its caption and receipt, and the chapter\'s static figure stays the authority. Also gives up per-scene controls (no slider) unless the film scene has one. |
 | **B. Film port, kit-assisted** | An SVG player like Wave 1\'s, drawn with a shared kit of the primitives Wave 1 built three times (bars with ghosts, chain-nudge, belt, log axis, colour band, token, slider, badge, formula toggles) and choreographed from the film\'s storyboard row and `window.CH*_STORY` constants. | ≈ 0.8–1.5 M tokens (no design panel; film → build → one visual check). | Nothing the contract requires; still needs the fixture audit and tests. |
-| **C. Wave-1 process** | As B, with designers, judges, four lenses and skeptics. | ≈ 4–5 M tokens. | Retired except where no film scene exists (Ch11 greedy tree, A1 SVD circle). |
+| **C. Wave-1 process** | As B, with designers, judges, four lenses and skeptics. | ≈ 4–5 M tokens. | Retired except where no film scene exists (A1 SVD circle). |
 
 **Author decision (2026-09-10).** Not Route A: "we want to embed, but we want to use the
 already developed ideas and not reinvent the wheels." So the excerpts stay native SVG players in
@@ -86,7 +103,9 @@ scene instead of being invented**: the picture, the object that moves, the revea
 easing and the captions come straight from `lecture.jsx` and the storyboard row; only the fixture
 values are re-bound to the manuscript and the grammar's 40-s budget is applied. No designer panel,
 no judges — the film *is* the approved design. This is Route B, and it is the default for every
-Wave 2–4 scene that has a film counterpart (all but Ch11 greedy tree and A1 SVD circle).
+Wave 2–4 scene that has a film counterpart (all but A1 SVD circle). The September 13
+source audit found `SGreedyTree` in `6050-Ch11/lecture.jsx` and its storyboard row;
+its blocker was the missing manuscript fixture, not missing film composition.
 
 ## 3. What "port the film scene" means, step by step (≈ 1 M tokens per scene)
 
@@ -148,7 +167,8 @@ schematic `VQ` basis with `Q^T z` coordinates), A1 `svd-circle` (no film — Rou
 author-approved existing constructed factors, scales 3 and 1),
 Ch18 `preference-ruler` (port of `BradleyTerry`), Ch17 `scale-granularity` (port of
 `GranularityDesign`), Ch14 `layernorm-axis` (port of `LayerNormAxis`), Ch5 `derivative-gates`
-(port of `SGates`; reuses Wave 1's log axis).
+(network-first adaptation of `SGates`: forward activity versus backward sensitivity,
+then an activation-factor path; no logarithmic plot in the revised composition).
 
 ## 6. Per-wave acceptance (unchanged)
 

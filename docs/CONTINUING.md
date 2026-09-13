@@ -10,7 +10,43 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 
 ---
 
-> **Current work — LayerNorm contrast approved publication, September 13, 2026.**
+> **Current work — derivative gates approved publication, September 13, 2026.**
+> The approved LayerNorm/BatchNorm comparison is pushed as `e00d3c5`; local and
+> remote `main` matched after the ordinary push. Run `34766825371` completed
+> successfully. Its live HTML/player/PDF verification now passes, with receipts in
+> `/tmp/dl-book-normalization-pdf-approval.mQ7NMn/normalization-live.PTLdRX/`. Local
+> acceptance: 929 tests, exact 133-block stdout, all source/HTML audits, full PDFs
+> unchanged at 548/519 pages with 390 outlines each and identical 1,067 rasters.
+> Receipt: `/tmp/dl-book-normalization-pdf-approval.mQ7NMn/`.
+> Chapter 5 [derivative gates](derivative-gates-excerpt.md), after `cell-fig-gates`,
+> is now a network-first redesign requested by the author. The large forward
+> sigmoid output at six stays visible while a unit backward probe shrinks to its
+> tiny local derivative. Small activation-function insets are secondary. ReLU is
+> briefly substituted; then a ten-component path isolates best-case sigmoid
+> factors, with weight contributions omitted rather than assumed to be one.
+> Filled area encodes sensitivity without a minimum floor; a hollow ring marks
+> location only. The exact zero witness is analytic, not an even-grid sample.
+> Network-first validation passes: 974 tests (45 focused), all six audits, exact
+> 133-block stdout and the Pandoc HTML-filter no-op proof. Desktop/phone,
+> full playback, MathJax and expanded-mode checks pass. Local review:
+> `http://127.0.0.1:8770/chapters/part1/05-backpropagation.html?preview=network-components#derivative-gates-excerpt`.
+> The earlier plot/log-ruler acceptance is superseded. No
+> measured 30-layer replay, QMD/freeze edits, experiment, tag or scheduled task.
+> The author approved the network-first scene with “good. Push and do next.”
+> Publish only derivative gates after the full publication checks. The next
+> candidate is now authorized separately: add the small Chapter 11 greedy-versus-
+> beam example to the shared manuscript, then animate it locally for review.
+> This intentionally changes both editions, unlike the derivative publication.
+> Keep it out of this commit. No scheduled monitoring.
+> Publication accessibility correction: inactive inset curves are dashed; labels
+> remain fully opaque. See the scene receipt for the fresh regression logs.
+> Full derivative publication checks pass: 548/519 PDF pages, 390 outlines each,
+> exact text/geometry/outlines and 1,067 unchanged page rasters. Receipt:
+> `/tmp/dl-book-derivative-pdf-approval.j8b72q/`. Canonical HTML rendered last;
+> final asset/anchor/stdout audits and desktop/390px inspection pass. A push is
+> not deployment: check this revision's publishing run and live assets.
+>
+> **Prior checkpoint — LayerNorm contrast approved publication, September 13, 2026.**
 > The author approved the BatchNorm–LayerNorm comparison with “push and do next.”
 > Publish only this scene; Chapter 5 derivative gates is next for separate local
 > review. Scale run `34764538563` has now succeeded across all jobs. Full PDF

@@ -7,7 +7,38 @@ it from editing before you have said what you want done.
 Keep this file current: if a rule changes or the state moves, edit the prompt here
 rather than re-deriving it in chat.
 
-**Animation work override — LayerNorm contrast approved, September 13, 2026:**
+**Animation work override — derivative gates approved publication, September 13, 2026:**
+Use `/Users/hs9hd/dl-book-html-release`. Twenty scenes are pushed through `e00d3c5`,
+including the approved LayerNorm/BatchNorm comparison. Run `34766825371` succeeded;
+its live HTML/player/PDF verification also passes (receipt below). Full local PDF checks retain
+548/519 pages, exact text/geometry/outlines and all 1,067 rasters; receipt:
+`/tmp/dl-book-normalization-pdf-approval.mQ7NMn/`. Chapter 5 derivative gates is a
+network-first redesign approved after review of the plot-first draft.
+Read `docs/derivative-gates-excerpt.md`: forward activation stays large while a
+normalized backward probe shrinks; actual activation-function insets are secondary.
+The final ten-component path isolates best-case sigmoid factors, omitting weights
+rather than setting them to one. Filled area represents sensitivity with no floor;
+a hollow ring shows location only. Preserve analytic-zero/PyTorch conventions.
+Network-first validation passes: 974 tests (45 focused), all six audits, exact
+133-block stdout, Pandoc HTML-filter no-op and desktop/phone playback checks.
+Review `http://127.0.0.1:8770/chapters/part1/05-backpropagation.html?preview=network-components#derivative-gates-excerpt`.
+The old plot/log-ruler acceptance is superseded. The author approved this scene
+with “good. Push and do next.” Complete publication checks and push only this
+revision; prepare the next source-qualified candidate separately for local review.
+The author separately chose “Add the shared example, then animate it” for
+Chapter 11 greedy versus beam. Add that static example in both editions, then
+prepare its player locally, after the derivative publication commit. No
+QMD/freeze/numerical gate, PDF setting, tag, experiment, runtime migration or
+scheduled task changes are part of the derivative publication.
+Inactive inset curves now use dashes, not faded labels; the regression preserves
+full text contrast without changing the approved picture.
+Derivative publication checks also pass: full PDFs retain 548/519 pages, 390
+outlines each and exact text/geometry/outlines/1,067 rasters. Receipt:
+`/tmp/dl-book-derivative-pdf-approval.j8b72q/`. Canonical HTML rendered last with
+asset/anchor/stdout audits and desktop/phone inspection. Verify the derivative
+commit's own publishing run and live files before claiming deployment.
+
+Prior checkpoint — LayerNorm contrast approved, September 13, 2026:
 Use `/Users/hs9hd/dl-book-html-release`. The author approved the comparison with
 “push and do next.” Publish only Chapter 14's scene, then prepare Chapter 5
 derivative gates locally. Read `docs/layernorm-axis-excerpt.md`. Scale run

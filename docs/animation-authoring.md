@@ -2,12 +2,14 @@
 
 Author-approved September 9, 2026. These are optional HTML explanations of existing
 book examples, not videos, new experiments, or a replacement for the static book.
-**Current source state — September 13, 2026:** nineteen scenes are pushed through
-`e5827cb`, including [scale granularity](scale-granularity-excerpt.md). Run
-`34764538563` is in progress. The preceding preference/SVD publication is verified
-live after successful run `34762857399`. Chapter 14 [LayerNorm axis](layernorm-axis-excerpt.md)
-is the next separate local preview, using the existing four-token audit and its
-approximately-unit-variance boundary. It is not publication-approved.
+**Current source state — September 13, 2026:** twenty scenes are pushed through
+`e00d3c5`, including the author-approved [LayerNorm/BatchNorm contrast](layernorm-axis-excerpt.md).
+Its publishing run `34766825371` succeeded; verify live assets separately.
+Scale run `34764538563` succeeded. Chapter 5 [derivative gates](derivative-gates-excerpt.md)
+is author-approved for publication after the network-first revision. Rebuild and
+verify before its ordinary push; approval is not deployment. This completes the
+ready Wave 4 queue. Greedy tree remains gated on a shared-manuscript fixture.
+The static manuscript and all frozen numerical evidence remain unchanged.
 
 Prior source checkpoint: seventeen scenes were pushed on `main`
 through `9730659`, including A1's [SVD circle](svd-circle-excerpt.md) and its
@@ -41,6 +43,30 @@ The author's rejection of dashboard-like first drafts established the
 the parameter-control exception and the requirement to make tiny values visually
 distinguishable before naming their numerical gap.
 
+### Derivative gates: activity is not sensitivity
+
+[Chapter 5's scene](derivative-gates-excerpt.md) complements One Chain's cached
+calculus by exposing a distinction: a large forward activation can transmit very
+little backward sensitivity. The author rejected the curve-primary draft because
+it repeated the static figure and risked confusing activation shape with signal
+decay. The main representation is now a component inside a network, with forward
+values held visible while a separate unit sensitivity crosses its derivative in
+reverse. Small activation-function insets explain the component; they are not
+depth curves and carry their own vertical axes.
+
+Filled packet area, not radius, represents sensitivity. A hollow locator may keep
+a subpixel signal findable, but never supplies a minimum numerical magnitude.
+An even-sized source grid can omit zero: an analytic witness there is not a sampled
+maximum. Preserve the exact quarter identity and positive finite sigmoid tails.
+The ReLU function has an explicit zero vertex; a tangent is omitted at its kink,
+where PyTorch's backpropagation convention must not be called a classical derivative.
+
+The continuation isolates best-case sigmoid factors in connected multiplier
+components, with integer counts and explicit numerical readouts. This is not a
+simulated ten-layer forward network or a bound on the complete gradient. Weight
+matrices and branching are omitted from that calculation, not assumed harmless.
+Use the common transport, no extra parameter controls, and native-size phone reflow.
+
 ## The first ten committed examples
 
 | Location | What the reader follows | Teaching boundary |
@@ -71,7 +97,7 @@ hover-only attention paths or a fabricated distribution plot.
 
 ### LayerNorm versus BatchNorm: show who shares the statistics
 
-The local Chapter 14 preview uses its existing two-example, two-token, four-feature
+The approved Chapter 14 scene uses its existing two-example, two-token, four-feature
 audit. The author-requested contrast first groups a feature column across examples
 and token positions (temporal BatchNorm in training), then selects one complete
 row (tokenwise LayerNorm). A separate schematic recalls CNN BatchNorm's per-channel
@@ -402,6 +428,11 @@ math — and it is what `interactives/_template` encodes and the harness's
    is amplified or shrunk as it passes each stage. A product of gates is the same packet
    passing through the same valve again and again. Show the operation before naming it;
    then name it once.
+   **Earn the animation.** Before building, name the misconception that static text
+   or the existing figure leaves hard to see. Make the moving object resolve it.
+   If a mechanism is a network of operations, show components and transmission;
+   do not substitute a second large curve plot. Supporting curves stay small and
+   explicitly name their quantity so they cannot be mistaken for signal decay.
 4. **Colour = meaning, everywhere at once.** Blue is the input `x`; orange is the
    learnable parameter (`w`, and nothing else); green is a prediction or probability;
    purple is the target `y`; wine is loss, error, blame. The same colour appears on the
