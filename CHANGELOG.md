@@ -1,3 +1,18 @@
+# Rolling post-v1.3 — SVD circle (September 13, 2026)
+
+- Adds one optional Appendix A view of the existing SVD fixture: follow two marked
+  input directions through coordinate alignment, scaling and output rotation, then
+  see rank-one truncation collapse the ellipse to its longer axis.
+- Fixed equal-unit ruler, native SVG/shared playback, and matrix-error boundary.
+  No new experiment, dependency, manuscript content, PDF or frozen output change.
+- Same-subspace was separately approved and pushed as `2439557`; publishing run
+  `34727889922` passed, with live player and unchanged PDFs verified. The author
+  approved SVD with “push and do the next”; the preference ruler is next for
+  separate local review.
+- September 13 acceptance: 793 interaction tests, all source/HTML/fixture audits,
+  unchanged frozen stdout/LaTeX, and desktop/phone playback and fullscreen checks.
+- Source/verification receipt: `docs/svd-circle-excerpt.md`.
+
 # Rolling post-v1.3 — same subspace, different coordinates (September 12, 2026)
 
 - Adds one author-approved optional autoencoder-interlude view of the existing orthogonal

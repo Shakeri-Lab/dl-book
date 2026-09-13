@@ -10,7 +10,28 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 
 ---
 
-> **Current approved publication — same subspace, September 12, 2026.**
+> **Current work — SVD approved publication, September 13, 2026.**
+> The approved same-subspace scene was normally pushed as `2439557`; local and
+> remote `main` match. Publishing run `34727889922` passed all jobs, and the live
+> HTML/player/PDFs match `gh-pages` at `3a65f955`; PDFs retain 548/519 pages,
+> 390 outlines each, and unchanged text/geometry. Deployment receipt:
+> `/tmp/dl-book-pca-pdf-approval.aNzhwp/pca-live.llCyNL/provenance.json`.
+> The next scene is Appendix A's existing figure at
+> `a1-linear-algebra.html#svd-circle-excerpt`. It transforms the same marked circle
+> through `V^T`, scales 3/1 and `U`, then removes one contribution. See
+> [the source receipt](svd-circle-excerpt.md). The author approved this scene with
+> “push and do the next.” Publish SVD separately; Chapter 18's preference ruler
+> is next for local review, not blanket publication approval. No QMD/freeze,
+> runtime/tolerance, PDF configuration, stable tag or scheduled task changes.
+> SVD local acceptance: 793 full tests, 45 scene tests, all source/HTML/fixture
+> audits, unchanged frozen stdout and byte-identical Appendix A LaTeX. Desktop/
+> phone, playback, fullscreen and deferred/direct-anchor behavior are verified.
+> Publication builds also pass: 548/519 pages, 390 outlines each, unchanged full
+> text/geometry/outlines and all 1,067 page raster hashes. Receipt:
+> `/tmp/dl-book-svd-pdf-approval.ztG1Xr/`. Final frozen HTML and asset/anchor audits pass.
+> Review link: `http://127.0.0.1:8770/chapters/appendices/a1-linear-algebra.html?preview=svd-circle-final#svd-circle-excerpt`.
+
+> **Approved publication — same subspace, September 12, 2026.**
 > Mask before softmax was normally pushed as **`6cde283`**, local/remote `main`
 > confirmed equal. Publishing run **34601697930** passed all jobs; its live player
 > and both PDF artifacts were verified on September 12. The approved scene is the autoencoder

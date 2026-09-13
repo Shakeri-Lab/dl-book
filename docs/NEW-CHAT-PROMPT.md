@@ -7,13 +7,23 @@ it from editing before you have said what you want done.
 Keep this file current: if a rule changes or the state moves, edit the prompt here
 rather than re-deriving it in chat.
 
-**Animation work override — September 12, 2026:** use
-`/Users/hs9hd/dl-book-html-release`. Fifteen scenes are committed and pushed to
+**Animation work override — September 13, 2026:** use
+`/Users/hs9hd/dl-book-html-release`. Sixteen scenes are committed and pushed to
+`main` at `2439557`, including approved same-subspace. Publishing run `34727889922`
+passed all jobs; live HTML/player/PDFs match `gh-pages` at `3a65f955`, with unchanged
+548/519-page PDFs. The author approved A1's `#svd-circle-excerpt`, tied to the
+existing 3/1 SVD figure, with “push and do the next.” See `docs/svd-circle-excerpt.md`;
+publish it separately, then build Chapter 18's preference ruler for local review.
+No new numerical fixture or QMD edit.
+SVD acceptance: 793 full tests, 45 scene tests, source/HTML/fixture audits,
+unchanged frozen stdout and LaTeX, and desktop/phone playback/fullscreen review.
+
+Prior publication history: fifteen scenes were committed and pushed to
 `main` at `6cde283`, including approved mask-before-softmax. Its publishing run is
 `34601697930`; all jobs passed and live HTML/player/PDFs are verified. The author has approved the autoencoder
 interlude's `#same-subspace-excerpt`, an explicitly schematic basis change from
-the existing projector identity, not the later rank-one experiment. It requires
-separate publication; see `docs/same-subspace-excerpt.md`. The next scene is A1's
+the existing projector identity, not the later rank-one experiment. It was
+separately published as `2439557`; see `docs/same-subspace-excerpt.md`. The next scene is A1's
 existing circle-to-ellipse SVD example, for local review only.
 748 interaction tests and all source/HTML/fixture audits pass; frozen stdout is
 unchanged. Desktop/phone diagrams, playback and deferred/direct-anchor behavior

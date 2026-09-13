@@ -2,9 +2,11 @@
 
 Author-approved September 9, 2026. These are optional HTML explanations of existing
 book examples, not videos, new experiments, or a replacement for the static book.
-**Current source state — September 11, 2026:** fifteen scenes are committed on `main`
-at `6cde283`, including the author's Wave 1, Wave 2, approved mask/predictor,
-reference tilt, score field, attention bill, and mask-before-softmax. Their earlier
+**Current source state — September 12, 2026:** sixteen scenes are committed on `main`
+at `2439557`, including the author's Wave 1, Wave 2, approved mask/predictor,
+reference tilt, score field, attention bill, mask-before-softmax and same-subspace.
+A1's [SVD circle](svd-circle-excerpt.md) is author-approved for separate publication
+on September 13; Chapter 18's preference ruler is next for local review. Their earlier
 review history lives in the [Wave 1](wave1-excerpts.md) and [Wave 2](wave2-excerpts.md)
 receipts. Check the publishing run and live anchors before treating committed source
 as deployed. The current repair pass fixes LSTM equation links and four narrow-screen
@@ -58,6 +60,17 @@ three and four remain earned receipts, and log-probability terms stay symbolic.
 The helper's sequence sum is not the SFT objective's negative mean. No token is
 removed from context. Timeline highlighting carries the mechanism without adding
 hover-only attention paths or a fabricated distribution plot.
+
+### SVD circle: keep the ruler fixed
+
+The Appendix A preview tracks one perimeter and two distinct marked input radii
+through the existing factorization. An unmarked rotating circle would reveal
+nothing; the circle/diamond marks show `V^T` aligning its input directions. Scales
+3 and 1 change lengths on a fixed equal-unit ruler before `U` sets the output
+orientation. Removing the short contribution produces a line, not a smaller
+ellipse. Its omitted semiaxis shows matrix error, not proof of noise removal.
+Use the factors constructed in the manuscript, not a new browser decomposition
+with potentially different singular-vector signs. No film or new engine is needed.
 
 ### Same subspace: coordinates are not the reconstructed object
 

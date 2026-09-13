@@ -1,6 +1,12 @@
 # Wave 2 plan — mechanism excerpts, and how to build them cheaply
 
-Status update, September 11, 2026: four Wave 2 scenes are committed in `0674cab`.
+Current work, September 13: same-subspace is separately pushed as `2439557`
+(publishing run `34727889922`, passed and verified live). A1's
+[SVD circle](svd-circle-excerpt.md) is author-approved for separate publication,
+using the existing `fig-a1-svd` factors and static composition. Chapter 18's
+preference ruler is next for local review.
+
+Prior status, September 11, 2026: four Wave 2 scenes are committed in `0674cab`.
 The author approved repairs and mask/predictor for publication after local review,
 then requested reference tilt as the next local-review scene. The approved pass
 was pushed in `d08c41f`; reference tilt is now separately author-approved for push
@@ -127,7 +133,8 @@ of `AttentionBill`), Ch13 `mask-before-softmax` (port of `MaskBefore`; source-bo
 intermediate scores resolved, approved for publication), Ch11 `greedy-tree`
 (no manuscript numbers — needs a manuscript addition first). Wave 4:
 PCA interlude `same-subspace` (port of `SSameSubspace`; author-approved,
-schematic `VQ` basis with `Q^T z` coordinates), A1 `svd-circle` (no film — Route C),
+schematic `VQ` basis with `Q^T z` coordinates), A1 `svd-circle` (no film — Route C;
+author-approved existing constructed factors, scales 3 and 1),
 Ch18 `preference-ruler` (port of `BradleyTerry`), Ch17 `scale-granularity` (port of
 `GranularityDesign`), Ch14 `layernorm-axis` (port of `LayerNormAxis`), Ch5 `derivative-gates`
 (port of `SGates`; reuses Wave 1's log axis).
