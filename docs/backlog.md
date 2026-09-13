@@ -5,7 +5,14 @@ them or a chapter naturally touches them.
 
 ## Focused animation roadmap — approved September 9, 2026
 
-**Updated September 13, 2026:** seventeen scenes are pushed through `9730659`.
+**Updated September 13, 2026:** eighteen scenes are pushed through `7aba6ea`.
+[Scale granularity](scale-granularity-excerpt.md) is now author-approved for its
+own publication: fixed 8-bit grid and the Chapter 17 quiet-row interval.
+Next local-only preview: Chapter 14 LayerNorm axis. Derivative gates remain later;
+greedy tree still requires a manuscript fixture. Preference run `34762857399`
+completed successfully; verify each new publication's deployment separately.
+
+Prior checkpoint: seventeen scenes were pushed through `9730659`.
 Same-subspace is deployed and verified (run `34727889922`). A1's
 [SVD circle](svd-circle-excerpt.md) was pushed in `4fb86d4`; `9730659` fixes its
 Linux static-SVG serialization failure. Run `34761906820` passed interactions but

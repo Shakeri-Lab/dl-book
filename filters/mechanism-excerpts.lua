@@ -50,13 +50,13 @@ local function scenes_for(source)
   return mine
 end
 
--- after-cell: the div Quarto derives from an executable cell's label, as today.
--- before-heading: the level-2 heading whose text is exactly the declared target.
+-- after-cell: the exact div Quarto derives from an executable cell's label.
+-- before-heading: a level-2/3 heading whose text exactly matches the target.
 local function is_anchor(scene, block)
   if scene.anchor.type == "after-cell" then
     return block.t == "Div" and block.identifier == scene.anchor.target
   end
-  return block.t == "Header" and block.level == 2
+  return block.t == "Header" and (block.level == 2 or block.level == 3)
     and pandoc.utils.stringify(block.content) == scene.anchor.target
 end
 

@@ -7,7 +7,32 @@ it from editing before you have said what you want done.
 Keep this file current: if a rule changes or the state moves, edit the prompt here
 rather than re-deriving it in chat.
 
-**Animation work override — September 13, 2026:** use
+**Animation work override — scale publication, September 13, 2026:** use
+`/Users/hs9hd/dl-book-html-release`. The author approved scale granularity with
+“push and do the next.” Publish that scene alone; prepare Chapter 14 LayerNorm
+axis separately for local review. Read `docs/scale-granularity-excerpt.md`.
+Preference run `34762857399` completed successfully. Scale acceptance passes
+882 tests, all source/HTML audits and exact stdout; both complete PDFs retain
+548/519 pages with identical text, geometry, outlines and page rasters. Receipt:
+`/tmp/dl-book-scale-pdf-approval.MKXd82/`. Do not infer deployment from a push. No QMD/freeze,
+numerical gate, PDF configuration, tag or scheduled-task change.
+
+Prior scale preview checkpoint — September 13, 2026:
+`/Users/hs9hd/dl-book-html-release`. Eighteen scenes are pushed through `7aba6ea`,
+including the separately approved preference ruler. Run `34762857399` is in
+progress; verify it independently before saying deployed. Chapter 17's
+`#scale-granularity-excerpt` is the next UNCOMMITTED local preview. Read
+`docs/scale-granularity-excerpt.md`: fixed 8 bits and manuscript-owned row ranges,
+no invented sample dots or new experiment. Keep QMD/freeze/tolerances/PDF settings,
+stable tags and the paused numerical migration untouched. No scheduled monitor.
+Scale preview passes 882 tests, all source/HTML/fixture audits, exact stdout and
+Ch17 LaTeX, desktop/phone playback and native fullscreen. It is outside code and
+callouts, before H3 “What a quantization workflow protects.” Both Ch17 players
+initialize and remain deferred on normal navigation. See its receipt for logs.
+Preference CI at handoff: interaction/export/shards 2/3 pass; 0/1/4/5 still run.
+No monitoring remains active; live artifacts have not yet been verified.
+
+Prior September 13 preference publication checkpoint:
 `/Users/hs9hd/dl-book-html-release`. Seventeen scenes are pushed through `9730659`.
 SVD shipped in `4fb86d4`; Linux CI caught last-bit static SVG coordinate strings.
 The isolated hotfix serializes only pixel coordinates and adds a regression;

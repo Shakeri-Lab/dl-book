@@ -1,6 +1,12 @@
 # Wave 2 plan — mechanism excerpts, and how to build them cheaply
 
-Current work, September 13: A1's [SVD circle](svd-circle-excerpt.md) is pushed in
+Current work, September 13: [scale granularity](scale-granularity-excerpt.md) is
+author-approved for a separate publication. Fixed 8 bits, source-owned quiet-row
+interval, no invented film samples. Chapter 14 LayerNorm axis is the next local
+preview; derivative gates remain later. Preference ruler was pushed separately
+as `7aba6ea`; run `34762857399` completed successfully.
+
+Prior checkpoint: A1's [SVD circle](svd-circle-excerpt.md) was pushed in
 `4fb86d4`, with pixel-serialization hotfix `9730659`. Publishing run `34761906820`
 passed interactions but failed the existing Chapter 18 notebook signed-zero gate.
 Chapter 18's [preference ruler](preference-ruler-excerpt.md)

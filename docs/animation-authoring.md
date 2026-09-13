@@ -2,7 +2,14 @@
 
 Author-approved September 9, 2026. These are optional HTML explanations of existing
 book examples, not videos, new experiments, or a replacement for the static book.
-**Current source state — September 13, 2026:** seventeen scenes are pushed on `main`
+**Current source state — September 13, 2026:** eighteen scenes are pushed through
+`7aba6ea`, including the [preference ruler](preference-ruler-excerpt.md). Its run
+`34762857399` completed successfully.
+[Scale granularity](scale-granularity-excerpt.md) is author-approved for a separate
+publication. It keeps bit width fixed and uses the chapter's quiet-row range, not
+the film's sample dots. Chapter 14 LayerNorm axis is next for local review only.
+
+Prior source checkpoint: seventeen scenes were pushed on `main`
 through `9730659`, including A1's [SVD circle](svd-circle-excerpt.md) and its
 static-SVG serialization follow-up. Run `34761906820` passed interaction tests but
 failed the existing Chapter 18 exact notebook gate on signed zero; do not bypass it.
@@ -515,11 +522,16 @@ rebuild touches them.
 - `filters/mechanism-excerpts.lua`: manifest-driven. It decodes
   `interactives/manifest.json` with `pandoc.json.decode`, the same way
   `filters/chapter-tools.lua` reads `scripts/notebook_manifest.json`, and inserts every
-  scene the manifest gives the document being rendered — after the div of an `after-cell`
-  anchor, immediately before the level-2 heading of a `before-heading` one — failing if a
+  scene the manifest gives the document being rendered — after the div of an
+  `after-cell` anchor, or immediately before the level-2/3 heading of a
+  `before-heading` one — failing if a
   required insertion point is absent or duplicated. The shared stylesheet is emitted once
   per document, each scene adds its own `<style>`, and `shared/loader.js` is emitted once,
   after the last panel on the page, so it sees every root there.
+  Keep a replay outside a cell's enclosing Plan → Code wrapper. Nonfigure labels
+  need not acquire a `cell-` prefix. Do not use two `after-cell` entries on the
+  same target: repeated insertion reverses their order. Use distinct insertion
+  points and check both players initialize in actual document order.
   `filters/convolution-excerpt.lua` still names its own chapter and heading; it inserts
   the same way and fails the same way.
 - `interactives/_template/`: the skeleton a new scene copies, in the visual grammar —

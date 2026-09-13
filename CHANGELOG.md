@@ -1,3 +1,15 @@
+# Rolling post-v1.3 — scale granularity (September 13, 2026)
+
+- Adds the author-approved Chapter 17 fixed-8-bit replay: the source audit's quiet
+  row fits inside the shared grid's zero bin; a per-row scale resolves its range.
+- Separates the maximum-magnitude endpoint witness from a general rounding bound,
+  and scale metadata from unchanged packed payload. No fabricated film samples.
+- Extends the exact heading insertion match to H3, keeping both Chapter 17 players
+  independent and outside collapsed code. No new anchor type or shared runtime.
+- Native, deferred SVG; no manuscript, frozen output, numerical gate, PDF setting
+  or stable-tag change. Receipt: `docs/scale-granularity-excerpt.md`.
+- Next: LayerNorm axis as a separate local preview, not part of this publication.
+
 # Rolling post-v1.3 — preference ruler (September 13, 2026)
 
 - Adds one author-approved Chapter 18 replay of its existing Bradley–Terry witness:

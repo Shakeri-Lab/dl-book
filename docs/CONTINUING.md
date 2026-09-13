@@ -10,7 +10,38 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 
 ---
 
-> **Current work — preference ruler approved publication, September 13, 2026.**
+> **Current work — scale granularity approved publication, September 13, 2026.**
+> The author reviewed the final Chapter 17 scene and requested “push and do the
+> next.” Publish only scale granularity; Chapter 14 LayerNorm axis is the next
+> separate local preview. Preference run `34762857399` has passed interactions,
+> export and all six notebook shards; that run now completed successfully.
+> Scale acceptance passes 882 tests, all source/HTML audits and exact 133-block
+> stdout. Both full PDFs remain 548/519 pages with identical text, geometry,
+> outlines and 1,067 page rasters. Full scale PDF receipt:
+> `/tmp/dl-book-scale-pdf-approval.MKXd82/`. Preserve the manuscript,
+> frozen outputs, numerical contracts, PDF settings, release tags and stopped
+> scheduled task. Source publication is not deployment; verify the live assets.
+
+> **Prior checkpoint — scale granularity local preview, September 13, 2026.**
+> Preference ruler was pushed normally as `7aba6ea`; local and remote `main`
+> match. Run `34762857399` is in progress; source publication is not deployment.
+> Its separate PDF receipt retains 548/519 pages with identical text, geometry,
+> outlines and page rasters. Chapter 17's [scale-granularity scene](scale-granularity-excerpt.md)
+> is now the local work, not included in that push. Fixed 8 bits: the quiet row
+> falls wholly inside the global zero bin; a row-specific grid resolves it.
+> No film sample dots, new experiment, QMD/freeze/numerical gate change, PDF setting,
+> release tag or scheduled task. Local preview acceptance passes 882 full tests,
+> 42 scene tests, all source/HTML audits, exact frozen stdout and unchanged Ch17
+> LaTeX. Desktop/phone, full playback and native fullscreen pass. Both Ch17 players
+> initialize after the exact heading matcher was extended to H3; the new replay
+> sits before “What a quantization workflow protects,” outside code and callouts.
+> Local review: `http://127.0.0.1:8770/chapters/part5/17-peft-quantization.html?preview=scale-granularity-final#scale-granularity-excerpt`.
+> Final CI snapshot: interaction/export/shards 2/3 pass; 0/1/4/5 still run, with
+> no current failures. Monitoring has stopped; no automation. Live verification
+> remains outstanding. Resume with the prepared checker and snapshot in
+> `/tmp/dl-book-preference-pdf-approval.ueOB4R/preference-live.m8U5Ud/`.
+
+> **Prior checkpoint — preference ruler approved publication, September 13, 2026.**
 > SVD was pushed separately as `4fb86d4`, followed by serialization fix `9730659`.
 > Local and remote main match. Run `34761426323` failed exact static-SVG parity
 > on Linux last-bit coordinates; the fix keeps full-precision arithmetic and

@@ -561,6 +561,8 @@ test('integration: the manifest, not the filter, names the chapters; LaTeX guard
   for (const type of ['after-cell', 'before-heading'])
     assert(filter.includes(`"${type}"`), `the filter places no ${type} anchor`);
   assert.match(filter, /assert\(inserted == 1/, 'each scene still fails closed');
+  assert.match(filter, /block\.level == 2 or block\.level == 3/,
+    'exact subsection anchors place optional replays outside code panels');
   for (const typed of ['cell-fig-kernel-lookup', 'cell-fig-mlm-policy', 'kernel-weighting', 'bert-ledger'])
     assert(!filter.includes(typed), `${typed} is manifest data; the filter must not retype it`);
   const config = fs.readFileSync(path.join(__dirname, '../_quarto.yml'), 'utf8');
