@@ -78,6 +78,11 @@ the existing player contract. No parameter control is added.
 
 ## Why greedy tree remains deferred
 
+**Superseded.** This was true on September 12, 2026. The numerical example it asks
+for entered Chapter 11 in `c06892f`, and the greedy-tree scene shipped with it; see
+the review pass at the end of this receipt. The original passage is kept as the
+record of why this scene was built first.
+
 Chapter 11 prints complete-sequence joint log scores, which do not determine the
 per-token conditionals needed for the film's branching tree. The film's separate
 `toy_search_tree_evidence` in `audit-ch11-encoder-decoder.py` is not a manuscript
@@ -141,10 +146,95 @@ Lecture paths are relative to
 | Source | SHA-256 |
 |---|---|
 | `chapters/interludes/making-pca-learnable.qmd` | `303deb9bc25818d6bd3371dab832a78f6f26e5b4cff5f5609c714033c4fdb50a` |
-| `chapters/part3/11-encoder-decoder.qmd` | `e2855b10331f957c6abdf9a3b22e4fca90ffff896783b9b7bd158a0c77e855be` |
+| `chapters/part3/11-encoder-decoder.qmd` | `566ca1553a4e53962f2b35c13295c6392983a2454d4211ed97ea6c8d8c8c5678` |
 | `6050-Interlude-Autoencoders/lecture.jsx` | `2d2a0d2bd4c9a8314a79e9bb7ea0afa98077a6ec30ab5e4eb7613fa6e64e91f4` |
 | `6050-Interlude-Autoencoders/STORYBOARD.md` | `3d5686f60c10edb6e5b83236adeebccb933811718e3b08d86d10fe6b2921ddba` |
 | `6050-Interlude-Autoencoders/pca-autoencoder-data.js` | `c8d4dd8da42275c0997aeaf6330b20cb1284c980f9e51be8f76a346ddd32fde9` |
 | `audit-interlude-autoencoders.py` | `578deb6d7813a802ae1a62e903e66990fbf60056c9cca2825269ecba926b6a5a` |
 | `6050-Ch11/lecture.jsx` | `00fc79dc8dee86830a59f74a91e43401c855e93638b9384a46395266b6d3271c` |
 | `audit-ch11-encoder-decoder.py` | `31dbfd38476c00e7c971bf230a10308c6d3a6a612a3f06580b2c822450c49ba3` |
+
+## Review pass — September 17, 2026
+
+An independent review found the scene clean and effective and listed five
+defects. The design, fixture, 40-second duration and beats are unchanged.
+
+- **Labels out of sync.** From 12 s to 15 s the axis and coordinate labels already
+  read v′ and z′ while the side label still said "basis V / read both
+  projections". One `turned` flag, true from the moment the basis leaves its
+  original position, now drives the primes, the dashed original axes, their legend
+  and the side label together. Reduced motion holds the beat-2 still unturned and
+  unprimed until 15 s. New tests sample every 0.05 s, name 12–15 s explicitly at
+  both layouts, and repeat the check under reduced motion.
+- **Plain-text math.** "basis V" and "basis VQ" were SVG text. The picture now
+  says "original basis" and "turned basis"; V, Q and VQ stay in the typeset
+  formula line. The manuscript convention is unchanged: the basis becomes VQ, the
+  encoder gives Qᵀz, the decoder uses VQ. A test rejects matrix symbols in any
+  picture text, in both script-free prints and at every sampled time.
+- **Test-only global and per-frame dumps.** `window.BookSameSubspace` is gone.
+  The suite mounts alternate and invalid fixtures through the panel's declared
+  data attributes and reads the published state. The old coordinates are written
+  once at mount. Origin, scale and axis extent are written in `layout()`. The
+  angle, new coordinates, turned basis and components are written only when the
+  angle changes, and the stage only when it changes. The projector is no longer
+  dumped: the oracle forms (VQ)(VQ)ᵀ from the published basis and compares it with
+  its own VVᵀ. The duplicated `data-start`/`data-end` arrow receipts are removed;
+  tests read the drawn shaft. A held picture is not redrawn, and a test observes
+  that no scene attribute is written during a hold.
+- **Intro wording.** "The identity above" pointed at the SVD and tanh callout,
+  which sits between the identity and the panel. The identity is stated in the
+  note "Same subspace, not the same coordinates", two blocks earlier in the same
+  section, "Make PCA learnable". The intro now says "the orthogonal-basis identity
+  in this section's note" and names it. A test checks that section, note, identity
+  and insertion point still appear in that order in the `.qmd`. The `.qmd` is
+  unchanged.
+- **This receipt.** The Chapter 11 digest recorded above went stale when `c06892f`
+  changed `chapters/part3/11-encoder-decoder.qmd`. It is corrected in place to
+  `566ca1553a4e53962f2b35c13295c6392983a2454d4211ed97ea6c8d8c8c5678`
+  (`shasum -a 256`, at `c06892f`); the earlier value was `e2855b10…55be`. This is
+  the one digest this pass edits, because it names another chapter's state. The
+  "greedy tree remains deferred" passage is also outdated: `c06892f` added the
+  per-token toy decoder to Chapter 11 (`tbl-greedy-tree`) and shipped
+  `interactives/greedy-tree` with `docs/greedy-tree-excerpt.md`. The passage is
+  marked superseded where it stands.
+
+Found while looking at the frames, and fixed because the brief requires no
+overlapping text at either width:
+
+- At the 15–17 s hold, and for the whole 15–20 s still under reduced motion, the
+  half turn puts the first axis through the point, so "reconstruction" covered
+  the v′₁ label. On phones "same reconstruction" ran across the second component
+  arrow and its foot. The axis tips sweep the ring just outside the point, so no
+  spot beside the point is clear at every angle. The label now sits above the
+  plane on a short green leader at both widths, drawn beneath the haloed axis
+  labels. A test checks the label's estimated box against both axis labels at
+  seven widths.
+- The decode arrow's tail sat under the first letters of "basis changes cancel".
+  It now starts left of the widest side label.
+- Drawing coordinates were raw doubles in a byte-compared static print. They are
+  now serialised at 0.0001 px (visual grammar, rule 9). The published state is
+  not rounded; arithmetic tests keep their 1e-12 tolerance and pixel comparisons
+  use 1e-4.
+
+Not changed: the half-turn hold still lands with the point almost on the first
+axis (the point sits at 30.2° and the hold at 30°), so z′₂ is nearly zero in that
+still. Moving it would change the fixture or the timing, which this pass keeps.
+
+**49/49 scene tests pass** (`node --test scripts/test_same_subspace_excerpt.cjs`),
+and `scripts/audit_excerpt_fixtures.py` passes. The full interaction suite was
+not run in this pass because sibling scenes were being edited in the same tree.
+Frames were inspected at 1280 and 375 CSS pixels at 2, 7, 11, 12.5, 13.5, 14.9,
+16, 18, 18.5, 22, 27, 32, 37 and 39.9 s, and again with reduced motion: no page
+overflow, no picture text outside the figure, no console errors. The asset byte
+total and player SHA-256 recorded under Acceptance describe the September 12
+files and are superseded; a later pass records the new values.
+- **Turn angle.** The layout fixture's final turn is now 100 degrees (it was 60). The schematic
+  point sits at about 30 degrees, so the old half-turn hold (30 degrees) put it almost exactly
+  on the first turned axis: the second new coordinate was nearly zero and its projection
+  vanished during the beat that says the encoder "must report coordinates in that new basis."
+  At 50 and 100 degrees both projections are clearly visible. The angle is drawing geometry,
+  not a manuscript literal or a measured value; the earlier "60-degree final turn" sentence
+  above records the first build. Both static frames regenerated; the suite passes unchanged.
+- **Less prose around the picture.** The boundary now shows one sentence; every remaining scope note,
+  unchanged, sits in a closed "Scope and caveats" disclosure beside the transcript. New asset sizes
+  and digests for this pass are recorded once in [the review-pass receipt](excerpt-review-pass.md).

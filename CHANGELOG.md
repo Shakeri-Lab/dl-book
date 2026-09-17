@@ -1,3 +1,21 @@
+# Rolling post-v1.3 — mechanism replay review pass (September 17, 2026)
+
+- Independent review of the twelve replays added since `0674cab`, then fixes. Every number
+  already matched its chapter; the defects were in teaching and legibility.
+- Derivative gates no longer shows its answer while asking for a prediction. Mask-before-softmax
+  now moves: the padded scores slide to negative infinity and the freed weight visibly lands on
+  the real keys. Scale granularity draws storage as a byte-scale bar and makes its sub-pixel
+  zero bin findable. Attention bill traces a visible token and puts ×16 and ×4 on their marks.
+  Preference ruler, reference tilt, score field, same subspace, mask/predictor, greedy tree,
+  SVD circle and LayerNorm axis receive the smaller fixes listed in the receipt.
+- All nineteen grammar scenes now show one boundary sentence; every other caveat, unchanged,
+  sits in a closed "Scope and caveats" disclosure. Three script-free phone prints that sat low
+  over their formula are anchored. True minus signs and `× 10ⁿ` replace ASCII on the picture.
+- Contract updates in `docs/animation-authoring.md` (prose budget, plain-text number format,
+  never spoil a prediction, four-decimal geometry). Interaction suite: 1,018 → 1,087 tests.
+- HTML-only: no manuscript, freeze, filter, PDF setting, numerical gate or tag changed.
+  Receipt: `docs/excerpt-review-pass.md`. Verify the publishing run before claiming deployment.
+
 # Rolling post-v1.3 — Chapter 11 greedy versus beam (September 13, 2026)
 
 - Adds the author-approved shared probability table and complete-sequence

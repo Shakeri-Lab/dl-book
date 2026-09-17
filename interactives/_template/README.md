@@ -40,8 +40,10 @@ What a scene's pane contains, top to bottom, and nothing else:
 3. **One caption line** (`.mechanism-caption[data-caption]`), at most twenty words,
    saying what is happening now; the polite live region, written only on change.
 
-Around the pane the disclosure keeps its question, its intro, the boundary paragraph,
-the load status, the dialog and the transcript; they are prose, not the picture.
+Around the pane the disclosure keeps its question, its intro, the boundary, the load
+status, the dialog and the transcript; they are prose, not the picture. The boundary shows
+one sentence; every further qualifier sits in its closed "Scope and caveats" disclosure
+(`details.mechanism-scope`), so the caveats never outweigh the picture on a phone.
 
 ## Where a new scene has to be registered
 

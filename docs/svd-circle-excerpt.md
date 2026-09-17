@@ -137,3 +137,17 @@ including the perturbation test. The scoped publication suite is recorded at
 | `_freeze/chapters/appendices/a1-linear-algebra/execute-results/html.json` | `999ca511af7ddce799759dd184f0ca1d067c67f593622c5257d378a05c6330f9` |
 | `_freeze/chapters/appendices/a1-linear-algebra/execute-results/tex.json` | `525f9def7e93b6b77599acf57a673e1b1ef2b1c9709e66e08d8dda4f94840388` |
 | `_freeze/chapters/appendices/a1-linear-algebra/figure-html/fig-a1-svd-output-2.png` | `262a5e726f0dfc8c38f5f2794046cbe0eaf012f9020e7fabd9a1db5acc0ce943` |
+
+## Review pass — September 17, 2026
+
+- **Geometry serialisation.** The independent review measured the closest final-frame
+  coordinate at only about twenty ulps from a nine-decimal rounding boundary. Drawing
+  coordinates are now serialised to four decimal places (0.0001 px), which moves every
+  coordinate roughly five orders of magnitude further from a boundary. Matrices, singular
+  values and errors remain unrounded; the suite's pixel tolerance follows the new step
+  (`PIXEL_EPSILON = 5.1e-5`) and the four-ulp perturbation test still passes. Both static
+  frames regenerated.
+- **Less prose around the picture.** The boundary shows its first sentence; the remaining
+  scope notes, unchanged, sit in a closed "Scope and caveats" disclosure.
+- New asset hashes are recorded once for the whole pass in
+  [the review-pass receipt](excerpt-review-pass.md).

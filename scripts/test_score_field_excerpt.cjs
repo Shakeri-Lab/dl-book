@@ -15,6 +15,34 @@ const widths = [240,296,360,519,520,553,713];
 const sum = values => values.reduce((total, value) => total + value, 0);
 const attr = (node, name) => Number(node.getAttribute(name));
 const drawing = f => f.$('[data-drawing]');
+// A printed number, read back the way a reader reads it: U+2212 for minus, four decimals,
+// or a mantissa times a power of ten in Unicode superscripts. Hyphen-minus, e-notation and
+// raw doubles are not numbers this scene may print, so they fail here rather than parse.
+const SUPERSCRIPT = '⁰¹²³⁴⁵⁶⁷⁸⁹';
+function shown(text) {
+  const match = /^([+−]?)(\d+(?:\.\d+)?)(?: × 10(⁻?)([⁰¹²³⁴⁵⁶⁷⁸⁹]+))?$/.exec(text.trim());
+  assert(match, `not a house-style number: "${text}"`);
+  const exponent = match[4] ? Number([...match[4]].map(digit => SUPERSCRIPT.indexOf(digit)).join('')) * (match[3] ? -1 : 1) : 0;
+  return (match[1] === '−' ? -1 : 1) * Number(match[2]) * 10 ** exponent;
+}
+// Hyphen-minus before a digit, or a mantissa followed by e and an exponent.
+const ASCII_MATH = /(?:^|[^\w])-\s?\d|\d(?:\.\d+)?e[-+]?\d/i;
+// Drawing coordinates are serialised at 0.0001 px; the state on the root is not rounded.
+const PIXEL = 6e-5;
+// What is drawn, read from the picture alone: the printed numbers and the arrows' directions.
+function picture(f) {
+  const value = selector => f.$(selector).textContent;
+  const direction = node => {const run = attr(node,'data-end')-attr(node,'data-start'); return Math.abs(run) < 0.01 ? 0 : Math.sign(run);};
+  return {hidden:f.$('[data-sum-geometry]').hasAttribute('hidden'),
+    x:shown(value('[data-value="x"]').replace(/^x = /,'')),
+    weights:[0,1].map(i => shown(value(`[data-responsibility="${i}"]`).replace(/^weight \d: /,''))),
+    pulls:[0,1].map(i => shown(value(`[data-pull-value="${i}"]`))),
+    directions:[0,1].map(i => direction(f.$(`[data-pull="${i}"]`))),
+    sum:shown(value('[data-value="score"]')), sumText:value('[data-value="score"]'),
+    sumDirection:direction(f.$('[data-score-arrow]')),
+    zeroRing:!f.$('[data-zero-result]').hasAttribute('hidden'),
+    curves:f.$('[data-density-curve]').getAttribute('d')+f.$('[data-score-curve]').getAttribute('d')};
+}
 const declared = f => ({means:numbers(f.root.dataset.means), scale:Number(f.root.dataset.scale),
   priors:numbers(f.root.dataset.priors), domain:numbers(f.root.dataset.domain)});
 function actual(f) {
@@ -139,9 +167,10 @@ test('score field: the component means are not rounded into exact mixture critic
   f.seek((low+high)/2); const got=checkState(f,fx);
   close(got.x,2,1e-10); close(got.score,-4.73483167039e-6,2e-10);
   assert(got.score<0 && got.score!==0,'the second component mean is very near a mode, not exactly at one');
-  const shown=Number(f.$('[data-value="score"]').textContent.replaceAll('−','-'));
-  assert(shown<0,'the visible readout must not round this near-mode score to a false exact zero');
-  close(shown,got.score,5e-8);
+  const printed=f.$('[data-value="score"]').textContent;
+  assert.equal(printed,'−4.7 × 10⁻⁶','a tiny nonzero score is a mantissa and a power of ten, not e-notation');
+  assert(shown(printed)<0,'the visible readout must not round this near-mode score to a false exact zero');
+  close(shown(printed),got.score,5e-8);
   assert(exact(fx,-2).score>0); assert(exact(fx,1.99999).score>0);
   assert.doesNotMatch(read('score-field/panel.html'),/(?:means|centers)[^.]{0,40}(?:are|equal) (?:the )?(?:modes|zeros)/i);
 });
@@ -219,16 +248,18 @@ test('score field: both plots use the probe coordinate and explicit independent 
     for(const time of [0,7,10,16,18,26,28,34,40]) {
       f.seek(time); const got=actual(f),px=left+(got.x-fx.domain[0])/(fx.domain[1]-fx.domain[0])*(right-left);
       const density=f.$('[data-probe-dot="density"]'),score=f.$('[data-probe-dot="score"]');
-      close(attr(density,'cx'),px); close(attr(score,'cx'),px);
-      close(attr(density,'cy'),densityBase-got.density*densityScale);
-      close(attr(score,'cy'),scoreZero-got.score*scoreScale);
+      close(attr(density,'cx'),px,PIXEL); close(attr(score,'cx'),px,PIXEL);
+      close(attr(density,'cy'),densityBase-got.density*densityScale,PIXEL);
+      close(attr(score,'cy'),scoreZero-got.score*scoreScale,PIXEL);
+      for(const guide of drawing(f).querySelectorAll('[data-probe-guide]')) {
+        close(attr(guide,'x1'),px,PIXEL); close(attr(guide,'x2'),px,PIXEL);
+      }
     }
   }
 });
 
 test('score field: signed arrows add tip-to-tail on one shared magnitude ruler', t => {
   const f=fixture(t,NAME),fx=declared(f); f.load(); f.open();
-  const normalize=text=>Number(text.replaceAll('−','-'));
   for(const width of widths) {
     f.resize(width);
     for(const time of [10,14,16,18,21,25,28,32,34,36,40]) {
@@ -239,22 +270,21 @@ test('score field: signed arrows add tip-to-tail on one shared magnitude ruler',
       const values=[...got.pulls,got.score];
       arrows.forEach((arrow,i)=>{
         const start=attr(arrow,'data-start'),end=attr(arrow,'data-end');
-        close(attr(arrow,'data-magnitude'),values[i]);
-        close(end-start,values[i]*scale,2e-10);
+        close(end-start,values[i]*scale,2*PIXEL);
         assert(start>=0 && start<=width && end>=0 && end<=width);
         const segment=/^M\s+([-\d.e+]+)\s+([-\d.e+]+)\s+L\s+([-\d.e+]+)\s+([-\d.e+]+)/i.exec(arrow.getAttribute('d'));
         assert(segment,'the path exposes its actual horizontal arrow segment');
         close(Number(segment[1]),start); close(Number(segment[3]),end);
         close(Number(segment[2]),Number(segment[4]));
         const label=i<2?f.$(`[data-pull-value="${i}"]`):f.$('[data-value="score"]');
-        close(normalize(label.textContent),values[i],5.00001e-5);
+        close(shown(label.textContent),values[i],5.00001e-5);
       });
       close(attr(arrows[0],'data-start'),origin);
       close(attr(arrows[1],'data-start'),attr(arrows[0],'data-end'));
       close(attr(arrows[2],'data-start'),origin);
       close(attr(arrows[2],'data-end'),attr(arrows[1],'data-end'));
       if(got.x===0) {
-        close(attr(arrows[0],'data-end')-origin,-(attr(arrows[1],'data-end')-attr(arrows[1],'data-start')));
+        close(attr(arrows[0],'data-end')-origin,-(attr(arrows[1],'data-end')-attr(arrows[1],'data-start')),2*PIXEL);
         close(attr(arrows[2],'data-end'),origin);
         assert(!f.$('[data-zero-result]').hasAttribute('hidden'),'zero sum needs a visible result mark, not a vanished arrow');
       }
@@ -271,7 +301,6 @@ test('score field: the white label halo cannot override the signed arrow strokes
   assert.deepEqual(selectors,['.score-field-figure text[data-value]',
     '.score-field-figure text[data-responsibility]']);
   for(const arrow of drawing(f).querySelectorAll('[data-pull], [data-score-arrow]')) {
-    assert(arrow.hasAttribute('data-magnitude'));
     assert(!arrow.hasAttribute('data-value'),'data-value is reserved for textual readouts');
     for(const selector of selectors) assert(!arrow.matches(selector),'a white numeral halo must not repaint a wine arrow');
   }
@@ -302,4 +331,226 @@ test('score field: local inspection is not a sample, a learned score, or reverse
   assert.doesNotMatch(source,/Math\.random|fetch\(|import\(|setInterval\(/);
   assert.doesNotMatch(read('score-field/panel.html'),/@eq-/);
   assert(!read('score-field/player.css').includes('#c05621'),'fixed component means are not learnable parameters');
+});
+
+// --- Review pass, September 17, 2026 ------------------------------------------------
+
+test('score field: every printed number uses U+2212 and powers of ten, never hyphen-minus or e-notation', t => {
+  // The script-free panel first: both static prints and the picture's accessible name.
+  const still=fixture(t,NAME),print=still.$('[data-figure] svg');
+  const prints=[print.querySelector('[data-drawing]'),print.querySelector('[data-static-frame="narrow"]')];
+  for(const group of prints) {
+    const texts=[...group.querySelectorAll('text')].map(node=>node.textContent);
+    assert(texts.length>=20,'a static print carries its labels');
+    for(const text of texts) assert.doesNotMatch(text,ASCII_MATH,`ASCII math in the static print: "${text}"`);
+    assert.equal(group.querySelector('[data-pull-value="0"]').textContent,'−4.5 × 10⁻¹⁵',
+      'the final frame prints its tiny nonzero pull as a mantissa and a power of ten');
+    assert.equal(group.querySelector('[data-responsibility="0"]').textContent,'weight 1: 3.6 × 10⁻¹⁶',
+      'and the tiny weight that scales it is not printed as a false zero beside it');
+    assert.equal(group.querySelector('[data-value="score"]').textContent,'−5.3333');
+    for(const label of ['−5','−2','−6','mean −2']) assert(texts.includes(label),`axis label ${label} uses U+2212`);
+  }
+  assert.doesNotMatch(print.getAttribute('aria-label'),ASCII_MATH);
+  // Then every frame, at both layouts, in every place a reader or a screen reader meets a number.
+  const f=fixture(t,NAME); f.load(); f.open();
+  for(const width of [713,296]) {
+    f.resize(width);
+    for(let n=0;n<=160;n++) {
+      f.seek(n/4);
+      const met=[...drawing(f).querySelectorAll('text')].map(node=>node.textContent);
+      met.push(f.$('[data-figure] svg').getAttribute('aria-label'),f.$('[data-caption]').textContent,
+        f.$('[data-controls] input[type="range"]').getAttribute('aria-valuetext'));
+      for(const text of met) assert.doesNotMatch(text,ASCII_MATH,`ASCII math at ${n/4}s: "${text}"`);
+      for(const node of drawing(f).querySelectorAll('[data-pull-value], [data-value="score"]')) shown(node.textContent);
+    }
+  }
+  f.seek(18);
+  assert.equal(f.$('[data-value="score"]').textContent,'0','an exact zero prints 0, not a run of rounded zeros');
+  assert.equal(f.$('[data-value="x"]').textContent,'x = 0.00');
+  f.seek(12); assert.equal(f.$('[data-value="x"]').textContent,'x = −1.00');
+  assert.equal(f.$('[data-pull-value="0"]').textContent,'−1.7763');
+  assert.equal(f.$('[data-pull-value="1"]').textContent,'+0.0043');
+});
+
+// One entry per thing a caption asserts about the picture. Each predicate reads only what
+// is drawn: printed numbers and arrow directions. `previous` is the still of the beat
+// before (reduced motion) or the frame before (normal playback).
+const CLAIMS=[
+  [/will the two local pulls reinforce each other or cancel\?$/, s=>assert(s.hidden,'the question sits over a withheld answer')],
+  [/One probe inspects the fixed mixture/, s=>assert(s.hidden)],
+  [/their sum is the score/, s=>{close(s.pulls[0]+s.pulls[1],s.sum,1.5e-4); assert.equal(s.sumDirection,Math.sign(s.sum));}],
+  [/the right gains weight/, (s,previous,strict)=>assert(strict?s.weights[1]>previous.weights[1]:s.weights[1]>=previous.weights[1])],
+  [/the left still dominates/, s=>assert(s.weights[0]>s.weights[1])],
+  [/Equal weights/, s=>assert.equal(s.weights[0],s.weights[1])],
+  [/give opposite pulls/, s=>{assert(s.pulls[0]<0 && s.pulls[1]>0); assert.deepEqual(s.directions,[-1,1]);}],
+  [/They cancel/, s=>{assert.equal(s.sumText,'0'); assert.equal(s.sumDirection,0); assert(s.zeroRing);}],
+  [/Right of the midpoint .* gives the right component more weight/, s=>assert(s.x<=0 || s.weights[1]>s.weights[0])],
+  [/the right component dominates/, s=>assert(s.weights[1]>s.weights[0])],
+  [/local score points right/, s=>{assert(s.sum>0); assert.equal(s.sumDirection,1);}],
+  [/Before the right mean pull 2 points right; past it both pulls point left, and so does the score/, (s,_,__,fx)=>{
+    if(s.x<fx.means[1]) {assert(s.pulls[1]>0); assert(s.directions[1]>=0);}
+    if(s.x>fx.means[1]) {
+      assert(s.pulls[0]<0 && s.pulls[1]<0 && s.sum<0,'both printed pulls and their sum are negative');
+      assert(s.directions.every(direction=>direction<=0) && s.sumDirection<=0,'no arrow points right');
+    }
+  }],
+  [/inspects a fixed field/, (s,_,__,___,first)=>assert.equal(s.curves,first.curves,'the sweep never redrew the field')]
+];
+function checkCaption(f,fx,previous,strict,first,used) {
+  const caption=f.$('[data-caption]').textContent,state=picture(f);
+  const matched=CLAIMS.filter(([pattern])=>pattern.test(caption));
+  assert(matched.length>0,`no checkable claim recognised in "${caption}": extend CLAIMS when a caption is reworded`);
+  for(const [pattern,check] of matched) {used.add(pattern); check(state,previous,strict,fx,first);}
+  return state;
+}
+
+test('score field: under reduced motion every caption is true of the still it sits on', t => {
+  const f=fixture(t,NAME,{reduced:true}),fx=declared(f); f.load(); f.open();
+  const used=new Set(),stills=[]; let previous,first;
+  for(const beat of scene.beats) {
+    f.seek(beat);
+    const state=checkCaption(f,fx,previous,true,first,used);
+    first=first||state; previous=state; stills.push(state.x);
+    f.seek(beat+1.5); assert.equal(picture(f).x,state.x,'the still holds for its whole beat');
+  }
+  // A hold rests on its witness; a sweep rests midway, where its sentence is about.
+  assert.deepEqual(stills,[-5,-3,-1,-0.5,0,0.5,1,3,5]);
+  assert.equal(used.size,CLAIMS.length,'every listed claim was exercised by some caption');
+  // The defect this pins: at the old still for beat 7, x = 1, pull 2 was +1.776 under "both pulls point left".
+  f.seek(32); const beyond=picture(f);
+  assert(beyond.x>fx.means[1] && beyond.pulls.every(pull=>pull<0) && beyond.directions[1]===-1);
+});
+
+test('score field: in normal playback every caption stays true through the motion it introduces', t => {
+  const f=fixture(t,NAME),fx=declared(f); f.load(); f.open();
+  const used=new Set(); let previous,first;
+  // Quarter seconds, stopping a quarter second short of the next beat, so four printed
+  // decimals can still tell two nearly equal weights apart.
+  for(let n=0;n<=160;n++) {
+    const time=n/4;
+    if(scene.beats.includes(time+0.25)) continue;
+    f.seek(time);
+    const state=checkCaption(f,fx,previous,false,first,used);
+    first=first||state; previous=state;
+  }
+  assert.equal(used.size,CLAIMS.length);
+});
+
+test('score field: six live numbers, each beside its mark, and a sweep greys what it is not about', t => {
+  const f=fixture(t,NAME); f.load(); f.open();
+  const readouts=['[data-value="x"]','[data-responsibility="0"]','[data-responsibility="1"]',
+    '[data-pull-value="0"]','[data-pull-value="1"]','[data-value="score"]'];
+  assert.equal(f.$('[data-value="density"]'),null,'the density number is gone: the dot on the curve carries it');
+  // No other text on the picture changes during the forty seconds.
+  const texts=[...drawing(f).querySelectorAll('text')],live=new Set(readouts.map(selector=>f.$(selector)));
+  const seen=new Map(texts.map(node=>[node,new Set()]));
+  for(let n=0;n<=160;n++) {f.seek(n/4); for(const node of texts) seen.get(node).add(node.textContent);}
+  for(const [node,values] of seen) assert(values.size===1 || live.has(node),`an unlisted number is live: ${[...values].slice(0,3).join(', ')}`);
+  // What is emphasised, by beat.
+  const muted=selector=>f.$(selector).classList.contains('sf-muted');
+  const weightsOf=readouts.slice(1,3),pullsOf=readouts.slice(3);
+  for(const [time,greyed] of [[12,[]],[16,pullsOf],[20,[]],[25,pullsOf],[30,[]],[34,weightsOf],[38,[]]]) {
+    f.seek(time);
+    for(const selector of readouts) assert.equal(muted(selector),greyed.includes(selector),`${selector} at ${time}s`);
+  }
+  for(const time of [2,7]) {
+    f.seek(time); assert(f.$('[data-sum-geometry]').hasAttribute('hidden'),'before the reveal only x is on the picture');
+    assert(!f.$('[data-value="x"]').closest('[hidden]'));
+  }
+  // At most four emphasised numbers change from one frame to the next, and none during a hold.
+  let before=null;
+  for(let n=0;n<=160;n++) {
+    f.seek(n/4);
+    const visible=!f.$('[data-sum-geometry]').hasAttribute('hidden');
+    const now=readouts.map((selector,i)=>(i===0||visible)&&!muted(selector)?f.$(selector).textContent:null);
+    if(before && f.root.dataset.stage===before.stage) {
+      const changed=now.filter((text,i)=>text!==null && before.now[i]!==null && text!==before.now[i]).length;
+      assert(changed<=4,`${changed} emphasised numbers change at once at ${n/4}s`);
+      if([2,4,6,8].includes(Number(before.stage))) assert.equal(changed,0,'nothing changes while the reader reads');
+    }
+    before={now,stage:f.root.dataset.stage};
+  }
+  const css=read('score-field/player.css');
+  assert.match(css,/\.score-field-figure text\.sf-muted\s*\{\s*fill:var\(--sf-scenery\);\s*\}/);
+  // Beside its mark, at both layouts.
+  for(const width of [713,296]) {
+    f.resize(width);
+    const guides=[...drawing(f).querySelectorAll('[data-probe-guide]')];
+    assert.equal(guides.length,2,'the guide is broken across the label row between the plots');
+    const gap=[attr(guides[0],'y2'),attr(guides[1],'y1')];
+    assert(gap[1]-gap[0]>=40);
+    for(const time of [0,7,12,16,20,26,30,34,38]) {
+      f.seek(time);
+      const x=f.$('[data-value="x"]');
+      assert(Math.abs(attr(x,'x')-attr(guides[0],'x1'))<=20,`x rides with the probe at ${time}s`);
+      // Nothing in the label row can be crossed by the guide, wherever the probe stands.
+      for(const node of [x,f.$('[data-valley] text'),...drawing(f).querySelectorAll('[data-mean-label], [data-score-title]')])
+        assert(attr(node,'y')-12>=gap[0] && attr(node,'y')<=gap[1],`"${node.textContent}" sits between the guide's two segments`);
+      if(time<10) continue;
+      const origin=Number(f.root.dataset.pullOrigin);
+      const rows=[f.$('[data-pull="0"]'),f.$('[data-pull="1"]'),f.$('[data-score-arrow]')];
+      const labels=[f.$('[data-pull-value="0"]'),f.$('[data-pull-value="1"]'),f.$('[data-value="score"]')];
+      rows.forEach((arrow,i)=>{
+        const extent=Math.max(origin,attr(arrow,'data-start'),attr(arrow,'data-end'));
+        assert.notEqual(labels[i].getAttribute('text-anchor'),'end','a value is not parked at the far edge of the pane');
+        close(attr(labels[i],'x')-extent,10,2*PIXEL);
+        const row=Number(/^M\s+\S+\s+(\S+)/.exec(arrow.getAttribute('d'))[1]);
+        assert(Math.abs(attr(labels[i],'y')-row)<=5,'the value shares its arrow\'s row');
+      });
+      assert.equal(attr(labels[1],'x'),attr(labels[2],'x'),'the second pull and the sum end at the same tip, so their values align');
+    }
+    [0,1].forEach(i=>{
+      const weight=f.$(`[data-responsibility="${i}"]`);
+      if(width>=520) {
+        assert.equal(weight.getAttribute('text-anchor'),'middle');
+        assert.equal(attr(weight,'x'),attr(f.$(`[data-mean="${i}"]`),'x1'),'each weight sits under its own component');
+      } else assert.equal(attr(weight,'x'),i?width-8:8);
+    });
+  }
+});
+
+test('score field: the fixed field is drawn once per width, not once per frame', t => {
+  const f=fixture(t,NAME); f.load(); f.open(); f.seek(0);
+  const fixed=new Set([f.$('[data-density-curve]'),f.$('[data-score-curve]'),f.$('[data-valley] circle'),
+    f.$('[data-pull-origin]'),...drawing(f).querySelectorAll('[data-mean], [data-mean-label], [data-score-title]')]);
+  const layoutKeys=['data-plot-left','data-plot-right','data-score-zero','data-score-scale','data-density-baseline',
+    'data-density-scale','data-pull-origin','data-pull-scale'];
+  const observer=new f.w.MutationObserver(()=>{});
+  observer.observe(f.$('[data-figure] svg'),{attributes:true,subtree:true});
+  observer.observe(f.root,{attributes:true,attributeFilter:layoutKeys});
+  const rewrites=()=>observer.takeRecords().filter(record=>fixed.has(record.target)
+    || record.target===f.root || (record.target===f.$('[data-figure] svg') && record.attributeName==='viewBox'));
+  for(let n=0;n<=80;n++) f.seek(n/2);
+  assert.deepEqual(rewrites().map(record=>record.attributeName),[],'a frame rewrote something that depends only on the width');
+  const before=f.$('[data-score-curve]').getAttribute('d');
+  f.resize(296);
+  assert(rewrites().length>=fixed.size,'a new width redraws the field');
+  assert.notEqual(f.$('[data-score-curve]').getAttribute('d'),before);
+  observer.disconnect();
+  // The serialised picture carries no raw doubles: at most four decimals in any attribute.
+  for(const time of [7,12,20,34,40]) {
+    f.seek(time);
+    for(const node of drawing(f).querySelectorAll('*')) for(const {name,value} of node.attributes)
+      assert.doesNotMatch(value,/\d\.\d{5,}|\de[-+]?\d/i,`${name}="${value.slice(0,40)}" is an unrounded coordinate`);
+  }
+});
+
+test('score field: live numbers are announced in one place, the scrubber value text', t => {
+  const f=fixture(t,NAME); f.load(); f.open();
+  const svg=f.$('[data-figure] svg'),range=f.$('[data-controls] input[type="range"]');
+  const observer=new f.w.MutationObserver(()=>{});
+  observer.observe(svg,{attributes:true,attributeFilter:['aria-label']});
+  for(let n=0;n<=160;n++) {
+    f.seek(n/4);
+    assert.doesNotMatch(svg.getAttribute('aria-label'),/\d/,'the picture\'s name describes it; it does not recite live values');
+  }
+  assert(observer.takeRecords().length<=3,'and it is rewritten only when the description changes');
+  observer.disconnect();
+  f.seek(12);
+  const spoken=range.getAttribute('aria-valuetext');
+  for(const selector of ['[data-pull-value="0"]','[data-pull-value="1"]','[data-value="score"]'])
+    assert(spoken.includes(f.$(selector).textContent),`${selector} is announced with the scrubber`);
+  assert.match(spoken,/Weights 0\.9992 and 0\.0008\./);
+  assert.match(fixture(t,NAME).$('[data-figure] svg').getAttribute('aria-label'),/^A fixed two-component density/,
+    'the static print carries the same number-free name');
 });

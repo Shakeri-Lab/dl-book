@@ -62,7 +62,7 @@
   svg.querySelectorAll('[data-static-frame]').forEach(node=>node.remove());
   const drawing=svg.querySelector('[data-drawing]'),formula=$('[data-formula]'),caption=$('[data-caption]');
   drawing.replaceChildren();
-  const NS='http://www.w3.org/2000/svg',pixel=value=>Number(value.toFixed(9));
+  const NS='http://www.w3.org/2000/svg',pixel=value=>Number(value.toFixed(4));
   const attrs=(node,values)=>{for(const[key,value]of Object.entries(values))node.setAttribute(key,typeof value==='number'?String(pixel(value)):String(value));};
   const make=(tag,attributes,text='',parent=drawing)=>{const node=document.createElementNS(NS,tag);attrs(node,attributes);node.textContent=text;parent.appendChild(node);return node;};
   const show=(node,visible)=>visible?node.removeAttribute('hidden'):node.setAttribute('hidden','');
@@ -121,7 +121,7 @@
   const scopeReturn=label('LN: within this token','la-muted',{'data-scope-return':''});
   let width=713,lastTime=0,reduced=false;
   function measure(){width=Math.max(240,Math.round(figure.getBoundingClientRect().width||713));root.dataset.layout=width<560?'narrow':'wide';}
-  const number=value=>Number(value.toFixed(3)).toString();
+  const number=value=>Number(value.toFixed(3)).toString().replace('-','−');
   function render(time,reducedMotion){
     lastTime=time;reduced=reducedMotion;
     const state=buildState(time,reducedMotion),{stage}=state,narrow=width<560;
@@ -207,7 +207,7 @@
       attrs(currentLabels[index],{x:point[0],y:point[1]-13});currentLabels[index].textContent=number(state.currentValues[index]);currentLabels[index].classList.toggle('la-output',state.scaleProgress>0);show(currentLabels[index],state.profileVisible);
     });
     const meanY=screenY(state.currentMean);
-    attrs(meanLine,{x1:plotMinX,y1:meanY,x2:plotMaxX,y2:meanY});attrs(meanLabel,{x:plotMaxX-2,y:meanY-7});meanLabel.textContent=`mean ${number(state.currentMean)}`;
+    attrs(meanLine,{x1:plotMinX,y1:meanY,x2:plotMaxX,y2:meanY});attrs(meanLabel,{x:plotMaxX-2,y:meanY+15});meanLabel.textContent=`mean ${number(state.currentMean)}`;
     show(meanLine,state.meanVisible);show(meanLabel,state.meanVisible);
     attrs(divisorLabel,{x:(plotMinX+plotMaxX)/2,y:plotBottom+61});divisorLabel.textContent=`divide by ${number(state.selectedRow.denominator)}`;show(divisorLabel,state.divisorVisible&&!state.comparisonsVisible);
     attrs(resultLabel,{x:(plotMinX+plotMaxX)/2,y:plotBottom+82});resultLabel.textContent=`variance ≈ ${state.selectedRow.outputVariance.toFixed(6)}`;show(resultLabel,state.normalizedVisible&&!state.comparisonsVisible);

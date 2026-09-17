@@ -1382,3 +1382,11 @@ Nothing in this list is done. It is written as pending because it is pending.
 12. **Live verification after publication** — the `html_interactions` CI job green, every
     new `player.js` URL fetched, and each of the three live anchors opened paused — cannot
     happen until something is pushed.
+
+## Review pass — September 17, 2026
+
+The boundary paragraphs of softmax shift, one chain and gate product ran from 64 to 364 words, always visible under a
+forty-second picture. Each boundary now shows one sentence; every remaining sentence, unchanged,
+sits in a closed "Scope and caveats" disclosure beside the transcript (hinge bump's first
+sentence was split at ", which is why" so its lead could stand alone). No player, fixture, beat
+or static frame changed. Sizes and digests: [the review-pass receipt](excerpt-review-pass.md).

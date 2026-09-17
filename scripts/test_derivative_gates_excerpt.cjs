@@ -13,11 +13,21 @@ const {staticFrame}=require('./render_static_frames.cjs');
 const NAME='derivative-gates-excerpt',scene=entry(NAME);
 const FIXTURE={domain:[-6,6],samples:300,maxGates:10};
 const widths=[240,296,360,519,520,553,559,560,713];
-const PIXEL_EPSILON=5.1e-10;
+// Drawing coordinates are serialized at 0.0001 px; the mathematical state is never rounded.
+const PIXEL_DIGITS=4,PIXEL_EPSILON=5.1e-5;
 const attr=(node,key)=>Number(node.getAttribute(key));
 const data=(f,key)=>JSON.parse(f.root.dataset[key]);
 const visible=node=>Boolean(node&&!node.closest('[hidden]'));
 const drawing=f=>f.$('[data-drawing]');
+// The full-precision state the page publishes. Geometry tests check the drawing against it;
+// verifyMath and the TIMELINE witnesses check the state itself, independently.
+const published=f=>{
+  const d=f.root.dataset,n=key=>Number(d[key]),b=key=>d[key]==='true';
+  return{z:n('z'),kind:d.kind,localProgress:n('localProgress'),probeOpacity:n('probeOpacity'),signalValue:n('signalValue'),
+    revealed:b('revealed'),delivered:b('delivered'),gateCount:n('gateCount'),bound:n('bound'),travel:n('travel'),
+    backwardVisible:b('backwardVisible'),chainVisible:b('chainVisible')};
+};
+const shownText=f=>[...drawing(f).querySelectorAll('text')].filter(visible);
 const numericTokens=text=>(text.match(/[-+]?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?/gi)||[]).map(Number);
 const closeTree=(actual,expected,epsilon=1e-12)=>{
   if(Array.isArray(expected)) {
@@ -25,32 +35,24 @@ const closeTree=(actual,expected,epsilon=1e-12)=>{
     expected.forEach((value,index)=>closeTree(actual[index],value,epsilon));
   } else close(actual,expected,epsilon);
 };
-const clamp=(value,low,high)=>Math.max(low,Math.min(high,value));
-const ease=value=>{const x=clamp(value,0,1);return x*x*(3-2*x);};
 // cosh is independent of the player's signed/stable exponential evaluation.
 const sigmoid=z=>1/(1+Math.exp(-z));
 const sigmoidDerivative=z=>1/(4*Math.cosh(z/2)**2);
 const reluDerivative=z=>z>0?1:0; // PyTorch's convention at the nonsmooth zero.
 const factorProduct=k=>Array.from({length:k},()=>0.25).reduce((product,value)=>product*value,1);
-function oracle(time,source=FIXTURE,reduced=false) {
-  const t=clamp(Number.isFinite(time)?time:0,0,40),stage=Math.min(7,Math.floor(t/5));
-  const held=reduced?scene.beats[stage]:t;
-  const z=source.domain[1]*ease((held-12)/3),kind=stage===5?'relu':'sigmoid';
-  const activation=kind==='relu'?Math.max(0,z):sigmoid(z),factor=kind==='relu'?reluDerivative(z):sigmoidDerivative(z);
-  const localProgress=stage===0?0:stage===1?ease((held-7)/3):stage===3?ease((held-17)/3):1;
-  const localPassed=localProgress>=0.5;
-  const travel=clamp((held-30)/5,0,1)*(source.maxGates+1);
-  const gateCount=Math.min(source.maxGates,Math.floor(travel));
-  return{stage,held,z,sigmoid:sigmoid(z),sigmoidGate:sigmoidDerivative(z),reluGate:reluDerivative(z),
-    ceiling:0.25,gateCount,bound:factorProduct(gateCount),kind,activation,factor,localProgress,localPassed,
-    signalValue:localPassed?factor:1,backwardVisible:stage>=1,chainVisible:stage>=6};
-}
-function verifyState(state,time,source=FIXTURE,reduced=false) {
-  const expected=oracle(time,source,reduced);
-  for(const[key,value]of Object.entries(expected)) {
-    if(typeof value==='boolean'||typeof value==='string')assert.equal(state[key],value,key);else close(state[key],value);
-  }
-  assert.equal(state.bound,expected.bound,'integer powers of a quarter are exact binary fractions');
+// Independent mathematics, keyed by the input the player REPORTS, never by the clock: the
+// suite owns no copy of the player's stage or easing logic, so a timing defect cannot hide
+// inside a mirrored formula. Timing is asserted separately, as literal named-time witnesses.
+function verifyMath(state,source=FIXTURE) {
+  const relu=state.kind==='relu';assert(relu||state.kind==='sigmoid');
+  assert(state.z>=0&&state.z<=source.domain[1]);
+  close(state.sigmoid,sigmoid(state.z));close(state.sigmoidGate,sigmoidDerivative(state.z));
+  assert.equal(state.reluGate,reluDerivative(state.z));
+  close(state.activation,relu?Math.max(0,state.z):sigmoid(state.z));
+  close(state.factor,relu?reluDerivative(state.z):sigmoidDerivative(state.z));
+  assert.equal(state.ceiling,0.25);
+  assert(Number.isInteger(state.gateCount)&&state.gateCount>=0&&state.gateCount<=source.maxGates);
+  assert.equal(state.bound,factorProduct(state.gateCount),'integer powers of a quarter are exact binary fractions');
   assert.equal(state.curve.length,source.samples);
   state.curve.forEach((point,index)=>{
     const z=source.domain[0]+(source.domain[1]-source.domain[0])*index/(source.samples-1);
@@ -59,7 +61,46 @@ function verifyState(state,time,source=FIXTURE,reduced=false) {
   });
   assert.equal(state.bounds.length,source.maxGates+1);
   state.bounds.forEach((point,k)=>{assert.equal(point.k,k);assert.equal(point.value,factorProduct(k));});
-  return expected;
+}
+// The timeline the receipt states, as literal witnesses. `z` is a fraction of the domain's
+// upper end; `probe` is the unit probe's position (0 output side, 1 input side) and `drawn`
+// whether it is on the picture; `printed` says whether the multiplier shows its factor
+// (the delivered value is printed beside the packet once it rests at the input side);
+// `area` is the packet's filled area (unit, the quarter measured at zero, or the saturated
+// factor at the domain's upper end); `gates` counts the chain factors crossed.
+const TIMELINE=[
+  {time:0,stage:0,z:0,probe:0,drawn:true,printed:false,area:'unit',gates:0},
+  {time:5,stage:1,z:0,probe:0,drawn:true,printed:false,area:'unit',gates:0},
+  {time:7,stage:1,z:0,probe:0,drawn:true,printed:false,area:'unit',gates:0},
+  {time:8,stage:1,z:0,probe:0.5,drawn:true,printed:true,area:'quarter',gates:0},
+  {time:9,stage:1,z:0,probe:1,drawn:true,printed:true,area:'quarter',gates:0},
+  {time:10,stage:2,z:0,probe:1,drawn:true,printed:true,area:'quarter',gates:0},
+  {time:12,stage:2,z:0,probe:1,drawn:true,printed:true,area:'quarter',gates:0},
+  {time:13.5,stage:2,z:0.5,drawn:false,printed:false,gates:0},
+  {time:15,stage:3,z:1,probe:0,drawn:true,printed:false,area:'unit',gates:0},
+  {time:17,stage:3,z:1,probe:0,drawn:true,printed:false,area:'unit',gates:0},
+  {time:18,stage:3,z:1,probe:0.5,drawn:true,printed:true,area:'saturated',gates:0},
+  {time:19,stage:3,z:1,probe:1,drawn:true,printed:true,area:'saturated',gates:0},
+  {time:20,stage:4,z:1,probe:1,drawn:true,printed:true,area:'saturated',gates:0},
+  {time:25,stage:5,relu:true,z:1,probe:1,drawn:true,printed:true,area:'unit',gates:0},
+  {time:30,stage:6,z:1,probe:1,drawn:true,printed:true,area:'saturated',gates:0},
+  {time:35,stage:7,z:1,probe:1,drawn:true,printed:true,area:'saturated',gates:'all'},
+  {time:40,stage:7,z:1,probe:1,drawn:true,printed:true,area:'saturated',gates:'all'}
+];
+// Reduced motion: one still per five-second beat, named by the beat it holds.
+const STILLS=[0,5,10,15,20,25,30,35].map(beat=>TIMELINE.find(row=>row.time===beat));
+function verifyWitness(state,row,source=FIXTURE) {
+  const high=source.domain[1],label=`at ${row.time}s`;
+  assert.equal(state.stage,row.stage,label);assert.equal(state.kind,row.relu?'relu':'sigmoid',label);
+  close(state.z,row.z*high);
+  assert.equal(state.probeOpacity>0,row.drawn,`probe drawn ${label}`);
+  if(row.drawn){assert.equal(state.probeOpacity,1,label);close(state.localProgress,row.probe);}
+  assert.equal(state.revealed,row.printed,`factor printed ${label}`);
+  assert.equal(state.delivered,row.printed&&row.probe===1,`delivered value printed ${label}`);
+  if(row.area)close(state.signalValue,{unit:1,quarter:0.25,saturated:sigmoidDerivative(high)}[row.area]);
+  assert.equal(state.gateCount,row.gates==='all'?source.maxGates:row.gates,label);
+  assert.equal(state.backwardVisible,row.time>=5);assert.equal(state.chainVisible,row.time>=30);
+  verifyMath(state,source);
 }
 
 registerTransportTests(NAME,{witness:/9\.5[34]|one in a million/,anchors:['derivative-gates-playback-help'],width:713});
@@ -76,7 +117,7 @@ test('Derivative gates: fixture and operation come from the existing Chapter 5 w
   assert(chapter.includes('sigmoid_gate = sig * (1 - sig)'));
   assert(chapter.includes('relu_gate = (z > 0).float()'));
   assert.match(chapter,/At the kink.*PyTorch uses derivative.*0/s);
-  verifyState(f.w.BookDerivativeGates.buildState(40),40);
+  verifyWitness(f.w.BookDerivativeGates.buildState(40),TIMELINE.at(-1));
 });
 
 test('Derivative gates: the sigmoid ceiling is analytic, not the maximum sampled on an even grid',t=>{
@@ -95,7 +136,7 @@ test('Derivative gates: the sigmoid ceiling is analytic, not the maximum sampled
 test('Derivative gates: ReLU zero is the declared kink convention, not an open gate',t=>{
   const f=fixture(t,NAME);f.load();f.open();const build=f.w.BookDerivativeGates.buildState;
   for(const time of [0,5,9.999,10,11,12,12.001,15,25,29.999,30,40]) {
-    const state=build(time);verifyState(state,time);assert.equal(state.reluGate,state.z>0?1:0);
+    const state=build(time);verifyMath(state);assert.equal(state.reluGate,state.z>0?1:0);
   }
   assert.equal(build(10).reluGate,0);assert.equal(build(12).reluGate,0);assert.equal(build(15).reluGate,1);
 });
@@ -103,8 +144,7 @@ test('Derivative gates: ReLU zero is the declared kink convention, not an open g
 test('Derivative gates: quarter products count activation gates and stay positive without a magnitude floor',t=>{
   const f=fixture(t,NAME);f.load();f.open();const build=f.w.BookDerivativeGates.buildState;
   for(let step=0;step<=160;step++) {
-    const time=25+step/10,state=build(time);verifyState(state,time);
-    assert(Number.isInteger(state.gateCount));assert(state.gateCount>=0&&state.gateCount<=10);assert(state.bound>0);
+    const time=25+step/10,state=build(time);verifyMath(state);assert(state.bound>0);
   }
   const final=build(40);assert.equal(final.gateCount,10);assert.equal(final.bound,9.5367431640625e-7);
   assert(final.bound<1e-6);assert.equal(build(25).bound,1);assert.equal(build(30,true).gateCount,0);
@@ -113,7 +153,12 @@ test('Derivative gates: quarter products count activation gates and stay positiv
 
 test('Derivative gates: a near-one sigmoid activation can transmit a tiny local backward sensitivity',t=>{
   const f=fixture(t,NAME);f.load();f.open();const build=f.w.BookDerivativeGates.buildState;
-  for(const time of [0,5,7,8.5,10,12,13.5,15,17,18.5,20,25,30,35,40])verifyState(build(time),time);
+  for(const row of TIMELINE)verifyWitness(build(row.time),row);
+  STILLS.forEach((row,index)=>{
+    // Reduced motion holds the beat's own still for the whole beat, to its last instant.
+    for(const time of [row.time,row.time+2.5,row.time+4.999])verifyWitness(build(time,true),{...row,time});
+    assert.equal(build(row.time+4.999,true).held,5*index);
+  });
   const centered=build(10),saturated=build(20),activeRelu=build(25);
   assert.equal(centered.activation,0.5);assert.equal(centered.factor,0.25);
   close(saturated.activation,0.9975273768433653);close(saturated.factor,0.002466509291360048);
@@ -121,22 +166,22 @@ test('Derivative gates: a near-one sigmoid activation can transmit a tiny local 
   assert(saturated.activation>centered.activation&&saturated.factor<centered.factor);
   assert.equal(activeRelu.kind,'relu');assert.equal(activeRelu.activation,6);assert.equal(activeRelu.factor,1);
   assert.equal(activeRelu.signalValue,1);
-  for(const time of [5,7.5,8.499,15,17.5,18.499])assert.equal(build(time).signalValue,1);
-  for(const time of [8.5,10,18.5,20])assert.equal(build(time).signalValue,build(time).factor);
+  // A probe carries one unit until it meets the multiplier; from there it carries the factor.
+  for(const time of [5,7.5,7.999,15,17.5,17.999])assert.equal(build(time).signalValue,1);
+  for(const time of [8,10,12,18,20])assert.equal(build(time).signalValue,build(time).factor);
 });
 
 test('Derivative gates: bounded alternative fixtures remain correct and inputs are not mutated',t=>{
   const f=fixture(t,NAME);f.load();f.open();
   for(const source of [
     {domain:[-4,8],samples:101,maxGates:6},
-    {domain:[-1,2],samples:2,maxGates:1},
+    {domain:[-1,2],samples:2,maxGates:2},
     {domain:[-30,30],samples:301,maxGates:100}
   ]) {
     const before=JSON.stringify(source);
-    for(const time of [0,5,8.5,10,13.5,15,20,25,28.4,30,35,40]) {
-      verifyState(f.w.BookDerivativeGates.buildState(time,false,source),time,source);
-      verifyState(f.w.BookDerivativeGates.buildState(time,true,source),time,source,true);
-    }
+    for(const row of TIMELINE)verifyWitness(f.w.BookDerivativeGates.buildState(row.time,false,source),row,source);
+    for(const row of STILLS)verifyWitness(f.w.BookDerivativeGates.buildState(row.time+3.3,true,source),{...row,time:row.time+3.3},source);
+    for(const time of [8.5,13.1,18.4,28.4,32.2])verifyMath(f.w.BookDerivativeGates.buildState(time,false,source),source);
     assert.equal(JSON.stringify(source),before);
   }
 });
@@ -145,9 +190,11 @@ test('Derivative gates: invalid domains, sampling and gate counts fail before dr
   const f=fixture(t,NAME);f.load();f.open();const build=f.w.BookDerivativeGates.buildState;
   for(const patch of [{domain:[]},{domain:[-6]},{domain:[0,6]},{domain:[-6,0]},{domain:[2,6]},
     {domain:[6,-6]},{domain:[-31,6]},{domain:[-6,31]},{domain:[-6,Infinity]},{domain:[NaN,6]},
-    {samples:1},{samples:2001},{samples:4.5},{samples:NaN},{maxGates:0},{maxGates:101},{maxGates:2.5}])
+    {samples:1},{samples:2001},{samples:4.5},{samples:NaN},{maxGates:0},{maxGates:1},{maxGates:101},{maxGates:2.5}])
     assert.throws(()=>build(40,false,{...FIXTURE,...patch}),/domain|finite|sample|gate|integer|bound|zero|range/i);
-  for(const time of [NaN,Infinity,-Infinity,-10,70])verifyState(build(time),time);
+  for(const[time,clock]of [[NaN,0],[Infinity,0],[-Infinity,0],[-10,0],[70,40]]) {
+    const state=build(time);assert.equal(state.time,clock);verifyWitness(state,TIMELINE.find(row=>row.time===clock));
+  }
 });
 
 test('Derivative gates: secondary insets show actual activation functions and correctly scaled local tangents',t=>{
@@ -155,7 +202,8 @@ test('Derivative gates: secondary insets show actual activation functions and co
   for(const width of widths) {
     f.resize(width);const fixed={};
     for(const time of [0,5,8.5,10,12.1234567,13.5,14.9,15,20,25,30,40]) {
-      f.seek(time);const expected=oracle(time);
+      f.seek(time);const expected=published(f);verifyMath(f.w.BookDerivativeGates.buildState(time));
+      assert.equal(expected.z,f.w.BookDerivativeGates.buildState(time).z);
       for(const kind of ['sigmoid','relu']) {
         const inset=f.$(`[data-inset="${kind}"]`),frame=numericTokens(inset.querySelector('.dg-axis').getAttribute('d'));
         assert.equal(frame.length,6);const[left,top,,bottom,right]=frame;
@@ -210,8 +258,8 @@ test('Derivative gates: the same component carries forward values and a reverse 
   const f=fixture(t,NAME);f.load();f.open();
   for(const width of widths) {
     f.resize(width);
-    for(const time of [0,5,7.1234567,8.5,10,13.5,15,17.5,18.5,20,25,30,40]) {
-      f.seek(time);const expected=oracle(time),input=f.$('[data-input-node]'),output=f.$('[data-output-node]'),component=f.$('[data-activation-node]');
+    for(const time of [0,5,7.1234567,8,8.5,10,12.3,13.5,14.7,15,17.5,18,18.5,20,25,30,40]) {
+      f.seek(time);const expected=published(f),input=f.$('[data-input-node]'),output=f.$('[data-output-node]'),component=f.$('[data-activation-node]');
       const lx=attr(input,'cx'),rx=attr(output,'cx'),fy=attr(input,'cy'),cx=attr(component,'x')+attr(component,'width')/2;
       assert(lx<cx&&cx<rx);assert.equal(attr(output,'cy'),fy);
       closeTree(numericTokens(f.$('[data-forward-left]').getAttribute('d')),[lx+attr(input,'r'),fy,attr(component,'x'),fy],PIXEL_EPSILON);
@@ -226,16 +274,24 @@ test('Derivative gates: the same component carries forward values and a reverse 
       for(const node of f.root.querySelectorAll('[data-reverse-arrow]')) {
         const p=numericTokens(node.getAttribute('d'));assert(p[2]<p[0]&&p[2]<p[4],'backward arrow must point left');
       }
-      const pulse=f.$('[data-local-pulse]'),ring=f.$('[data-local-locator]');
+      const pulse=f.$('[data-local-pulse]'),ring=f.$('[data-local-locator]'),probe=f.$('[data-local-probe]');
       const center=[rx+(lx-rx)*expected.localProgress,by];
       closeTree([attr(pulse,'cx'),attr(pulse,'cy')],center,PIXEL_EPSILON);closeTree([attr(ring,'cx'),attr(ring,'cy')],center,PIXEL_EPSILON);
       close(attr(pulse,'r'),14*Math.sqrt(expected.signalValue),PIXEL_EPSILON);
-      close((attr(pulse,'r')/14)**2,expected.signalValue,2*PIXEL_EPSILON);
+      close((attr(pulse,'r')/14)**2,expected.signalValue,1e-5);
       assert.equal(attr(ring,'r'),16,'the hollow locator must not encode a changing sensitivity');
       assert.equal(Number(f.root.dataset.signalValue),f.w.BookDerivativeGates.buildState(time).signalValue);
+      close(attr(probe,'opacity'),expected.probeOpacity,PIXEL_EPSILON);
+      assert.equal(visible(pulse),expected.backwardVisible&&attr(probe,'opacity')>0,'an invisible probe is removed, not left transparent');
+      assert(probe.compareDocumentPosition(multiplier)&f.w.Node.DOCUMENT_POSITION_FOLLOWING,'the probe passes under the multiplier, so its ring never crosses the printed factor');
       assert.equal(f.$('[data-activation-name]').textContent,expected.kind==='relu'?'ReLU':'sigmoid');
-      if(expected.localPassed)assert.notEqual(f.$('[data-downstream-value]').textContent,'?');
-      else assert.equal(f.$('[data-downstream-value]').textContent,'?');
+      // The factor is printed, on the multiplier and at the input side, only once a probe has crossed.
+      const printed=f.$('[data-factor-value]').textContent,delivered=f.$('[data-downstream-value]').textContent;
+      if(expected.revealed){assert.match(printed,/^× \d/);assert(attr(pulse,'cx')<=cx+PIXEL_EPSILON);}
+      else{assert.equal(printed,'× ?');assert.equal(delivered,'?');}
+      // A number sits beside the mark it measures: the delivered value waits for the packet to arrive.
+      if(expected.delivered){assert.equal(delivered,printed.slice(2));close(attr(pulse,'cx'),lx,PIXEL_EPSILON);}
+      else assert.equal(delivered,'?');
       assert.match(f.$('[data-upstream-value]').textContent,/unit probe.*1/);
     }
   }
@@ -248,8 +304,10 @@ test('Derivative gates: each backward chain crossing multiplies filled area with
   const f=fixture(t,NAME);f.load();f.open();
   for(const width of widths) {
     f.resize(width);let fixed;
-    for(const time of [30,30.01,30.4544,30.4546,31,31.9,32.5,33.7,34.5454,34.5456,35,40]) {
-      f.seek(time);const expected=oracle(time),curve=numericTokens(f.$('[data-chain-wire]').getAttribute('d'));
+    // Eleven equal segments in five seconds: gate k is met at 30 + 5k/11 s. Literal counts, not a copied formula.
+    for(const[time,count]of [[30,0],[30.01,0],[30.4544,0],[30.4546,1],[31,2],[31.9,4],[32.5,5],[33.7,8],[34.5454,9],[34.5456,10],[35,10],[40,10]]) {
+      f.seek(time);const expected=published(f),curve=numericTokens(f.$('[data-chain-wire]').getAttribute('d'));
+      assert.equal(expected.gateCount,count,`gates crossed at ${time}s`);assert.equal(expected.bound,factorProduct(count));
       const points=Array.from({length:curve.length/2},(_,i)=>curve.slice(2*i,2*i+2));
       assert.equal(points.length,12);if(!fixed)fixed=points;closeTree(points,fixed,0);
       closeTree(data(f,'chainPoints'),points,PIXEL_EPSILON);
@@ -257,7 +315,10 @@ test('Derivative gates: each backward chain crossing multiplies filled area with
       gates.forEach((gate,i)=>{
         closeTree([attr(gate,'cx'),attr(gate,'cy')],points[i+1],PIXEL_EPSILON);
         assert.equal(gate.dataset.passed,String(i<expected.gateCount));
-        assert.equal(f.$(`[data-gate-index="${i+1}"]`).textContent,String(i+1));
+        const index=f.$(`[data-gate-index="${i+1}"]`);assert.equal(index.textContent,String(i+1));
+        // Where the path drops to the next row, the wire runs straight down from the gate: its number sits beside it.
+        if(points[i+2][0]===points[i+1][0])assert(Math.abs(attr(index,'x')-points[i+1][0])>=attr(gate,'r')+6,`gate ${i+1}'s number lies under the wire at ${width}px`);
+        else close(attr(index,'x'),points[i+1][0],PIXEL_EPSILON);
         assert.match(f.$(`[data-gate-label="${i+1}"]`).textContent,/¼|1\/4/);
         const arrow=numericTokens(f.$(`[data-chain-arrow="${i+1}"]`).getAttribute('d'));
         const dx=points[i+2][0]-points[i+1][0],dy=points[i+2][1]-points[i+1][1];
@@ -265,19 +326,23 @@ test('Derivative gates: each backward chain crossing multiplies filled area with
         assert((arrow[2]-tail[0])*dx+(arrow[3]-tail[1])*dy>0,'chain arrow follows the next component');
       });
       assert.equal(new Set(gates.map(g=>attr(g,'cy'))).size,width<280?3:width<560?2:1,'phone chain reflows, without shrinking its components');
-      const travel=clamp((time-30)/5,0,1)*11,segment=Math.min(10,Math.floor(travel)),fraction=travel-segment;
+      const travel=expected.travel,segment=Math.min(10,Math.floor(travel)),fraction=travel-segment;
+      assert.equal(Math.min(10,Math.floor(travel)),count);if(time===30)assert.equal(travel,0);if(time>=35)assert.equal(travel,11);
       const center=points[segment].map((value,axis)=>value+(points[segment+1][axis]-value)*fraction);
       const pulse=f.$('[data-chain-pulse]'),ring=f.$('[data-chain-locator]');
       closeTree([attr(pulse,'cx'),attr(pulse,'cy')],center,2*PIXEL_EPSILON);closeTree([attr(ring,'cx'),attr(ring,'cy')],center,2*PIXEL_EPSILON);
-      assert.equal(attr(ring,'r'),16);assert.equal(attr(pulse,'r'),14*2**(-expected.gateCount));
-      assert.equal((attr(pulse,'r')/14)**2,expected.bound,'area matches exact binary quarter powers with no lower floor');
-      assert(attr(pulse,'r')>0);assert.equal(Number(f.root.dataset.bound),expected.bound);
+      assert.equal(attr(ring,'r'),16);close(attr(pulse,'r'),14*2**(-count),PIXEL_EPSILON);
+      assert(attr(pulse,'r')>0,'the drawn packet has no lower floor and never reaches zero');
+      assert.equal(Number(f.root.dataset.bound),factorProduct(count),'the published area is the exact binary quarter power');
+      assert(ring.compareDocumentPosition(gates[0])&f.w.Node.DOCUMENT_POSITION_FOLLOWING,'the chain probe passes under each gate');
       assert.equal(f.$('[data-factor-chain]').dataset.quantity,'sigmoid-activation-factor-ceiling');
       assert.match(f.$('[data-chain-note]').textContent,/best case.*weights omitted/i);
       assert.match(f.$('[data-bound-value]').textContent,new RegExp(`^${expected.gateCount} factors: at most `));
       if(time>=35) {
-        assert.match(f.$('[data-bound-value]').textContent,/9\.54e-7/);
-        assert(expected.bound>expected.sigmoidGate**10,'the chain is a ceiling, not ten copies of the saturated witness');
+        assert.equal(f.$('[data-bound-value]').textContent,'10 factors: at most 9.54 × 10⁻⁷');
+        assert(expected.bound>sigmoidDerivative(6)**10,'the chain is a ceiling, not ten copies of the saturated witness');
+        // At rest the locator stands clear of the last gate instead of overlapping it.
+        assert(Math.hypot(attr(ring,'cx')-attr(gates[9],'cx'),attr(ring,'cy')-attr(gates[9],'cy'))>=attr(ring,'r')+attr(gates[9],'r'));
       }
     }
   }
@@ -286,7 +351,8 @@ test('Derivative gates: each backward chain crossing multiplies filled area with
 test('Derivative gates: forward witnesses precede backward transmission and the activation-only chain',t=>{
   const f=fixture(t,NAME);f.load();f.open();
   for(const time of [0,4.99,5,9.99,10,15,19.99,20,24.99,25,29.99,30,34.99,35,40]) {
-    f.seek(time);const expected=oracle(time);
+    // The backward lane appears at 5 s, ReLU stands in from 25 s to 30 s, the chain appears at 30 s.
+    f.seek(time);const expected={backwardVisible:time>=5,chainVisible:time>=30,kind:time>=25&&time<30?'relu':'sigmoid'};
     for(const selector of ['[data-forward-network]','[data-activation-value]','[data-z-value]'])assert(visible(f.$(selector)));
     for(const selector of ['[data-backward-network]','[data-cache-link]','[data-local-pulse]','[data-signal-legend]'])
       assert.equal(visible(f.$(selector)),expected.backwardVisible);
@@ -298,6 +364,157 @@ test('Derivative gates: forward witnesses precede backward transmission and the 
     assert.equal(formula.classList.contains('dg-highlight-relu'),expected.kind==='relu');
     if(time<5)assert.doesNotMatch(f.$('[data-figure] svg').getAttribute('aria-label'),/multiplied|derivative|0\.25/);
     if(time<30)assert.doesNotMatch(f.$('[data-figure] svg').getAttribute('aria-label'),/\d+ gates|ceiling/);
+  }
+});
+
+// Everything a reader or a screen reader can meet at this instant, with the input's own
+// label and clause removed: z is the forward story and passes through small values as it
+// leaves zero, so it is not a leaked factor. What remains must not name a factor.
+function readerFacing(f) {
+  const range=f.$('[data-controls] input[type=range]'),picture=f.$('[data-figure] svg');
+  return[...shownText(f).filter(node=>!node.hasAttribute('data-z-value')).map(node=>node.textContent),
+    picture.getAttribute('aria-label').replace(/At z [^,]*,/,''),range.getAttribute('aria-valuetext'),f.$('[data-caption]').textContent];
+}
+const leaks=text=>numericTokens(text).some(value=>value>0&&value<0.25)||/0\.00\d|⁻|multiplied by/.test(text);
+
+test('Derivative gates: the saturated factor is withheld from the picture, the label and the scrubber until the probe crosses',t=>{
+  for(const width of [713,296]) {
+    const f=fixture(t,NAME,{width});f.load();f.open();
+    const multiplier=f.$('[data-local-multiplier]'),center=attr(multiplier,'x')+attr(multiplier,'width')/2;
+    const printed=()=>f.$('[data-factor-value]').textContent,delivered=()=>f.$('[data-downstream-value]').textContent;
+    const pulse=f.$('[data-local-pulse]'),probe=f.$('[data-local-probe]'),output=attr(f.$('[data-output-node]'),'cx'),input=attr(f.$('[data-input-node]'),'cx');
+    // The measurement at zero stands, in full, until the input starts to move.
+    f.seek(12);assert.equal(printed(),'× 0.25');assert.equal(delivered(),'0.25');assert.equal(attr(pulse,'cx'),input);assert.equal(attr(pulse,'r'),7);
+    let reveal=null,faded=null,ready=null;
+    for(let step=0;reveal===null;step++) {
+      const time=Number((12.05+step*0.05).toFixed(2));assert(time<20,'the probe never reveals the factor');
+      f.seek(time);
+      if(printed()!=='× ?'){reveal=time;break;}
+      assert.equal(delivered(),'?',`delivered value shown at ${time}s`);
+      for(const text of readerFacing(f))assert(!leaks(text),`the answer leaks at ${time}s (${width}px): "${text}"`);
+      // The stale packet is never redrawn smaller: it fades at its measured size where it lay,
+      // and the only other packet on the lane is a whole unit probe on the output side.
+      if(visible(pulse)) {
+        if(attr(pulse,'cx')===input){assert.equal(attr(pulse,'r'),7,`stale packet resized at ${time}s`);assert(time<13&&faded===null);}
+        else{assert.equal(attr(pulse,'r'),14,`a shrunken probe is visible at ${time}s`);assert(attr(pulse,'cx')>center);if(faded===null)faded=time;
+          if(attr(pulse,'cx')===output&&attr(probe,'opacity')===1&&ready===null)ready=time;}
+      } else if(faded===null)faded=time;
+    }
+    assert(faded<=12.65,`the stale packet is still drawn at ${faded}s`);
+    assert(ready!==null&&ready<=15,'a whole unit probe waits on the output side by the beat');
+    // Two still seconds to predict, then the crossing; the revealed factor then holds two seconds before the next caption.
+    assert(reveal>=17&&reveal<=18,`reveal at ${reveal}s`);
+    assert(attr(pulse,'cx')<=center+PIXEL_EPSILON,'the factor is printed only once the probe has reached the multiplier');
+    assert.equal(printed(),'× 0.002467');close(attr(pulse,'r'),14*Math.sqrt(sigmoidDerivative(6)),PIXEL_EPSILON);
+    const still=()=>canonicalMarkup(f.$('[data-figure]').innerHTML);
+    f.seek(15);const predicting=still();for(const time of [15.5,16,16.5,17]){f.seek(time);assert.equal(still(),predicting,`the picture moves at ${time}s while the reader is predicting`);}
+    for(const time of [reveal,19,20,22.5,24.99]){f.seek(time);assert.equal(printed(),'× 0.002467');assert.equal(delivered(),time<19?'?':'0.002467');}
+    // No flash across the hand-over: either side of 12 s and of the beat at 15 s the probe is the same mark.
+    const mark=()=>[attr(pulse,'cx'),attr(pulse,'cy'),attr(pulse,'r'),attr(probe,'opacity')];
+    for(const[before,after]of [[12,12.001],[14.999,15]]){f.seek(before);const a=mark();f.seek(after);closeTree(mark(),a,0.01);}
+    f.seek(13.5);assert(!visible(pulse),'no packet is on the lane while nothing is being measured');
+    // The forward story stays in full view through the glide: the honest hint is the flattening tangent.
+    let z=-1,slope=Infinity;
+    for(const time of [12.3,13,13.5,14,14.9,15]) {
+      f.seek(time);const state=published(f),tangent=f.$('[data-tangent="sigmoid"]');assert(state.z>z);z=state.z;
+      assert.match(f.$('[data-z-value]').textContent,/^z = \d/);assert.match(f.$('[data-activation-value]').textContent,/^a = 0\.\d/);
+      const rise=(attr(tangent,'y1')-attr(tangent,'y2'))/(attr(tangent,'x2')-attr(tangent,'x1'));assert(visible(tangent)&&rise<slope&&rise>0);slope=rise;
+    }
+  }
+});
+
+test('Derivative gates: reduced-motion stills never pair the prediction with its answer',t=>{
+  const f=fixture(t,NAME,{reduced:true});f.load();f.open();
+  const printed=()=>f.$('[data-factor-value]').textContent,delivered=()=>f.$('[data-downstream-value]').textContent;
+  const pulse=f.$('[data-local-pulse]'),output=attr(f.$('[data-output-node]'),'cx'),input=attr(f.$('[data-input-node]'),'cx');
+  for(const time of [10,12.5,14.99]) { // beat 2: the measurement at zero, delivered
+    f.seek(time);assert.equal(printed(),'× 0.25');assert.equal(delivered(),'0.25');assert.equal(f.$('[data-z-value]').textContent,'z = 0');
+    assert.equal(attr(pulse,'cx'),input);assert.equal(attr(pulse,'r'),7);assert.match(f.$('[data-caption]').textContent,/one quarter/);
+  }
+  for(const time of [15,17.5,18.5,19.99]) { // beat 3: saturated, a whole probe waiting, nothing revealed
+    f.seek(time);assert.equal(printed(),'× ?');assert.equal(delivered(),'?');assert.equal(f.$('[data-z-value]').textContent,'z = 6');
+    assert.equal(attr(pulse,'cx'),output);assert.equal(attr(pulse,'r'),14);assert(visible(pulse));
+    assert.match(f.$('[data-caption]').textContent,/Predict/);
+    for(const text of readerFacing(f))assert(!leaks(text),`the still at ${time}s answers its own question: "${text}"`);
+  }
+  for(const time of [20,24.99]) { // beat 4: the result
+    f.seek(time);assert.equal(printed(),'× 0.002467');assert.equal(delivered(),'0.002467');assert.equal(attr(pulse,'cx'),input);
+    assert.doesNotMatch(f.$('[data-caption]').textContent,/Predict/);
+  }
+});
+
+test('Derivative gates: every printed number is typeset, and is announced on the picture only',async t=>{
+  // e-notation or a hyphen-minus sign; and a raw double: more than four significant digits in one decimal.
+  const significant=token=>token.replace('.','').replace(/^0+/,'').length;
+  const raw={test:text=>/\de[-+]?\d|(?:^|[\s(=×])-\d/i.test(text)||(text.match(/\d+\.\d+/g)||[]).some(token=>significant(token)>4)};
+  const f=fixture(t,NAME);f.load();f.open();
+  const range=f.$('[data-controls] input[type=range]'),picture=f.$('[data-figure] svg');
+  for(const width of [713,296])for(const reduced of [false,true]) {
+    const g=reduced?fixture(t,NAME,{reduced:true,width}):f;if(reduced){g.load();g.open();}else f.resize(width);
+    for(let step=0;step<=400;step++) {
+      g.seek(step/10);
+      const texts=[...[...drawing(g).querySelectorAll('text')].map(node=>node.textContent),g.$('[data-figure] svg').getAttribute('aria-label'),
+        g.$('[data-controls] input[type=range]').getAttribute('aria-valuetext'),g.$('[data-caption]').textContent];
+      for(const text of texts)assert(!raw.test(text),`untypeset number at ${step/10}s: "${text}"`);
+    }
+  }
+  // Rule 7: the scrubber names the state; the numbers live on the picture and in its one description.
+  for(const time of [0,2.5,5,8,10,13.5,15,18,20,25,30,32.5,35,40]) {
+    f.seek(time);assert.doesNotMatch(range.getAttribute('aria-valuetext').replace(/^\d+:\d\d of \d+:\d\d\. /,''),/\d/,`the scrubber repeats a number at ${time}s`);
+  }
+  f.seek(40);assert.match(picture.getAttribute('aria-label'),/10 gates, ceiling 9\.54 × 10⁻⁷\./);
+  assert.equal(f.$('[data-bound-value]').textContent,'10 factors: at most 9.54 × 10⁻⁷');
+  f.seek(33.7);assert.equal(f.$('[data-bound-value]').textContent,'8 factors: at most 1.53 × 10⁻⁵');
+  f.seek(32.5);assert.equal(f.$('[data-bound-value]').textContent,'5 factors: at most 0.0009766');
+  // Both script-free prints and the static description carry the same typeset witness.
+  const bare=fixture(t,NAME),prints=[drawing(bare),bare.$('[data-static-frame="narrow"]')];
+  for(const print of prints){assert.match(print.textContent,/at most 9\.54 × 10⁻⁷/);for(const node of print.querySelectorAll('text'))assert(!raw.test(node.textContent),node.textContent);}
+  assert.match(bare.$('[data-figure] svg').getAttribute('aria-label'),/ceiling 9\.54 × 10⁻⁷\./);
+  assert(!raw.test(bare.$('[data-figure] svg').getAttribute('aria-label')));
+  assert(raw.test('ceiling 9.5367431640625e-7')&&raw.test('at most 9.54e-7')&&raw.test('z = -6')&&raw.test('0.24651'),'the detector itself must see the old defects');
+});
+
+test('Derivative gates: fixture tables and width-only geometry are built once, not every frame',t=>{
+  const f=fixture(t,NAME);f.load();f.open();const build=f.w.BookDerivativeGates.buildState;
+  assert.equal(build(3).curve,build(27).curve,'the 300-point curve is one frozen table, not rebuilt per call');
+  assert.equal(build(3).bounds,build(27).bounds);assert(Object.isFrozen(build(3).curve)&&Object.isFrozen(build(3).curve[0]));
+  const records=[],observer=new f.w.MutationObserver(list=>records.push(...list));
+  observer.observe(f.root,{attributes:true,subtree:true,attributeOldValue:true});
+  f.play();for(let n=0;n<270;n++)f.tick(100); // 40.5 content seconds at 1.5x: the whole timeline
+  records.push(...observer.takeRecords());observer.disconnect();assert.equal(f.time,40);
+  const rewritten=new Set(records.map(record=>`${record.target.getAttribute('data-inset')||record.target.tagName.toLowerCase()}@${record.attributeName}`));
+  for(const name of ['data-curve','data-bounds','data-chain-points','data-ceiling','data-layout','viewBox'])
+    assert(!records.some(record=>record.attributeName===name),`${name} is rewritten during playback`);
+  assert(!records.some(record=>record.attributeName==='d'),`a path is rebuilt during playback: ${[...rewritten].join(' ')}`);
+  assert(!records.some(record=>record.target.tagName==='text'&&['x','y'].includes(record.attributeName)),'labels are repositioned during playback');
+  assert.equal(data(f,'curve').length,300);assert.equal(data(f,'bounds').length,11);
+  // While the reader is predicting (15-17 s) the picture is still, and a still frame writes nothing to it.
+  f.seek(15.2);const quiet=new f.w.MutationObserver(()=>{});
+  quiet.observe(f.$('[data-figure]'),{attributes:true,childList:true,characterData:true,subtree:true});
+  f.play();for(let n=0;n<10;n++)f.tick(100);f.play();close(f.time,16.7);
+  assert.equal(quiet.takeRecords().length,0,'frames inside a hold must not touch the drawing');quiet.disconnect();
+  // A width change is what rebuilds them, and only a real one.
+  const before=f.$('[data-activation-curve="sigmoid"]').getAttribute('d');
+  f.resize(713);assert.equal(f.$('[data-activation-curve="sigmoid"]').getAttribute('d'),before);
+  f.resize(296);assert.notEqual(f.$('[data-activation-curve="sigmoid"]').getAttribute('d'),before);assert.equal(f.root.dataset.layout,'narrow');
+});
+
+test('Derivative gates: a one-gate fixture is refused before drawing; the two-gate minimum draws finite geometry',t=>{
+  const one=fixture(t,NAME);one.root.dataset.fixture=JSON.stringify({...FIXTURE,maxGates:1});
+  assert.throws(()=>one.load(),/2-100 gates/);assert(!one.root.dataset.ready);
+  assert(one.$('[data-static-frame="narrow"]'),'a refused fixture leaves the static print in place');
+  const two=fixture(t,NAME);two.root.dataset.fixture=JSON.stringify({...FIXTURE,maxGates:2});two.load();two.open();
+  for(const width of widths) {
+    two.resize(width);
+    for(const time of [0,30,32.5,40]) {
+      two.seek(time);assert.equal(drawing(two).querySelectorAll('[data-gate]').length,2);
+      for(const node of drawing(two).querySelectorAll('*'))for(const{name,value}of [...node.attributes]) {
+        assert.doesNotMatch(value,/NaN|Infinity|undefined/,`${name}="${value}" at ${width}px`);
+        if(['x','y','cx','cy','r','x1','x2','y1','y2'].includes(name))assert(Number.isFinite(Number(value)));
+      }
+      assert.doesNotMatch(two.$('[data-figure] svg').getAttribute('viewBox'),/NaN/);
+    }
+    two.seek(40);assert.equal(two.$('[data-bound-value]').textContent,'2 factors: at most 0.0625');
   }
 });
 
@@ -317,17 +534,17 @@ test('Derivative gates: narrow panes keep visible geometry readable and serializ
       }
       for(const node of drawing(f).querySelectorAll('*'))for(const key of ['x','x1','x2','y','y1','y2','cx','cy','width','height']) {
         if(!node.hasAttribute(key))continue;const value=attr(node,key);assert(Number.isFinite(value));
-        assert.equal(value,Number(value.toFixed(9)));
+        assert.equal(value,Number(value.toFixed(PIXEL_DIGITS)));
         if(visible(node)) {
           const limit=key.startsWith('x')||key==='cx'||key==='width'?width:box[3];
           assert(value>=0&&value<=limit,`${key}=${value} exceeds ${limit} at ${width}`);
         }
       }
       for(const node of drawing(f).querySelectorAll('[d]'))for(const value of numericTokens(node.getAttribute('d')))
-        assert.equal(value,Number(value.toFixed(9)));
+        assert.equal(value,Number(value.toFixed(PIXEL_DIGITS)));
       for(const node of [...drawing(f).querySelectorAll('circle')].filter(visible)) {
         const x=attr(node,'cx'),y=attr(node,'cy'),r=attr(node,'r');
-        assert(r>0&&Number.isFinite(r));assert.equal(r,Number(r.toFixed(9)));
+        assert(r>0&&Number.isFinite(r));assert.equal(r,Number(r.toFixed(PIXEL_DIGITS)));
         assert(x-r>=0&&x+r<=width,`circle extent [${x-r},${x+r}] exceeds width ${width}`);
         assert(y-r>=0&&y+r<=box[3]);
       }

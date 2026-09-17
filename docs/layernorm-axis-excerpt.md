@@ -214,3 +214,21 @@ Related prose follow-up for a future shared-manuscript/PDF cut: Chapter 9's
 has spatial positions for BatchNorm2d statistics; stored running statistics define
 the usual evaluation protocol. The present HTML animation does not repeat that
 wording and does not silently alter the shared chapter.
+
+## Review pass — September 17, 2026
+
+- **Status correction.** The two passages above that call this scene "uncommitted and
+  unapproved" and "local, uncommitted and not pushed" describe the working tree before
+  approval. The scene was pushed as `e00d3c5`; the header of this receipt is the current status.
+- **Less prose around the picture.** The boundary now shows its first sentence; the remaining
+  scope notes sit in a closed "Scope and caveats" disclosure, and the two author-requested
+  explanations (why sharing fits a CNN; why token-local statistics fit variable lengths) sit
+  in a closed "Why BatchNorm fits images and LayerNorm fits sequences" disclosure. Every
+  sentence is unchanged and still in the panel; on a phone the caveats no longer outweigh
+  the animation.
+- **Geometry serialisation.** Drawing coordinates are now serialised to four decimal places
+  (0.0001 px) instead of nine, so a last-bit math-library difference cannot flip a printed
+  digit in the byte-compared static frames. Arithmetic is still unrounded; the suite's pixel
+  tolerance follows the new step (`PIXEL_EPSILON = 5.1e-5`). Both static frames regenerated.
+- New asset hashes are recorded once for the whole pass in
+  [the review-pass receipt](excerpt-review-pass.md).

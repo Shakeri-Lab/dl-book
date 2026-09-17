@@ -53,7 +53,9 @@ metadata. Its five schematic dots per row and 3-bit grid are deliberately omitte
 They are not manuscript observations. One fixed quiet-row zoom carries the range,
 rounding interval and maximum-magnitude witness. Any skipped ticks are explicitly
 sampled; a subpixel zero bin is not falsely widened. Weight and reconstructed
-parameter marks are orange, errors wine, and grid structure neutral.
+parameter marks are orange, errors wine, and grid structure neutral. (As first
+published the local grid ticks were drawn orange and the subpixel bin was hidden
+under the code-0 tick; both are corrected in the September 17 review pass below.)
 
 Reuse the deferred native SVG player, with the existing compact controls, closed
 and paused initially, 1.5× default, 40-second duration, transcript/static fallback
@@ -119,3 +121,74 @@ Lecture root:
 | `6050-Ch17/lecture.jsx` | `aba2a4a94a52f12d3d5ed113d5f3209b0604065fc328d10566e0979bb459d3cb` |
 | `6050-Ch17/STORYBOARD.md` | `b36b1df0110b5d261ec232ed97af5ff402c67fe58db56fa2302aec71042f94fc` |
 | `6050-Ch17/ch17-data.js` | `966d73e40d3d5ac8c9a14dfb0e039d6960321acf51b675d5736d8499bba913e1` |
+
+## Review pass — September 17, 2026
+
+An independent review found the numbers right and the picture wrong: it read as
+stacked text, not a mechanism. No fixture value, duration or beat changed.
+
+- **Final frame was a text stack.** The five-line header and the four centred
+  readouts under the ruler are gone. The header is two lines (which row sets the
+  spacing; `s = max/127 = value`), in ink only on the beat where it is the news
+  (1 and 4) and grey otherwise. The `8-bit · Q = 127 · 64 × 256` banner is removed.
+- **Storage is a bar, not a sentence.** One bar on one byte scale (ruler width =
+  16,384 + 256 B): codes light neutral, FP32 scales ink. The 4 B segment keeps its
+  true sub-pixel width and gets a hollow locator below the bar; it grows to 256 B
+  (about 1.5 % of the bar) and the locator goes once the segment is visible. Labels
+  sit beside their marks: `8-bit codes: 16,384 B, unchanged` over the codes,
+  `FP32 scales: 4 B → 256 B` under the scales end.
+- **Error bound is attached to the bin.** `rounding error ≤ s/2 = 3.937 × 10⁻⁵`
+  (wine) hangs from the local zero bin's callout instead of floating as a line.
+- **The local zero bin can be found.** Its width is still the true `s·unit`
+  (0.58 px wide layout, 0.22 px narrow; never inflated). It now extends beyond the
+  code-0 tick, deepens in ink as it thins, and carries a hollow ring on the
+  hairline with a leader to `zero bin: 1000× narrower`. A locator supplies no width.
+- **Axis.** Ticks sit at the round weights they print (−0.02, 0, 0.02); the old
+  tick at `s/4 = 0.019685` labelled "0.02" is gone. Bin edges are labelled `−s/2`
+  and `s/2`, with the value once in `shared zero bin: ±s/2 = ±0.03937`.
+- **No ASCII math.** One scene-local formatter (four significant figures, U+2212,
+  `7.874 × 10⁻⁵`) serves the picture, both static prints and the svg `aria-label`.
+  The scrubber value text carries no number, so a value is announced in one place.
+- **Reduced-motion beat 4 was untruthful**: it parked the endpoint diamond on 0 of
+  the local grid for five seconds. Every glide now ends on the beat it leads into
+  (collapse 12→15, refinement 17→20, endpoint drop 22→25, scale bytes 29→30), so a
+  beat seek and every reduced-motion still show the finished picture its caption
+  describes. The diamond is drawn only while it drops from the row's maximum onto
+  code 127, always above code 127's own position, and never at 0.
+- **Tracked object and refinement.** The orange interval is on the ruler for the
+  whole forty seconds: full, collapsed to a dot (`all 256 weights → code 0`),
+  restored. Grid ticks and bins are neutral ink (the first build drew local ticks
+  orange). From 17 s to 20 s the spacing shrinks geometrically from 10/127 to
+  0.01/127: ticks stream in from the ruler ends, the stride doubles with a fade
+  rather than a pop, the zero bin narrows at its true width, and the outermost
+  code lands on the row's maximum. **The intermediate spacings and the restoring
+  image are explanatory motion between the two declared scales, not additional
+  quantizers**; text never shows an interpolated number. `← code −1` and
+  `code 1 →` mark the shared grid's neighbours as off this zoom.
+- **Captions** 1, 4 and 5 were rewritten to be true of their stills (at most 18
+  words). On phones the caption reserves three lines so the pane height is constant.
+- **Housekeeping.** Fixture-only state and static geometry are written at mount or
+  in `layout()`; the per-frame dataset is six entries. Geometry is serialized with
+  `toFixed(4)` (was 9); model state stays unrounded. Dead `.sg-ray` and
+  `.sg-row-tick` rules removed. The static svg gained
+  `preserveAspectRatio="xMinYMin meet"`: without it the script-free narrow print
+  was centred in its taller box, started roughly 100 px low and overflowed the
+  formula line (checked script-free at 375 px before and after).
+- **Tests.** 49 pass in `scripts/test_scale_granularity_excerpt.cjs` (was 42).
+  New regressions: hollow bin locator with unchanged true width; ticks at printed
+  round values and `s/2` edge labels; endpoint marker never off code 127's
+  position; reduced-motion beat-4 still; continuous refinement with no popping
+  tick and no interpolated text; storage bar on one byte scale with a sub-pixel
+  4 B segment and locator; header and loud-number budget; no hyphen-minus,
+  e-notation or raw double in the picture, static prints, `aria-label` or value
+  text. The oracle that re-implemented the player's smoothstep timing was replaced
+  by exact-at-beats and monotone-inside-glides assertions.
+  `scripts/audit_excerpt_fixtures.py` passes. Frames were inspected at 1280, 700,
+  375 and 320 px, with and without reduced motion, plus the script-free prints.
+
+The byte sizes and SHA-256 recorded under Acceptance describe the September 13
+build; a later pass records the new ones. The Acceptance paragraph's "nine-decimal
+pixel serialization" likewise describes that build.
+- **Less prose around the picture.** The boundary now shows one sentence; every remaining scope note,
+  unchanged, sits in a closed "Scope and caveats" disclosure beside the transcript. New asset sizes
+  and digests for this pass are recorded once in [the review-pass receipt](excerpt-review-pass.md).

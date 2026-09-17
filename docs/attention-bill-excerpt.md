@@ -96,7 +96,9 @@ Both PDF audits and representative visual checks pass. Receipt:
 and both audit logs). Canonical frozen HTML is rendered last.
 
 Browser review checked the trace and final comparison in desktop and 390-CSS-pixel
-phone layouts, with readable labels, three correctly typeset math expressions,
+phone layouts, with readable labels (corrected September 17, 2026: that review missed
+a near-invisible trace and a link drawn across the column label at beat 2; see the
+review pass below), three correctly typeset math expressions,
 and no clipped SVG text or horizontal page overflow. The view capability was
 adjusted for the browser's existing zoom and the CSS width measured directly;
 the phone drawing is approximately 297 by 630 CSS pixels. Single-patch highlights
@@ -127,3 +129,64 @@ Lecture paths are relative to
 | `6050-Ch16/STORYBOARD.md` | `7657e0372b2aa1861ae1bf7fa6f0a8bdcda7edb807ce0b6e1042ee9c3990d9a4` |
 | `6050-Ch16/ch16-data.js` | `68881c89c2e85d85b821b7addb606bb11651dc4dd7a0fbcd45f07539dc5501ee` |
 | `audit-ch16-vit-scaling.py` | `eb3312f4b07580a2a01177969364965c826796bd03d10003f49b6c822901ef84` |
+
+## Review pass — September 17, 2026
+
+An independent review found five defects. The counts, fixture, beats, and duration are
+unchanged; every number on the picture is still computed from the panel's declared
+224-by-224 image and patch widths 32 and 16.
+
+- **The traced object could not be seen.** The scene traced token 0, whose query row and
+  key column are strips about 1.3 px thick (1.1 px on a phone) lying under the score
+  square's own border. It now traces an interior token (patch row 2, column 0: token 14 of
+  49, a presentation choice, not manuscript data). The strips keep their true scale, since
+  thin rows are the point; a hollow input-blue locator outline, 10 px across, is centred on
+  each, and a locator supplies no magnitude. The link is heavier, starts at a dot in the
+  highlighted patch, and ends in an arrowhead on the row's left end and the column's top.
+  It leaves the image upward on a wide pane and leftward on a narrow one, so it crosses no
+  caption; the wide "P = 32 pixels" line moved under the image for the same reason.
+- **The column link crossed "49 key columns".** During the trace the square now carries
+  only the two names the caption uses, "query row" beside the row and "key column" under
+  the column, on the sides the link does not use. The counted brackets and their labels
+  wait for beat 3, where the caption multiplies them. On the small square the column label
+  and the entry count sit flush left, clear of the rotated row label. The narrow layout
+  gained 10 px between the token count and the column label, which used to touch.
+- **An arrow-key seek to beat 5 parked on one of sixteen tiles.** The stamping now leads
+  into the beat: the new square holds two seconds (20–22 s), the tiles fade in one by one
+  from 22 s, and the sixteenth is complete at 25 s. Beat 5's caption now reads "Count the
+  equal-area tiles. …", which is true of that still. Under reduced motion beat 4 is the
+  bare new square and beat 5 the full tiling. The transcript's sixth item says the same.
+- **`ab-boundary` was toggled with no rule.** Removed.
+- **The final frame was small print.** The two growth factors are now the picture: ×16 on
+  the square and ×4 on the bar, one size and one weight (26 px, bold), each centred on its
+  own mark, ink for the area and input blue for the length. The bar moved from the lower
+  left to directly under the square and is exactly the square's side, with ruler ticks at
+  each old length, so length ×4 and area ×16 are read off one ruler. The tile note belongs
+  to beat 5 and is withdrawn afterwards; "38,416 entries / head", the bracket counts, the
+  token count, and the image title turn grey; "fixed model width" left the picture (the
+  beat-6 caption and the boundary carry it). "2,401 entries / head" at beat 3 now sits
+  under the small square it counts instead of 220 px below it.
+- Cross-cutting: the scrubber's value text names the beat only, and the counts are
+  described once, in the picture's label. Geometry that depends only on the fixture and
+  the width is placed in `layout()`; a frame whose stage and stamp progress are unchanged
+  is not redrawn, and the 196 patch cells are rewritten only when the patch size changes.
+  The scene never rounded coordinates with `toFixed(9)`: its geometry is exact rational
+  arithmetic with no transcendental calls, so the 4-decimal serialisation rule was not
+  needed and the 1e-12 geometry oracles stand.
+- The pictures shrank: 713 × 450 wide and 296 × 558 narrow (were 458 and 630); the
+  script-free aspect ratios in `player.css` follow.
+
+Scene suite: **48/48**. New regressions: locator thickness, hollowness, and interior
+placement at nine widths; a geometric no-overlap check of every visible label against
+every other label, link segment, bracket, and locator, using the suites' 0.6 em per
+character estimate; the arrow-key park at beat 5 in both motion modes; every class given
+to the formula line has a rule; the final frame's two factors share size, weight, and
+anchor, sit inside their marks, and everything else is muted; at most eight emphasised
+numbers at any time. Two were mutation-checked: restoring the counted labels at beat 2, or
+the old stamp timing, fails them. `audit_excerpt_fixtures.py` passes. Frames were reviewed
+at 1280 and 375 CSS pixels (also 700 and 610), with and without reduced motion, and both
+script-free prints with JavaScript disabled: no page overflow, no svg text outside the
+picture, no console errors.
+- **Less prose around the picture.** The boundary now shows one sentence; every remaining scope note,
+  unchanged, sits in a closed "Scope and caveats" disclosure beside the transcript. New asset sizes
+  and digests for this pass are recorded once in [the review-pass receipt](excerpt-review-pass.md).

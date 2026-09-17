@@ -1634,3 +1634,11 @@ quarto pandoc chapters/part3/10-sequences-rnn.qmd -t latex -o /tmp/with10.tex \
 quarto pandoc chapters/part3/10-sequences-rnn.qmd -t latex -o /tmp/without10.tex
 cmp /tmp/with10.tex /tmp/without10.tex                    # byte-identical, 54868 bytes
 ```
+
+## Review pass — September 17, 2026
+
+The boundary paragraphs of pooling bins, hinge bump, quantization grid and LSTM valves ran from 64 to 364 words, always visible under a
+forty-second picture. Each boundary now shows one sentence; every remaining sentence, unchanged,
+sits in a closed "Scope and caveats" disclosure beside the transcript (hinge bump's first
+sentence was split at ", which is why" so its lead could stand alone). No player, fixture, beat
+or static frame changed. Sizes and digests: [the review-pass receipt](excerpt-review-pass.md).

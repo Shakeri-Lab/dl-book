@@ -17,7 +17,9 @@ const attr=(node,key)=>Number(node.getAttribute(key));
 const visible=node=>Boolean(node&&!node.closest('[hidden]'));
 const drawing=f=>f.$('[data-drawing]');
 const numericTokens=text=>(text.match(/[-+]?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?/gi)||[]).map(Number);
-const PIXEL_EPSILON=5.1e-10;
+const PIXEL_EPSILON=5.1e-5; // half the 4-decimal geometry serialisation step (0.0001 px), plus slack
+// The picture prints a true minus sign (U+2212); parse it back before comparing numbers.
+const printed=text=>Number(text.replace('−','-'));
 const closePixel=(actual,expected)=>close(actual,expected,PIXEL_EPSILON);
 const closeTree=(actual,expected,epsilon=1e-12)=>{
   if(Array.isArray(expected)) {
@@ -190,7 +192,7 @@ test('LayerNorm axis: each bracket selects one token across its actual four feat
       f.seek(time);assert.equal(drawing(f).querySelectorAll('[data-input-cell]').length,16);
       for(let row=0;row<4;row++) {
         const cells=rows[row].raw.map((value,feature)=>{
-          const node=f.$(`[data-input-cell="${row}:${feature}"]`);assert.equal(Number(node.textContent),value);
+          const node=f.$(`[data-input-cell="${row}:${feature}"]`);assert.equal(printed(node.textContent),value);assert.doesNotMatch(node.textContent,/-/,'printed minus is U+2212');
           assert.equal(Number(node.dataset.valueSource),value);return node;
         });
         assert(cells.every(node=>attr(node,'y')===attr(cells[0],'y')));
@@ -224,7 +226,7 @@ test('LayerNorm axis: the opening BatchNorm column becomes a LayerNorm row, not 
       assert.equal(cells.length,16,'the BN contrast reuses, rather than replaces, the manuscript tensor');
       for(const cell of cells) {
         const [row,feature]=cell.dataset.inputCell.split(':').map(Number);
-        assert.equal(Number(cell.textContent),FIXTURE.input.flat()[row][feature]);
+        assert.equal(printed(cell.textContent),FIXTURE.input.flat()[row][feature]);
         if(attr(cell,'x')>attr(column,'x')&&attr(cell,'x')<attr(column,'x')+attr(column,'width')
           &&attr(cell,'y')>attr(column,'y')&&attr(cell,'y')<attr(column,'y')+attr(column,'height'))
           inColumn.push([row,feature]);

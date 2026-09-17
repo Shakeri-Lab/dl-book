@@ -10,7 +10,15 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 
 ---
 
-> **Current work — Chapter 11 approved publication, September 13, 2026.**
+> **Current work — mechanism replay review pass, September 17, 2026.** An independent review of
+> the twelve replays added since `0674cab` found no numerical error but one spoiled prediction
+> (derivative gates), one scene with no motion (mask before softmax) and a set of legibility
+> defects; all are fixed, every grammar scene's caveats are folded behind one visible sentence,
+> and the contract in `docs/animation-authoring.md` records the four new rules. HTML-only: no
+> manuscript, freeze, filter, PDF or tag change. Receipt: `docs/excerpt-review-pass.md`.
+> Verify the publishing run and live anchors before claiming deployment.
+>
+> **Previous — Chapter 11 approved publication, September 13, 2026.**
 > Derivative gates is pushed as `00c0730`; publishing run `34770754602` is blocked
 > by a Chapter 8 bootstrap HTTP 503 and the known Chapter 18 exact-output signed-zero
 > difference (`-0.0` versus `0.0`). No numerical gate or runtime change; no scheduled

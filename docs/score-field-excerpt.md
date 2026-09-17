@@ -100,3 +100,50 @@ Lecture paths are relative to
 | `6050-Ch19/STORYBOARD.md` | `6c0956d6e00f54428aa562527c602c8f521b66c52240ba2f776bdd5aa3f6643b` |
 | `6050-Ch19/ch19-data.js` | `a82d1f350fb6da16f92f8322a6fd0c41c130c80394ddd7d181cb9ed3d1358110` |
 | `audit-ch19-generative.py` | `221068fe2ea31d66d40b3c2b2b9e9e9ac74533cad6ff2e9f5ffcafbf5e93556c` |
+
+## Review pass — September 17, 2026
+
+An independent review found five defects. The design, the fixture, `data-duration`
+and `data-beats` are unchanged; every number is still evaluated from the declared
+means, standard deviation and priors. The statement above that reduced motion was
+verified was true only of the transport (one still per beat): until this pass the
+stills for the four sweep beats sat under captions that described somewhere else.
+
+- **Typeset numbers.** One formatter serves the picture, both static prints and the
+  scrubber text: U+2212 for minus, four decimals while they can carry the value, and
+  below that a mantissa with a Unicode power of ten. The final frame's first pull now
+  prints `−4.5 × 10⁻¹⁵` (was `-4.5e-15`), and the weight that scales it prints
+  `3.6 × 10⁻¹⁶` rather than a false `0.0000` beside it. Only the exact midpoint sum
+  prints `0`. Axis and mean labels use U+2212.
+- **Captions true of their stills.** Under reduced motion a hold rests on its witness
+  and a sweep rests midway between its two ends (`x = −3, −0.5, 0.5, 3`), the
+  coordinate its sentence is about. Four captions were reworded (each within twenty
+  words) to be true of that still and of every frame of the sweep; the beat-7 caption
+  is now a two-sided statement, since pull 2 still points right before the right mean.
+  `CLAIMS` in the suite checks each caption against the printed pulls, weights and
+  arrow directions, for every reduced-motion still and through normal playback.
+- **Fewer live numbers.** The density readout is gone; the dot on the density curve
+  carries it. `x` rides with the probe in the label row between the plots, and the
+  guide is broken across that row so it no longer crosses the valley label, a mean
+  label or its own coordinate. Each pull value and the sum sit just right of their
+  arrow, never left of the shared origin, so the three read as a column sum; in the
+  wide layout each weight sits under its own component mean. A weight sweep (beats 3,
+  5) greys the pull values; the pull sweep (beat 7) greys the weights; holds show all
+  six. At most four emphasised numbers change between frames.
+- **Announced once.** The picture's `aria-label` now names what is drawn and carries
+  no live values; the scrubber's value text is the one place they are announced.
+- **Per-frame work.** Both 241-point paths, the axes, ticks, fixed labels, the valley
+  mark, `at(0)` and the layout constants on the root are computed in `layout()`, once
+  per width. `render()` moves only the probe, its six numbers and the three arrows.
+- **Serialisation.** Drawing coordinates are written at 0.0001 px and the arrows no
+  longer carry an unrounded `data-magnitude`, so the byte-compared prints hold no raw
+  doubles. The unrounded state stays on the root's `data-pulls` and `data-score`.
+- The picture grew by one label row: 713 × 492 wide, 296 × 518 narrow.
+
+Local acceptance after this pass: **48/48** scene checks; the fixture audit passes.
+Frames were inspected at 1280 and 375 pixels, with and without reduced motion, and
+the script-free prints at both widths. Recorded digests above are left for the later
+pass that re-records them.
+- **Less prose around the picture.** The boundary now shows one sentence; every remaining scope note,
+  unchanged, sits in a closed "Scope and caveats" disclosure beside the transcript. New asset sizes
+  and digests for this pass are recorded once in [the review-pass receipt](excerpt-review-pass.md).

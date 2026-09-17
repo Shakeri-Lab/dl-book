@@ -83,17 +83,23 @@ KaTeX, a video payload, or a general animation engine.
 
 | Time | Reveal |
 |---|---|
-| 0 s | Predict from four existing scores and validity marks. |
-| 5 s | Set the two padded scores to zero. |
-| 10 s | Their exponentials are one, not zero. |
-| 15 s | Normalize: padding still receives positive mass. |
-| 20 s | Use negative infinity for padded scores instead. |
-| 25 s | Their zero contributions leave the denominator. |
-| 30 s | Normalize the real keys; padded weights are zero, row sum one. |
+| 0 s | Predict from the four existing scores and validity marks. |
+| 5 s | Set the two padded scores to zero (the mistake, printed in wine). |
+| 10 s | Exponentiate: the four bars grow from their baselines for 3 s, then hold. The padded bars reach one, not zero. |
+| 15 s | One bracket draws across all four contributions; the shared sum appears when it lands. |
+| 20 s | Divide: weight bars grow for 3 s; one wine bracket names the padded share. |
+| 25 s | Hold 2 s on the announced edit, then push the padded scores from 0 toward −∞ on the same picture, arriving exactly at 30 s. |
+| 30 s | Hold the masked picture: padded contributions and share exactly zero, real weights sum to one. |
 | 35 s | Retain the final witness and state the at-least-one-real-key guard. |
 
+(Timeline as revised in the September 17, 2026 review pass, below. The first build
+switched between two precomputed rows and cleared the stage at 25 s.)
+
 Source/key labels are blue, probabilities green, operators neutral, and the
-wrong padded contribution wine. Meaning also appears in labels and geometry.
+wrong padded contribution wine: the padded score, its exponential bar, its weight
+bar, the padded half of the sum bracket, and the PAD-share bracket, for exactly as
+long as that contribution is non-zero. A padded share of exactly zero is neutral
+ink, because zero leakage is not an error. Meaning also appears in labels and geometry.
 Four columns remain aligned at phone widths; calculation levels reflow instead
 of shrinking an entire slide. No hover-only interaction or new parameter control.
 Default closed, paused, silent, 1.5× playback, keyboard/scrubbing/expanded view,
@@ -164,3 +170,68 @@ Lecture paths below are relative to
 | `6050-Ch13/storyboard.md` | `2a932bf1b8eafe5e029f20562a3091a54e4e3943373a0528947d271cb53e1dc8` |
 | `6050-Ch13/ch13-data.js` | `9c6da18e1816c503809c6c89556d475868d5ecb44756ee0dcf761e1776137b75` |
 | `audit-ch13-attention.py` | `59b18b88eb8db3de8ba4bfcc223bc24a01b96f33f6c9cd172a76958ebd6ce419` |
+
+## Review pass — September 17, 2026
+
+An independent review found that the scene had no motion: `render` used time only to pick
+a stage, so playback equalled reduced motion; the wrong-regime frame carried about fourteen
+live numbers; and at 25 s the stage was cleared and rebuilt, leaving a nearly blank picture
+for five seconds. Fixture, duration (40 s) and beats (0 5 10 15 20 25 30 35) are unchanged.
+
+- **One parameter drives the picture.** From 5 s on, everything is recomputed from `c`, the
+  contribution one padded slot makes to the shared sum; its score is `s = ln c`. `c = 1` is
+  the zeroed score, `c = 0` the mask. Sum, weights, bars and labels are the softmax at the
+  current `c` every frame; nothing blends two tables of answers. Published as
+  `data-pad-contribution`; `data-mode` is `raw`, `zeroed`, `pushing` or `masked`.
+- **The mechanism is one glide on the same picture (25–30 s).** Nothing is cleared. After a
+  2 s hold on the announced edit (label, push cue, `exp(−∞) = 0` shown unlit) the padded
+  score label runs 0 → −∞, the padded exponential bars shrink, the sum counts down
+  3.7233 → 1.7233 and travels with its bracket's centre, and the padded weight bars empty
+  while the real ones grow to 0.4090 and 0.5910. The glide ends exactly at 30 s, so an
+  arrow-key seek parks on the finished masked picture.
+- **Refinement of the brief's "bracket retracts".** A bracket end sliding leftwards would,
+  in a paused frame, show one padded column inside the sum and the other outside although
+  both contribute the same `c`. Instead the bracket has an ink half over the real keys and a
+  wine half over the padding; the wine half's ticks shrink and its line fades in step with
+  `c`, identically for every padded slot, and is gone at `c = 0`.
+- **Earlier beats move too.** Exponential bars (10–13 s) and weight bars (20–23 s) grow from
+  their baselines; the sum bracket draws across (15–18 s). Each number appears when its
+  mark arrives and then holds at least 2 s. Baselines are scenery from 0 s.
+- **Fewer numbers.** The two padded weights are read as the one PAD share; numbers no longer
+  in play turn grey and step down a size; a withheld number is blank as well as hidden. At
+  most eight emphasised numbers at any sampled instant (tested).
+- **Reduced motion** derives every quantity from the stage, never the clock: beat 5's still
+  is the wrong picture with the edit announced (`c = 1`), beat 6's the finished mask.
+  Captions were rewritten (at most 15 words) to be true of each still and of the motion
+  that follows, and to keep the phone-width pane the same height at every beat.
+- **Colour.** The receipt said the wrong padded contribution was wine; the code drew it
+  neutral. Now it is wine while non-zero (corrected above) and the masked PAD share reads
+  `0` in neutral ink. `exp(0) = 1` is lit only while `c = 1`; `exp(−∞) = 0` only when `c = 0`.
+- **Minus is U+2212** in every drawn number, the static prints, and the scrubber text (the
+  first build printed `-0.350` beside `−∞`). `data-shown-scores` keeps the machine string
+  `-Infinity`; it is never read to a person.
+- **One place for a live value.** The picture's `aria-label` is now a fixed structural
+  description; live values are spoken only in the scrubber's value text.
+- **Weight ruler.** The hard-coded `105/.65` overflowed for any weight above 0.65. Both
+  rulers are now set by the largest value the declared fixture can reach; the suite checks
+  bar bounds on the alternate fixtures, including a single real key with weight one.
+- **Dead CSS.** `.mbs-excluded` was never applied. It now quiets a masked column's arrow
+  (dashed, grey) while the column keeps its slot; a test fails on any unused `mbs-` rule.
+- **Per-frame work.** Fixture-only facts are published once at mount, width-only geometry
+  is placed in `layout()`, and DOM writes happen only on change: a held beat makes no
+  mutations (tested). Drawing coordinates are serialised at 0.0001 px; state is not rounded.
+- **Transcript** items 3–7 retell the new beats; every decimal in it is checked against the
+  fixture's computed values.
+
+Suite: `node --test scripts/test_mask_before_softmax_excerpt.cjs`, **50/50**. New checks:
+weights sum to one and equal exp/sum throughout the glide; `c`, the PAD share and the sum
+are monotone, held through 27 s and exactly finished from 30 s; the drawing differs at 26,
+27.5 and 29 s while reduced motion holds one still per beat, each equal to the settled
+normal frame; no hyphen-minus in any svg text. `scripts/audit_excerpt_fixtures.py` passes.
+Frames were inspected in Chromium at 1280 and 375 CSS pixels, normal and reduced motion:
+no overflow, no text outside the picture, no console errors, constant pane height. The
+hashes, byte sizes and counts recorded above predate this pass and are left for a later
+pass to refresh.
+- **Less prose around the picture.** The boundary now shows one sentence; every remaining scope note,
+  unchanged, sits in a closed "Scope and caveats" disclosure beside the transcript. New asset sizes
+  and digests for this pass are recorded once in [the review-pass receipt](excerpt-review-pass.md).

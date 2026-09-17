@@ -11,7 +11,7 @@ const {staticFrame}=require('./render_static_frames.cjs');
 const NAME='svd-circle-excerpt',scene=entry(NAME),widths=[240,296,360,519,520,553,713];
 // SVG pixels are serialized at nine decimal places. This bound applies only to
 // drawn coordinates, never to model matrices, singular values, ranks or errors.
-const PIXEL_EPSILON=5.1e-10;
+const PIXEL_EPSILON=5.1e-5; // half the 4-decimal geometry serialisation step (0.0001 px), plus slack
 const dot=(a,b)=>a.reduce((total,value,j)=>total+value*b[j],0);
 const columns=a=>a[0].map((_,j)=>a.map(row=>row[j]));
 const product=(a,b)=>a.map(row=>columns(b).map(column=>dot(row,column)));
@@ -242,8 +242,8 @@ test('SVD circle: the actual curve and two marker rays follow the computed map a
       close(Number(f.root.dataset.rulerExtent),Math.max(1,source.singularValues[0])+0.4);
       if(initialUnit===undefined) {initialUnit=unit;initialOrigin=origin;}
       close(unit,initialUnit);closeTree(origin,initialOrigin);
-      closeTree(pathPoints(f.$('[data-outline]')),want.image.map(point=>screen(f,point)),1e-9);
-      closeTree(pathPoints(f.$('[data-full-ghost]')),want.input.map(point=>screen(f,apply(want.full,point))),1e-9);
+      closeTree(pathPoints(f.$('[data-outline]')),want.image.map(point=>screen(f,point)),PIXEL_EPSILON);
+      closeTree(pathPoints(f.$('[data-full-ghost]')),want.input.map(point=>screen(f,apply(want.full,point))),PIXEL_EPSILON);
       for(let j=0;j<2;j++) {
         const marker=f.$(`[data-marker="${j}"]`),ray=f.$(`[data-ray="${j}"]`),point=screen(f,state.markerOutputs[j]);
         closeTree(markerPosition(marker),point,PIXEL_EPSILON);closeTree(JSON.parse(marker.dataset.position),point,PIXEL_EPSILON);

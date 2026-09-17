@@ -187,8 +187,11 @@ The QMD, both stored Markdown files and both PDF SHA-256 values above remain
 exactly unchanged from the original preview. No new PDF render or numerical
 execution is claimed for this HTML-only refinement.
 The revised final and depth-two frames were visually inspected at desktop,
-390px and 320px widths: no horizontal page overflow, label collisions or
-MathJax errors. Real playback advances, pause preserves position, and fullscreen
+390px and 320px widths: no horizontal page overflow or MathJax errors.
+(Corrected September 17, 2026: that inspection also recorded "no label
+collisions", which the independent review showed to be false. On the phone
+layout every vertical rail ran through the joint label above its node, and on
+the desktop the winner ring cut `#1 p 0.361`. See the review pass below.) Real playback advances, pause preserves position, and fullscreen
 controls work. The preview is left open at its direct anchor, paused at zero,
 with the temporary viewport override cleared. Independent final review confirms
 the ranked-list return contract and the absence of speculative-verification claims.
@@ -232,3 +235,84 @@ asset and metadata checks, public anchors resolve, and frozen stdout remains exa
 (`rendered-audits.log`). Final browser inspection confirms the supplied-prefix
 labels, top-choice/runner-up ending, working 1.5× playback/pause/reset, no math
 errors, and no horizontal page overflow. The preview remains paused at zero.
+
+## Review pass — September 17, 2026
+
+An independent review found the scene sound and its numbers right, and listed four
+presentation defects. Fixture, timeline (`data-duration` 40, eight beats), captions,
+transcript, boundary paragraph and arithmetic are unchanged. No QMD, shared file,
+manifest or other scene was touched.
+
+- **Phone layout: edges struck through labels.** With the rails vertical, each joint
+  label sat centred above its node, exactly where the incoming rail passes; the
+  `0.60`/`0.40` labels sat on the BOS diagonals; `given A x` crossed its rail. Now
+  every narrow label stands on the *outer* side of its rail (left of the left column,
+  right of the right one) at native 13/12 px: the joint above the node beside the
+  rail, the rank (`#1`, `#2`) as its own label beside the node, the edge factor and
+  its `given …` context right- or left-aligned against the rail. First-token factors
+  are pushed along the outward normal of their diagonal until the label box clears
+  the line, in both layouts. Rails moved from 25 %/75 % to 28 %/72 % so the widest
+  outer label (`given A x`) fits a 240 px picture; the two `other` stubs keep their
+  text off both rails; the narrow depth guides stand just above their row, where two
+  resting rings leave room. Desktop: joints are raised 5 px so the ring (r = 27)
+  clears `p 0.361`, the rank follows the joint on its right (on the left it met the
+  B diagonal), and the first column keeps at least 132 px from BOS so the B diagonal
+  arrives under B's label at the narrowest wide pane.
+- **Picture description.** The svg `aria-label` named candidates by internal ids
+  (`Retained: ByEOS, AxEOS`). It now joins each candidate's tokens: `Retained: B y
+  EOS, A x EOS`. `EOS`, not `<eos>`: it is what the node, the transcript and the same
+  label's "If one answer is requested: B y EOS" already say, it reads aloud sensibly,
+  and a raw `<` inside the attribute would break the `[^>]*` tag patterns in
+  `render_static_frames.cjs`. The joint probabilities were also announced twice (svg
+  label and scrubber `aria-valuetext`); the scrubber now names the beat and the
+  number of retained candidates, and the picture alone speaks the numbers.
+- **Clutter at the limit.** The final frame printed 22 probability labels, all green.
+  Nothing was removed. A number now carries `data-emphasis`: the newest depth is
+  `live` (green); older factors, joints and bounds stay but `muted` (grey, 12 px); at
+  the two comparison beats only the completed scores, their ranks and `0.361 > 0.264`
+  are `score` (green, bold). At most eight numbers are emphasised at any instant
+  (beat 6: two factors, two joints, two ranks, two bounds); the limit frame
+  emphasises five labels. `other` stubs remain bounds (`other 0.45`, `≤ 0.270`),
+  never tokens. The blue `given …` cues keep their colour: blue is the supplied
+  history, an author-approved cue, not a probability.
+- **Formula line.** The product and log-sum spans wrap to two lines at 302 px and the
+  log-sum breaks once more at 247 px. They sit in normal flow under the svg; the
+  comparison and bound summary end 14 px inside the picture, so they cannot meet.
+  The reserved `min-height` and `visibility: hidden` keep the caption from jumping.
+- **Found while looking: the script-free phone print was displaced.** The static svg
+  keeps the wide `713 × 490` viewBox while `player.css` reshapes its box to
+  `296 / 650`; the default `xMidYMid` centred the viewBox in that tall box, leaving
+  a blank band of about a third of the picture above the narrow print and pushing the
+  same amount out of the bottom, over the formula and caption. The svg now declares
+  `preserveAspectRatio="xMidYMin meet"` (the gate-product scene's remedy). Live
+  playback is unaffected: its viewBox already matches its box.
+- **Per-frame work.** The declared fixture is evaluated once and frozen; every printed
+  number is written at mount; geometry is computed in `layout()` on a width change;
+  stage-dependent visibility and emphasis are repainted only when the beat changes. A
+  frame within a beat moves the frontier ring(s) and nothing else. The fixture-only
+  `data-*` publications are written once, not re-serialised sixty times a second.
+- **Coordinate serialisation.** Geometry-only rounding went from `toFixed(9)` to
+  `toFixed(4)` (0.0001 px). The mathematical state is still never rounded. Churn: two
+  tolerances in the edge-endpoint test moved from 1e-8 to 1e-3.
+
+Tests: the scene suite grows from 44 to 52. New: a geometric regression over eleven
+widths (240–1280, both layouts), twenty-one times and reduced motion — no estimated
+label box within 2.5 px of any tree edge or `other` stub, none cut by a resting
+frontier ring, none overlapping another label, none outside the picture — using the
+gate-product suite's advance estimate (0.6 em a glyph at the label's CSS size) since
+JSDOM lays nothing out; run against the pre-review player it reports exactly the
+reviewed collisions (six joints, `0.60`/`0.40`, four contexts on the phone; the two
+diagonal labels and the ring through `#1 p 0.361` on the desktop). Also new: beats
+park every ring on a node; outer-side placement; the emphasis ledger per beat and the
+"nothing removed" inventory; token-named, once-only announcements; only the frontier
+moves within a beat; the comparison stays inside the picture; the script-free narrow
+print is top-anchored. `scripts/audit_excerpt_fixtures.py` passes.
+
+Looked at, not only tested: Chromium frames at 1280, 640, 375 and 320 px viewports
+(figure 713, 546, 302, 247 px) at 2, 7, 12, 14, 17, 22, 24, 27, 32, 34, 37 and 39.9 s,
+the same with reduced motion at 1280 and 375, and the script-free fallback at 1280
+and 375. No page overflow, no svg text outside the picture, no console errors.
+Recorded SHA-256 values and byte sizes above are left for the pass that records new ones.
+- **Less prose around the picture.** The boundary now shows one sentence; every remaining scope note,
+  unchanged, sits in a closed "Scope and caveats" disclosure beside the transcript. New asset sizes
+  and digests for this pass are recorded once in [the review-pass receipt](excerpt-review-pass.md).

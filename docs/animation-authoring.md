@@ -2,7 +2,12 @@
 
 Author-approved September 9, 2026. These are optional HTML explanations of existing
 book examples, not videos, new experiments, or a replacement for the static book.
-**Current source state — September 13, 2026:** twenty-one scenes are pushed through
+**Review pass — September 17, 2026:** an independent review of the twelve newest scenes led to
+fixes in all of them and to four contract changes below (prose budget, plain-text number
+format, never spoil a prediction, four-decimal geometry). See
+[the review-pass receipt](excerpt-review-pass.md). No new scene is authorized by it.
+
+**Source state — September 13, 2026:** twenty-one scenes are pushed through
 `00c0730` (network-first derivative gates). Its publish run `34770754602` is
 blocked by a bootstrap HTTP 503 and the known Chapter 18 signed-zero gate.
 The twenty-second scene, [greedy versus beam](greedy-tree-excerpt.md), is
@@ -126,8 +131,11 @@ explicit illustrative aliases for the book's unchanged ID fixtures. One sequence
 appears at a time; the phone layout wraps into two three-column strips. Counts
 three and four remain earned receipts, and log-probability terms stay symbolic.
 The helper's sequence sum is not the SFT objective's negative mean. No token is
-removed from context. Timeline highlighting carries the mechanism without adding
-hover-only attention paths or a fabricated distribution plot.
+removed from context. One ink marker carries the mechanism: it rides the last prompt
+slot's output to its shifted target, passes the ×1 gate and lands on a score rail under
+the targets; taken from an excluded output it stops at the ×0 gate's stop bar. Mask
+gates are neutral operators, never wine. No hover-only attention paths and no
+fabricated distribution plot.
 
 ### LayerNorm versus BatchNorm: show who shares the statistics
 
@@ -483,14 +491,28 @@ math — and it is what `interactives/_template` encodes and the harness's
    equation in the chapter. Animate a formula by toggling CSS classes on sub-expressions
    wrapped in `\class{name}{…}` — a wash, a strike — never by rewriting TeX during
    playback, and never with a live-changing number inside the formula: a changing number
-   is plain `<text>` on the picture. The recipe is below.
+   is plain `<text>` on the picture. The recipe is below. Plain text obeys the same rule:
+   a minus sign is U+2212, never a hyphen, and a small number is `9.54 × 10⁻⁷`, never
+   `9.54e-7` and never a raw double — on the picture, in both static prints, and in
+   every `aria-label` or `aria-valuetext` (the gate product's formatter is the pattern).
+   Suites that parse printed numbers parse the true minus back first.
 6. **Text budget.** On the picture: labels only (`w`, `x`, `y`, `z`, `a`, `L`, a unit, a
    value). One typeset formula line under the picture. One caption line of at most twenty
    words saying what is happening now. The question above the pane, the boundary
-   paragraph below it, and the transcript stay as they are: they are prose, not the
-   picture.
+   below it, and the transcript are prose, not the picture — but prose is budgeted too.
+   The boundary shows **one** sentence (about thirty words at most): the single most
+   important thing the scene does not claim. Every further qualifier — drawing devices,
+   computed variants, colour decisions, what a later section measures — sits in a closed
+   `details.mechanism-scope` disclosure, "Scope and caveats", beside the transcript. The
+   September 17 review measured 70–360 words of always-visible caveats under forty-second
+   pictures; on a phone the caveats were longer than the animation. Nothing was deleted:
+   the wrapper keeps the `mechanism-boundary` class, so suites that read its text still
+   bind every sentence.
 7. **Stillness when the reader should read.** A reveal holds for at least two seconds.
-   Nothing flashes.
+   Nothing flashes. **A prediction is never spoiled:** while a caption asks the reader to
+   predict, the answer is absent from the drawing, the svg `aria-label` and the scrubber's
+   value text — including a glide that has already started toward it. Test this from the
+   DOM at fine time steps, not by re-implementing the player's timing.
 8. **Reduced motion** is the same picture at each beat with the object jumped to its beat
    position.
 9. **Static fallback** is the final frame drawn as static SVG inside the panel,
@@ -501,7 +523,9 @@ math — and it is what `interactives/_template` encodes and the harness's
    MathJax label IDs unique and give their existing labels narrow static geometry.
    Inspect actual phone-width type, not only the presence of a narrow group.
    Serialize computed drawing coordinates at an explicit subpixel precision before
-   requiring byte-identical SVG fallbacks. Platform math libraries can differ in
+   requiring byte-identical SVG fallbacks: four decimal places (0.0001 px). Nine places
+   left the SVD scene's closest coordinate only about twenty ulps from a rounding
+   boundary; four moves every coordinate roughly five orders of magnitude further away. Platform math libraries can differ in
    their last bits. Keep the underlying arithmetic unrounded and test it separately;
    a rendering precision contract must not loosen numerical-evidence gates.
 10. **Native links inside raw panels.** HTML inserted by the excerpt filter does not

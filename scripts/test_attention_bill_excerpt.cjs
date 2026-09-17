@@ -56,6 +56,27 @@ function vertices(node) {
   return points;
 }
 
+// JSDOM has no text layout. As in the layernorm and SVD suites, a label's extent is a
+// conservative 0.6 em per character at its declared size; browser review owns real glyphs.
+function textBox(node) {
+  const size=attr(node,'font-size'),length=Array.from(node.textContent).length*size*0.6;
+  const x=attr(node,'x'),y=attr(node,'y'),anchor=node.getAttribute('text-anchor')||'start';
+  assert(['start','middle','end'].includes(anchor));
+  const before=anchor==='end'?length:anchor==='middle'?length/2:0;
+  const transform=node.getAttribute('transform')||'';
+  if(!transform) return {left:x-before,right:x-before+length,top:y-0.8*size,bottom:y+0.25*size};
+  // The only transform the scene uses: a quarter turn about the label's own anchor.
+  assert.equal(transform,`rotate(-90 ${x} ${y})`);
+  return {left:x-0.8*size,right:x+0.25*size,top:y-(length-before),bottom:y+before};
+}
+const overlap=(a,b,gap=0)=>a.left<b.right+gap&&b.left<a.right+gap&&a.top<b.bottom+gap&&b.top<a.bottom+gap;
+const rectBox=node=>({left:attr(node,'x'),right:attr(node,'x')+attr(node,'width'),
+  top:attr(node,'y'),bottom:attr(node,'y')+attr(node,'height')});
+// Every link segment is axis-aligned, so a segment is a degenerate box.
+const segments=node=>{const p=vertices(node);return p.slice(1).map((point,i)=>({left:Math.min(p[i][0],point[0]),
+  right:Math.max(p[i][0],point[0]),top:Math.min(p[i][1],point[1]),bottom:Math.max(p[i][1],point[1])}));};
+const visibleTexts=f=>[...drawing(f).querySelectorAll('text')].filter(visible);
+
 registerTransportTests(NAME,{witness:/38(?:,|\s)?416/,
   anchors:['attention-bill-playback-help'],width:713});
 registerBeatHoldTest(NAME);
@@ -180,17 +201,21 @@ test('attention bill: one selected patch connects to both its query row and its 
     for(const time of [0,5,9.99,10,12.5,14.99,15,20,25,30,40]) {
       f.seek(time);
       const active=time>=10 && time<15;
-      const patch=f.$('[data-patch-cell="0"]'),highlight=f.$('[data-patch-highlight]');
+      // Token i is patch i in raster order, and it owns row i and column i of the score grid.
+      const index=Number(f.root.dataset.patchIndex);
+      assert(Number.isInteger(index)&&index>0&&index<Number(f.root.dataset.startTokens)-1,
+        'an interior token: row 0 and column 0 lie under the square\'s own border');
+      const patch=f.$(`[data-patch-cell="${index}"]`),highlight=f.$('[data-patch-highlight]');
       const row=f.$('[data-score-row]'),column=f.$('[data-score-column]');
       const rowLink=f.$('[data-patch-link="row"]'),columnLink=f.$('[data-patch-link="column"]');
-      assert.equal(Number(f.root.dataset.patchIndex),0);
+      for(const node of [highlight,row,column]) assert.equal(Number(node.dataset.index??node.dataset.tokenIndex),index);
       for(const node of [highlight,row,column,rowLink,columnLink]) assert.equal(Boolean(visible(node)),active);
       if(!active) continue;
+      assert.equal(Number(patch.dataset.index),index);
       for(const coordinate of ['x','y','width','height']) close(attr(highlight,coordinate),attr(patch,coordinate));
       const square=f.$('[data-score-square]'),unit=Number(f.root.dataset.pixelsPerEntry);
-      for(const strip of [row,column]) {
-        close(attr(strip,'x'),attr(square,'x')); close(attr(strip,'y'),attr(square,'y'));
-      }
+      close(attr(row,'x'),attr(square,'x')); close(attr(row,'y'),attr(square,'y')+index*unit,1e-10);
+      close(attr(column,'x'),attr(square,'x')+index*unit,1e-10); close(attr(column,'y'),attr(square,'y'));
       close(attr(row,'width'),attr(square,'width')); close(attr(row,'height'),unit);
       close(attr(column,'width'),unit); close(attr(column,'height'),attr(square,'height'));
       const source=[attr(patch,'x')+attr(patch,'width')/2,attr(patch,'y')+attr(patch,'height')/2];
@@ -300,7 +325,7 @@ test('attention bill: both dimension brackets and coarse area tiles use the squa
       assert.match(f.$('[data-column-label]').textContent,new RegExp(`^${count} key columns$`));
       const tiles=[...drawing(f).querySelectorAll('[data-area-tile]')];
       assert.equal(tiles.length,16);
-      if(time<25) assert(tiles.every(tile=>!visible(tile)));
+      if(time<=22) assert(tiles.every(tile=>!visible(tile)));
       else {
         const x=attr(square,'x'),y=attr(square,'y'),block=attr(ghost,'width');
         const positions=new Set();
@@ -316,7 +341,7 @@ test('attention bill: both dimension brackets and coarse area tiles use the squa
         // One comparison block is the entire original 49-by-49 matrix, not a
         // single score entry or a local-attention window.
         close((block/unit)**2,2401,1e-10);
-        if(time>=28) assert(tiles.every(visible));
+        if(time>=25) assert(tiles.every(visible));
       }
     }
   }
@@ -325,15 +350,23 @@ test('attention bill: both dimension brackets and coarse area tiles use the squa
 test('attention bill: area stamps are deterministic comparison blocks, not intermediate matrix states', t => {
   const f=fixture(t,NAME); f.load(); f.open();
   let previous=0;
-  for(let index=0;index<=64;index++) {
-    const time=24+index/16; f.seek(time);
+  for(let index=0;index<=128;index++) {
+    const time=20+index/16; f.seek(time);
     const tiles=[...drawing(f).querySelectorAll('[data-area-tile]')];
     const shown=tiles.filter(visible).length;
     assert.equal(shown,Number(f.root.dataset.stampedTiles));
     assert(shown>=previous && shown<=16); previous=shown;
     assert.equal(Number(f.root.dataset.currentTokens),196);
     assert.equal(Number(f.root.dataset.currentEntries),38416);
-    if(time<25) assert.equal(shown,0);
+    // The new square is a reveal: it holds two seconds before anything is stamped on it.
+    if(time<=22) assert.equal(shown,0);
+    // The stamping leads into beat 5 and is finished there; nothing moves afterwards.
+    if(time>=25) assert.equal(shown,16);
+    for(const tile of tiles.filter(visible)) {
+      const ink=tile.hasAttribute('opacity')?attr(tile,'opacity'):1;
+      assert(ink>0&&ink<=1);
+      if(time>=25) assert(!tile.hasAttribute('opacity'),'a finished stamp is fully inked');
+    }
   }
   assert.equal(previous,16);
   const labels=[f.$('[data-tile-label]').textContent,f.$('[data-tile-entries]').textContent].join(' ');
@@ -343,6 +376,157 @@ test('attention bill: area stamps are deterministic comparison blocks, not inter
   const r=fixture(t,NAME,{reduced:true}); r.load(); r.open(); r.seek(25);
   assert.equal(Number(r.root.dataset.stampedTiles),16,'reduced motion presents the completed comparison at its beat');
   assert.equal([...drawing(r).querySelectorAll('[data-area-tile]')].filter(visible).length,16);
+});
+
+test('attention bill: hollow locators make the one-pixel query row and key column findable at every width', t => {
+  const f=fixture(t,NAME); f.load(); f.open();
+  const css=read('attention-bill/player.css');
+  assert.match(css,/\.ab-locator\s*\{[^}]*fill:\s*none[^}]*stroke:\s*var\(--ab-input\)/,
+    'a locator is a hollow outline in input blue: it finds the strip and supplies no magnitude');
+  assert.match(css,/\.ab-link\s*\{[^}]*stroke:\s*var\(--ab-input\)/);
+  for(const width of widths) {
+    f.resize(width);
+    const rowLocator=f.$('[data-row-locator]'),columnLocator=f.$('[data-column-locator]');
+    for(const time of [0,5,9.99,15,20,25,30,40]) {
+      f.seek(time);
+      for(const node of [rowLocator,columnLocator,f.$('[data-row-name]'),f.$('[data-column-name]'),
+        ...f.root.querySelectorAll('[data-link-head],[data-link-source]')]) assert(!visible(node),`trace mark shown at ${time}s`);
+    }
+    for(const time of [10,12.5,14.99]) {
+      f.seek(time);
+      const square=rectBox(f.$('[data-score-square]')),unit=Number(f.root.dataset.pixelsPerEntry);
+      const row=rectBox(f.$('[data-score-row]')),column=rectBox(f.$('[data-score-column]'));
+      // True scale is kept: the strips are as thin as one entry really is on this ruler.
+      assert(unit<2,'the fixed side scale leaves about a pixel per entry');
+      close(row.bottom-row.top,unit); close(column.right-column.left,unit);
+      for(const [locator,strip,thin,long] of [[rowLocator,row,['top','bottom'],['left','right']],
+        [columnLocator,column,['left','right'],['top','bottom']]]) {
+        assert(visible(locator));
+        const box=rectBox(locator),thickness=box[thin[1]]-box[thin[0]];
+        assert(thickness>=8,`locator only ${thickness}px thick at ${width}px`);
+        assert(attr(locator,'stroke-width')>=1.5);
+        // Centred on the strip with clear air either side, and exactly as long as the square.
+        close((box[thin[0]]+box[thin[1]])/2,(strip[thin[0]]+strip[thin[1]])/2,1e-10);
+        assert(strip[thin[0]]-box[thin[0]]>=2.5&&box[thin[1]]-strip[thin[1]]>=2.5);
+        close(box[long[0]],square[long[0]]); close(box[long[1]],square[long[1]]);
+        // Interior: neither locator straddles the square's border.
+        assert(box[thin[0]]>square[thin[0]]+1&&box[thin[1]]<square[thin[1]]-1);
+      }
+      for(const link of f.root.querySelectorAll('[data-patch-link]')) assert(attr(link,'stroke-width')>=1.5);
+      // Each link ends in an arrowhead on its own target, and both start at one dot in the patch.
+      const source=f.$('[data-link-source]');
+      for(const role of ['row','column']) {
+        const link=f.$(`[data-patch-link="${role}"]`),head=f.$(`[data-link-head="${role}"]`).getAttribute('d').match(/-?\d+(?:\.\d+)?/g).map(Number);
+        close(head[0],attr(link,'data-target-x'),1e-10); close(head[1],attr(link,'data-target-y'),1e-10);
+        close(attr(source,'cx'),attr(link,'data-source-x'),1e-10); close(attr(source,'cy'),attr(link,'data-source-y'),1e-10);
+      }
+      assert.match(f.$('[data-row-name]').textContent,/^query row$/);
+      assert.match(f.$('[data-column-name]').textContent,/^key column$/);
+    }
+  }
+});
+
+test('attention bill: no link, locator, or bracket crosses a label, and no two labels collide', t => {
+  const f=fixture(t,NAME); f.load(); f.open();
+  for(const width of widths) {
+    f.resize(width);
+    for(const time of [0,5,10,12.5,15,17.5,20,22.5,25,27.5,30,35,40]) {
+      f.seek(time);
+      const texts=visibleTexts(f).map(node=>({node,box:textBox(node)}));
+      for(const [i,a] of texts.entries()) for(const b of texts.slice(i+1))
+        assert(!overlap(a.box,b.box),`"${a.node.textContent}" collides with "${b.node.textContent}" at ${width}px, ${time}s`);
+      const lines=[...drawing(f).querySelectorAll('[data-patch-link],[data-row-bracket],[data-column-bracket]')].filter(visible);
+      if(time>=10&&time<15) assert.equal(lines.filter(node=>node.hasAttribute('data-patch-link')).length,2);
+      for(const line of lines) for(const segment of segments(line)) for(const {node,box} of texts)
+        assert(!overlap(segment,box,2),
+          `${line.getAttribute('class')} crosses "${node.textContent}" at ${width}px, ${time}s`);
+      for(const locator of [...drawing(f).querySelectorAll('[data-row-locator],[data-column-locator]')].filter(visible))
+        for(const {node,box} of texts) assert(!overlap(rectBox(locator),box,2),`a locator covers "${node.textContent}"`);
+    }
+  }
+  // The regression itself: at beat 2 the column link enters the square from above, and the
+  // counted column label that used to sit in its way now waits for beat 3.
+  f.resize(713); f.seek(12);
+  assert(!visible(f.$('[data-column-label]'))&&!visible(f.$('[data-row-label]')));
+  assert(!visible(f.$('[data-column-bracket]'))&&!visible(f.$('[data-row-bracket]')));
+  f.seek(15);
+  for(const name of ['column-label','row-label','column-bracket','row-bracket']) assert(visible(f.$(`[data-${name}]`)));
+});
+
+test('attention bill: an arrow-key seek to beat 5 parks on the finished, countable tiling', t => {
+  for(const reduced of [false,true]) {
+    const f=fixture(t,NAME,{reduced}); f.load(); f.open();
+    f.seek(20); f.key('ArrowRight'); close(f.time,25);
+    const tiles=[...drawing(f).querySelectorAll('[data-area-tile]')];
+    assert.equal(tiles.filter(visible).length,16,'the caption says count the tiles: all sixteen are there to count');
+    assert(tiles.every(tile=>!tile.hasAttribute('opacity')));
+    assert.match(f.$('[data-caption]').textContent,/^Count the equal-area tiles\./);
+    assert(visible(f.$('[data-tile-label]'))&&visible(f.$('[data-tile-entries]')));
+    // One coherent still per beat: beat 4 is the bare new square, beat 5 the full tiling.
+    f.key('ArrowLeft'); close(f.time,20);
+    assert.equal(tiles.filter(visible).length,0);
+    if(reduced) for(const time of [22.5,24,24.99]) { f.seek(time); assert.equal(tiles.filter(visible).length,0); }
+  }
+});
+
+test('attention bill: every class the formula line is given has a rule to give it a purpose', t => {
+  const f=fixture(t,NAME); f.load(); f.open();
+  const css=read('attention-bill/player.css'),seen=new Set();
+  for(let time=0;time<=40;time+=0.5) { f.seek(time); for(const cls of f.$('[data-formula]').classList) seen.add(cls); }
+  assert(seen.size>1);
+  for(const cls of seen) assert(css.includes(`.${cls}`),`player.css has no rule for .${cls}`);
+  assert(!seen.has('ab-boundary'));
+  assert.doesNotMatch(read('attention-bill/player.js'),/ab-boundary/);
+});
+
+test('attention bill: the final frame speaks two factors, each on its own mark, and mutes the rest', t => {
+  const f=fixture(t,NAME); f.load(); f.open();
+  for(const width of widths) {
+    f.resize(width);
+    for(const time of [30,35,40]) {
+      f.seek(time);
+      const area=mark(f,'ratio'),length=mark(f,'linear-ratio');
+      assert.equal(area.textContent,'×16'); assert.equal(length.textContent,'×4');
+      for(const name of ['font-size','font-weight','text-anchor'])
+        assert.equal(area.getAttribute(name),length.getAttribute(name),`the two factors share one ${name}`);
+      assert(attr(area,'font-size')>=24);
+      // ×16 sits on the area it measures; ×4 sits on the length it measures.
+      const square=rectBox(f.$('[data-score-square]')),bar=rectBox(f.$('[data-linear-bar]'));
+      const inside=(node,box)=>attr(node,'x')>box.left&&attr(node,'x')<box.right&&attr(node,'y')>box.top&&attr(node,'y')<=box.bottom;
+      assert(inside(area,square)); assert(inside(length,bar));
+      close((square.left+square.right)/2,attr(area,'x')); close((bar.left+bar.right)/2,attr(length,'x'));
+      // The bar is the square's own side, drawn directly beneath it: length against area.
+      close(bar.left,square.left); close(bar.right,square.right); assert(bar.top>square.bottom);
+      const ticks=vertices(f.$('[data-linear-ticks]')).filter((_,i)=>i%2===0).map(point=>point[0]);
+      assert.equal(ticks.length,3); ticks.forEach((x,i)=>close(x,bar.left+(i+1)*(bar.right-bar.left)/4,1e-10));
+      // Everything else steps back: muted or small, and the beat-5 tile note is withdrawn.
+      for(const node of visibleTexts(f)) {
+        if(node===area||node===length) continue;
+        const quiet=/\bab-muted\b/.test(node.getAttribute('class')||'')||attr(node,'font-size')<=12;
+        assert(quiet,`"${node.textContent}" competes with the two factors at ${width}px`);
+        assert(attr(node,'font-size')<=14);
+      }
+      assert(!visible(f.$('[data-tile-label]'))&&!visible(f.$('[data-tile-entries]')));
+    }
+  }
+});
+
+test('attention bill: few numbers are live at once and each is announced in one place', t => {
+  const f=fixture(t,NAME); f.load(); f.open();
+  const range=f.$('[data-controls] input[type="range"]');
+  for(const width of [296,713]) {
+    f.resize(width);
+    for(let time=0;time<=40;time+=2.5) {
+      f.seek(time);
+      const live=visibleTexts(f).filter(node=>/\d/.test(node.textContent)&&!/\bab-muted\b/.test(node.getAttribute('class')||''));
+      assert(live.length<=8,`${live.length} emphasised numbers at ${time}s`);
+      // The scrubber names the beat; the counts live in the picture's own description.
+      assert.doesNotMatch(range.getAttribute('aria-valuetext').replace(/^\d+:\d\d of \d+:\d\d\. /,''),/\d/);
+    }
+  }
+  f.seek(40);
+  const label=f.$('[data-figure] svg').getAttribute('aria-label');
+  for(const value of ['38,416','2,401']) assert.equal(label.split(value).length,2,`${value} is described once`);
 });
 
 test('attention bill: playback history and resizing cannot change a frame', t => {
