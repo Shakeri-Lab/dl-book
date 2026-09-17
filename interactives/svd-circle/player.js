@@ -66,7 +66,7 @@
   // Serialize display coordinates to nine decimal places (at most 0.5e-9 CSS
   // pixel rounding). libm last bits differ across platforms; they must not turn
   // an identical picture into different SVG bytes. Model state stays unrounded.
-  const pixel=value=>Number(value.toFixed(9));
+  const pixel=value=>Number(value.toFixed(4));
   const make=(tag,attributes,text='',parent=drawing)=>{
     const node=document.createElementNS(NS,tag);
     for(const[key,value]of Object.entries(attributes))node.setAttribute(key,String(typeof value==='number'?pixel(value):value));
@@ -77,7 +77,7 @@
   const label=(value,cls='',attributes={})=>make('text',{'text-anchor':'middle','font-size':13,class:cls,...attributes},value);
   const heading=label('', 'svd-muted',{'data-context':'','font-size':13});
   const axes=[0,1].map(index=>make('line',{class:'svd-axis','data-axis':index}));
-  const ticks=[-3,-1,1,3].map(value=>({line:make('line',{class:'svd-axis','data-tick':value}),label:label(String(value),'svd-muted',{'font-size':12})}));
+  const ticks=[-3,-1,1,3].map(value=>({line:make('line',{class:'svd-axis','data-tick':value}),label:label(String(value).replace('-','−'),'svd-muted',{'font-size':12})}));
   const origin=make('circle',{class:'svd-origin',r:2.5,'data-origin':''});
   const fullGhost=make('path',{class:'svd-ghost','data-full-ghost':''});
   const outline=make('path',{class:'svd-outline','data-outline':''});
