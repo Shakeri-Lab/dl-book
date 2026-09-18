@@ -10,7 +10,15 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 
 ---
 
-> **Current work — mechanism replay review pass, September 17, 2026.** An independent review of
+> **Current work — mechanism replay value pass, September 18, 2026.** The author asked whether a
+> weak replay "even helps". All twenty-two were judged by the first/last-frame test; derivative
+> gates, mask/predictor, LayerNorm axis and hinge bump failed and were redesigned so the motion
+> is the mechanism (three gain or keep one draggable parameter). Every panel now ends with a
+> hidden-answer transfer question, recomputed by `scripts/test_excerpt_checks.cjs`. HTML-only.
+> Receipt: `docs/excerpt-value-pass.md`. No learner data exists yet; the questions are written
+> to double as exit-ticket items. Retiring a scene remains the author's call.
+>
+> **Previous — mechanism replay review pass, September 17, 2026.** An independent review of
 > the twelve replays added since `0674cab` found no numerical error but one spoiled prediction
 > (derivative gates), one scene with no motion (mask before softmax) and a set of legibility
 > defects; all are fixed, every grammar scene's caveats are folded behind one visible sentence,

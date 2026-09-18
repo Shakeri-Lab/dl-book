@@ -1642,3 +1642,139 @@ forty-second picture. Each boundary now shows one sentence; every remaining sent
 sits in a closed "Scope and caveats" disclosure beside the transcript (hinge bump's first
 sentence was split at ", which is why" so its lead could stand alone). No player, fixture, beat
 or static frame changed. Sizes and digests: [the review-pass receipt](excerpt-review-pass.md).
+
+## Hinge bump value redesign — September 18, 2026
+
+The author's test for every excerpt: replace the animation by its first and last frames; if a
+student loses nothing, the motion is not carrying the mechanism. The September 17 hinge bump
+showed its three partial sums well, but −2 arrived as a given: nothing let the reader see that
+it is forced, and two frames (three ramps; the finished bump) lost little. The duration (36 s),
+the beats (0, 6, 14, 22, 30), the fixture attributes and the manuscript are unchanged; the
+player, the panel, the stylesheet and the suite were rewritten around one idea.
+
+**Misconception targeted.** *"ReLU ramps only ever go up, so a sum of them cannot make something
+local."* What the student should leave with is the slope ledger: each hinge, as x passes its
+breakpoint, adds its coefficient to the running slope — +1, then +1 − 2 = −1, then −1 + 1 = 0 —
+and therefore *why* the middle coefficient has to be exactly −2 (equal spacing, outer
+coefficients 1) for the sum to come back to zero and stay there.
+
+**What the motion now carries that two frames could not.**
+
+1. *One control, the middle coefficient c on h₂.* A real `<input type="range">` outside
+   `[data-controls]`, −3 … +1 in steps of 0.25, timeline-driven by default; dragging pauses
+   playback and redraws the whole picture for the dragged value; any timeline action (play from a
+   pause, a scrub, an arrow-key beat, Home/End) resumes the timeline's value; its own keys never
+   reach the pane's beat seeking, and the pane listener mirrors the transport's alt/ctrl/meta and
+   auto-repeat guard. The pattern is `interactives/reference-tilt/player.js`. It is drawn in the
+   emphasis ink the hinges already use — nothing here is learned, so nothing is orange.
+2. *The sweep is the operation.* c enters two running sums at once, so turning it turns the last
+   two pieces of the green sum by the same amount: the middle piece about the apex (0.5, 2), the
+   tail about (0.5, 0), a lever whose far end comes down from above the plot. With too little
+   (c = −1) the sum plateaus and then climbs away; with too much (c = −3) it dives below zero for
+   ever; only at −2 does the tail lie flat *on zero*, because the last slope 2 + c and the height
+   at the last breakpoint 4 + 2c vanish together only there. The timeline sweeps +1 → −2 across
+   the whole Fold beat and lands exactly at the Lock beat (a glide finishes at the beat it leads
+   into); the reader can overshoot by hand.
+3. *The ledger is on the picture and is written in x-order.* Above the plot, on top of each
+   breakpoint's rule, the term that switches on there (`+1 h₁`, `c h₂` with c's live value in the
+   control's heavier ink, `+1 h₃`); between the rules, the slope of the sum on that piece in the
+   sum's green. In the Add beat a constant-speed pen draws the plain sum on, and each term gains
+   its coefficient, and each slope is written, as the pen crosses that breakpoint: +1, +2, +3 —
+   the misconception's own picture, "only up".
+4. *The prediction is withheld.* The Predict beat asks which coefficient brings the sum back to
+   zero to stay. Until the sweep has landed, −2 is absent from the drawing, the svg `aria-label`,
+   the svg `<title>` (a hover tooltip), the scrubber's and the control's value text, the readout
+   and the caption; the formula line shows a second static identity, g(x) = h₁ + *c* h₂ + h₃,
+   and swaps to the chapter's g(x) = h₁ − 2h₂ + h₃ only once the sum has locked. Neither TeX
+   source is ever rewritten; the swap is two root classes. The always-visible prose around the
+   pane (question, intro, the boundary's lead) no longer names the coefficient either.
+5. *The payoff is something the eye sees.* The pale target stands the whole time; when the sum
+   lands on it the fill deepens, the dashed edge disappears under the sum, the peak numeral 2
+   and the window bracket arrive, and the tail's slope reads 0. Dragged off −2, all of that goes
+   away again and one of three captions says which side the reader is on.
+6. *The dashed line is always the term.* c starts at +1 — a bare ramp — so the first frame's
+   three plain hinges are exactly the three terms at the control's starting value and the dashed
+   line is c·h₂ at every instant. The September 17 player swung the drawn ramp from +h₂ to
+   −2h₂ while admitting 0 → −2 into the sum, a drawing device in which the dashed line was not
+   the term being added; that device is gone. This is why the control runs to +1 rather than
+   stopping at 0 as first briefed: at c = 0 the first frame's middle ramp would have to lie flat
+   on the axis, or be drawn as something it is not.
+
+**Beats (times unchanged; renamed).** *Ramps* 0–6: three ramps, the pale target, the question.
+*Add* 6–14: the pen and the ledger. *Predict* 14–22: a hold; the caption asks. *Fold* 22–30: the
+sweep. *Lock* 30–36: peak, bracket, the chapter's identity with its coefficient washed, then the
+ramps step back to a ghost. Reduced motion: one still per beat — holds are themselves, Add is
+its finished drawing, Fold is the finished swing; the coefficient stands at +1 or −2, never
+between.
+
+**Removed.** The close beat in which h₃ joined last; the eased entry amounts of h₂ and h₃; the
++h₂ → −2h₂ drawing device; the slope entries riding the pieces (they could not follow a piece
+that leaves the plot); the ramp names at the feet of the ramps (the dragged sum passes through
+that corner); the consumption of the target; the live coefficients in the svg `aria-label` and
+in the scrubber's value text (the control announces them, once); the 161-sample paths (every
+curve here is piecewise linear, so each is now the polyline through its own vertices, and
+`panel.html` fell from 23,667 bytes at `030fcf7` to about 15 KB); two-decimal geometry (now
+four).
+
+**Declared computed variants** (none is a number of the chapter; the manifest text for them is
+in the redesign report, since `interactives/manifest.json` is outside this change's limits):
+
+1. The family g_c(x) = h₁ + c·h₂ + h₃ at each of the control's seventeen values
+   c = −3, −2.75, …, +1, and at every intermediate c of the timeline's eased sweep from +1 to −2.
+   Only c = −2 is the chapter's `bump`.
+2. Its slopes on the four pieces, 0, 1, 1 + c, 2 + c — the running sums of the coefficients —
+   of which the ledger writes the last three, at rest spelt short (−1.25, −0.5, 0) and during the
+   sweep to two decimals.
+3. The value at the right edge of the domain, g_c(5) = 4.5 (2 + c), announced only in the
+   control's `aria-valuetext`; and the height at the last breakpoint, g_c(2.5) = 4 + 2c, named
+   only in the closed scope text. The apex g_c(0.5) = 2 does not depend on c.
+4. As before: the peak 2, the final slopes 0, +1, −1, 0, the target silhouette, the bracket on
+   [−1.5, 2.5]. New: the second formula-line identity with the symbol c, which is this panel's
+   notation and not the chapter's; the plot's y-range, now −1.1 … 3.6.
+
+The suite recomputes all of it independently of the player: slopes by finite differences at
+every stop, the end value, the height at 2.5, and that exactly one stop of the control is zero
+outside [−1.5, 2.5].
+
+**Boundary sentences the control made false, rewritten.** The lead keeps one sentence but no
+longer prints the answer the pane now asks for: "Nothing here is learned: the three breakpoints
+and the three coefficients are placed by hand, as the chapter places them." In the closed scope:
+"this panel has no control to turn" → the one control turns the middle coefficient by hand, in
+ink, and no optimizer touches it; "no intermediate coefficient is ever written" → the control's
+range, the timeline's sweep, and the statement that every sum, slope and end value for c ≠ −2
+is this panel's declared computed variant and not the chapter's; "it is consumed the moment the
+sum reaches it" → it stays while the control can still miss it; "of which the panel writes at
+most two at a time" → the ledger writes the last three; "that is … not something this panel
+shows" → why −2 is forced (equal spacing, outer coefficients 1: 2 + c and 4 + 2c vanish
+together). The closing sentence — one bump is a construction, not an approximation theorem — is
+unchanged.
+
+**Still out of scope.** Learning any of these numbers; unequal spacing or outer coefficients
+other than 1 (where the forced value differs and a bump may need a different third coefficient);
+more than one bump, tiling, and the approximation theorem; whether training finds such hinges.
+A second knob would be a second scene.
+
+**First/last-frame verdict.** Passes. The first frame (three ramps, a pale target) and the last
+(the bump, the ledger +1, −1, 0) do not show that any other coefficient fails, nor that the two
+later slopes are tied together; the sweep and the control do.
+
+**Checks.** `node --test scripts/test_hinge_bump_excerpt.cjs`: 56 tests, 56 pass (the transport,
+beat-hold and grammar suites it inherits, plus: the family's arithmetic at all seventeen stops
+against the dragged DOM; the drawn sum against g_c at every 0.05 s; the two later pieces turning
+together and the tail's line always through (0.5, 0); landing exactly at 30 s; the ledger
+following the pen; the prediction withheld at 0.01 s steps across drawing, label, title, both
+value texts, readout, caption and formula classes; drag, resize, fullscreen, speed, clamping,
+every timeline action, and the alt/ctrl/meta/auto-repeat regression; one still per beat with a
+true caption; estimated text boxes inside the picture, off each other and off every line at
+both layouts for seventeen timed frames and all seventeen dragged values; four-decimal
+geometry; static wide and narrow prints equal to the final render). Five mutations of the
+player — full title before the landing, no modifier guard, a dashed ramp that is not c·h₂, a
+sweep that lands a second early, lock marks off the lock — each fail it.
+`uv run --python 3.12 python scripts/audit_excerpt_fixtures.py`: PASS.
+`node scripts/render_static_frames.cjs hinge-bump --check`: current. Real frames at 1280 px and
+375 px (normal, reduced motion, scripts off, mouse-dragged in Chromium): figure 713 / 302 px, no
+page overflow, no svg text outside the picture, no console errors.
+
+**Not done here, by the limits of this change.** `interactives/manifest.json` still carries the
+September 17 computed-variant sentences, four of which the redesign makes false; and the panel
+has no `details.mechanism-check` yet, which `scripts/test_excerpt_checks.cjs` expects.

@@ -2,6 +2,10 @@
 
 Author-approved September 9, 2026. These are optional HTML explanations of existing
 book examples, not videos, new experiments, or a replacement for the static book.
+**Value pass — September 18, 2026:** every scene was judged by the first/last-frame test
+("Earn the animation", below); four failed and were redesigned, and every panel now closes
+with a transfer check. See [the value-pass receipt](excerpt-value-pass.md).
+
 **Review pass — September 17, 2026:** an independent review of the twelve newest scenes led to
 fixes in all of them and to four contract changes below (prose budget, plain-text number
 format, never spoil a prediction, four-decimal geometry). See
@@ -75,8 +79,18 @@ maximum. Preserve the exact quarter identity and positive finite sigmoid tails.
 The ReLU function has an explicit zero vertex; a tangent is omitted at its kink,
 where PyTorch's backpropagation convention must not be called a classical derivative.
 
+The September 18 value redesign keeps that network-first picture and makes the cause
+visible inside it. The active component's box carries its own activation curve as its
+face, with the operating point and a tangent of fixed drawn length; a link ties that
+tangent to the backward multiplier, which reads `× slope`. `z` is the scene's one
+control (timeline-driven, draggable over the declared domain), so the reader can find
+what two frames cannot show: the gate is widest at zero and dies on both sides. On the
+timeline the slope stays withheld until the probe crosses; a dragged `z` shows it live.
+
 The continuation isolates best-case sigmoid factors in connected multiplier
-components, with integer counts and explicit numerical readouts. This is not a
+components, with integer counts and explicit numerical readouts. Because a sub-pixel
+packet cannot be the payoff, one log ruler under the path carries a marker through ten
+equal steps to `9.54 × 10⁻⁷`, while an active-ReLU mark stays at 1. This is not a
 simulated ten-layer forward network or a bound on the complete gradient. Weight
 matrices and branching are omitted from that calculation, not assumed harmless.
 
@@ -116,7 +130,7 @@ the scene receipt and arc ledger, not in an extra dashboard or premature lecture
 | Chapter 2: softmax shift — `02-logistic-softmax.html#softmax-shift-excerpt` | Exponentiate four scores, divide by one shared sum, then add 100 to every score and watch the ruler slide while the probability bars hold under dashed marks; the `e^c` is struck out of numerator and denominator. | Four fixed scores; no training, no data, no learned quantity. Invariance is to *adding* a constant, not to scaling one. The shift moves on the timeline, not under a knob. |
 | Chapter 5: one chain — `05-backpropagation.html#one-chain-excerpt` | Fill and cache `w → z → a → L`, turn the knob and measure a slope, then let three backward rays deliver one local derivative each and land their product beside the measurement. | One neuron, one example, one knob. Nothing is updated: no step, no learning rate, and `w` ends where it started. No `∂L/∂b`, no branch accumulation, no PyTorch. |
 | Chapter 10: gate product — `10-sequences-rnn.html#gate-product-excerpt` | One word, `cat`, enters at step 1 and travels eighty steps on two bands at once, `b_f = 0` and `b_f = +1`, while its gradient `f^k` is traced on one shared chart; the axis switches linear → log, a ratio badge names the gap (`× 1.6 × 10¹³`, sixteen trillion), and the timeline sweeps the `b_f` slider the reader may then drag. | One constant gate multiplied eighty times, the approximation the chapter's own `≈` makes. Real gates vary per unit and per step. The log axis has a stated floor, `10⁻²⁵`, and the word's legibility at step 80 is on that mapping, never "intact". Nothing is trained; the recall experiment remains the chapter's evidence. `b_f` is the one parameter control (rule 1's amendment). |
-| Chapter 3: hinge bump — `03-nonlinearity-mlp.html#hinge-bump-excerpt` | Add three weighted ramps to a faint target silhouette; the negative middle term turns the sum back down. | The existing fixed circuit is evaluated, not trained. |
+| Chapter 3: hinge bump — `03-nonlinearity-mlp.html#hinge-bump-excerpt` | Add three ramps under a slope ledger, predict the middle coefficient, then watch (or drag) it: the sum's tail swings like a lever and lies flat on zero only at −2. | The existing fixed circuit is evaluated, not trained. The middle coefficient is the scene's one control; every value other than −2 is a declared computed variant. |
 | Chapter 8: pooling bins — `08-cnn.html#pooling-bins-excerpt` | Shift clues inside pooling bins, then across a boundary; compare the resulting maps. | Local tolerance is not general translation invariance. |
 | Chapter 10: LSTM valves — `10-sequences-rnn.html#lstm-valves-excerpt` | Retain, write, and expose a carried scalar; close the read valve while the stored value survives. | Illustrative gate openings, not measured trajectories. Complements the gradient-over-time scene rather than repeating it. |
 | Chapter 17: quantization grid — `17-peft-quantization.html#quantization-grid-excerpt` | Round fixed weights onto a coarse grid, then separate collisions by increasing bit width. | Rounding-error bounds and ideal payload are not task accuracy or runtime speed. |
@@ -131,7 +145,10 @@ explicit illustrative aliases for the book's unchanged ID fixtures. One sequence
 appears at a time; the phone layout wraps into two three-column strips. Counts
 three and four remain earned receipts, and log-probability terms stay symbolic.
 The helper's sequence sum is not the SFT objective's negative mean. No token is
-removed from context. One ink marker carries the mechanism: it rides the last prompt
+removed from context. The shift itself is the opening motion: a copy of the token cards,
+each carrying its own prompt/response tag, slides one slot left to become the target row, so
+the reader sees a response target come to rest under the last prompt slot before any gate is
+shown. One ink marker then carries the mechanism: it rides the last prompt
 slot's output to its shifted target, passes the ×1 gate and lands on a score rail under
 the targets; taken from an excluded output it stops at the ×0 gate's stop bar. Mask
 gates are neutral operators, never wine. No hover-only attention paths and no
@@ -146,8 +163,11 @@ row (tokenwise LayerNorm). A separate schematic recalls CNN BatchNorm's per-chan
 pool over images and spatial positions; the sequence tensor is not relabeled as
 image data. No invented BatchNorm output is needed. Translate the token profile by its own mean, then divide
 all four centered features by one local scale on a fixed ruler. Other rows remain
-visible as excluded inputs to those statistics. Only their independently normalized
-outputs later enter the plot. Do not jitter the nearly coincident marks.
+visible as excluded inputs to those statistics. Do not jitter nearly coincident marks.
+The scene closes with a perturbation test rather than four coincident profiles: a
+neighbour token doubles, the pooled BatchNorm column mean slides (10 → 20) and the
+token's LayerNorm mean and profile do not move. Only that BatchNorm statistic is
+computed; no BatchNorm output is drawn.
 
 The normalized variance is `v/(v+epsilon)`, not exactly one; the illustrated call
 has no affine transform. Keep this boundary separate from learning gamma/beta,
@@ -472,6 +492,13 @@ math — and it is what `interactives/_template` encodes and the harness's
    then name it once.
    **Earn the animation.** Before building, name the misconception that static text
    or the existing figure leaves hard to see. Make the moving object resolve it.
+   Then apply the **first/last-frame test**: put the first and last frames side by
+   side. If a student loses nothing, the motion is not carrying the mechanism and the
+   scene should be redesigned or retired — a weak scene costs the reader attention and
+   can confuse. A scene passes when the motion is the operation itself (a shift is a
+   slide, a product is a scaling, a slope is a tilting tangent), when the payoff is
+   visible to the eye rather than a digit string or a sub-pixel dot, and, where the
+   mechanism is one parameter's effect, when the reader can drag that parameter.
    If a mechanism is a network of operations, show components and transmission;
    do not substitute a second large curve plot. Supporting curves stay small and
    explicitly name their quantity so they cannot be mistaken for signal decay.
@@ -508,10 +535,17 @@ math — and it is what `interactives/_template` encodes and the harness's
    pictures; on a phone the caveats were longer than the animation. Nothing was deleted:
    the wrapper keeps the `mechanism-boundary` class, so suites that read its text still
    bind every sentence.
+   **Close with a transfer check.** Every panel ends with one closed
+   `details.mechanism-check`: "Check yourself." plus a question that applies the
+   mechanism to a case the picture did not show, its answer hidden until asked for.
+   The answer's numbers follow from the declared fixture and are recomputed by
+   `scripts/test_excerpt_checks.cjs`. A question the reader can answer by reading the
+   final frame, or by dragging the scene's own control, is recall, not transfer.
 7. **Stillness when the reader should read.** A reveal holds for at least two seconds.
-   Nothing flashes. **A prediction is never spoiled:** while a caption asks the reader to
-   predict, the answer is absent from the drawing, the svg `aria-label` and the scrubber's
-   value text — including a glide that has already started toward it. Test this from the
+   Nothing flashes. **A prediction is never spoiled:** from the moment a caption asks the
+   reader to predict until the scene's own reveal — which follows at least two still
+   seconds — the answer is absent from the drawing, the svg `aria-label` and the scrubber's
+   value text, including a glide that has already started toward it. Test this from the
    DOM at fine time steps, not by re-implementing the player's timing.
 8. **Reduced motion** is the same picture at each beat with the object jumped to its beat
    position.

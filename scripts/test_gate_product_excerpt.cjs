@@ -376,7 +376,10 @@ test('gate-product: the count is attributed in both roundings, and every printed
   computed.add(scientific(held(HALF, 12))); computed.add(scientific(held(OPEN, 20)));
   for (const m of values.measured) computed.add(scientific(held(m, values.horizon)));
   assert(computed.has('1.27 × 10⁻⁷⁴') && computed.has('2.36 × 10⁻⁴⁶') && computed.has('3.89 × 10⁻⁵') && computed.has('4.7 × 10¹⁹'));
-  const spoken = node => [...node.childNodes].map(child => (child.nodeType === 3 ? child.textContent : spoken(child))).join(' ');
+  // The closing transfer check asks about a gate value the slider cannot reach (f = 0.9); its
+  // numbers are recomputed by scripts/test_excerpt_checks.cjs, not by this scene.
+  const spoken = node => [...node.childNodes].map(child => (child.nodeType === 3 ? child.textContent
+    : child.nodeType === 1 && child.matches('.mechanism-check') ? '' : spoken(child))).join(' ');
   const s = fixture(t, NAME);
   const written = spoken(s.root).match(/\d\.\d{1,2} × 10[⁻⁰¹²³⁴⁵⁶⁷⁸⁹]+/g) || [];
   assert(written.length >= 14, `only ${written.length} scientific numbers in the static panel`);

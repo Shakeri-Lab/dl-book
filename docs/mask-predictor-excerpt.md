@@ -129,3 +129,117 @@ not re-recorded here.
 - **Less prose around the picture.** The boundary now shows one sentence; every remaining scope note,
   unchanged, sits in a closed "Scope and caveats" disclosure beside the transcript. New asset sizes
   and digests for this pass are recorded once in [the review-pass receipt](excerpt-review-pass.md).
+
+## Value redesign — September 18, 2026
+
+The author's test for every excerpt: replace the animation by its first and last frames side by
+side; if a student loses nothing, the motion carries no mechanism. The September 17 scene failed
+it. At beat 1 the whole target row appeared already shifted and already gated, and the only thing
+that moved afterwards was a marker riding a finished diagram. The one operation that causes the
+confusion, the shift, was never shown. Fixture, duration (40 s) and beats (0/5/10/15/20/26/32/36)
+are unchanged; digests and sizes above are not re-recorded here.
+
+**Misconception targeted.** "A prompt position has mask 0, so nothing computed at a prompt position
+is trained" — the off-by-one of SFT code that reads `response_mask[:, :-1]`. The truth is that
+targets are the inputs shifted left by one and the mask belongs to the *target*: the predictor at
+the last prompt slot is scored because its target is the first response token.
+
+**What the motion now carries that two stills could not.**
+
+- *The shift is a slide.* In beat 1 a copy of every token card drops below the outputs (5.0–6.0 s),
+  rests, and then the whole copy slides exactly one column pitch to the left as one rigid tape
+  (6.6–7.8 s): "birds" travels from under slot 3 to under slot 2, "Explain" is cut off at the left
+  end of the strip, and the fixture's seventh token `[PAD]` enters on the right. The slid copy then
+  stands still for 2.2 s. Only at beat 2 do the copies turn target purple, the row label change
+  from "copy" to "target (given)", and the ×0/×1 gates, the routes and the score rail appear.
+- *The mask rides on the target.* Every card carries its own role tag (prompt, response, padding)
+  inside the card, so the tag is in the group that moves: the reader watches "birds · response"
+  come to rest under "why · prompt". At the reveal each gate is printed directly under the tag
+  that travelled with it (response → ×1, otherwise ×0). Slot labels are now bare slot numbers; the
+  former "prompt 2 / response 3" column headers, which attached the role to the *slot* and so
+  restated the misconception, are gone.
+- *Prediction before reveal.* The question stands through beat 0 and through the slide and its
+  still moment. Until 10 s no gate, rail, route, target arrow, count, target colour or muting is
+  drawn (muting is now scoped to a gated row in CSS, so an ungated picture cannot show which
+  outputs are excluded), the formula line with its `i+1` is hidden, the marker does not move, and
+  neither the svg `aria-label` nor the scrubber text names the answer. The intro sentence above the
+  pane no longer says how ×0/×1 is read.
+- *The boundary moves as motion too.* At beat 3 sequence B arrives already copied and repeats the
+  same slide (15.8–17.0 s); its gates and the earned `B: 4` appear at 17.4 s. The scored predictor
+  set visibly moves from slots 2–4 to slots 1–4 with the response start; slot 0 still sits over a
+  prompt-tagged target with ×0.
+- *Phone wrap.* Each three-slot strip is a window on the same tape. The copy of token 3 leaves the
+  second strip by its left end, fading out, while its twin enters the first strip from the right,
+  fading in by the same amount, both carrying the same word and role; a dotted ink return path
+  (left end of strip 2 → right end of strip 1) is drawn under the tape while the copy is ungated.
+  Judged on 375 px and 320 px frames: the hand-off reads as a line wrap.
+
+**Kept from the September 17 pass.** One ink marker carries the last prompt slot's output through
+its ×1 gate onto the score rail (now entirely inside beat 2: 10.4 → 13.0 s, then a 2 s hold);
+sequence B's contrast; the perturb-excluded-outputs demonstration with the marker stopped, core
+emptied, at a ×0 stop bar; neutral gate colours; earned counts `A: 3`, `B: 4`; symbolic
+log-probabilities. Marker and tape never move at the same time.
+
+**Removed or changed.** The target row no longer appears ready-made; role-and-slot column headers;
+the beat-1 caption's prefix sentence (the idea stays in the boundary's lead sentence and the
+transcript); the rule that reduced motion shows each beat's *first* frame. Reduced motion now
+shows, per beat, the rest frame inside that beat at which what the caption describes has finished
+(9 s, 14 s, 18.5 s for beats 1–3; the beat's first frame elsewhere), so the beat-1 still is the
+slid, ungated copy and its caption is true. Captions 1–3 were rewritten (20 words each). The
+formula gains `\class{mp-next}` on both `i+1` indices, underlined in ink from the reveal. Wide
+height stays 302; narrow height is 510 (was 502). The output boxes are on the picture from beat 0
+so that "the predictor" in the question has a referent; they are all drawn alike until the reveal.
+
+**Declared computed variants and drawing devices.** No new number enters the scene.
+
+- The ghost copies and their slide are a drawing device for the manuscript's existing
+  shifted-target construction. The audit helper does not build a `labels` tensor; it states the
+  shift by slicing: `chapters/part5/18-alignment.qmd` lines 186–187 gather
+  `F.log_softmax(logits[:, :-1], dim=-1)` at `index=token_ids[:, 1:].unsqueeze(-1)`, and line 189
+  returns `(next_token_logps * response_mask[:, 1:]).sum(dim=1)`. "Copy the tokens and slide the
+  copy one slot left, mask attached" is `token_ids[:, 1:]` with `response_mask[:, 1:]` drawn as
+  motion. No tensor moves at run time.
+- Role tags are the declared mask rows spelt in words, computed at mount: mask 1 → `response`;
+  mask 0 before the first response token → `prompt`; mask 0 after it → `padding` (the chapter,
+  lines 141–143: "m_t=0 for prompt or padding positions"). A gate is ×1 exactly where the tag says
+  response; the suite checks this against the declared masks.
+- `[PAD]` entering on the right is the fixture's own seventh token (`token_ids[:, 6] = 0`,
+  mask False), not an invented pad. It has no input card because slot 6's output has no next
+  target, which is why it enters from outside the strip.
+- Active predictors `[2,3,4]` / `[1,2,3,4]`, counts 3 / 4 and the zero change remain the frozen
+  audit's receipts, as before. The bezel clip, the opacity cross-fade of the wrap hand-off and the
+  dotted return path are drawing devices of the phone layout only.
+
+**Out of scope, unchanged.** No numeric logits, probabilities or sequence scores; no training
+trajectory; no attention-visibility claim; the helper's sum is not the SFT objective's negative
+mean; the words remain illustrative aliases. No parameter control was added: the response start
+takes only the two values the manuscript's fixture declares, so a slider would have to invent
+mask rows. The grammar's "one tracked object" is relaxed by design of this brief: the tape is the
+tracked object while the targets are built, the marker afterwards, and they never move together.
+
+**Checks.** `node --test scripts/test_mask_predictor_excerpt.cjs`: 52 pass (24 scene tests plus the
+inherited transport, beat-hold and grammar suites). New or rewritten tests pin, from the DOM at
+named times: copies start exactly under the tokens they copy with the same word and role; the
+slide is one rigid, monotone, jump-free leftward motion of exactly one column pitch over many
+frames; the ≥ 2 s still; nothing that answers the question exists before 10 s at 0.05 s steps,
+both layouts; sequence B's scored set read off the drawn gates; the phone hand-off (twin words and
+roles, opacities summing to one, equal leftward offsets, return path in free channels); marker and
+tape never moving together; reduced-motion stills that are real rest frames of their own beat and
+match their captions; estimated-text-box collisions (labels, cards, routes, stop bars, marker,
+picture edge) at seven widths; per-frame writes limited to the marker or the travelling copies;
+four-decimal serialisation at a non-round width; both static prints byte-equal to a fresh render.
+Nine single-line mutations of `player.js` (a 0.9-slot slide, gates half a second early, the role
+read from the slot above, the slide as a cut, no hold, the marker leaving during the slide, no
+hand-off fade, muting before the reveal, the unslid reduced still) each fail the suite.
+`uv run --python 3.12 python scripts/audit_excerpt_fixtures.py` passes.
+
+**Transfer check.** The panel gains the one closed `details.mechanism-check` that the concurrent
+"Check yourself" pass expects of every scene (`scripts/test_excerpt_checks.cjs` requires the
+strings "slot 0" and "one slot before" in this scene's answer). It asks whether slot 0 would be
+scored if the response began at slot 1. It introduces no number; its visible question does not
+settle the scene's own prediction, and the scene suite pins both facts. If that pass brings its
+own wording, replace this block rather than adding a second one.
+
+**Not changed here (outside this pass's files).** The Chapter 18 paragraph in
+`docs/animation-authoring.md` and the manifest's `computedVariants` do not yet mention the
+travelling copy; suggested sentences were handed to the author with this pass.

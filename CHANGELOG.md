@@ -1,3 +1,24 @@
+# Rolling post-v1.3 — mechanism replay value pass (September 18, 2026)
+
+- Applies one test to all twenty-two replays: put the first and last frames side by side; if a
+  student loses nothing, the motion is not the mechanism. Four scenes failed and were redesigned.
+- Derivative gates: the component's face is its activation curve with a tilting tangent tied to
+  the backward multiplier; `z` is draggable, so the gate is seen widest at zero and dead at both
+  ends; depth is ten equal steps on a log ruler. Mask/predictor: the target row is built by
+  sliding a tagged copy of the tokens one slot left. LayerNorm axis: a neighbour token doubles,
+  BatchNorm's pooled mean moves and the token's LayerNorm profile does not. Hinge bump: a slope
+  ledger and a draggable middle coefficient show why only −2 brings the sum back to zero.
+- On author review, LayerNorm's axis change became one continuous turn — the highlight sweeps
+  from BatchNorm's column to LayerNorm's row about the cell they share — and the column stays
+  as a muted ghost until the closing test, so the contrast is never off screen.
+- Every panel now closes with one hidden-answer transfer question; a new suite recomputes all
+  twenty-two answers from the declared fixtures. Interaction suite: 1,087 → 1,139 tests.
+- Contract: the first/last-frame test and the transfer-check rule join
+  `docs/animation-authoring.md`; new on-screen values are declared computed variants.
+- HTML-only: no manuscript, freeze, filter, PDF setting or tag changed. No scene added or
+  retired. Receipt: `docs/excerpt-value-pass.md`. Verify the publishing run before claiming
+  deployment.
+
 # Rolling post-v1.3 — mechanism replay review pass (September 17, 2026)
 
 - Independent review of the twelve replays added since `0674cab`, then fixes. Every number
