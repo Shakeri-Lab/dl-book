@@ -50,14 +50,26 @@ local function scenes_for(source)
   return mine
 end
 
+-- Pandoc's smart-quote extension turns the manuscript's ASCII quotes, apostrophes and
+-- dashes into their typographic forms, so a heading reads one way in the .qmd and
+-- another in the AST this filter walks. Compare a normalized form, the same one
+-- scripts/audit_excerpt_fixtures.py applies to the source, so a manifest target written
+-- in plain ASCII matches the heading it names on both sides.
+local function normalize_heading(text)
+  return (text:gsub("\226\128\152", "'"):gsub("\226\128\153", "'")
+    :gsub("\226\128\156", '"'):gsub("\226\128\157", '"')
+    :gsub("\226\128\147", "-"):gsub("\226\128\148", "-"))
+end
+
 -- after-cell: the exact div Quarto derives from an executable cell's label.
--- before-heading: a level-2/3 heading whose text exactly matches the target.
+-- before-heading: a level-2/3 heading whose text matches the target after normalization.
 local function is_anchor(scene, block)
   if scene.anchor.type == "after-cell" then
     return block.t == "Div" and block.identifier == scene.anchor.target
   end
   return block.t == "Header" and (block.level == 2 or block.level == 3)
-    and pandoc.utils.stringify(block.content) == scene.anchor.target
+    and normalize_heading(pandoc.utils.stringify(block.content))
+      == normalize_heading(scene.anchor.target)
 end
 
 local controls, shared_css, loader

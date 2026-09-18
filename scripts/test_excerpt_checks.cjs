@@ -115,6 +115,45 @@ const expected = {
     assert(winner > rival && bounds.every(b => b < winner));
     return [fixed(winner, 3), fixed(rival, 3), fixed(Math.max(...bounds), 3)];
   },
+  'template-score': root => {
+    const w = Number(root.dataset.templateNorm ?? root.dataset.weightNorm), x = Number(root.dataset.inputNorm), b = Number(root.dataset.bias);
+    // cos 60 is exactly 1/2, so the new score is exact; the opening reading is the scene's own.
+    const asked = b + w * 4 * 0.5, opening = b + w * x * Math.cos(20 * Math.PI / 180);
+    assert(asked > opening, 'the longer, worse-aligned input must win');
+    return [fixed(asked, 2), fixed(opening, 2)];
+  },
+  'downhill-bowl': root => {
+    const xs = nums(root.dataset.xs), residuals = nums(root.dataset.residuals);
+    const [gw, gb] = nums(root.dataset.generating), start = nums(root.dataset.start), eta = Number(root.dataset.rate);
+    const ys = xs.map((x, i) => gw * x + gb + residuals[i]), n = xs.length;
+    const grad = ([w, b]) => {
+      const e = xs.map((x, i) => w * x + b - ys[i]);
+      return [2 * e.reduce((s, ei, i) => s + ei * xs[i], 0) / n, 2 * e.reduce((s, ei) => s + ei, 0) / n];
+    };
+    const norm = v => Math.hypot(v[0], v[1]);
+    // The bowl is quadratic, so the gradient is linear in the displacement from the
+    // minimiser: doubling that displacement doubles every step, the first one included.
+    const sx = xs.reduce((s, x) => s + x, 0) / n, sxx = xs.reduce((s, x) => s + x * x, 0) / n;
+    const sy = ys.reduce((s, y) => s + y, 0) / n, sxy = xs.reduce((s, x, i) => s + x * ys[i], 0) / n;
+    const wStar = (sxy - sx * sy) / (sxx - sx * sx), star = [wStar, sy - wStar * sx];
+    const far = star.map((c, i) => c + 2 * (start[i] - c));
+    const first = eta * norm(grad(start)), doubled = eta * norm(grad(far));
+    assert(Math.abs(doubled / first - 2) < 1e-9, 'the first step must double exactly');
+    return [fixed(doubled, 4)];
+  },
+  'column-space': root => {
+    const columns = JSON.parse(root.dataset.columns), target = JSON.parse(root.dataset.target);
+    const dot = (a, b) => a.reduce((s, v, i) => s + v * b[i], 0);
+    // Normal equations on the declared schematic, then the dependent third column.
+    const g = [[dot(columns[0], columns[0]), dot(columns[0], columns[1])], [dot(columns[1], columns[0]), dot(columns[1], columns[1])]];
+    const r = [dot(columns[0], target), dot(columns[1], target)], det = g[0][0] * g[1][1] - g[0][1] * g[1][0];
+    const w = [(r[0] * g[1][1] - g[0][1] * r[1]) / det, (g[0][0] * r[1] - r[0] * g[1][0]) / det];
+    const fit = target.map((_, i) => w[0] * columns[0][i] + w[1] * columns[1][i]);
+    const residual = target.map((v, i) => v - fit[i]), length = Math.hypot(...residual);
+    const sum = columns[0].map((v, i) => v + columns[1][i]);
+    assert(Math.abs(dot(sum, residual)) < 1e-12, 'a dependent column cannot reduce the residual');
+    return [fixed(length, 0)];
+  },
   'hinge-bump': () => ['2, −4, 2', 'peak becomes 4', '0, +2, −2, 0'],
   'mask-predictor': () => ['slot 0', 'one slot before'],
   'layernorm-axis': () => {

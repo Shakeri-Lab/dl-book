@@ -10,7 +10,14 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 
 ---
 
-> **Current work — mechanism replay value pass, September 18, 2026.** The author asked whether a
+> **Current work — Chapter 1 replays, September 18, 2026.** The author reviewed the films at
+> `Video_lectures` and chose three Chapter 1 scenes to adapt: the template scorer, the
+> column-space projection and the descent bowl. All three ship, anchored before the chapter's
+> own headings. A survey of all 294 film scenes found the remaining well essentially dry:
+> only Chapter 14's permutation debt survives as a further candidate. Chapter 2, 3 and 4
+> picks are next. HTML-only. Receipts: the three new files under `docs/`.
+>
+> **Previous — mechanism replay value pass, September 18, 2026.** The author asked whether a
 > weak replay "even helps". All twenty-two were judged by the first/last-frame test; derivative
 > gates, mask/predictor, LayerNorm axis and hinge bump failed and were redesigned so the motion
 > is the mechanism (three gain or keep one draggable parameter). Every panel now ends with a

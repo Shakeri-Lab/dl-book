@@ -1,3 +1,28 @@
+# Rolling post-v1.3 — Chapter 1 mechanism replays (September 18, 2026)
+
+- Adds the chapter's first three replays, adapted from the Chapter 1 film: a template
+  scorer, the column-space projection, and the descent bowl. Each targets a misconception
+  the static figures leave standing.
+- Template score: the input rotates at fixed length so the shadow slides through zero —
+  at exactly 90 degrees the score is exactly zero and the prediction exactly b — then the
+  angle freezes and only the template's length changes, so the cosine holds while the
+  score halves. Template length is the scene's one control.
+- Column space: a candidate prediction slides inside the plane dragging its residual;
+  the length bottoms out where the right angle snaps on and grows again past the foot,
+  so the minimum is earned rather than announced, and the leftover is unreachable.
+- Downhill bowl: the contours stay hidden for thirty seconds — the walker only ever feels
+  the local slope. The step is drawn as the first quarter of the gradient arrow, and the
+  twenty step lengths collapse by a factor of 172 because the slope does, not a schedule.
+- Two tooling bugs the chapter exposed, both fixed: the excerpt filter matched headings
+  against Pandoc's rendered text while the fixture audit matched the raw source, so a
+  heading containing quotes could satisfy neither; both now compare one normalized form.
+  And Quarto reserves every `column-*` class for its own page-layout API — a scene
+  stylesheet that coined one turned its panel into a full-width grid and the chapter
+  scrolled sideways, so the audit now refuses that namespace.
+- The three new suites join `npm test`. Interaction suite: 1,143 to 1,277 tests.
+- HTML-only: no manuscript, freeze, PDF setting or tag changed. Receipts:
+  `docs/{template-score,column-space,downhill-bowl}-excerpt.md`.
+
 # Rolling post-v1.3 — mechanism replay value pass (September 18, 2026)
 
 - Applies one test to all twenty-two replays: put the first and last frames side by side; if a

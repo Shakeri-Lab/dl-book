@@ -2,6 +2,13 @@
 
 Author-approved September 9, 2026. These are optional HTML explanations of existing
 book examples, not videos, new experiments, or a replacement for the static book.
+**Chapter 1 replays — September 18, 2026:** the author picked three film scenes for Chapter 1
+(template scorer, column space, descent bowl); all three ship. Two rules follow from building
+them: a `before-heading` target is compared in a normalized form, so plain ASCII quotes in the
+manifest match the typographic ones Pandoc renders; and a scene may not coin a class in
+Quarto's reserved `column-*` layout namespace — `scripts/audit_excerpt_fixtures.py` refuses
+both mistakes.
+
 **Value pass — September 18, 2026:** every scene was judged by the first/last-frame test
 ("Earn the animation", below); four failed and were redesigned, and every panel now closes
 with a transfer check. See [the value-pass receipt](excerpt-value-pass.md).

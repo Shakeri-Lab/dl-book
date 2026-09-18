@@ -38,6 +38,15 @@ SCENE_KEYS = {
     "receipt",
 }
 ANCHOR_TYPES = {"after-cell", "before-heading"}
+HEADING_RE = re.compile(r"^#{2,}\s+(.*?)\s*$", re.M)
+# Pandoc's smart extension replaces ASCII quotes, apostrophes and dashes in the rendered
+# heading, so both sides compare this form (mirrored in filters/mechanism-excerpts.lua).
+TYPOGRAPHIC = str.maketrans({"\u2018": "'", "\u2019": "'", "\u201c": '"', "\u201d": '"',
+                             "\u2013": "-", "\u2014": "-"})
+
+
+def normalize_heading(text: str) -> str:
+    return text.translate(TYPOGRAPHIC)
 TRANSPORTS = {"shared", "scene"}
 
 # Receipts record provenance as one-row-per-source Markdown tables whose first
@@ -93,13 +102,37 @@ def declared_beats(markup: str) -> list[float] | None:
     return [float(value) for value in declared[0].split()]
 
 
+# Quarto's layout pass claims every class beginning `column-` (column-margin,
+# column-page, column-screen, ...). A scene stylesheet that coins one of its own turns
+# the panel into a full-width grid and the chapter scrolls sideways, so the names are
+# refused here rather than discovered in a render.
+RESERVED_CLASS_RE = re.compile(r"""(?:class="|\.)(column-[A-Za-z0-9_-]+)""")
+RESERVED_CLASS_ALLOWED = {"column-margin", "column-page", "column-screen", "column-body"}
+
+
+def reserved_classes(scene_dir: Path) -> set[str]:
+    found: set[str] = set()
+    for name in ("panel.html", "player.css", "player.js"):
+        path = scene_dir / name
+        if path.exists():
+            found |= {m for m in RESERVED_CLASS_RE.findall(path.read_text(encoding="utf-8"))}
+    return found - RESERVED_CLASS_ALLOWED
+
+
 def anchor_present(anchor: dict, chapter: str) -> bool:
     target = anchor["target"]
     if anchor["type"] == "after-cell":
         # Quarto derives the div id `cell-<label>` from the executable cell's label.
         label = target[len("cell-"):] if target.startswith("cell-") else target
         return re.search(rf"^#\|\s*label:\s*{re.escape(label)}\s*$", chapter, re.M) is not None
-    return re.search(rf"^#{{2,}}\s+{re.escape(target)}\s*(?:\{{.*\}})?\s*$", chapter, re.M) is not None
+    # Headings are compared in the normalized form filters/mechanism-excerpts.lua uses,
+    # so a target written in plain ASCII still names a heading Pandoc renders with
+    # typographic quotes, apostrophes or dashes.
+    wanted = normalize_heading(target)
+    return any(
+        normalize_heading(re.sub(r"\s*\{.*\}\s*$", "", line).strip()) == wanted
+        for line in HEADING_RE.findall(chapter)
+    )
 
 
 def audit_scene(scene: dict, index: int, errors: list[str]) -> None:
@@ -107,6 +140,12 @@ def audit_scene(scene: dict, index: int, errors: list[str]) -> None:
     if not isinstance(scene, dict):
         errors.append(f"{where}: not an object")
         return
+    scene_dir = ROOT / "interactives" / str(scene.get("scene", ""))
+    for name in sorted(reserved_classes(scene_dir)):
+        errors.append(
+            f"{scene.get('id', where)}: class {name!r} is in Quarto's reserved column-* "
+            "layout namespace; rename it (the panel would become a full-width grid)"
+        )
     identifier = scene.get("id", where)
     missing = SCENE_KEYS - set(scene)
     extra = set(scene) - SCENE_KEYS
