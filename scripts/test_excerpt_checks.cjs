@@ -154,6 +154,117 @@ const expected = {
     assert(Math.abs(dot(sum, residual)) < 1e-12, 'a dependent column cannot reduce the residual');
     return [fixed(length, 0)];
   },
+  'sgd-zones': root => {
+    const xs = nums(root.dataset.xs), residuals = nums(root.dataset.residuals);
+    const [gw, gb] = nums(root.dataset.line), start = nums(root.dataset.start);
+    const reps = residuals.length / xs.length, X = [], Y = [];
+    for (let r = 0; r < reps; r += 1) xs.forEach((x, k) => { X.push(x); Y.push(gw * x + gb + residuals[r * xs.length + k]); });
+    const grad = ([w, b], idx) => {
+      const rows = idx ?? X.map((_, i) => i), m = rows.length;
+      const e = rows.map(i => w * X[i] + b - Y[i]);
+      return [2 * e.reduce((s, ei, k) => s + ei * X[rows[k]], 0) / m, 2 * e.reduce((s, ei) => s + ei, 0) / m];
+    };
+    const batches = Array.from({length: reps}, (_, r) => xs.map((_, k) => r * xs.length + k));
+    const here = grad(start), noise = batches.map(b => grad(start, b).map((v, i) => v - here[i]));
+    // The bowl is quadratic, so doubling the displacement from the optimum doubles the
+    // signal while the five noise vectors are unchanged: every angle roughly halves.
+    const far = [gw + 2 * (start[0] - gw), gb + 2 * (start[1] - gb)];
+    const widest = point => {
+      const g = grad(point), len = Math.hypot(...g), u = [g[0] / len, g[1] / len];
+      return Math.max(...noise.map(x => {
+        const v = [g[0] + x[0], g[1] + x[1]];
+        return Math.atan2(Math.abs(u[0] * v[1] - u[1] * v[0]), v[0] * u[0] + v[1] * u[1]) * 180 / Math.PI;
+      }));
+    };
+    assert(Math.abs(Math.hypot(...grad(far)) / Math.hypot(...here) - 2) < 1e-9, 'the signal must double');
+    return [fixed(widest(far), 2), fixed(widest(start), 2)];
+  },
+  'sigmoid-squash': root => {
+    const w = nums(root.dataset.weights), b = Number(root.dataset.bias), cross = nums(root.dataset.cross);
+    const sq = w[0] * w[0] + w[1] * w[1];
+    // The point whose score is 1, on the boundary's normal through the crossing point.
+    const at = [cross[0] + w[0] / sq, cross[1] + w[1] / sq];
+    const score = (v, k = 1) => k * (w[0] * at[0] + w[1] * at[1] + b);
+    assert(Math.abs(score(at) - 1) < 1e-12, 'the probe point must score exactly 1');
+    // Doubling w and b doubles every score, so the zero set -- the boundary -- is the same line.
+    return [fixed(sigmoid(score(at)), 4), fixed(sigmoid(2 * score(at)), 4)];
+  },
+  'batch-vote': root => {
+    assert.equal(nums(root.dataset.features).length ** 2, 64, 'the declared population is 64 examples');
+    // The chapter's two laws at a population far larger than this scene's own.
+    const N = 1e6, correction = size => Math.sqrt((N - size) / (N - 1));
+    const ratio = 0.5 * correction(400) / correction(100);
+    assert(Math.abs(ratio - 0.5) < 1e-3, 'the correction barely moves when B is far below n');
+    return [fixed(correction(100), 5), fixed(correction(400), 5), fixed(ratio, 5)];
+  },
+  'feature-space': root => {
+    const readout = nums(root.dataset.readout), b = Number(root.dataset.readoutBias);
+    const norm = v => Math.hypot(...v), cut = v => -b * (norm(v) / norm(readout)) / norm(v);
+    // Scaling the readout scales w and b together, so -b/||w|| and the drawn axis w/||w|| both hold.
+    const doubled = readout.map(v => 2 * v);
+    assert.equal(norm(readout), 2); assert.equal(norm(doubled), 4);
+    assert(doubled.every((v, i) => Math.abs(v / norm(doubled) - readout[i] / norm(readout)) < 1e-12),
+      'the drawn axis is unchanged by scaling');
+    assert(Math.abs(-b / norm(readout) - (-2 * b) / norm(doubled)) < 1e-12, 'the cut is unchanged');
+    return [fixed(-b / norm(readout), 2)];
+  },
+  'surprise-loss': () => {
+    // Two examples labelled 1: two hedges against one confident hit and one confident miss.
+    const loss = p => -Math.log(p), hedge = 2 * loss(0.5), split = loss(0.9) + loss(0.1);
+    assert(hedge < split, 'the confident mistake must cost more than both hedges');
+    return [fixed(loss(0.5), 4), fixed(hedge, 4), fixed(loss(0.9), 4), fixed(loss(0.1), 4), fixed(split, 4)];
+  },
+  'decay-angle': root => {
+    const rate = Number(root.dataset.rate ?? 0.1), penalty = Number(root.dataset.penalty ?? 0.01);
+    // The check uses the chapter's rule at its own eta and lambda, not the fixture's.
+    const factor = 1 - 2 * 0.1 * 0.01;
+    let steps = 0, length = 1;
+    while (length > 0.1) { length *= factor; steps += 1; }
+    assert.equal(steps, 1151);
+    assert(Number.isFinite(rate) && Number.isFinite(penalty));
+    return [String(steps), minus((1 - 2 * 0.1 * 0.01).toFixed(3))];
+  },
+  'momentum-memory': () => {
+    // v <- beta v + g. A constant g has fixed point g/(1-beta); an alternating g a
+    // two-cycle at +-g/(1+beta). Both are recomputed by iterating the recursion too.
+    const settle = (beta, alternating) => {
+      let v = 0;
+      for (let i = 0; i < 4000; i += 1) v = beta * v + (alternating && i % 2 ? -10 : 10);
+      return Math.abs(v);
+    };
+    for (const beta of [0.9, 0.95]) {
+      assert(Math.abs(settle(beta, false) - 10 / (1 - beta)) < 1e-9, 'agreeing fixed point');
+      assert(Math.abs(settle(beta, true) - 10 / (1 + beta)) < 1e-9, 'alternating two-cycle');
+    }
+    return [fixed(10 / 0.1, 0), fixed(10 / 0.05, 0), fixed(10 / 1.9, 4), fixed(10 / 1.95, 4),
+      fixed(1.9 / 0.1, 0), fixed(1.95 / 0.05, 0)];
+  },
+  'hinge-lift': root => {
+    const w = JSON.parse(root.dataset.weights), b = Number(root.dataset.bias);
+    const corners = [[0, 0], [0, 1], [1, 0], [1, 1]];
+    // Over the four signed corners the plane's own coefficients cancel, so every plane's
+    // clearances sum to the same budget: positive only when the rectifier clips a corner.
+    const budget = bias => {
+      const h = corners.map(([a, c]) => Math.max(w[0] * a + w[1] * c + bias, 0));
+      return h[0] + h[3] - h[1] - h[2];
+    };
+    assert(Math.abs(budget(b) + b) < 1e-12, 'the clipped budget equals minus the bias');
+    assert(Math.abs(budget(0)) < 1e-12, 'with nothing clipped the lifted corners are coplanar');
+    const z = corners.map(([a, c]) => w[0] * a + w[1] * c);
+    assert(z.every(v => v >= 0), 'with b = 0 nothing is clipped');
+    return ["No.", `${z[2].toFixed(2)} and ${z[3].toFixed(2)}`, `0 + ${z[3].toFixed(2)} = ${z[1]} + ${z[2].toFixed(2)}`];
+  },
+  'step-length': root => {
+    const c = Number(root.dataset.curvature);
+    // On a quadratic the iterate's displacement is multiplied by 1 - alpha*c each step,
+    // so the threshold is 2/c: ten times the curvature makes the chapter's middle rate diverge.
+    const factor = (alpha, curve) => 1 - alpha * curve;
+    assert.equal(2 / c, 1, 'the declared bowl puts the threshold at one');
+    const steep = 20, rates = [0.005, 0.12, 1.1];
+    const survive = rates.filter(a => Math.abs(factor(a, steep)) < 1);
+    assert.deepEqual(survive, [0.005], 'only the smallest rate survives ten times the curvature');
+    return [fixed(2 / steep, 1), minus(String(factor(0.12, steep)))];
+  },
   'hinge-bump': () => ['2, −4, 2', 'peak becomes 4', '0, +2, −2, 0'],
   'mask-predictor': () => ['slot 0', 'one slot before'],
   'layernorm-axis': () => {

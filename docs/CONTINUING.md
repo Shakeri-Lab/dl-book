@@ -10,7 +10,15 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 
 ---
 
-> **Current work — Chapter 1 replays, September 18, 2026.** The author reviewed the films at
+> **Current work — Chapters 1 to 4 replays, September 19, 2026.** Nine more scenes from the
+> author's film picks: sigmoid squash, surprise loss, feature space, hinge lift, SGD zones,
+> batch vote, momentum memory, step length and decay angle. Eleven picks were scoped against
+> the manuscript first; two were dropped (a ledger table with no mechanism, a capacity U-curve)
+> and one deferred. Loss-curve races and rotatable 3-D lenses were cut as rejected genres; the
+> one surviving 3-D scene uses the fixed camera the `column-space` precedent set. Still open
+> from the author's list: four from Chapter 5, Chapter 6 and the Trainer interlude.
+>
+> **Previous — Chapter 1 replays, September 18, 2026.** The author reviewed the films at
 > `Video_lectures` and chose three Chapter 1 scenes to adapt: the template scorer, the
 > column-space projection and the descent bowl. All three ship, anchored before the chapter's
 > own headings. A survey of all 294 film scenes found the remaining well essentially dry:

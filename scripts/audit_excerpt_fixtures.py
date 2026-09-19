@@ -46,7 +46,9 @@ TYPOGRAPHIC = str.maketrans({"\u2018": "'", "\u2019": "'", "\u201c": '"', "\u201
 
 
 def normalize_heading(text: str) -> str:
-    return text.translate(TYPOGRAPHIC)
+    # Pandoc renders a heading's code span without its backticks, so the filter never
+    # sees them; drop them here too rather than asking a manifest target to carry them.
+    return text.translate(TYPOGRAPHIC).replace("`", "")
 TRANSPORTS = {"shared", "scene"}
 
 # Receipts record provenance as one-row-per-source Markdown tables whose first

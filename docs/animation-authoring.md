@@ -2,6 +2,13 @@
 
 Author-approved September 9, 2026. These are optional HTML explanations of existing
 book examples, not videos, new experiments, or a replacement for the static book.
+**Chapters 1 to 4 replays — September 19, 2026:** nine further scenes from the author's film
+picks, each scoped against the manuscript before it was built. Two rules were reaffirmed by
+dropping picks: a table is not a mechanism however it animates, and a scene whose evidence is
+measured accuracy is a results plot. A third was added: when a pick's stated rationale is not
+a claim the book makes, build the claim the book does make and carry its caveat — the
+`decay-angle` scene shows steering, not stalling, and says so.
+
 **Chapter 1 replays — September 18, 2026:** the author picked three film scenes for Chapter 1
 (template scorer, column space, descent bowl); all three ship. Two rules follow from building
 them: a `before-heading` target is compared in a normalized form, so plain ASCII quotes in the

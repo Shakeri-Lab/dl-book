@@ -58,7 +58,8 @@ end
 local function normalize_heading(text)
   return (text:gsub("\226\128\152", "'"):gsub("\226\128\153", "'")
     :gsub("\226\128\156", '"'):gsub("\226\128\157", '"')
-    :gsub("\226\128\147", "-"):gsub("\226\128\148", "-"))
+    :gsub("\226\128\147", "-"):gsub("\226\128\148", "-")
+    :gsub("`", ""))
 end
 
 -- after-cell: the exact div Quarto derives from an executable cell's label.

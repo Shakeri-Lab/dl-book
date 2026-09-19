@@ -1,3 +1,31 @@
+# Rolling post-v1.3 — nine replays across Chapters 1 to 4 (September 19, 2026)
+
+- The author reviewed the twenty-one lecture films and chose scenes to adapt. A survey of
+  all 294 film scenes found few remaining candidates, so these were scoped one by one
+  against the manuscript: eleven picks became nine scenes, with two dropped and one
+  deferred for want of a printed fixture or because the evidence was a results plot.
+- Chapter 2: `sigmoid-squash` (the boundary is where the score is zero; equal pushes buy
+  0.2311 then 0.0294) and `surprise-loss` (cross-entropy is not a distance; every halving
+  of the belief costs one more log 2, forever).
+- Chapter 3: `feature-space` (the cut never bends — the space moves, and the wrong-side
+  count falls ten to zero) and `hinge-lift` (one hinge lifts XOR out of the plane; the
+  clearance budget is exactly minus the bias, positive only because the rectifier clips).
+- Chapter 4: `sgd-zones` (the noise floor never moves; the signal collapses by 22),
+  `batch-vote` (jitter falls as one over the root of B, exactly zero at B = n),
+  `momentum-memory` (one running sum, two components: one cancels, one stacks) and
+  `step-length` (past two over the curvature every landing is higher).
+- Chapter 1: `decay-angle`. The author asked for this in Chapter 4 as a story about
+  stalled training; the book makes no such claim and its Chapter 1 footnote explicitly
+  disclaims it, so the scene shows what the footnote does state — the same nudge rotates
+  a larger vector less — and carries that disclaimer.
+- Three anchor traps found and fixed in shared tooling: `before-heading` targets are now
+  compared in one normalized form on both sides (Pandoc renders smart quotes and strips a
+  code span's backticks, so a heading containing either could satisfy neither the filter
+  nor the audit), and the audit refuses class names in Quarto's reserved `column-*`
+  layout namespace, which silently turn a panel into a full-width grid.
+- HTML-only: no manuscript, freeze, filter guard, PDF setting or tag changed. Interaction
+  suite: 1,277 to 1,681 tests; the fixture audit now binds 34 scenes.
+
 # Rolling post-v1.3 — Chapter 1 mechanism replays (September 18, 2026)
 
 - Adds the chapter's first three replays, adapted from the Chapter 1 film: a template
