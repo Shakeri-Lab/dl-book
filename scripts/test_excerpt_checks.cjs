@@ -43,6 +43,54 @@ const expected = {
     const e = shifted.map(Math.exp), total = e.reduce((x, y) => x + y);
     return [`(${shifted.map(v => minus(String(v))).join(', ')})`, `(${e.map(v => fixed(v / total, 4)).join(', ')})`];
   },
+  // The check swaps the ambient dimension for the intrinsic one: the spread goes as one
+  // over the square root of the dimension the data actually varies in, so the band is
+  // wider than the ambient number suggests by the square root of their ratio.
+  'distance-band': root => {
+    const ambient = Number(root.dataset.focus), intrinsic = 12;
+    const widen = Math.sqrt(ambient / intrinsic);
+    assert(widen > 7.5 && widen < 8.5, 'about eight times wider');
+    return ['intrinsic 12', 'ambient 784', 'eight times wider',
+      `square root of ${ambient} over ${intrinsic}`];
+  },
+  // The check applies the permutation to the pixels ALONE, which is the case the scene
+  // never draws: the shuffle experiment is free only because retraining moves the
+  // weights with them. Verified here as arithmetic, not as prose.
+  'shift-shuffle': root => {
+    const w = nums(root.dataset.weights), x = nums(root.dataset.pixels), perm = nums(root.dataset.permutation);
+    const dot = (a, b) => a.reduce((s, v, i) => s + v * b[i], 0);
+    const together = dot(perm.map(i => w[i]), perm.map(i => x[i]));
+    const pixelsOnly = dot(w, perm.map(i => x[i]));
+    assert(Math.abs(together - dot(w, x)) < 1e-12, 'a common permutation is free');
+    assert(Math.abs(pixelsOnly - dot(w, x)) > 0.1, 'permuting the pixels alone is not');
+    return ['Yes, and no.', 're-pairs every term', 'retrains', 'relative positions'];
+  },
+  // The check restarts the same rule from three times as many configurations: one more
+  // round, three times the final budget, and a saving that grows rather than holds.
+  'halving-budget': root => {
+    const configs = nums(root.dataset.keep)[0] * 3, ratio = 3;
+    const counts = [], rungs = [];
+    for (let n = configs, b = 1; n >= 1; n /= ratio, b *= ratio) { counts.push(n); rungs.push(b); }
+    let previous = 0, cost = 0;
+    const perRound = counts.map((n, r) => { const c = n * (rungs[r] - previous); previous = rungs[r]; cost += c; return c; });
+    assert.deepEqual(counts, [81, 27, 9, 3, 1]);
+    assert.deepEqual(perRound, [81, 54, 54, 54, 54]);
+    const full = configs * rungs.at(-1);
+    return ['Five rounds', `${rungs.at(-1)} epochs`, `${cost} epoch-units`,
+      `${full}`, `about ${Math.round(full / cost)} times`];
+  },
+  // The check moves the second branch's target, so the two branches no longer carry the
+  // same value. The product rule hands each branch the OTHER branch's value, so the
+  // counter holds their sum -- which is then no longer twice either one.
+  'branch-blame': root => {
+    const w = Number(root.dataset.w), x = Number(root.dataset.x);
+    const b = Number(root.dataset.bias), target = Number(root.dataset.target), e = Number(root.dataset.e);
+    const a = 1 / (1 + e ** -(w * x + b));
+    const near = a - target, far = a - 0.1, total = near + far, gate = a * (1 - a);
+    assert(Math.abs(total - 2 * near) > 1e-3, 'the moved target breaks the doubling the scene showed');
+    return [fixed(total, 4), fixed(far, 4), fixed(near, 4),
+      fixed(total * gate * x, 4), fixed(2 * near * gate * x, 4)];
+  },
   'one-chain': root => {
     const {w, x, b, y} = Object.fromEntries(['w', 'x', 'b', 'y'].map(k => [k, Number(root.dataset[k])]));
     const a = sigmoid(w * x + b), dLda = 2 * (a - y), dadz = a * (1 - a);

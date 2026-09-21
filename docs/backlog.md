@@ -218,6 +218,38 @@ Other Wave 4 entries remain a shortlist, not permission to implement. See
 Defer training replays, diffusion, RoPE, and elaborate 3-D scenes until the smaller
 excerpts demonstrate useful teaching value.
 
+#### Shipped from the film picks — September 21, 2026
+
+Four scenes the author scoped from the lecture films, built together and recorded here as
+shipped rather than as candidates. Each is registered in `interactives/manifest.json` and
+carries its own receipt.
+
+- **Branch accumulation** (Chapter 5, before "`torch.autograd` in practice: five rules";
+  `branch-blame-excerpt`, [receipt](branch-blame-excerpt.md)). The gap `one-chain` names:
+  `loss = (a + (-0.3)) * (a + (-0.3))` uses `a` twice, so two packets of blame land on one
+  counter and `self.grad +=` adds them. The trunk then reaches the 0.337801 the chapter
+  prints, beside a struck 0.168900 — what assignment would have left.
+- **Search under a budget** (Trainer interlude, before "Train, validation, and test have
+  different jobs"; `halving-budget-excerpt`, [receipt](halving-budget-excerpt.md)).
+  Successive halving drawn as area: each round keeps a third and triples the budget, so
+  the rungs cost 27, 18, 18, 18 and the staircase is 81 of the square's 729. The nearer
+  heading sits inside a callout, which is why the split section's heading is the anchor.
+- **Shift versus shuffle** (Chapter 6, before "The autopsy, in pictures";
+  `shift-shuffle-excerpt`, [receipt](shift-shuffle-excerpt.md)). The arithmetic under the
+  chapter's two experiments: a permutation applied to the weights as well moves every
+  product without changing one (0.39 either way), and a two-pixel slide re-pairs them
+  (1.40). A declared schematic row of eight stands in for 784.
+- **Distance concentration** (Chapter 6, after `cell-fig-curse`; `distance-band-excerpt`,
+  [receipt](distance-band-excerpt.md)). Not the measured curve but the closed form under
+  it: the distance's spread tends to a constant while its mean grows as the square root of
+  d, so the relative spread is the square root of 0.35 over d. Evaluated at 784 that gives
+  0.89, the digit the chapter measures.
+
+Still scoped and unbuilt from the same picks, recorded so they are not re-derived: the
+experiment ledger table, the capacity U-curve, Chapter 5's §5.1 local-slope zoom and its
+outer product, the three splits, Chapter 3's §3.4 tile-the-gaps, and Adam. Each was set
+aside either as a results plot or as a duplicate of a shipped scene's mechanism.
+
 ### Shared acceptance contract
 
 - Follow the approved convolution player: optional and closed/paused initially,
