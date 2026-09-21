@@ -112,6 +112,10 @@
     const parts = [];
     const [PW, PH] = g.port;
     const sub = (base, text) => `${base}<tspan class="lv-sub" dy="${mode === 'wide' ? 4 : 3}">${text}</tspan>`;
+    // The candidate's name wears a combining tilde, and the body sans has no mark
+    // positioning for U+0303: it sets a spacing tilde after the c instead of over it.
+    // Only that symbol goes to the serif face, which composes the mark.
+    const accented = symbol => `<tspan class="mechanism-accent">${symbol}</tspan>`;
     const line = (x1, y1, x2, y2, cls) => parts.push(`<line x1="${num(x1)}" y1="${num(y1)}" x2="${num(x2)}" y2="${num(y2)}" class="${cls}"></line>`);
     const text = (x, y, content, cls, anchor = 'middle', attrs = '') =>
       parts.push(`<text x="${num(x)}" y="${num(y)}" class="${cls}" text-anchor="${anchor}"${attrs}>${content}</text>`);
@@ -162,7 +166,7 @@
     parts.push(`<circle cx="${num(g.plus)}" cy="${num(g.beltY)}" r="${g.plusR}" class="lv-op-node"></circle>`);
     text(g.plus, g.beltY + (mode === 'wide' ? 7 : 5), '+', 'lv-op-plus');
     text(g.ctOut, g.beltNameY, sub('c', 't'), 'lv-name');
-    text(g.ctilde, g.branchNameY, sub('c̃', 't'), 'lv-name');
+    text(g.ctilde, g.branchNameY, sub(accented('c̃'), 't'), 'lv-name');
     text(g.hOut, g.branchNameY, sub('h', 't'), 'lv-name');
 
     // What the second beat installs: the three valves on the lanes they gate, the candidate

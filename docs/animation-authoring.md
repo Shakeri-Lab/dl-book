@@ -25,7 +25,16 @@ fixes in all of them and to four contract changes below (prose budget, plain-tex
 format, never spoil a prediction, four-decimal geometry). See
 [the review-pass receipt](excerpt-review-pass.md). No new scene is authorized by it.
 
-**Source state — September 13, 2026:** twenty-one scenes are pushed through
+**Source state — September 21, 2026:** thirty-eight scenes are registered in
+`interactives/manifest.json`, the four most recent being the film picks built together:
+[branch accumulation](branch-blame-excerpt.md) (Chapter 5),
+[search under a budget](halving-budget-excerpt.md) (the Trainer interlude),
+[shift versus shuffle](shift-shuffle-excerpt.md) and
+[distance concentration](distance-band-excerpt.md) (both Chapter 6). The same pass fixed
+the accent typography named in rule 5 below. `docs/backlog.md` lists what remains scoped
+and unbuilt from the author's picks.
+
+**Prior source state — September 13, 2026:** twenty-one scenes are pushed through
 `00c0730` (network-first derivative gates). Its publish run `34770754602` is
 blocked by a bootstrap HTTP 503 and the known Chapter 18 signed-zero gate.
 The twenty-second scene, [greedy versus beam](greedy-tree-excerpt.md), is
@@ -537,6 +546,17 @@ math — and it is what `interactives/_template` encodes and the harness's
    `9.54e-7` and never a raw double — on the picture, in both static prints, and in
    every `aria-label` or `aria-valuetext` (the gate product's formatter is the pattern).
    Suites that parse printed numbers parse the true minus back first.
+   **A symbol wearing an accent is typeset, not spelled in Unicode.** The body sans face
+   carries no mark positioning for the combining accents U+0302 and U+0303, so `p̂` and
+   `c̃` set the mark beside the letter instead of over it: measured on the published page
+   at 40 px, that face advances 18.24 for `c` and 20.41 for `c̃` — a spacing tilde — while
+   the serif face advances 18.16 for both, which is what a composed mark looks like. In
+   prose, say the symbol in TeX (`<span class="math inline">\( \predictionpart{\hat p} \)</span>`,
+   exactly what Pandoc emits for the chapter's own `$\hat p$`) and let MathJax compose it.
+   SVG `<text>` cannot be typeset, so there the accented symbol *alone* wears
+   `class="mechanism-accent"`, which hands that one glyph to the serif face and leaves the
+   prose around it in the body face. Precomposed letters — U+0177 `ŷ`, U+0175 `ŵ` — are
+   single glyphs the sans face draws correctly and are left as they are.
 6. **Text budget.** On the picture: labels only (`w`, `x`, `y`, `z`, `a`, `L`, a unit, a
    value). One typeset formula line under the picture. One caption line of at most twenty
    words saying what is happening now. The question above the pane, the boundary

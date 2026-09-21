@@ -142,13 +142,24 @@
     make('text', {class: cls, 'font-size': size, 'text-anchor': 'middle', ...extra}, text);
   const show = (node, visible) => visible ? node.removeAttribute('hidden') : node.setAttribute('hidden', '');
   const write = (node, value) => { if (node.textContent !== value) node.textContent = value; };
+  // A label whose symbol wears a combining accent: the body sans has no mark positioning
+  // for U+0302, so it sets the hat beside the p rather than over it, and only the symbol
+  // is handed to the serif face. The tspan is built rather than written as innerHTML so it
+  // carries the SVG namespace, and textContent still reads "belief p̂" for anything asking.
+  const accented = (node, prose, symbol) => {
+    node.textContent = `${prose} `;
+    const span = attrs(document.createElementNS(NS, 'tspan'), {class: 'mechanism-accent'});
+    span.textContent = symbol;
+    node.appendChild(span);
+    return node;
+  };
 
   const marks = {
     lossAxis: make('line', {class: 'sl-axis', 'data-loss-axis': ''}),
     beliefAxis: make('line', {class: 'sl-axis', 'data-belief-axis': ''}),
     lossTitle: label('sl-muted', 12, {'data-name': 'loss-title'}, 'loss (nats)'),
     activeName: label('sl-target-fill sl-number', 12, {'data-name': 'active'}, 'y = 1 term'),
-    beliefTitle: label('sl-muted', 12, {'data-name': 'belief-title'}, 'belief p̂'),
+    beliefTitle: accented(label('sl-muted', 12, {'data-name': 'belief-title'}), 'belief', 'p̂'),
     ghostCurve: make('path', {class: 'sl-ghost', 'data-ghost-curve': '', fill: 'none'}),
     activeCurve: make('path', {class: 'sl-curve', 'data-active-curve': '', fill: 'none'}),
     ghostName: label('sl-muted sl-number', 12, {'data-name': 'ghost'}, 'y = 0 term × 0'),

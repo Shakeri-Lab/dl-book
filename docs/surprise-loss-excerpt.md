@@ -287,3 +287,15 @@ Lecture paths are relative to
 | `chapters/part1/02-logistic-softmax.qmd` | `f72c79714b91dac6788f7745272a104fae6c960544fb743a884165f3e573998e` |
 | `6050-Ch2/STORYBOARD.md` | `16022632a6a90c8cb8f202ed8d51bd60490e040914fd732ef1e7090af9333e77` |
 | `6050-Ch2/lecture.jsx` | `025b275df2150cd71963358e332ff14d73d2a610d481b9606f6cc66ce5824eeb` |
+
+## Accent typography — September 21, 2026
+
+The belief was spelled `p̂` (or `c̃`) as `p` plus the combining accent U+0302 (U+0303). The
+body sans face carries no mark positioning for either, so the hat landed beside the letter
+rather than over it: measured on the published page at 40 px, that face advances 18.24 for
+`c` and 20.41 for `c̃` — a spacing tilde — while the serif face advances 18.16 for both.
+Prose now says the symbol in TeX, exactly as the chapter does, and MathJax composes it. SVG
+text cannot be typeset, so on the picture the accented symbol alone wears the new shared
+class `.mechanism-accent`, which hands that one glyph to `Georgia, "Times New Roman", serif`
+and leaves the word beside it in the body face. Nothing else moved: the static prints were
+regenerated from the same geometry, and no fixture, timetable or caption changed.

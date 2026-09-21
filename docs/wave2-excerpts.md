@@ -1778,3 +1778,17 @@ page overflow, no svg text outside the picture, no console errors.
 **Not done here, by the limits of this change.** `interactives/manifest.json` still carries the
 September 17 computed-variant sentences, four of which the redesign makes false; and the panel
 has no `details.mechanism-check` yet, which `scripts/test_excerpt_checks.cjs` expects.
+
+## Accent typography — September 21, 2026
+
+`lstm-valves` spelled the candidate `c̃` as `c` plus the combining tilde U+0303, and the body
+sans face carries no mark positioning for it: measured on the published page at 40 px that
+face advances 18.24 for `c` and 20.41 for `c̃` — a spacing tilde set beside the letter —
+while the serif face advances 18.16 for both, which is what a composed mark looks like. SVG
+text cannot be typeset, so the symbol alone now wears the new shared class
+`.mechanism-accent`, which hands that one glyph to `Georgia, "Times New Roman", serif` and
+leaves its subscript and the names around it in the body face. The static prints were
+regenerated from the same geometry; no fixture, timetable or caption changed. The same pass
+fixed `p̂` in `surprise-loss` and `sigmoid-squash`, where the symbol appears in prose and is
+now said in TeX for MathJax to compose — see those receipts and rule 5 of
+`docs/animation-authoring.md`.
