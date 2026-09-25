@@ -116,8 +116,8 @@ test('column space: the manuscript owns the geometry while the vectors are decla
   assert(equation > 0 && figure > equation && anchor > figure, 'normal equations, figure, then the heading');
   assert.match(f.$('.mechanism-intro').textContent, /projection figure above/);
   // The two facts this scene declines to draw are the chapter's own, named in the scope.
-  assert.match(chapter, /\*\*Rank deficiency\.\*\* The fitted prediction is still a unique projection/);
-  assert.match(chapter, /\*\*Conditioning\.\*\* Forming the normal equations squares the spectral condition number/);
+  assert.match(chapter, /\*\*Rank deficiency: one prediction, many weights\.\*\*[\s\S]*?The fitted prediction is still unique; the weights are not/);
+  assert.match(chapter, /\*\*Conditioning: factor [\s\S]*?\*\* Forming the normal equations\n\s+squares the spectral condition number/);
   // The panel links the equation by anchor, never by a guessed number, and never with @eq-.
   assert.match(read('column-space/panel.html'), /href="#eq-normal"/);
   assert.doesNotMatch(read('column-space/panel.html'), /@eq-/);

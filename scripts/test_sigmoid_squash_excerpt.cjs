@@ -105,7 +105,7 @@ test('sigmoid squash: the chapter owns the curve; the plane behind it is a decla
   // The three sentences this scene exists to make visible.
   assert.match(chapter, /The sigmoid does not bend the boundary; it grades our confidence on either\nside of it/);
   assert.match(chapter, /an unbounded score/);
-  assert.match(chapter, /its confident regions saturate at the tails/);
+  assert.match(chapter, /its confident regions saturate far from it/);
   // The score axis is the chapter's own sweep, ends included.
   assert(chapter.includes(`o = torch.linspace(${source.range[0]}, ${source.range[1]}, ${source.samples})`));
   // The scene's own schematic contract: the crossing point really is on the boundary, the

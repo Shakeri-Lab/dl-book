@@ -267,6 +267,6 @@ test('integration: the excerpt is HTML-only, manifest-driven, and declared in th
   assert(chapter.includes('## `torch.autograd` in practice: five rules'));
   assert.equal(chapter.split('\n').filter(line => line.startsWith('## ')
     && line.slice(3).replace(/`/g, '').trim() === scene.anchor.target).length, 1, 'the anchor is unambiguous');
-  assert(chapter.indexOf('**Rule 2 — gradients accumulate.**') > chapter.indexOf('## `torch.autograd`'),
+  assert(chapter.indexOf('**Rule 2: gradients accumulate.**') > chapter.indexOf('## `torch.autograd`'),
     'the rule this scene explains is the one just past the anchor');
 });
