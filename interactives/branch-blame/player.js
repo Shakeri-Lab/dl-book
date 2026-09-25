@@ -47,13 +47,13 @@
   const STAGES = ['Ask', 'Seed', 'First branch', 'Hold', 'Second branch',
     'Assignment', 'Down the trunk', 'Compare'];
   const CAPTIONS = [
-    'One value feeds two branches. When blame returns, does the counter read once or twice?',
-    'Blame starts at the loss with one. The product rule sends each branch the other.',
+    'One value feeds two branches. When the gradient returns, does the counter read once or twice?',
+    'The backward pass seeds the loss with one. The product rule sends each branch the other.',
     'The upper branch arrives, and the counter takes its first reading.',
     'One packet has landed; one is still in flight. What will the counter read?',
     'The second lands on the same counter, which adds rather than replaces.',
     'Assignment would have kept only the last arrival. Plus-equals keeps both.',
-    'The doubled blame travels the trunk and lands on the gradient the chapter prints.',
+    'The doubled gradient travels the trunk and lands on the ∂L/∂w the chapter prints.',
     'Two uses, two arrivals, one sum. That is where the factor of two comes from.'
   ];
 
@@ -195,7 +195,7 @@
     const m = g.meter, unit = m.span / TOTAL;
     parts.push(`<rect class="bb-track" x="${num(m.x)}" y="${num(m.y)}" width="${num(m.span)}" height="${m.h}" rx="4"></rect>`);
     parts.push(`<rect class="bb-fill" data-mark="fill" x="${num(m.x)}" y="${num(m.y)}" width="${num(grad * unit)}" height="${m.h}" rx="4"></rect>`);
-    text(m.label[0], m.label[1], 'blame on a', 'bb-scenery', m.anchor);
+    text(m.label[0], m.label[1], 'a.grad', 'bb-scenery', m.anchor);
     text(m.x + grad * unit + 10, m.y + m.h - 5, grad > 0 ? fixed(grad) : '·',
       'bb-blame bb-number bb-total', 'start', ' data-value="grad"');
     // The counterfactual is a second, hollow bar under the real one, so the comparison is
