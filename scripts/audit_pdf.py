@@ -366,7 +366,7 @@ def main() -> None:
     # These are intentionally invented words in the no-position Transformer sample.
     # Their presence proves that the page's embedded text remains searchable and
     # copyable even though the generated prose itself is supposed to be nonsense.
-    for sample_token in ("Thrivofforical", "Xaysherd"):
+    for sample_token in ("independes", "derngexperevive"):
         if sample_token not in normalized_text:
             errors.append(
                 "known Transformer sample token is missing from the PDF text layer: "
