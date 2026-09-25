@@ -44,7 +44,7 @@
     'Multiply each pair, add the eight products: that is the unit’s score.',
     'Scramble the positions and retrain, so the weights scramble too. Does the score change?',
     'Every column moved, and every product travelled with it. Same terms, same total.',
-    'Back in place. Now slide only the pixels two to the right. Same question?',
+    'Back in place. Now slide only the pixels two to the right, with no retraining. Same question?',
     'Each weight meets a different pixel now. The products are remade.',
     'Against the score the same weights gave in place, the sum has moved.',
     'Order is nothing to a sum. Pairing is everything.'

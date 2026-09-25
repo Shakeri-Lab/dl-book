@@ -1,5 +1,10 @@
 # Shift versus shuffle — `shift-shuffle-excerpt`
 
+*2026-09-25:* the summary now reads "Watch the mechanism: retrained scramble versus
+zero-shot slide", and the question, the slide beat's caption, the scope note, and the
+lesson name the protocol behind each comparison, matching the chapter's protocol matrix.
+The animation, fixture, and timeline are unchanged.
+
 An optional, HTML-only mechanism excerpt for Chapter 6, inserted before the level-2
 heading `Inside the weights: full-frame matched filters` (retitled from `The autopsy, in pictures` on 2026-09-25) — that is, after both experiments and the diagnosis
 they share, and before the chapter turns to the fitted weights. The PDF is untouched:
@@ -136,4 +141,4 @@ templates, the U-curve — are left where they are.
 
 | Source | SHA-256 |
 |---|---|
-| `chapters/part1/06-generalization-inductive-bias.qmd` | `0f33bb0100e011b83fa65e6604bd7dd330434dbc6fa01582bbbbc0b46f3ac1bb` |
+| `chapters/part1/06-generalization-inductive-bias.qmd` | `74b5c3a1e9ce2d25db58034100e413f828151e6364600129f2fe12052536fe7f` |

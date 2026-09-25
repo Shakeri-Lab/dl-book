@@ -52,7 +52,16 @@
   garments keep a black margin was measured and found false for this dataset (Xiao et
   al. scale the longest edge to 28 pixels), so the crop control replaces it. The Chapter 6
   stdout contracts cover the three new blocks, and the shift-shuffle replay anchor follows
-  the new heading.
+  the new heading. Section 6.3 now opens on the protocol distinction (a shift breaks the
+  trained model; scrambling costs nothing upon retraining), and the shift-shuffle replay
+  is retitled "retrained scramble versus zero-shot slide", with its question, slide beat,
+  scope note, and lesson naming the protocol behind each comparison.
+- **"Blame" retired book-wide.** A follow-up sweep replaced the metaphor with "gradient"
+  language in Chapters 2 (a code comment), 8, 9, 10, 13, 17, and 18 and the epilogue.
+  Chapter 10's section "Blame through time" is now "Gradients through time", and Chapter
+  18's objective-and-location map labels its axes "Where may the gradient write?" and
+  "What defines the loss?". Chapter 3 keeps "blame" in its statement of the credit
+  assignment problem, where the word is literal.
 - **Evidence.** Chapters 5 and 9 were re-executed with byte-identical printed stdout.
   Chapter 6 was re-executed: its four existing stdout blocks are byte-identical, and it
   gains the three new ones. The print PDF has 556 pages and the continuous PDF 530, each

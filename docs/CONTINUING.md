@@ -21,10 +21,11 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > `scripts/build_tikz.sh 5_5`), and Section 5.3 now covers the batch transpose, two
 > backward products per forward product, and activation memory. The companion pointer
 > moved to Sources. Exercise 7 became the softmax VJP; the BatchNorm backward exercise now
-> lives in Chapter 9. Decision E1 (one-chain colours) is resolved. Open: "blame" still
-> appears in prose in Chapters 3 (credit assignment, deliberate), 8, 10, 13, 17, 18, and
-> the epilogue, including two Chapter 18 figure labels; a sweep needs re-execution of
-> those chapters. Chapter 6: headings retitled in the book's voice, a two-by-two protocol
+> lives in Chapter 9. Decision E1 (one-chain colours) is resolved. A follow-up sweep, at the
+> author's request, replaced "blame" in Chapters 2, 8, 9, 10, 13, 17, and 18 and the
+> epilogue (Chapter 10's heading is now "Gradients through time"; Chapter 18's figure
+> labels read "WHERE MAY THE GRADIENT WRITE?" and "WHAT DEFINES THE LOSS?"). The only
+> remaining use is Chapter 3's literal credit-assignment question. Chapter 6: headings retitled in the book's voice, a two-by-two protocol
 > matrix (zero-shot versus retrained, shift versus scramble), an edge-crop control, a
 > permutation-symmetry derivation, a pixel-space shift-distance check, and Hein et al.
 > (2019) in place of the 3Blue1Brown citation; Chapter 6 now prints seven stdout blocks,
