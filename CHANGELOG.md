@@ -70,6 +70,18 @@
   $a$ or $\lambda$. The job-interview analogy for per-design tuning becomes a physical one:
   an engine and an electric motor compared at one shared shaft speed, where one operating
   point can sit at one machine's peak and far from the other's.
+- **Chapter 7.** The opening states the diagnosis, the prescription, and why the operator
+  is built first in fixed form (to isolate locality and translation equivariance); the
+  closing states that treating the $3\times3$ kernel as a parameter tensor optimized by
+  reverse-mode automatic differentiation yields the convolutional network, instead of
+  staging the question. The output-size paragraph no longer points ahead by chapter
+  number. Three generic plan steps now describe their cells. A reported
+  `make_shapes (n: int64)` signature bug was checked and is not in the book: source,
+  HTML, and both PDFs read `make_shapes(n: int = 64)`, and the cell executes.
+- **Chapter 18 CI stability.** The printed `recovered centered scores` normalize a
+  round-off-sized negative zero (`round(x, 6) + 0.0`), so the line no longer prints
+  `-0.0` on some runners and `0.0` on others. This one frozen character changed from
+  `-0.0` to `0.0` with the author's approval; no tolerance changed.
 - **Evidence.** Chapters 5 and 9 were re-executed with byte-identical printed stdout.
   Chapter 6 was re-executed: its four existing stdout blocks are byte-identical, and it
   gains the three new ones. The print PDF has 556 pages and the continuous PDF 530, each

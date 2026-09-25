@@ -28,7 +28,11 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > remaining use is Chapter 3's literal credit-assignment question. The experimentation
 > interlude's Figure EX.1 now nests the inner training loop inside the outer
 > experiment cycle, and its job-interview analogy became engines at one shared shaft
-> speed (arc-seeds updated). Chapter 6: headings retitled in the book's voice, a two-by-two protocol
+> speed (arc-seeds updated). Chapter 7's opening and closing were rewritten without
+> trailers, and its generic plan steps now describe their cells; 119 of the same
+> "Prepare the inputs and fixed settings for the example." plan steps remain elsewhere
+> in the book. Chapter 18's signed-zero CI failure is fixed at the source (see the
+> resolved note below). Chapter 6: headings retitled in the book's voice, a two-by-two protocol
 > matrix (zero-shot versus retrained, shift versus scramble), an edge-crop control, a
 > permutation-symmetry derivation, a pixel-space shift-distance check, and Hein et al.
 > (2019) in place of the 3Blue1Brown citation; Chapter 6 now prints seven stdout blocks,
@@ -490,6 +494,10 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > Do not normalize frozen output, widen a tolerance, bypass CI, or resume the
 > numerical-runtime migration as part of this HTML-only publication. A fresh push
 > rechecks the existing contract; record its result independently.
+> **Resolved 2026-09-25 with the author's approval:** the failure recurred in three of
+> four publishing runs, so the print now reads `round(x, 6) + 0.0`, which maps a
+> round-off `-0.0` to `0.0`. The frozen stdout changed by that one character; no
+> tolerance changed and the numerical-runtime migration stays paused.
 
 > **Current animation work — September 11, 2026.** Work in
 > `/Users/hs9hd/dl-book-html-release`. The author's `main` commit `0674cab` contains
