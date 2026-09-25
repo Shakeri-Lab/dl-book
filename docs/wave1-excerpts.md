@@ -51,10 +51,10 @@ Digests recomputed with `shasum -a 256` while writing this receipt:
 
 | Source | SHA-256 |
 |---|---|
-| `chapters/part1/02-logistic-softmax.qmd` | `f72c79714b91dac6788f7745272a104fae6c960544fb743a884165f3e573998e` |
-| `chapters/part1/05-backpropagation.qmd` | `62b9791a5713f689a14b6275ea777a32a633f7c1a307c3221acabf7c8b5931ff` |
-| `chapters/part3/10-sequences-rnn.qmd` | `43aff04a9e678f6dbeb00a4e04519ee4cc281cec197ac411f39d28fedff6e8ba` |
-| `chapters/appendices/a3-precision-performance.qmd` | `f45440cf2f5988439066711a6722e4d6694ec528e7ae23a9f90bf2fabfcebcf9` |
+| `chapters/part1/02-logistic-softmax.qmd` | `e21d97a119a92dd63f09ced326524871b2537ec2ee2ca4f7dd2d60d2fbd146fc` |
+| `chapters/part1/05-backpropagation.qmd` | `fd3825ae9747ff6305ddb7f434fc0513d3d828d3fd878d8ea6a00cea8eee9b86` |
+| `chapters/part3/10-sequences-rnn.qmd` | `8034a59c9df18121babc7b80d51ccbf4e8ca50708818228c13b4630508fae878` |
+| `chapters/appendices/a3-precision-performance.qmd` | `ff5dae7284799bc89eb678c253e4e7e661e1af6395b2c4e9a3250239cdfd17e4` |
 
 The appendix is here because one witness `gate-product` displays is printed there and not
 in Chapter 10; see *Where 8.27 × 10⁻²⁵ is printed* below.

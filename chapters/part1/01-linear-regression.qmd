@@ -174,11 +174,11 @@ $$
 \end{aligned}
 $$ {#eq-mse}
 
-The wine residual names each miss; squaring and averaging those misses produces one
-neutral scalar. The loss is the guiding principle of training: it translates model
-error into a score of failure, giving the optimizer a precise measure of how much
-corrective work remains. The choice of loss is not arbitrary, and we will justify this
-one at the end of the chapter.
+The dark red residual $\residualpart{\vect{e}}$ names each miss; squaring and averaging
+those misses produces one neutral scalar. The loss is the guiding principle of training:
+it translates model error into a score of failure, giving the optimizer a precise
+measure of how much corrective work remains. The choice of loss is not arbitrary, and we
+will justify this one at the end of the chapter.
 
 With two parameters, $(w,b)$, this scalar becomes a surface over the parameter plane.
 That surface is the **loss landscape**. Learning means finding a low point on it; the
@@ -187,8 +187,23 @@ step by step.
 
 ## Finding the best weights, method 1: solve it exactly
 
-For this one special problem we can characterize the exact minimizer. Set the gradient
-of @eq-mse to zero and you get the **normal equations**:
+For this one special problem we do not need to search: we can characterize the exact
+minimizer. Differentiate the MSE of @eq-mse with respect to $\parameterpart{\vect{w}}$
+and set the gradient to zero:
+
+$$
+\nabla_{\parameterpart{\vect{w}}}\loss
+= -\frac{2}{n}\,\featurepart{\matr{X}}^{\top}
+\bigl(\targetpart{\vect{y}}-\featurepart{\matr{X}}\parameterpart{\vect{w}}\bigr)
+= -\frac{2}{n}\,\featurepart{\matr{X}}^{\top}\residualpart{\vect{e}}
+= \vect{0}.
+$$
+
+The condition $\featurepart{\matr{X}}^{\top}\residualpart{\vect{e}}=\vect{0}$ says the
+residual is orthogonal to every feature column. Substituting
+$\residualpart{\vect{e}}=\targetpart{\vect{y}}-\featurepart{\matr{X}}\parameterpart{\hat{\vect{w}}}$
+and moving the known term to the right gives the **normal equations**, which is why
+$\featurepart{\matr{X}}^{\top}$ appears on both sides:
 
 $$
 \featurepart{\matr{X}^\top\matr{X}}\,
@@ -197,28 +212,44 @@ $$
 \featurepart{\matr{X}^\top}\targetpart{\vect{y}} .
 $$ {#eq-normal}
 
-Four facts keep this equation honest without detouring into a linear-algebra treatise:
+Four computational facts keep this equation honest without detouring into a
+linear-algebra treatise. The rank-aware least-squares routine in Take 1 below is
+designed around the first three; the fourth is why we will soon stop solving exactly.
 
-- **Full column rank.** The minimizer is unique, and only then may we write
+- **Full column rank: one solution.** When
+  $\operatorname{rank}(\featurepart{\matr{X}})=d$, the matrix
+  $\featurepart{\matr{X}}^{\top}\featurepart{\matr{X}}$ is invertible and the minimizer
+  is unique. Only then may we write
   $\parameterpart{\hat{\vect{w}}}
   =(\featurepart{\matr{X}}^{\top}\featurepart{\matr{X}})^{-1}
-  \featurepart{\matr{X}}^{\top}\targetpart{\vect{y}}$.
-- **Rank deficiency.** The fitted prediction is still a unique projection, but the
-  parameter vector need not be unique. The minimum-norm choice is
+  \featurepart{\matr{X}}^{\top}\targetpart{\vect{y}}$. Writing the inverse is notation,
+  not an algorithm.
+- **Rank deficiency: one prediction, many weights.** When
+  $\operatorname{rank}(\featurepart{\matr{X}})<d$, which is guaranteed when $d>n$ and
+  also happens when features are collinear, infinitely many weight vectors reach the
+  same minimum error. The fitted prediction is still unique; the weights are not. The
+  standard choice is the minimum-norm solution
   $\parameterpart{\hat{\vect{w}}_{\min}}
   =\featurepart{\matr{X}^{+}}\targetpart{\vect{y}}$, where
-  $\featurepart{\matr{X}^{+}}$ is the Moore--Penrose pseudoinverse. This matters in
-  deep learning because $d>n$ is common, not exceptional.
-- **Conditioning.** Forming the normal equations squares the spectral condition number:
+  $\featurepart{\matr{X}^{+}}$ is the Moore--Penrose pseudoinverse. Classical
+  regression treated $d>n$ as a pathology; in deep learning, overparameterization is
+  the default regime.
+- **Conditioning: factor $\featurepart{\matr{X}}$, do not form
+  $\featurepart{\matr{X}}^{\top}\featurepart{\matr{X}}$.** Forming the normal equations
+  squares the spectral condition number,
   $\kappa_2(\featurepart{\matr{X}}^{\top}\featurepart{\matr{X}})
-  =\kappa_2(\featurepart{\matr{X}})^2$. QR-, SVD-, or library-based least-squares
-  routines are the computational default.
-- **Cost.** For a tall dense matrix, forming
-  $\featurepart{\matr{X}}^{\top}\featurepart{\matr{X}}$ costs $O(nd^2)$, followed by
-  about $O(d^3)$ for factorization. Either term may dominate.
+  =\kappa_2(\featurepart{\matr{X}})^2$, which doubles the number of significant digits
+  that rounding can destroy. Robust solvers therefore factor the rectangular
+  $\featurepart{\matr{X}}$ itself, by QR with column pivoting or by the SVD.
+- **Cost: a $d\times d$ wall.** For a tall dense matrix ($n\gg d$), forming
+  $\featurepart{\matr{X}}^{\top}\featurepart{\matr{X}}$ costs $O(nd^2)$ operations
+  and factoring it about $O(d^3)$ more, while its storage grows as $d^2$. With a million
+  parameters, that matrix alone would hold $10^{12}$ entries.
 
-There is a picture behind these facts worth keeping. Every prediction can be written
-as a weighted combination of the feature columns:
+### Two sides of the same projection
+
+There is a picture behind these facts worth keeping, because it returns throughout the
+book. Every prediction vector is a weighted combination of the feature columns:
 
 $$
 \predictionpart{\hat{\vect{y}}}
@@ -228,12 +259,17 @@ $$
 
 It must therefore live in the **column space** of $\featurepart{\matr{X}}$. If
 $\targetpart{\vect{y}}$ lies outside that space, the best prediction is its projection.
-The residual
+We drop a perpendicular onto the space, and $\predictionpart{\hat{\vect{y}}}$ is the
+**orthogonal projection** of $\targetpart{\vect{y}}$. The residual
 $\residualpart{\vect{e}}=\targetpart{\vect{y}}-\predictionpart{\hat{\vect{y}}}$ is
+orthogonal to every column, which is the condition
+$\featurepart{\matr{X}}^{\top}\residualpart{\vect{e}}=\vect{0}$ we just derived: it is
 perpendicular to the column space, so no adjustment of the weights can reduce it
-further.
+further. @fig-projection draws the picture.
 
-The same projection can be read from the other side:
+![The normal equations, geometrically: the optimal prediction $\predictionpart{\hat{\vect{y}}} = \featurepart{\matr{X}}\parameterpart{\hat{\vect{w}}}$ is the projection of $\targetpart{\vect{y}}$ onto the column space of $\featurepart{\matr{X}}$; the residual $\residualpart{\vect{e}}$ is orthogonal to it.](../../figures/generated/1_1_lin_Recap-fig06.svg){#fig-projection width=62% fig-alt="Geometric projection of y onto the column space of X, with residual e drawn perpendicular to the fitted vector."}
+
+Now read the same projection from the other side, one fitted value at a time:
 
 $$
 \predictionpart{\hat y_i}
@@ -242,15 +278,20 @@ $$
 \targetpart{y_j}.
 $$
 
-Each fitted value is a weighted combination of the training targets
-$\targetpart{y_j}$. Part IV will turn this same idea into attention by choosing mixing
-weights through similarity.
+The $n\times n$ matrix $\featurepart{\matr{X}\matr{X}^{+}}$ is the projection matrix,
+often called the *hat matrix* because it puts the hat on $\targetpart{\vect{y}}$. Read
+entry by entry, **every prediction is a weighted combination of the training targets**
+$\targetpart{y_j}$. Here those weights are fixed globally by least squares, and some can
+be negative. Part IV keeps this target-mixing form but changes the weights: they become
+nonnegative, sum to one, and depend on how similar a new input is to each training
+input. That is the step to attention.
 
-![The normal equations, geometrically: the optimal prediction $\predictionpart{\hat{\vect{y}}} = \featurepart{\matr{X}}\parameterpart{\hat{\vect{w}}}$ is the projection of $\targetpart{\vect{y}}$ onto the column space of $\featurepart{\matr{X}}$; the residual $\residualpart{\vect{e}}$ is orthogonal to it.](../../figures/generated/1_1_lin_Recap-fig06.svg){#fig-projection width=62% fig-alt="Geometric projection of y onto the column space of X, with residual e drawn perpendicular to the fitted vector."}
-
-The exact characterization is elegant, but deep models have millions or billions of
-parameters and nonlinear compositions. There is no comparable closed form to solve.
-We need another way.
+The exact characterization is elegant, but it does not survive the move to deep
+networks. Once a nonlinearity sits between layers, setting the gradient to zero gives a
+system of nonlinear equations with, in general, no closed-form solution. And with
+millions or billions of parameters, even the linear case hits the $d\times d$ wall
+above. We trade the one-shot solve for an iterative search: start with a guess, measure
+how bad it is, and make a local correction.
 
 ## Finding the best weights, method 2: walk downhill
 
@@ -1040,7 +1081,7 @@ Close the book for one minute and retrieve the complete learning story.
 - When do the closed form, scratch loop, and PyTorch module represent the same estimator?
 :::
 
-## Okay, so — what did we just build?
+## Okay, so: what did we just build?
 
 We taught a computer a function from examples, completely:
 
@@ -1097,24 +1138,30 @@ that expands what the model can learn.
 
 ## Exercises {.unnumbered}
 
-1. **(Pencil.)** Derive the normal equations @eq-normal by expanding
-   $\norm{\vect{y}-\matr{X}\vect{w}}_2^2$, taking the gradient with respect to
-   $\vect{w}$, and setting it to zero. Notice that this derivation does not require an
-   inverse. Then state what becomes unique when $\matr{X}$ has full column rank and
-   what remains unique when it is rank deficient.
+1. **(Pencil.)** Expand $\norm{\vect{y}-\matr{X}\vect{w}}_2^2$ term by term and
+   differentiate it with respect to $\vect{w}$ to recover the gradient displayed before
+   @eq-normal; then rearrange it into @eq-normal. Notice that this derivation does not
+   require an inverse. Then state what becomes unique when $\matr{X}$ has full column
+   rank and what remains unique when it is rank deficient.
 2. **(Pencil.)** Repeat the derivation with the ridge penalty
    $\lambda\norm{\vect{w}}_2^2$ and show the solution becomes
    $(\matr{X}^\top\matr{X} + n\lambda I)^{-1}\matr{X}^\top\vect{y}$ when the data-fit
    term is the MSE. Why does the $n\lambda I$ term guarantee invertibility for any
    $\lambda > 0$? If you augment $\matr{X}$ with a bias column, which diagonal entry
    should be zero so the intercept is not penalized?
-3. **(Code.)** In `make_synthetic_data`, raise `noise` to 1.0 and rerun all three
-   implementations 10 times with different seeds. How much do the learned weights vary
-   across runs? Which term of @eq-bias-variance are you watching?
+3. **(Code.)** In `make_synthetic_data`, raise `noise` to 1.0 and draw 10 training
+   sets with different seeds. Fit each with the closed form; the three implementations
+   above land on the same weights, so one is enough. How much do the learned weights
+   vary across training sets? The `noise` you raised sets the irreducible-noise term of
+   @eq-bias-variance. Which term measures the spread you just observed, and how does
+   higher label noise inflate it?
 4. **(Code.)** Set the learning rate in `LinearRegressionScratch` to 1.0 and rerun.
    Describe what the loss curve does, and explain it using the blindfolded-descent
    picture.
 5. **(Code.)** In the ridge experiment, sweep $\lambda \in \{0.01, 0.1, 1, 10, 100\}$
-   and plot both weight MSE and $\norm{\vect{w}}_2$ against $\lambda$. Where is the
-   sweet spot, and what happens to error and weight scale at the two extremes? Connect
-   your answer to bias and variance.
+   and plot both weight MSE and $\norm{\vect{w}}_2$ against $\lambda$ on a logarithmic
+   $\lambda$ axis (for example, `plt.semilogx`). Fix a seed before generating the data
+   so the sweep is reproducible; your numbers will differ from the chapter's, whose cell
+   inherits the random stream from earlier cells. Where is the sweet spot, and what
+   happens to error and weight scale at the two extremes? Connect your answer to bias
+   and variance.

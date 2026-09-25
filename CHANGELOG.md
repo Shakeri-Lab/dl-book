@@ -1,3 +1,70 @@
+# Rolling post-v1.3 — Preface, Chapters 1–4, reference audit, and em-dash sweep (September 25, 2026)
+
+- **Preface.** Rewritten around the author's Lecture 0: why this moment (scale as a design
+  decision, pretraining, shared representation spaces) and the batched GEMM that carries
+  most of the arithmetic, written in Appendix B's row-batch convention
+  $\matr{X}\matr{W}^{\top}+\vect{1}\vect{b}^{\top}$; what the mechanics explain and what
+  remains open theory (Chapter 6's double descent, Chapter 16's scaling laws); a
+  continuation, not a fresh start; the forward and backward passes; the read → predict →
+  run → audit loop with the five audit questions numbered and the estimator cases linked
+  to Chapter 4. Two new TikZ schematics (`figures/tikz-src/0_0_preface_{ladder,engine}.tex`)
+  replace a long arrow equation; they carry notes rather than numbered captions because the
+  Preface is unnumbered. Route tables, edition statement, support block, and the archived
+  v1.3 release are unchanged; the Phase B front-door and disclosure contracts pass.
+- **Chapter 1.** Section 1.3 names the residual colour "dark red". Section 1.4 shows the
+  gradient $-\tfrac{2}{n}\matr{X}^{\top}\vect{e}$ before the normal equations, retitles the
+  four computational facts (full column rank, rank deficiency, conditioning, cost), adds
+  the subsection "Two sides of the same projection" with the hat matrix, and plants the
+  target-mixing bridge to Part IV in plain language. Exercise 3 separates data seeds from
+  model seeds and noise from variance; Exercise 5 asks for a logarithmic λ axis and a fixed
+  seed; Exercise 1 asks for the derivation behind the displayed gradient. Frozen stdout is
+  byte-identical to the previous freeze.
+- **Chapter 2.** Names the **classification head** (Section 2.1 anchor, a callout after
+  $\vect{o}=\matr{W}\vect{x}+\vect{b}$, and the logits contract in the PyTorch warning) and
+  the backbone/head split that later chapters use; one-line callbacks join Chapters 3, 8, 9,
+  and 15. Figure 2.1 gains an input-space panel: the $o=0$ boundary as a straight line
+  between circles and squares, with parallel $\hat p$ contours. The "differentiable" box
+  now opens on the cliff, names the temperature $\tau$ shown in Figure 2.3, and reads the
+  temperature setting of text generators as an entropy dial. The information-theory box
+  names the KL divergence, shows $H(P,Q)=H(P)+D_{\mathrm{KL}}(P\|Q)$ and the one-hot collapse,
+  and gains a small decomposition figure. Exercises 1, 3, 4, and 5 are sharpened; Exercise
+  4 states its loss and gives the verified softmax–MSE gradient. Kullback & Leibler (1951)
+  and Blondel et al. (2020) join the chapter's Sources.
+- **Chapter 3.** Section 3.1 is retitled "The four points no hyperplane can separate" and
+  explains XOR's zero marginal correlation; the historical callout now centers credit
+  assignment (Minsky 1961; Minsky and Papert 1969) instead of folklore. Region counts are
+  called polynomial in width, and the composed-tent construction (Telgarsky 2016, $2^L$
+  pieces from $2L$ units) grounds the depth claim. Section 3.7 drops its chapter
+  trailer. Exercises 2, 4, and 6 are disambiguated.
+- **Chapter 4.** The introduction no longer names Adam early. Section 4.4 opens on the
+  signal/noise mechanism and Strang moves to Sources (§VI.4–VI.5). New paragraphs cover
+  the hardware economics of the minibatch and derive momentum from the heavy-ball
+  equation, with its low-pass reading. The regularizers gain subsections, AdamW is stated
+  in the chapter's own notation, and the dropout ensemble note names the nonlinearity
+  caveat. Exercises 2, 5, and 6 are disambiguated.
+- **Chapter 14 evidence.** Re-execution restores agreement between the printed training
+  trajectories and the prose: the published freeze printed 1.9306 and 0.0425 where the
+  text says 1.9190 and 0.0309. Both runs sit inside the reviewed portability ledger.
+- **Em dashes.** The author's rule is now "none unless genuinely necessary". The
+  manuscript went from 707 to 6 em dashes; the rest sit in a cited title, printed output,
+  figure text, or comments. Twenty-six files were edited in four batches and every
+  change was reviewed: code, math, URLs, and comments were checked unchanged by script,
+  parentheses balanced, and four defects (stripped list indentation, a broken YAML escape,
+  two nested parentheticals) were fixed before merging. Recap headings now read
+  "Okay, so: …"; four replay fixture literals and one replay anchor follow the new text.
+- **Reference audit.** All 207 external links and every prose attribution were checked by
+  two independent passes and every finding was verified by hand; no fabricated reference
+  was found. Twelve
+  defects are fixed: two dead NeurIPS links (Chapters 9 and 11), the epilogue's Table 3 →
+  Table 4, the "Wang, Yang, Vidal" byline (four places), the LSTM forget gate credited to
+  Gers, Schmidhuber & Cummins (2000), mixture of experts credited to Jacobs, Jordan, Nowlan
+  & Hinton (1991), three title/link mismatches (Chapters 17 and 18, Appendix C), Neal's
+  year, Chapter 16's EfficientNet product, and an internal file path in Chapter 4's
+  Sources. Receipt: `docs/reference-audit-2026-09-25.md`.
+- **Tooling.** `scripts/build_tikz.sh` supplies inert `\floatplacement` and `\chapter` so
+  standalone figure builds work again after the August macro hooks. The PDF outline now
+  has 395 entries.
+
 # Rolling post-v1.3 — nine replays across Chapters 1 to 4 (September 19, 2026)
 
 - The author reviewed the twenty-one lecture films and chose scenes to adapt. A survey of

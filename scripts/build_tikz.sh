@@ -35,6 +35,8 @@ PY
 \\providecommand{\\faInfo}{}
 \\providecommand{\\faLightbulb}{}
 \\providecommand{\\faExclamationTriangle}{}
+\\providecommand{\\floatplacement}[2]{}
+\\providecommand{\\chapter}{}
 \\newenvironment{Highlighting}{}{}
 \\newenvironment{Highlighting*}{}{}
 \\input{$(pwd)/tex/macros.tex}

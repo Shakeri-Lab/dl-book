@@ -124,7 +124,7 @@ Lecture paths are relative to
 
 | Source | SHA-256 |
 |---|---|
-| `chapters/part4/16-vit-scaling.qmd` | `75f24cfc9feab89d50a5cde238cea929d00fa24d20f98285291c47804b10791d` |
+| `chapters/part4/16-vit-scaling.qmd` | `a04a6f87e6ff2699740d2036e55cae5749375034a5e8119d3bc7fdb3e48f8066` |
 | `6050-Ch16/lecture.jsx` | `6b9cedc6ab0e407e9e62dfc3278ef35205cc0e9e7c61c9c64ff3093864cce057` |
 | `6050-Ch16/STORYBOARD.md` | `7657e0372b2aa1861ae1bf7fa6f0a8bdcda7edb807ce0b6e1042ee9c3990d9a4` |
 | `6050-Ch16/ch16-data.js` | `68881c89c2e85d85b821b7addb606bb11651dc4dd7a0fbcd45f07539dc5501ee` |

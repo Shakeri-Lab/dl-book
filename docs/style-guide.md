@@ -202,8 +202,9 @@ retrieve from memory: title the mistaken inference, then state the repair.
 
 ## Book-Specific Writing Rules (author feedback, July 2026)
 
-1. **Fewer em dashes.** Use them sparingly, only where an aside genuinely helps. Prefer
-   commas, colons, parentheses, or a new sentence. Where the em dash was expressing a
+1. **No em dashes unless genuinely necessary** (author rule, tightened September 25,
+   2026). Use commas, colons, parentheses, semicolons, or a new sentence. An em dash may
+   remain only inside a quoted title or quotation, code or printed output, or a comment. Where the em dash was expressing a
    *deduction* ("premise — so conclusion"), use a deduction arrow instead:
    `premise $\rightarrow$ conclusion`. Example (his):
    "We want the one that is most suited to our problem $\rightarrow$ the learning
@@ -251,7 +252,7 @@ retrieve from memory: title the mistaken inference, then state the repair.
    | Orange | learnable parameters ($\vect{w},b,\theta$) | `\parameterpart{}` |
    | Purple | observed targets ($y,\vect{y}$) | `\targetpart{}` |
    | Green | predictions and model outputs ($\hat y,\hat{\vect{y}}$) | `\predictionpart{}` |
-   | Wine | residuals and errors ($e,y-\hat y$) | `\residualpart{}` |
+   | Wine (say "dark red" in reader-facing prose) | residuals and errors ($e,y-\hat y$) | `\residualpart{}` |
 
    Operators and neutral structure stay black or grey. This vocabulary governs
    semantic equations, their matching prose, and conceptual diagrams; it does not

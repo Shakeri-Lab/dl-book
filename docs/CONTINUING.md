@@ -10,7 +10,24 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 
 ---
 
-> **Current work — Chapters 1 to 4 replays, September 19, 2026.** Nine more scenes from the
+> **Current work — Preface, Chapters 1–4, reference audit, em dashes, September 25, 2026.**
+> The Preface was rewritten from the author's Lecture 0 blueprint (why now; mechanics versus
+> open theory; a continuation; open the hood; the five audit questions) with two new TikZ
+> schematics that carry notes instead of numbered captions. Chapter 1's Section 1.4 and
+> exercises and Chapter 2's head callout, Figure 2.1 input-space panel, temperature box, and
+> KL box, Chapter 3's XOR history and depth folding, and Chapter 4's SGD mechanism,
+> momentum physics, and regularizer subsections were revised at the author's request.
+> Re-execution also restored Chapter 14's printed trajectories to the numbers its prose
+> quotes. Environment note: the `~/.venvs/dl-book` editable `dlbook` install pointed at
+> the Box copy, whose online-only files failed to load; it now points at
+> `~/dl-book/code`, as CI does. A two-family reference audit (Claude plus
+> two rounds of Gemini teams) found no fabricated reference and fixed twelve defects;
+> receipt `docs/reference-audit-2026-09-25.md`. The author tightened the em-dash rule to
+> "none unless genuinely necessary"; the manuscript went from 707 to 6. Open: the 94 em
+> dashes inside `interactives/` replays (their tests assert the text), and the
+> refreshed excerpt-receipt hashes must be re-reviewed if a chapter changes again.
+>
+> **Previous — Chapters 1 to 4 replays, September 19, 2026.** Nine more scenes from the
 > author's film picks: sigmoid squash, surprise loss, feature space, hinge lift, SGD zones,
 > batch vote, momentum memory, step length and decay angle. Eleven picks were scoped against
 > the manuscript first; two were dropped (a ledger table with no mechanism, a capacity U-curve)
@@ -1260,8 +1277,8 @@ Everything in CLAUDE.md §Environment still applies. On a fresh account verify:
 ## 4. Standing author rules (accumulated from his feedback — binding)
 
 A. **Style** (full detail in `docs/style-guide.md`, "Book-Specific Writing
-   Rules"): sparing em dashes — calibration: accepted chapters run ≈ 9–11 em
-   dashes per 1000 words; judge density, not raw counts. Deduction em dashes
+   Rules"): no em dashes unless genuinely necessary (tightened September 25,
+   2026; the manuscript was swept to zero outside titles, code, and comments). Deduction em dashes
    become `$\rightarrow$` arrows. Process chains as
    "(predict $\rightarrow$ measure $\rightarrow$ step)".
 B. **Figure-rich**, echoing his Manim scene compositions

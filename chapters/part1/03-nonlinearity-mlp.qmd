@@ -20,7 +20,7 @@ different knobs $\rightarrow$ no amount of stacking buys any new expressive powe
 learn the patterns of the real world we need a magic ingredient: **nonlinearity**. This
 chapter is about what one small bend does to everything.
 
-## The tiny dataset that embarrassed a field
+## The four points no hyperplane can separate
 
 You do not need real-world data to expose the linear ceiling. Four points suffice. The
 XOR function outputs 1 exactly when its two binary inputs *differ*:
@@ -37,15 +37,32 @@ positive examples sit on one diagonal, the negatives on the other; any line you 
 puts at least one point on the wrong side. A linear classifier cannot represent this
 function, no matter how it is trained.
 
-::: {.callout-note}
-## A historical scar
+Why is a linear model blind here? Weight the four points equally. Each input on its
+own carries no evidence about the label: whether $x_1$ is 0 or 1, the label is 1 half
+the time, and the same holds for $x_2$, so the correlation between either input and
+the label is exactly zero. The label lives entirely in the *interaction* of the two
+inputs. A linear score $\vect{w}^\top\vect{x} + b$ adds up the inputs' separate
+contributions, so it has no term that could capture one.
 
-This is not a toy observation. The limitations of single-layer perceptrons, including
-XOR, were publicized in 1969 and became emblematic of the case against that research
-program. They contributed to reduced enthusiasm and funding, but they were not a
-single-cause explanation for the first "AI winter"; limited compute, data, and unmet
-promises mattered too. Multi-layer networks and practical backpropagation
-(@sec-05-backpropagation) later removed the representational obstacle exposed here.
+::: {.callout-note}
+## A historical scar: credit assignment, not only geometry
+
+This is not a toy observation. In 1969 Marvin Minsky and Seymour Papert published
+*Perceptrons*, a rigorous analysis of what single-layer perceptrons can and cannot
+compute, with XOR as the simplest emblem of linear inseparability.
+
+The folklore says the book exposed a blind spot and killed the field. The history is
+subtler. Networks with a layer of hidden units could already represent functions like
+XOR; the open problem was how to *train* them. With no targets for the hidden units,
+how should a learning rule decide which hidden weight to blame for an error at the
+output? Minsky had described this **credit assignment problem** in 1961, and he and
+Papert conjectured that extending the perceptron to multilayer machines would prove
+unrewarding.
+
+That doubt, together with limited compute and data and cuts in research funding,
+contributed to a long lull in neural-network research, though no single cause explains
+it. The obstacle was never representation; it was the lack of an efficient learning
+rule. Backpropagation (@sec-05-backpropagation) is that rule.
 :::
 
 Let us confirm the ceiling empirically. We reuse the framework loop previewed in
@@ -162,7 +179,7 @@ $$
 f(\vect{x}) = \mathrm{ReLU}(\vect{w}^\top\vect{x} + b).
 $$ {#eq-neuron}
 
-The weighted input $\vect{w}^\top\vect{x} + b$ is the stimulus — and recall from
+The weighted input $\vect{w}^\top\vect{x} + b$ is the stimulus, and recall from
 @sec-01-linear-regression that it is a *similarity score* against the template
 $\vect{w}$. Below threshold, the neuron is silent (output 0); above it, the neuron
 fires with intensity proportional to the stimulus.
@@ -192,7 +209,7 @@ surface = torch.relu(w[0] * x1 + w[1] * x2 + b)
 #| echo: false
 #| label: fig-neuron-hinge
 #| fig-alt: "The left panel shows a ReLU response that is zero for negative stimulus and linear for positive stimulus. The right panel shows a two-dimensional neuron's zero-response half-plane and rising positive contours, with the weight vector perpendicular to the threshold boundary."
-#| fig-cap: "One neuron, two views. Left: ReLU bends a scalar stimulus at zero—silent on one side, proportional response on the other. Right: the same bend creates a threshold line in the input plane; the weight vector is perpendicular to it, and activation grows as inputs move across the line."
+#| fig-cap: "One neuron, two views. Left: ReLU bends a scalar stimulus at zero: silent on one side, proportional response on the other. Right: the same bend creates a threshold line in the input plane; the weight vector is perpendicular to it, and activation grows as inputs move across the line."
 fig, axes = plt.subplots(1, 2, figsize=(8.2, 3.35))
 axes[0].plot(z, response, color="#2F855A", lw=2.5)
 axes[0].axvspan(-3, 0, color="#B8B8A8", alpha=0.18)
@@ -220,8 +237,8 @@ everything that follows.
 (What about the sharp corner at $z=0$, where the derivative is undefined? Libraries
 choose a subgradient convention, commonly 0. Exact zeros can occur systematically with
 zero biases, sparse activations, or symmetric inputs, so the convention is not merely
-academic. The gradient story of this open-or-shut gate — including when it helps and
-when a unit goes dead — is told in
+academic. The gradient story of this open-or-shut gate, including when it helps and
+when a unit goes dead, is told in
 @sec-05-backpropagation.)
 
 ## Layers of hinges: bumps and polytopes
@@ -230,7 +247,8 @@ One neuron makes one boundary. A layer of $k$ neurons makes $k$ boundaries, and 
 intersections partition the input space into convex **polyhedral regions** (bounded
 ones are polytopes), and within each cell the layer computes a plain linear function. For fixed input
 dimension $d$, the maximum region count of one generic hyperplane arrangement grows on
-the order of $k^d$.
+the order of $k^d$: polynomial in the width $k$, and quadratic on a two-dimensional
+plane (Exercise 4 derives the exact count).
 
 The simplest compact constructive example lives in 1D. Combine three hinges so the
 slopes cancel again after the third breakpoint:
@@ -327,7 +345,7 @@ Now read the theorem's fine print, because it is where beginners over-promise:
 ::: {.callout-warning}
 ## Trap: universal approximation is not a training guarantee
 
-1. It does not tell you **how to find the weights** — existence of a good network is
+1. It does not tell you **how to find the weights**. Existence of a good network is
    not a training algorithm. Finding the weights is the job of the loss and the
    optimizer, and nothing guarantees gradient descent lands on the theorem's solution.
 2. It does not say the network is **small**. Tiling a complicated function with
@@ -355,12 +373,20 @@ where the on/off pattern of its units is constant, and those regions are polytop
 whose walls are the units' boundaries. Deeper layers add walls that kink wherever
 they cross earlier ones. Exercise 4 has you draw this tiling and count its cells.
 
-This bending can compound dramatically. For suitable ReLU constructions at fixed input
+This bending compounds through repeated folding, and one dimension already shows how.
+A single hidden layer of $k$ ReLU units cuts a line into at most $k+1$ linear pieces,
+so the pieces grow linearly with width. Now let two units fold the interval $[0,1]$
+into a tent, $t(x) = 2\,\mathrm{ReLU}(x) - 4\,\mathrm{ReLU}(x - \tfrac{1}{2})$, which
+rises and then falls. Composing the tent with itself $L$ times gives a sawtooth with
+$2^L$ linear pieces from only $2L$ units, because each fold doubles the pieces of
+everything beneath it. A single hidden layer needs $2^L - 1$ units to match.
+
+The same holds beyond one dimension: for suitable ReLU constructions at fixed input
 dimension, achievable region counts grow exponentially with depth, while a single
-hidden layer's count grows polynomially with width. This is an existence and
-architecture-dependent comparison, not a promise that every trained deep network
-realizes all those regions. It gives the economic argument for depth: some partitions
-represented by a deep, narrow network require far more units in a shallow one.
+hidden layer's count grows polynomially with width. This is an existence
+construction, not a promise that gradient descent finds or uses all those regions. It
+is the economic argument for depth: deep networks fold space recursively and buy
+partitions that a shallow network would need exponentially more units to match.
 
 ## Your first real MLP
 
@@ -372,7 +398,7 @@ Time to build the model properly as a reusable class.
 Every model you write from now on subclasses `nn.Module`, and the first line of your
 `__init__` is always `super().__init__()`. Think of it as pouring the foundation
 before building the house: it is what wires up parameter tracking, `.parameters()`,
-and everything the optimizer and autograd need. Forget it and PyTorch fails loudly —
+and everything the optimizer and autograd need. Forget it and PyTorch fails loudly:
 the one favor a framework can do you.
 :::
 
@@ -398,7 +424,7 @@ class MLP(nn.Module):
 ```
 ::::
 And a problem worthy of it: two interleaved moons, the classic shape no line can
-separate well. Same training loop as always — the model is the only thing that changed:
+separate well. Same training loop as always: the model is the only thing that changed:
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
@@ -461,13 +487,14 @@ for ax, (acc, Z), title in zip(
 axes[0].set_ylabel("$x_2$")
 plt.tight_layout(); plt.show()
 ```
-Where did the curve go? Nowhere — and that is the chapter's deepest point. The MLP
+Where did the curve go? Nowhere, and that is the chapter's deepest point. The MLP
 did not learn a curved boundary; it learned a **space in which the boundary is
 straight**. Its readout is still a linear model, $\vect{w}^\top \phi_\theta(x) + b$:
 project the hidden activations onto the readout direction
 $\hat{\vect{w}} = \vect{w}/\lVert\vect{w}\rVert$ and the decision boundary sits at
-the exact coordinate $-b/\lVert\vect{w}\rVert$, a straight line. This is the
-preface's central equation, drawn:
+the exact coordinate $-b/\lVert\vect{w}\rVert$, a straight line. In Chapter 2's
+vocabulary, the hidden layers form a backbone $\phi_\theta$ and this readout is its
+classification head. This is the preface's central equation, drawn:
 
 :::: {.plan-code}
 ::: {.plan}
@@ -522,24 +549,29 @@ at 50% accuracy with silent units (you will verify this in Exercise 3). A few sp
 units cost little and improve reliability. @sec-04-training-loss-sgd will examine when
 optimization noise helps exploration, without treating it as a guaranteed escape.
 
-## A cautionary tale, and a look ahead
+## A cautionary tale: representation without structure
 
-There is a seductive story about what the layers of an MLP learn: the first layer
-detects edges, the next combines them into shapes, the next into objects — a tidy
-hierarchy of increasingly abstract features. It is the *idealized* story, and for
-fully-connected networks on raw images it is mostly **not what happens**. A
-fully-connected layer sees its input as one long, structureless vector; it has no
-notion that pixel potentially relates to its neighbor. Nothing in the architecture
-encourages the tidy hierarchy, and with every pixel connected to every unit, the
-parameter count explodes long before the hierarchy emerges.
+There is a seductive story about the hidden layers of a neural network: the first layer
+detects edges, the next combines them into textures and parts, and the next assembles
+objects, a tidy hierarchy of increasingly abstract features.
 
-We now hold real expressive power — networks that can, in principle, represent almost
-anything. @sec-04-training-loss-sgd trains them at scale and
-@sec-05-backpropagation supplies their gradients. And then
-@sec-06-generalization-inductive-bias asks this chapter's uncomfortable question:
-what happens when all that flexibility meets data it does not understand the
-*structure* of? The answer — watch an MLP fail, in pictures, then fix it by building
-knowledge into the architecture — is the turn the whole book pivots on.
+For a fully connected network on raw images, that is mostly **not what happens**. An
+MLP treats its input as one long, flat vector. To a dense weight matrix, neighboring
+pixels are no closer than pixels in opposite corners of the frame: the architecture
+has no notion of two-dimensional geometry or of locality, and nothing in it encourages
+a local-to-global hierarchy. Every unit connects to every pixel, so the first layer
+spends its parameters on diffuse, full-frame templates, and the parameter count
+explodes long before recognizable parts appear. The tidy hierarchy is not a property
+of depth itself; it appears in architectures that build locality in, and Part II
+builds one.
+
+We now hold real expressive power: networks that can, in principle, approximate any
+continuous function on a bounded domain. Universal representation does not guarantee
+sensible learning. What happens when an unconstrained model meets high-dimensional
+data whose geometry it cannot see? Flexibility without inductive bias tends to fit
+coordinates rather than concepts. Supplying the missing structure, through the
+architecture, the data, and the training procedure, is the problem the rest of this
+book keeps solving.
 
 ::: {.callout-note}
 ## Check yourself
@@ -551,14 +583,14 @@ Close the book for one minute and rebuild the bend.
 - How can a nonlinear feature map make a curved input-space problem linearly separable?
 :::
 
-## Okay, so — one bend changed everything
+## Okay, so: one bend changed everything
 
 1. **Linear stacks collapse** (@eq-collapse); XOR proves four points can defeat any
    line.
 2. **A neuron is a thresholded similarity score**: below the boundary silent, above it
    proportional. One neuron $\rightarrow$ one boundary; a layer $\rightarrow$ a
    polyhedral partition; three hinges $\rightarrow$ a compact bump.
-3. **Bumps tile functions** (universal approximation) — but the theorem promises
+3. **Bumps tile functions** (universal approximation), but the theorem promises
    existence, not learnability, economy, or generalization.
 4. **Depth bends boundaries**: suitable deep constructions can create region counts
    that grow exponentially with depth, yielding large efficiency gaps relative to
@@ -578,6 +610,16 @@ Close the book for one minute and rebuild the bend.
 - [Nair and Hinton, “Rectified Linear Units Improve Restricted Boltzmann Machines”
   (2010)](https://www.cs.toronto.edu/~hinton/absps/reluICML.pdf) is an early empirical
   account of rectifiers preserving useful signal through multiple layers.
+- Minsky and Papert, *Perceptrons: An Introduction to Computational Geometry* (MIT
+  Press, 1969) is the rigorous analysis of single-layer perceptrons behind the
+  historical callout.
+- [Minsky, “Steps Toward Artificial Intelligence”
+  (1961)](https://doi.org/10.1109/JRPROC.1961.287775) describes the credit assignment
+  problem that hidden units pose for learning.
+- [Telgarsky, “Benefits of Depth in Neural Networks”
+  (2016)](https://proceedings.mlr.press/v49/telgarsky16.html) gives the composed-tent
+  construction whose $2^L$ pieces a shallow network matches only with exponentially
+  many units.
 - [Montúfar et al., “On the Number of Linear Regions of Deep Neural Networks”
   (2014)](https://papers.nips.cc/paper_files/paper/2014/hash/fa6f2a469cc4d61a92d96e74617c3d2a-Abstract.html)
   develops the architecture-dependent region-count argument behind the chapter's case
@@ -592,9 +634,9 @@ Close the book for one minute and rebuild the bend.
 1. **(Pencil.)** Generalize @eq-collapse: show by induction that any stack of $L$
    linear layers equals a single linear layer. Where exactly does inserting
    $\mathrm{ReLU}$ between layers break your proof?
-2. **(Pencil.)** Using the bump construction, give explicit weights for a
-   one-hidden-layer network that outputs approximately 1 on $[0,1]$ and 0 outside
-   $[-0.2, 1.2]$. How many hidden units did you need?
+2. **(Pencil.)** Using the hinge construction, give explicit weights and biases for a
+   one-hidden-layer network that outputs exactly 1 on $[0,1]$ and 0 outside
+   $[-0.2, 1.2]$, a trapezoid. How many hidden units did you need?
 3. **(Code.)** Retrain the XOR network with `hidden_dim = 2` across ten different
    seeds. How often does it reach 100%? Inspect a failed run: what happened to its
    hidden units? (Hint: check how many are permanently silent.)
@@ -602,10 +644,12 @@ Close the book for one minute and rebuild the bend.
    maximum region count
    $1+h+\binom{h}{2}=\sum_{i=0}^{2}\binom{h}{i}$.
    **(Code.)** Color the input plane by ReLU on/off pattern for a random
-   2 → 8 → 8 network. Count connected constant-pattern cells on successively finer
-   grids, then compare deep and wide networks at matched parameter count using seed
-   6050. Report the grid resolution with the count: a sampled count is a lower bound,
-   not an exact theorem.
+   $2 \to 8 \to 8 \to 1$ network (seed 6050). On successively finer grids, count the
+   distinct activation patterns that appear (`torch.unique(patterns, dim=0)`). One
+   pattern can occupy several disjoint cells; to count spatially connected cells, label
+   connected components with `scipy.ndimage.label`. Compare with a parameter-matched
+   wide network, $2 \to 26 \to 1$: both have 105 parameters. Report the grid
+   resolution with each count: a sampled count is a lower bound, not an exact theorem.
 5. **(Code.)** Replace the moons MLP's ReLU with `nn.Identity()` and retrain. Explain
    the resulting boundary in one sentence using @eq-collapse.
 6. **(Pencil.)** Let $\sigma$ be smooth and choose an offset $c$ with
@@ -618,9 +662,11 @@ Close the book for one minute and rebuild the bend.
    \longrightarrow uv
    $$
    as $\lambda\to0$.
-   **(Code.)** Use the logistic sigmoid with $c=1$, sweep $\lambda$, and plot
-   $|m_\lambda(u,v)-uv|$ in float64. Then compose the gate into a balanced tree for
-   $x_1\cdots x_8$. Explain both the approximation-error regime and the eventual
-   roundoff regime. *Named wrong answer:* “expand the logistic sigmoid at $c=0$” —
+   **(Code.)** Use the logistic sigmoid with $c=1$, sweep $\lambda$ over
+   $[10^{-6}, 1]$ on a logarithmic grid, and plot $|m_\lambda(u,v)-uv|$ in float64 at
+   $u=0.6$, $v=0.4$. Explain both the approximation-error regime and the eventual
+   roundoff regime, and estimate the $\lambda$ where they balance. *Optional
+   extension:* compose seven gates into a balanced tree for $x_1x_2\cdots x_8$; how
+   does depth change the error, and how would you choose $\lambda$ at each level? *Named wrong answer:* “expand the logistic sigmoid at $c=0$”;
    that is its inflection point, where $\sigma''(0)=0$ and the proposed denominator
    vanishes.

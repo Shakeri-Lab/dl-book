@@ -3,7 +3,7 @@
 <!-- lecture-source: m01_lecture-1-from-linear-regression-to-neural-netwo_-bdoWPWjyTc.txt
      seeds: sources/1L-2_softmax.tex -->
 
-Regression predicts numbers; most of what the world wants predicted is *categories* —
+Regression predicts numbers; most of what the world wants predicted is *categories*:
 cat or dog, spam or not, which of ten digits. This chapter converts the linear
 machinery of @sec-01-linear-regression into a classifier without discarding a single
 idea: the same weighted sums, the same maximum-likelihood recipe for the loss, the same
@@ -28,6 +28,10 @@ What we need is two things:
 
 1. a way to turn the model's raw score (its **logit**, $o \in \R$) into a probability,
 2. a loss that measures how wrong a *probability* is.
+
+The linear map that produces those raw scores has a name worth learning now: it is the
+model's **head**, here a **classification head**. It is the last layer, and its job is
+to turn whatever representation reaches it into task-specific logits.
 
 ## Binary classification
 
@@ -61,19 +65,53 @@ sigmoid_response = torch.sigmoid(o)
 ```{python}
 #| echo: false
 #| label: fig-sigmoid
-#| fig-alt: "An S-shaped curve rises from near zero to near one. Dotted guides intersect it at logit zero and probability one half, while both tails flatten."
-#| fig-cap: "The sigmoid maps any real score to $(0,1)$, crossing $\\tfrac{1}{2}$ exactly at $o=0$. The model's uncertainty lives in the middle; its confident regions saturate at the tails."
-plt.figure(figsize=(5.8, 3))
-plt.plot(o, sigmoid_response, color="#232D4B", lw=2.2)
-plt.axhline(0.5, ls=":", color="#B8B8A8"); plt.axvline(0, ls=":", color="#B8B8A8")
-plt.annotate("decision boundary\n$o = 0$", xy=(0, 0.5), xytext=(1.6, 0.32),
-             color="#E57200", arrowprops=dict(arrowstyle="-|>", color="#E57200"))
-plt.xlabel(r"logit $o = \mathbf{w}^\top \mathbf{x} + b$")
-plt.ylabel(r"$\hat{p} = \sigma(o)$")
+#| fig-alt: "Left: an S-shaped curve rises from near zero to near one, with dotted guides meeting it at logit zero and probability one half. Right: navy circles and orange squares on a plane are separated by a straight solid line; two dashed lines parallel to it mark probabilities 0.1 and 0.9, and the shading shifts from navy to orange across the line."
+#| fig-cap: "The sigmoid maps any real score to $(0,1)$, crossing $\\tfrac{1}{2}$ exactly at $o=0$ (left). In input space (right), that single score is the straight line $\\mathbf{w}^\\top\\mathbf{x}+b=0$ between the circles and the squares; the dashed contours $\\hat p = 0.1$ and $0.9$ are parallel to it. Confidence grows with distance from the line, and the line itself never bends. The model's uncertainty lives near the boundary; its confident regions saturate far from it."
+fig, (ax_curve, ax_plane) = plt.subplots(1, 2, figsize=(10, 3.4),
+                                         gridspec_kw={"width_ratios": [1.15, 1]})
+ax_curve.plot(o, sigmoid_response, color="#232D4B", lw=2.2)
+ax_curve.axhline(0.5, ls=":", color="#B8B8A8"); ax_curve.axvline(0, ls=":", color="#B8B8A8")
+ax_curve.annotate("decision boundary\n$o = 0$", xy=(0, 0.5), xytext=(1.6, 0.32),
+                  color="#E57200", arrowprops=dict(arrowstyle="-|>", color="#E57200"))
+ax_curve.set_xlabel(r"logit $o = \mathbf{w}^\top \mathbf{x} + b$")
+ax_curve.set_ylabel(r"$\hat{p} = \sigma(o)$")
+ax_curve.set_title("score to probability", fontsize=10)
+
+import math
+
+# A schematic plane: its own drawing geometry, from a local generator so the
+# global random stream seen by later cells is untouched.
+w_plane, b_plane = torch.tensor([1.0, 1.6]), 0.4
+gen = torch.Generator().manual_seed(6050)
+circles = torch.tensor([-1.2, -0.9]) + 0.55 * torch.randn(12, 2, generator=gen)
+squares = torch.tensor([1.0, 0.8]) + 0.55 * torch.randn(12, 2, generator=gen)
+g1, g2 = torch.meshgrid(torch.linspace(-3, 3, 241), torch.linspace(-2.6, 2.6, 209),
+                        indexing="xy")
+p_plane = torch.sigmoid(w_plane[0] * g1 + w_plane[1] * g2 + b_plane)
+ax_plane.contourf(g1, g2, p_plane, levels=20, cmap="coolwarm", alpha=0.22)
+ax_plane.contour(g1, g2, p_plane, levels=[0.1, 0.5, 0.9],
+                 colors=["#232D4B", "#E57200", "#232D4B"],
+                 linestyles=["--", "-", "--"], linewidths=[1.1, 2.0, 1.1])
+angle = math.degrees(math.atan2(-w_plane[0].item(), w_plane[1].item()))
+for level, x_label, text, color in [(0.1, 0.9, r"$\hat p=0.1$", "#232D4B"),
+                                     (0.5, -2.1, r"$\hat p=0.5$: $o=0$", "#E57200"),
+                                     (0.9, 1.5, r"$\hat p=0.9$", "#232D4B")]:
+    score = math.log(level / (1 - level))                    # the logit on this contour
+    y_label = (score - b_plane - w_plane[0].item() * x_label) / w_plane[1].item()
+    ax_plane.text(x_label, y_label + 0.12, text, rotation=angle, rotation_mode="anchor",
+                  fontsize=8, color=color)
+ax_plane.scatter(circles[:, 0], circles[:, 1], marker="o", s=34, facecolor="white",
+                 edgecolor="#232D4B", linewidth=1.4, label="$y=0$")
+ax_plane.scatter(squares[:, 0], squares[:, 1], marker="s", s=30, color="#E57200",
+                 label="$y=1$")
+ax_plane.set_xlim(-3, 3); ax_plane.set_ylim(-2.6, 2.6); ax_plane.set_aspect("equal")
+ax_plane.set_xlabel("$x_1$"); ax_plane.set_ylabel("$x_2$")
+ax_plane.set_title("the same boundary in input space", fontsize=10)
+ax_plane.legend(loc="upper left", fontsize=8, framealpha=0.9)
 plt.tight_layout(); plt.show()
 ```
 Notice what did *not* change: the decision boundary $\hat{p} = \tfrac{1}{2}$ is exactly
-$o = 0$, i.e. $\vect{w}^\top\vect{x} + b = 0$ — the same hyperplane geometry from
+$o = 0$, i.e. $\vect{w}^\top\vect{x} + b = 0$, the same hyperplane geometry from
 @sec-01-linear-regression, with $\vect{w}$ still the template the input is scored
 against. The sigmoid does not bend the boundary; it grades our confidence on either
 side of it.
@@ -89,8 +127,8 @@ $$
 \loss_{\text{BCE}} = -\bigl[\, y \log \hat{p} + (1 - y)\log(1 - \hat{p}) \,\bigr].
 $$ {#eq-bce}
 
-Read it as *surprise*: if the true label is 1, the loss is $-\log \hat{p}$ — small when
-the model believed in the outcome, exploding as the model's belief goes to zero. A
+Read it as *surprise*: if the true label is 1, the loss is $-\log \hat{p}$. It is small
+when the model believed in the outcome and explodes as that belief goes to zero. A
 confident wrong answer is punished without mercy, which is exactly the pressure a
 probability deserves.
 
@@ -110,16 +148,47 @@ it is not the last time you will see it.
 ## Multiclass classification: softmax
 
 With $K$ classes, run $K$ templates at once: $\matr{W} \in \R^{K \times d}$ produces a
-score vector $\vect{o} = \matr{W}\vect{x} + \vect{b}$, one logit per class. To turn $K$
-scores into a probability distribution, exponentiate (making everything positive) and
-normalize:
+score vector $\vect{o} = \matr{W}\vect{x} + \vect{b}$, one logit per class.
+
+::: {.callout-tip}
+## The first architectural block: the classification head
+
+The linear map from an incoming representation to class scores is the **classification
+head**, also called a *linear readout*:
+
+$$
+\operatorname{head}(\featurepart{\vect{h}})
+= \parameterpart{\matr{W}}\featurepart{\vect{h}} + \parameterpart{\vect{b}},
+\qquad
+\parameterpart{\matr{W}} \in \R^{K \times d},\quad \parameterpart{\vect{b}} \in \R^{K}.
+$$
+
+Its contract is narrow: take a $d$-dimensional representation $\featurepart{\vect{h}}$,
+emit $K$ logits $\vect{o}$, and hand those logits straight to the loss. This chapter has
+no hidden layers yet, so the representation is the raw input, $\featurepart{\vect{h}} =
+\featurepart{\vect{x}}$: here the whole model *is* the head.
+
+Later models split into two parts. A **backbone** (also called the trunk) turns raw
+inputs such as pixels or tokens into a representation
+$\featurepart{\vect{h}} = \phi_{\theta}(\featurepart{\vect{x}})$, and a small head reads
+the task's answer off that representation. The backbone changes dramatically across the
+book, from multilayer perceptrons (Chapter 3) to convolutional stacks (Chapters 8 and 9)
+and Transformers (Chapters 14 to 16); the head usually stays this small linear map.
+Because the two are separate, either can be swapped. Adapting a pretrained model to new
+classes often keeps its backbone and trains only a fresh head (Chapters 9, 15, and 17),
+and one backbone can feed several heads at once: a softmax head for a label beside a
+linear-regression head for a coordinate.
+:::
+
+To turn $K$ scores into a probability distribution, exponentiate (making everything
+positive) and normalize:
 
 $$
 \hat{y}_j = \mathrm{softmax}(\vect{o})_j = \frac{e^{o_j}}{\sum_{k=1}^{K} e^{o_k}} .
 $$ {#eq-softmax}
 
 Softmax has three properties worth committing to memory: every output is positive, the
-outputs sum to one, and — less obviously — it is **invariant to constant shifts**:
+outputs sum to one, and, less obviously, it is **invariant to constant shifts**:
 adding the same $c$ to every logit changes nothing, because $e^{o_j + c} = e^c e^{o_j}$
 and the $e^c$ cancels top and bottom. Only the *differences* between scores matter.
 
@@ -170,31 +239,46 @@ long.
 :::
 
 ::: {.callout-note}
-## What "differentiable" buys us — softening the hard
+## What "differentiable" buys us: softening the hard
 
-That word *differentiable* deserves a moment in the light, because it names one of the
-great design patterns of this field.
+Gradient descent cannot follow a cliff.
 
-Consider the obvious way to pick a class: take the **argmax**, then output a one-hot
-vector with 1 at the winning index and 0 elsewhere. (The scalar `max` operation is
-different and does have a gradient through its winning input.) Argmax-plus-one-hot is
-*hard*: nudge a losing logit slightly and the output does not move at all; nudge it
-past the winner and the output jumps all at once. Its derivative is zero almost
-everywhere, so the output gives gradient descent no local hint about which losing
-score should move or by how much. Chapter 5 will formalize how such local derivatives
-combine across many layers; for now, zero means there is no useful direction to follow.
+Consider the obvious way to pick a class: take the $\operatorname{argmax}$, then output a
+one-hot vector with 1 at the winning index and 0 elsewhere. (The scalar $\max$ operation
+is different: it passes a gradient through its winning input.) Argmax-plus-one-hot is
+*hard*. Nudge a losing logit slightly and the output does not move at all; nudge it past
+the winner and the output jumps all at once. Its derivative is zero almost everywhere, so
+the selection gives gradient descent no local hint about which losing score was close,
+which was far, or how the weights should change.
 
-Softmax is a smooth relaxation of that one-hot selection; the name is literal: a
-**soft max**. Instead of crowning one winner, it distributes belief according to the
-scores, and now every logit can affect the loss. We gave up a little decisiveness and
-bought trainability.
+Softmax is a smooth relaxation of that one-hot selection; the name is literal: a **soft
+max**. Instead of crowning one winner, it spreads belief according to the scores, and
+every logit keeps a nonzero path to the loss. It is two things at once: a proper
+categorical distribution, the one cross-entropy scores below, and a smooth stand-in for
+a discrete choice. We gave up a little decisiveness and bought trainability.
+
+A **temperature** $\tau > 0$ sets where on that continuum the model sits:
+
+$$
+\operatorname{softmax}(\vect{o}/\tau)_j = \frac{e^{o_j/\tau}}{\sum_{k=1}^{K} e^{o_k/\tau}} .
+$$
+
+As $\tau \to 0$ the distribution sharpens toward the hard winner; as $\tau \to \infty$ it
+flattens toward uniform indifference; every value in between is smooth, so gradients
+reach every logit (@fig-soft-vs-hard). If you have moved a "temperature" setting on a
+text generator, this is the same division: the generator divides its next-token logits
+by $\tau$ and samples from the result. It is an entropy dial, not an imagination dial.
+Near $\tau = 0$ sampling becomes greedy decoding, predictable and prone to repeating
+itself; at very large $\tau$ it approaches uniform noise; in between, lower-ranked but
+plausible tokens occasionally win the draw.
 
 Watch for this move; it is everywhere once you see it. Whenever a useful operation is
-hard — a lookup, a yes/no choice, even *sorting a list* (yes, researchers have built
-differentiable sorting!) — the play is the same: replace it with a smooth version,
-train, and sharpen later if needed. The one to remember for this book is a hard memory
-lookup: one address wins and every other row is ignored. In Part IV we will replace
-that single address with a weighted read from several candidates.
+discrete, such as a lookup, a yes/no branch, or even sorting a list (differentiable
+sorting exists), the play is the same: replace the hard decision with a smooth,
+temperature-controlled relaxation, train with gradients, and sharpen later if needed.
+The one to remember for this book is a hard memory lookup, where one address wins and
+every other row is ignored. In Part IV that single address becomes a softmax-weighted
+read across a whole bank of stored representations: the core of attention.
 :::
 
 :::: {.plan-code}
@@ -219,7 +303,7 @@ soft_cases = [torch.softmax(logits_demo / temp, dim=0) for temp in temperatures]
 #| echo: false
 #| label: fig-soft-vs-hard
 #| fig-alt: "Five aligned bar charts use categories A through D. The first shows four logits, the second a one-hot hard winner, and the last three show softmax probabilities at temperatures 0.5, 1, and 4. The winning bar sharpens at low temperature and flattens as temperature rises."
-#| fig-cap: "The softening move, in one row. The same four logits (left) pass through the hard argmax-plus-one-hot selection — a cliff with zero gradient almost everywhere — and through softmax at three temperatures. Small $\\tau$ sharpens toward the hard winner; large $\\tau$ flattens toward indifference; every version in between is smooth, so a useful derivative reaches every logit. Chapter 13 returns to this same normalization pattern."
+#| fig-cap: "The softening move, in one row. The same four logits (left) pass through the hard argmax-plus-one-hot selection (a cliff with zero gradient almost everywhere) and through softmax at three temperatures. Small $\\tau$ sharpens toward the hard winner; large $\\tau$ flattens toward indifference; every version in between is smooth, so a useful derivative reaches every logit. Chapter 13 returns to this same normalization pattern."
 fig, axes = plt.subplots(1, 5, figsize=(10, 2.6))
 axes[0].bar(klasses, logits_demo, color="#232D4B")
 axes[0].set_title("logits $o_j$", fontsize=9)
@@ -250,26 +334,81 @@ $$
 \frac{\partial \loss}{\partial o_j} = \hat{y}_j - y_j ,
 $$ {#eq-ce-grad}
 
-prediction minus target, one more time. This recurrence is no coincidence — sigmoid/BCE
+prediction minus target, one more time. This recurrence is no coincidence: sigmoid/BCE
 and softmax/CE are both members of the exponential family paired with their natural
 losses, and that pairing always collapses the gradient to the error.
 
 ::: {.callout-note}
-## The information-theory reading
+## The information-theory reading: coding and surprise
 
-Entropy $H[P] = -\sum_j p_j \log p_j$ measures the uncertainty in a distribution;
-cross-entropy $H(P, Q) = -\sum_j p_j \log q_j$ is the cost of encoding outcomes from
-$P$ using codes built for $Q$. Minimizing our loss is minimizing that encoding cost —
-equivalently, maximizing the likelihood assigned to the observed labels. Probability
-and coding give two readings of the same objective. A later chapter will give the
-remaining mismatch term its own name, when we have a reason to compare whole
-distributions rather than one-hot labels.
+Probability and compression are two readings of the same objective. With natural logs,
+lengths are measured in nats.
+
+- **Entropy** $H(P) = -\sum_j p_j \log p_j$ is the uncertainty in a distribution: the
+  shortest average code length possible for symbols drawn from $P$.
+- **Cross-entropy** $H(P, Q) = -\sum_j p_j \log q_j$ is the average code length when
+  symbols from $P$ are encoded with a code built for the model's belief $Q$.
+
+The gap between them is the **Kullback–Leibler (KL) divergence**, the extra length paid
+for using the wrong code:
+
+$$
+H(P, Q) = H(P) + D_{\mathrm{KL}}(P \,\|\, Q),
+\qquad
+D_{\mathrm{KL}}(P \,\|\, Q) = \sum_j p_j \log \frac{p_j}{q_j} \;\ge\; 0 .
+$$
+
+A one-hot label puts probability 1 on the true class, so it has no uncertainty:
+$H(P) = 0$. For one-hot labels, then, cross-entropy *is* the KL divergence, and both
+reduce to the surprise at the truth, $-\log q_{\text{true}}$ of @eq-ce. Minimizing this
+loss is at once maximizing the categorical likelihood, minimizing the expected code
+length, and minimizing the KL divergence from the labels to the model.
+
+When the target is itself a soft distribution, $H(P)$ no longer vanishes. If $P$ is
+fixed, cross-entropy and KL still differ only by that constant; the distinction starts to
+matter when the first argument moves too, as in the alignment penalty of Chapter 18 and
+the variational autoencoder of Chapter 19. @sec-a5-statistical-learning compares KL with
+other ways to compare distributions.
 :::
+
+```{python}
+#| echo: false
+#| label: fig-ce-decomposition
+#| fig-alt: "Two stacked horizontal bars share one length scale. The top bar, for a soft target, splits into a gray entropy segment and a dark red KL segment. The bottom bar, for a one-hot target, has no entropy segment: its whole length is the KL segment, which equals minus the log of the probability on the true class."
+#| fig-cap: "Cross-entropy splits into the target's own entropy plus the KL divergence, the extra code length paid for using the model's belief $Q$. The model belief is the same in both rows. A soft target (top) carries entropy of its own; a one-hot target (bottom) carries none, so its whole cross-entropy is KL divergence, the surprise $-\\log q_{\\text{true}}$."
+q_model = torch.tensor([0.5, 0.3, 0.2])
+targets = {"soft target\n$P = (0.7, 0.2, 0.1)$": torch.tensor([0.7, 0.2, 0.1]),
+           "one-hot target\n$P = (1, 0, 0)$": torch.tensor([1.0, 0.0, 0.0])}
+fig, ax = plt.subplots(figsize=(7.2, 2.3))
+for row, (name, p_target) in enumerate(targets.items()):
+    support = p_target > 0
+    entropy = -(p_target[support] * p_target[support].log()).sum().item()
+    kl = (p_target[support] * (p_target[support] / q_model[support]).log()).sum().item()
+    y_pos = 1 - row
+    ax.barh(y_pos, entropy, color="#B8B8A8", height=0.5)
+    ax.barh(y_pos, kl, left=entropy, color="#722F37", height=0.5)
+    if entropy > 0:
+        ax.text(entropy / 2, y_pos, f"$H(P)$ = {entropy:.3f}", ha="center", va="center",
+                fontsize=8.5)
+    if kl > 0.2:
+        ax.text(entropy + kl / 2, y_pos, f"KL = {kl:.3f}", ha="center", va="center",
+                fontsize=8.5, color="white")
+    else:                                                    # too narrow to label inside
+        ax.text(entropy + kl / 2, y_pos + 0.33, f"KL = {kl:.3f}", ha="center",
+                va="bottom", fontsize=8.5, color="#722F37")
+    ax.text(entropy + kl + 0.02, y_pos, f"$H(P,Q)$ = {entropy + kl:.3f}", va="center",
+            fontsize=8.5)
+ax.set_yticks([1, 0], list(targets)); ax.set_xlim(0, 1.25)
+ax.set_xlabel("average code length (nats), model belief $Q = (0.5, 0.3, 0.2)$")
+for side in ("top", "right"):
+    ax.spines[side].set_visible(False)
+plt.tight_layout(); plt.show()
+```
 
 ### One numerical landmine
 
 Computing $e^{o_j}$ overflows once a logit reaches the high eighties in float32
-(about 700 in float64) — scales training easily produces. The fix exploits
+(about 700 in float64), a scale training easily reaches. The fix exploits
 shift invariance: subtract the max logit before exponentiating (the *log-sum-exp
 trick*), which changes nothing mathematically and everything numerically. We will use
 it in the code below; the deeper story of floating-point limits lives in
@@ -330,7 +469,7 @@ print(f"cross-entropy {ce:.3f}   accuracy {acc:.1%}")
 ```{python}
 #| label: fig-blobs
 #| fig-alt: "Three separated point clouds lie in three straight-edged decision regions. A gray uncertainty band follows the boundaries where the regions meet, while confidence increases farther inside each region."
-#| fig-cap: "Three templates, three linear boundaries. Color shows the predicted class; shading shows confidence (the max softmax probability) — crisp deep in each region, washed out along the boundaries where classes compete."
+#| fig-cap: "Three templates, three linear boundaries. Color shows the predicted class; shading shows confidence (the max softmax probability): crisp deep in each region, washed out along the boundaries where classes compete."
 #| code-summary: "Code: decision regions with confidence shading"
 #| code-fold: false
 import numpy as np
@@ -381,9 +520,11 @@ print(f"ours: {ce:.6f}   torch: {loss_fn(X @ W.T + b, y):.6f}")
 fuses the softmax and the logarithm internally using the log-sum-exp trick, which is
 more numerically stable than any softmax-then-log you would write yourself. So the
 advice is: have your model output logits, hand them straight to the loss, and only
-apply softmax when you actually need probabilities to report. (The same goes for
+apply softmax when you actually need probabilities to report. In PyTorch a
+classification head is simply an `nn.Linear(d, K)`, and its contract is to emit raw
+logits $\vect{o} \in \R^K$; it should not apply softmax internally. (The same goes for
 binary problems: prefer `binary_cross_entropy_with_logits` over sigmoid-then-BCE.)
-The classic bug is feeding softmax outputs into `CrossEntropyLoss` — the model still
+The classic bug is feeding softmax outputs into `CrossEntropyLoss`: the model still
 trains, just badly and silently. If a classifier is mysteriously mediocre, check this
 first.
 :::
@@ -398,22 +539,23 @@ Close the book for one minute and reconstruct the classifier.
 - Why should logits, rather than already normalized probabilities, enter PyTorch's cross-entropy loss?
 :::
 
-## Okay, so — classification is regression plus a normalizer
+## Okay, so: classification is regression plus a normalizer
 
 1. **The geometry survived**: logits are still template similarities
    $\vect{w}^\top\vect{x} + b$, boundaries are still hyperplanes. Sigmoid and softmax
-   grade confidence; they do not bend anything.
+   grade confidence; they do not bend anything. In the vocabulary of later chapters,
+   this whole model is a single classification head.
 2. **The loss came from the noise model**, exactly as in @sec-01-linear-regression:
    Bernoulli $\rightarrow$ BCE, categorical $\rightarrow$ cross-entropy, both read as
    *surprise at the truth*.
-3. **The gradient is the error**, $\hat{y} - y$, both times — the exponential-family
+3. **The gradient is the error**, $\hat{y} - y$, both times: the exponential-family
    pairing at work.
 4. **Softmax is a scores-to-weights machine**, shift-invariant, numerically tamed by
-   log-sum-exp — and it will return, unchanged, as the normalizer of attention.
+   log-sum-exp; it will return, unchanged, as the normalizer of attention.
 
 Next, we let the templates themselves be built out of other templates:
-@sec-03-nonlinearity-mlp stacks these linear units — and discovers why a bend between
-them is not optional.
+@sec-03-nonlinearity-mlp stacks these linear units into a backbone beneath the same
+head, and discovers why a bend between them is not optional.
 
 ## Sources and further reading {.unnumbered}
 
@@ -426,23 +568,34 @@ them is not optional.
 - [Shannon, “A Mathematical Theory of Communication”
   (1948)](https://doi.org/10.1002/j.1538-7305.1948.tb01338.x) is the original source
   behind the entropy and information vocabulary used to read cross-entropy.
+- [Kullback and Leibler, “On Information and Sufficiency”
+  (1951)](https://doi.org/10.1214/aoms/1177729694) introduces the divergence that
+  separates cross-entropy from entropy.
+- [Blondel, Teboul, Berthet, and Djolonga, “Fast Differentiable Sorting and Ranking”
+  (2020)](https://proceedings.mlr.press/v119/blondel20a.html) is one example of
+  replacing a hard, discrete operation with a trainable relaxation.
 
 ## Exercises {.unnumbered}
 
 1. **(Pencil.)** Derive @eq-bce-grad: write $\loss_{\text{BCE}}$ as a function of $o$
    through $\hat{p} = \sigma(o)$, use $\sigma'(o) = \sigma(o)(1 - \sigma(o))$, and
-   simplify. Which factors cancel, and why is the result independent of the sigmoid's
-   saturation?
+   simplify. Which factors cancel, and why does this gradient never stall when the model
+   is confident and wrong?
 2. **(Pencil.)** Prove softmax's shift invariance from @eq-softmax, then explain why
    subtracting the max logit makes the computation overflow-proof: what is the largest
    value ever exponentiated?
-3. **(Code.)** Temperature: replace `logits` with `logits / T` in the softmax figure
-   for $T \in \{0.5, 1, 2, 10\}$. Describe what happens to the distribution at both
-   extremes. (Keep this dial in mind — it returns when we scale attention scores in
-   Part IV.)
+3. **(Code.)** Temperature: in @fig-soft-vs-hard, scale the logits to $\vect{o}/\tau$ for
+   $\tau \in \{0.05, 0.5, 1, 10\}$. Describe what happens to the distribution at both
+   extremes, $\tau \to 0$ and $\tau \to \infty$, and connect each to greedy versus
+   random decoding.
 4. **(Code.)** Train the blobs classifier with MSE on one-hot targets instead of
-   cross-entropy (same manual loop; the gradient changes). Compare accuracy and the
-   confidence shading near boundaries. What does the wrong noise model cost?
-5. **(Code.)** Move the three blob centers closer together (`0.7 → 1.2` noise, or
-   centers at distance 1) and retrain. Where does the confidence shading collapse, and
-   what does the cross-entropy value tell you compared to the accuracy?
+   cross-entropy, using the per-example squared error summed over classes and averaged
+   over examples. The manual loop needs a new logit gradient: row $i$ becomes
+   $\frac{2}{n}\,\vect{p}_i \odot \bigl[(\vect{p}_i - \vect{y}_i) -
+   \langle \vect{p}_i - \vect{y}_i,\, \vect{p}_i \rangle\bigr]$ (derive it, or check it
+   against autograd). Compare convergence speed and the confidence shading near the
+   boundaries. What does the wrong noise model cost?
+5. **(Code.)** Increase the overlap between classes, either by raising the noise scale
+   from 0.7 to 1.2 or by moving the blob centers closer, and retrain. Where does the
+   confidence shading collapse, and what does the cross-entropy value tell you that the
+   accuracy does not?

@@ -17,7 +17,7 @@ TEXT_EDGE_WARNING = 4.0
 MEDIA_BOX_TOLERANCE = 0.5
 ROOT = Path(__file__).resolve().parents[1]
 SUPPORT_URL = "buymeacoffee.com/hshakeri"
-EXPECTED_OUTLINE_ENTRIES = 391
+EXPECTED_OUTLINE_ENTRIES = 399
 
 
 def source_edition() -> tuple[str, str]:
