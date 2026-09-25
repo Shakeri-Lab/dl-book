@@ -10,7 +10,28 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 
 ---
 
-> **Current work — Preface, Chapters 1–4, reference audit, em dashes, September 25, 2026.**
+> **Current work — Chapters 5 and 6 revised; published-source hygiene, September 25, 2026.**
+> Provenance comments no longer reach published HTML: `filters/strip-html-comments.lua`
+> runs last and strips raw HTML comments (keep writing provenance in hidden comments; the
+> filter is what keeps local paths out of the page source). Chapter 5 was revised at the
+> author's request to stand apart from micrograd and 3Blue1Brown: sensitivity/adjoint
+> language replaces "blame" (also in the Preface engine figure and the two Chapter 5
+> replays), Figures 5.1 to 5.3 were redrawn, a TikZ figure of four autograd rules was
+> added (`figures/tikz-src/5_5_autograd_rules.tex`; rebuild with
+> `scripts/build_tikz.sh 5_5`), and Section 5.3 now covers the batch transpose, two
+> backward products per forward product, and activation memory. The companion pointer
+> moved to Sources. Exercise 7 became the softmax VJP; the BatchNorm backward exercise now
+> lives in Chapter 9. Decision E1 (one-chain colours) is resolved. Open: "blame" still
+> appears in prose in Chapters 3 (credit assignment, deliberate), 8, 10, 13, 17, 18, and
+> the epilogue, including two Chapter 18 figure labels; a sweep needs re-execution of
+> those chapters. Chapter 6: headings retitled in the book's voice, a two-by-two protocol
+> matrix (zero-shot versus retrained, shift versus scramble), an edge-crop control, a
+> permutation-symmetry derivation, a pixel-space shift-distance check, and Hein et al.
+> (2019) in place of the 3Blue1Brown citation; Chapter 6 now prints seven stdout blocks,
+> and `scripts/notebook_stdout_contracts.py` covers all of them. The `quarto-file-metadata`
+> lesson: never strip Quarto's own HTML-comment markers (the print PDF lost `\appendix`).
+>
+> **Previous — Preface, Chapters 1–4, reference audit, em dashes, September 25, 2026.**
 > The Preface was rewritten from the author's Lecture 0 blueprint (why now; mechanics versus
 > open theory; a continuation; open the hood; the five audit questions) with two new TikZ
 > schematics that carry notes instead of numbered captions. Chapter 1's Section 1.4 and

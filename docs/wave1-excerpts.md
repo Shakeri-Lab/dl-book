@@ -52,7 +52,7 @@ Digests recomputed with `shasum -a 256` while writing this receipt:
 | Source | SHA-256 |
 |---|---|
 | `chapters/part1/02-logistic-softmax.qmd` | `e21d97a119a92dd63f09ced326524871b2537ec2ee2ca4f7dd2d60d2fbd146fc` |
-| `chapters/part1/05-backpropagation.qmd` | `fd3825ae9747ff6305ddb7f434fc0513d3d828d3fd878d8ea6a00cea8eee9b86` |
+| `chapters/part1/05-backpropagation.qmd` | `e33fc6eaad7a46df148b79bdfd018ef59582128c00afc77d82211ffe5584511e` |
 | `chapters/part3/10-sequences-rnn.qmd` | `8034a59c9df18121babc7b80d51ccbf4e8ca50708818228c13b4630508fae878` |
 | `chapters/appendices/a3-precision-performance.qmd` | `ff5dae7284799bc89eb678c253e4e7e661e1af6395b2c4e9a3250239cdfd17e4` |
 
@@ -498,7 +498,9 @@ The rejected build's `#B45309` is gone.
 > repaint the excerpt's backward rays orange and drop the wine-for-blame convention in this
 > one scene; (c) change `fig-chain-graph`'s `bwd` colour to the wine used here — a `.qmd`
 > edit, out of scope for this wave, and it would also change the PDF. **(a) is what ships
-> unless the author says otherwise.**
+> unless the author says otherwise.** *Resolved 2026-09-25 by option (c): the Chapter 5
+> redesign repainted `fig-chain-graph`, and the panel's scope note now says the colours
+> match.*
 
 **Deliberate choices, recorded.** (i) Rule 5 supersedes the brief's no-MathJax line (above).
 (ii) One orange, the macro's, with scoped role overrides. (iii) E1 stands. (iv) The bar
@@ -1343,9 +1345,9 @@ Nothing in this list is done. It is written as pending because it is pending.
    refuses `requestFullscreen` even for a trusted gesture); only the denial path was. The
    `softmax-shift` and `one-chain` native paths were exercised. A human should confirm the
    third.
-6. **Open decision E1** — the backward-arrow colour divergence between `fig-chain-graph`
-   and the Chapter 5 panel. Option (a) ships unless the author says otherwise; see the
-   blockquote in the `one-chain` section.
+6. **Decision E1, resolved 2026-09-25 by option (c).** The redesigned `fig-chain-graph`
+   draws `w` in the parameter orange and the backward pass in wine (dark red), so the
+   static figure and the Chapter 5 panel now agree; the panel's scope note says so.
 7. **Open decision E12** — timeline-driven sweeps are not user knobs. `c` in Chapter 2 and
    `w` in Chapter 5 still move on the timeline only, and each panel says so. For Chapter 10
    the author answered the question himself on 2026-09-10 by asking for a `b_f` slider: the

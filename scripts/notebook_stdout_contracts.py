@@ -83,7 +83,16 @@ NUMERIC_RULES: Mapping[BlockKey, NumericRule] = {
         mutable_fields=(1, 2),
         field_tolerances=((2, 1.2, 0.0),),
     ),
-    ("06-generalization-inductive-bias", 3): NumericRule(0.6, mutable_fields=(1, 2)),
+    # Block 3: the edge-crop control. The first two fields are data-only.
+    ("06-generalization-inductive-bias", 3): NumericRule(1.2, mutable_fields=(3,)),
+    ("06-generalization-inductive-bias", 4): NumericRule(0.6, mutable_fields=(1, 2)),
+    ("06-generalization-inductive-bias", 5): NumericRule(1.2, mutable_fields=(1, 2)),
+    # Block 6: pixel-space distances; percentages and distances in printed units.
+    ("06-generalization-inductive-bias", 6): NumericRule(
+        0.02,
+        mutable_fields=(1, 2, 3),
+        field_tolerances=((1, 0.6, 0.0),),
+    ),
     ("learning-by-experiment", 1): NumericRule(
         0.9,
         mutable_fields=(2, 3, 5, 6, 8, 9, 11, 12, 14, 15, 17, 18, 20, 21, 23, 24),
@@ -239,7 +248,16 @@ NUMERIC_JUSTIFICATIONS: Mapping[BlockKey, str] = {
         "seeded clean accuracy within 0.6 and shifted accuracy within 1.2 points"
     ),
     ("06-generalization-inductive-bias", 3): (
+        "edge-crop control: seeded crop-only accuracy within 1.2 points"
+    ),
+    ("06-generalization-inductive-bias", 4): (
         "seeded shuffle-control accuracy within 0.6 percentage point"
+    ),
+    ("06-generalization-inductive-bias", 5): (
+        "protocol matrix: zero-shot scramble and retrained shift within 1.2 points"
+    ),
+    ("06-generalization-inductive-bias", 6): (
+        "shift-distance audit: share within 0.6 point, medians within 0.02"
     ),
     ("learning-by-experiment", 1): "BatchNorm sweep endpoint and seed-SD portability",
     ("learning-by-experiment", 2): "locked endpoint and paired-contrast portability",
@@ -1101,19 +1119,31 @@ def _small_experiment_relations(slug: str, actual: Sequence[str]) -> list[str]:
 
     label = f"{slug} structural contract"
     if slug == "06-generalization-inductive-bias":
-        if len(actual) < 3:
-            return [f"{label}: expected three stdout blocks"]
-        fields = [_float_tokens(actual[index]) for index in range(3)]
-        if any(len(values) != 2 for values in fields):
+        if len(actual) < 5:
+            return [f"{label}: expected five stdout blocks"]
+        fields = [_float_tokens(actual[index]) for index in range(5)]
+        if [len(values) for values in fields] != [2, 2, 3, 2, 2]:
             return [f"{label}: generalization report schema changed"]
-        (train, validation), (shift_zero, shift_two), (original, shuffled) = fields
+        (
+            (train, validation),
+            (shift_zero, shift_two),
+            (_, _, crop_only),
+            (original, shuffled),
+            (zero_shot_scramble, retrained_shift),
+        ) = fields
         errors: list[str] = []
         if train <= validation:
             errors.append(f"{label}: train/validation generalization gap disappeared")
         if shift_zero - shift_two < 25:
             errors.append(f"{label}: two-pixel shift cliff is no longer material")
+        if crop_only - shift_two < 20:
+            errors.append(f"{label}: cropping alone now explains the shift cliff")
         if abs(original - shuffled) > 2:
             errors.append(f"{label}: pixel-shuffle control moved by more than 2 pp")
+        if zero_shot_scramble > 20:
+            errors.append(f"{label}: zero-shot scramble is no longer near chance")
+        if retrained_shift < validation - 3:
+            errors.append(f"{label}: retraining on shifted images no longer recovers")
         return errors
 
     if slug == "learning-by-experiment":

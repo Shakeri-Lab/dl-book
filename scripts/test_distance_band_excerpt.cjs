@@ -246,7 +246,7 @@ test('integration: the excerpt is HTML-only, manifest-driven, and declared in th
   assert.equal(scene.anchor.type, 'after-cell');
   assert.equal(scene.anchor.target, 'cell-fig-curse');
   assert.equal((chapter.match(/^#\| label: fig-curse$/gm) || []).length, 1);
-  assert(chapter.indexOf('#| label: fig-curse') < chapter.indexOf('## The cure has a name'));
+  assert(chapter.indexOf('#| label: fig-curse') < chapter.indexOf('## Inductive bias: constraints as knowledge'));
 });
 
 // The error function, so the extreme-value quantile is checked by its definition rather

@@ -6,17 +6,18 @@
             sources/ML_concepts_roadmap.tex; weight-viz: m02-03-shared.ipynb
      pacing: 3Blue1Brown "Gradient descent" lesson (author-cited) — show, then name -->
 
-Part I has given us everything a course could promise: models with universal expressive
-power (@sec-03-nonlinearity-mlp), losses grounded in maximum likelihood
-(@sec-02-logistic-softmax), an optimizer that scales (@sec-04-training-loss-sgd), and
-gradients for anything (@sec-05-backpropagation). This chapter takes all of it, aims it
-at real images, and succeeds completely.
+Part I has assembled a complete learning system: universal function approximators
+(@sec-03-nonlinearity-mlp), principled probabilistic losses (@sec-02-logistic-softmax),
+scalable optimization (@sec-04-training-loss-sgd), and exact automatic differentiation
+(@sec-05-backpropagation). Applied to Fashion-MNIST, this machinery reaches respectable
+validation accuracy in seconds.
 
-Then we will look a little closer, and the wheels will come off. Watching *how* they
-come off (in pictures rather than theorems) is the most important lesson of Part I,
-because the cure is the idea the entire rest of this book is built on.
+Yet high validation accuracy can conceal a complete absence of domain structure. By
+probing the fitted model with elementary geometric transformations, this chapter
+diagnoses the fundamental limitation of unconstrained models: flexibility without a
+spatial inductive bias memorizes pixel coordinates instead of learning image structure.
 
-## Victory
+## The baseline fit: empirical risk and clean validation
 
 The data is a subset of Fashion-MNIST, a classic benchmark:
 28×28 grayscale images of clothing in ten classes. The model and training loop hold no
@@ -90,8 +91,8 @@ to compute, we might be done.
 
 The rest of this chapter is about why we are not.
 
-Before the autopsy, separate three questions that are often collapsed into “the model
-worked.” Each question needs different evidence.
+Before probing the model, separate three questions that are often collapsed into
+“the model worked.” Each question needs different evidence.
 
 | Question | Evidence that answers it | What that evidence does not settle |
 |---|---|---|
@@ -103,9 +104,9 @@ worked.” Each question needs different evidence.
 about one optimization run and, indirectly, the available capacity. It is not a
 generalization result. {#tbl-three-learning-questions}
 
-## Two experiments that should worry you
+## Two experiments that challenge the baseline
 
-### Experiment 1: move everything two pixels
+### Experiment 1: shift every image two pixels
 
 Take the validation images and shift each one two pixels to the right. Nothing about any
 garment changes: a coat is a coat, wherever it hangs in the frame. Any human would
@@ -138,8 +139,41 @@ for px in [0, 2]:
           f"{accuracy(net, shift_right(X_val, px), y_val):.1%}")
 ```
 ::::
-Two pixels, and the accuracy is nearly cut in half. Push further and the collapse
-completes:
+Two pixels, and the accuracy is nearly cut in half.
+
+Does the shift fail because it pushes garments off the canvas? Fashion-MNIST scales each
+garment's longest edge to fill the frame (Xiao et al.), so wide items such as sandals,
+sneakers, and ankle boots reach the right border, and a two-pixel shift crops them.
+Measure the crop on its own: zero the same two columns without moving anything.
+
+:::: {.plan-code}
+::: {.plan}
+1. Measure how much ink the two cropped columns hold.
+2. Zero those columns in place, leaving every garment where it was.
+3. Report or visualize the measured result.
+:::
+
+```{python}
+#| label: edge-crop-control
+#| code-summary: "Code: separate cropping from moving"
+#| code-fold: false
+# [1]
+edge = X_val.reshape(-1, 28, 28)[:, :, -2:]        # the columns a 2px shift crops
+touched = (edge.flatten(1) > 0).any(dim=1).float().mean().item()
+ink_share = (edge.sum() / X_val.sum()).item()
+# [2]
+cropped = X_val.reshape(-1, 28, 28).clone()
+cropped[:, :, -2:] = 0
+# [3]
+print(f"images with ink in the two cropped columns: {touched:.1%}")
+print(f"share of all ink in those columns:          {ink_share:.1%}")
+print(f"columns zeroed in place, nothing moved:     validation accuracy "
+      f"{accuracy(net, cropped.reshape(-1, 784), y_val):.1%}")
+```
+::::
+About a third of the images lose some ink, but only a sliver of it, and removing that
+sliver in place costs two points. The rest of the collapse comes from moving the
+garment, not from cropping it.
 
 This is the distributional distinction prepared in Chapter 1. If
 $T$ shifts an image while preserving its label, then
@@ -159,6 +193,8 @@ model did not violate its literal empirical objective; that objective was insuff
 for the semantic and deployment contract we later imposed.
 @sec-a5-statistical-learning gathers the $P$, $T_\#P$, and deployment-distribution
 notation in one place.
+
+Push the shift further, and the collapse completes:
 
 :::: {.plan-code}
 ::: {.plan}
@@ -187,11 +223,10 @@ plt.ylim(0, 0.9); plt.xticks(shifts)
 plt.tight_layout(); plt.show()
 ```
 ::::
-### Experiment 2: destroy the images entirely
+### Experiment 2: permute the pixel coordinates
 
-Now the stranger experiment, which exposes a fatal flaw. Choose one fixed
-random permutation of the 784 pixel positions and apply it to *every* image, fit and
-validation alike. The displayed arrays are not recognizable pictures anymore: the
+Now a stranger experiment. Choose one fixed random permutation of the 784 pixel
+positions and apply it to *every* image, fit and validation alike. The displayed arrays are not recognizable pictures anymore: the
 ordinary grid adjacency has been destroyed. Retrain the same MLP on this scrambled
 world, and predict first: does the destroyed geometry cost this model five
 points, twenty, or nothing?
@@ -222,22 +257,62 @@ The two validation accuracies are close in this one deterministic run. That is n
 uncertainty estimate, but it is enough for the structural point: after retraining, an
 invertible relabeling of pixel coordinates costs this MLP no visible accuracy.
 
-Hold the two results side by side and the diagnosis writes itself:
+The two experiments used different protocols. Experiment 1 kept the clean model and
+changed only the test images; Experiment 2 changed the whole world and retrained.
+Complete the other two cells of that two-by-two design:
 
-> The MLP hypothesis class and training procedure show no preference for the structure
-> that matters, including pixel adjacency and image geometry, yet the fitted model is
-> **hypersensitive** to a nuisance that should not matter: where the garment happens to
-> sit. It learned the dataset without needing an image-aware representation.
+:::: {.plan-code}
+::: {.plan}
+1. Evaluate the clean model on scrambled images, without retraining.
+2. Retrain the same MLP on shifted images, then evaluate it on shifted images.
+3. Report or visualize the measured result.
+:::
 
-## The autopsy, in pictures
+```{python}
+#| label: protocol-matrix
+#| code-summary: "Code: complete the two-by-two protocol"
+#| code-fold: false
+# [1]
+zero_shot_scramble = accuracy(net, X_val[:, pixel_perm], y_val)
+# [2]
+net_shifted = train_mlp(shift_right(X_tr, 2), y_tr)
+retrained_shift = accuracy(net_shifted, shift_right(X_val, 2), y_val)
+# [3]
+print(f"scramble, trained clean:     validation accuracy {zero_shot_scramble:.1%}")
+print(f"two-pixel shift, retrained:  validation accuracy {retrained_shift:.1%}")
+```
+::::
+
+::: {.callout-note appearance="simple"}
+## Diagnostic protocol: zero-shot robustness versus representation
+
+Validation accuracy for the four combinations of transformation and protocol; the clean
+model scores 76.0% on untouched validation images. The four cells separate two questions
+that a single experiment would blur.
+
+| Protocol | Two-pixel shift | Fixed pixel scramble |
+|---|---|---|
+| **Zero-shot:** trained clean, tested transformed | 46.5% | 8.0%, chance level |
+| **Retrained:** trained and tested in the transformed world | 76.5% | 77.0% |
+
+The top row shows that the fitted model has no built-in tolerance for either
+transformation. The bottom row shows that shifted images are no harder to learn than
+the originals, and neither are scrambled ones. The MLP does not fail Experiment 1
+because shifted data is unlearnable, and it does not pass Experiment 2 because it
+understands scrambled images. Both retrained results hold because a dense layer treats
+every fixed arrangement of the 784 coordinates alike, and apart from the two columns it
+crops, a two-pixel shift is one more such arrangement.
+:::
+
+## Inside the weights: full-frame matched filters
 
 Why exactly does shifting hurt a model that shuffling cannot? Look at what the model
-actually learned. Each row of the first layer's weight matrix is a 784-vector, which
-means we can reshape it into a 28×28 image and look at it.^[Looking at
-first-layer weights as images is a long-standing diagnostic; the autopsy below
-applies it to our own model.] And we know from
-@sec-01-linear-regression what such a row *is*: a **template**, scored against the
-input by dot product.
+actually learned. Each row $\vect{w}_j^\top$ of the first-layer matrix
+$\matr{W}_1 \in \mathbb{R}^{256\times784}$ is a 784-vector, which means we can reshape
+it into a 28×28 image and look at it.^[Looking at first-layer weights as images is a
+long-standing diagnostic; the inspection below applies it to our own model.] And we
+know from @sec-01-linear-regression what such a row *is*: a **template**, a matched
+filter scored against the input by the inner product $\langle \vect{w}_j, \vect{x}\rangle$.
 
 :::: {.plan-code}
 ::: {.plan}
@@ -273,25 +348,47 @@ colorbar.set_ticks([-scale, 0, scale], labels=["negative", "zero", "positive"])
 colorbar.ax.tick_params(labelsize=7)
 plt.show()
 ```
-There is the whole story in one figure. Every template is **global**: a pattern
-stretched across the entire frame, tuned to where garments sat in the training images.
-Shift the input two pixels and every pixel of every template now scores against the
-wrong part of the garment; hundreds of learned template scores change at once.
-Conversely, the fixed permutation is merely an invertible relabeling of coordinates.
-Retraining can permute the first-layer weights in the opposite direction, so the same
-functions remain available even though adjacency has been destroyed. A model trained
-on ordinary images is not itself invariant to arbitrary pixel permutations.
+Every template is **global**: a pattern stretched across the entire frame, tuned to
+where garments sat in the training images. That is the expected outcome of fitting a
+flattened input, not an optimization accident. The gradient for row $j$ is a weighted
+sum of whole training images, $\sum_i \delta_{ij}\,\vect{x}_i$ (@eq-bp3 in batch
+form: sensitivity out times signal in), so every step adds full-frame patterns to a
+full-frame random initialization. Adam rescales each coordinate separately, but nothing
+in the loss, the optimizer, or the initialization rewards a compact template or relates
+a pixel to its neighbors. Shift the input two pixels and every pixel of every template
+now scores against the wrong part of the garment; hundreds of learned template scores
+change at once.
+
+The fixed permutation is different in kind. Write it as a permutation matrix
+$\matr{P}$, so a scrambled image is $\matr{P}\vect{x}$. For any first layer
+$\matr{W}_1$, the layer $\matr{W}_1' = \matr{W}_1\matr{P}^\top$ computes
+
+$$
+\matr{W}_1'(\matr{P}\vect{x})
+= \matr{W}_1\matr{P}^\top\matr{P}\vect{x}
+= \matr{W}_1\vect{x},
+$$ {#eq-permutation-symmetry}
+
+because $\matr{P}^\top\matr{P} = \matr{I}$. Every function the MLP can compute on
+images it can also compute on scrambled images, and training treats the two worlds
+alike: the initialization draws every weight independently, and Adam updates every
+coordinate by the same rule. The hypothesis class is closed under all $784!$
+permutations of the input coordinates. Images single out a tiny subset of those
+rearrangements, the translations of the pixel grid, and a dense layer has no way to
+prefer that subset. None of this makes a trained model invariant to permutations: the
+clean model scored 8.0% on scrambled images. The scramble is free only after
+retraining, which is what the protocol matrix showed.
 
 Capacity was never the issue. By @sec-03-nonlinearity-mlp's universal approximation
 theorem, this network *can represent* a perfectly shift-tolerant classifier. It has no
 reason to find one: nothing in its architecture, loss, or data ever told it that
 position is a nuisance and adjacency is meaningful.
 
-## Naming the disease
+## Diagnosing the failure: capacity versus geometry
 
 With the failure in hand, the classical concepts of Part I snap into focus.
 
-### Hunting the U-curve
+### Capacity: hunting the U-curve
 
 The textbook story (@sec-01-linear-regression's cartoon) predicts that as capacity
 grows, validation error should fall and then *rise* as the model overfits. We now have
@@ -345,7 +442,7 @@ Which sharpens our problem instead of solving it: **our model does not fail for 
 too much capacity. It fails for having no knowledge.** No point on either curve
 survives a two-pixel shift.
 
-### The curse of dimensionality
+### Geometry: the curse of dimensionality
 
 Could we fix everything with data alone, just by showing the model garments at every
 position? Count what that costs. Our images live in 784 dimensions; a small color image
@@ -397,7 +494,39 @@ a much lower-dimensional set, so this experiment is not their empirical distance
 distribution. It shows the price of trying to cover an *unconstrained* 784-dimensional
 space and why useful structure must enter through data, representation, or architecture.
 
-## The cure has a name
+The same geometry explains why more clean data cannot rescue the shift. In pixel space,
+how far does a two-pixel shift carry an image, compared with its distance to the nearest
+training image?
+
+:::: {.plan-code}
+::: {.plan}
+1. Measure how far the shift moves each validation image, and how far its nearest
+   training image is.
+2. Report or visualize the measured result.
+:::
+
+```{python}
+#| label: shift-distance
+#| code-summary: "Code: how far does a two-pixel shift move an image?"
+#| code-fold: false
+# [1]
+moved = (X_val - shift_right(X_val, 2)).norm(dim=1)     # (200,)
+nearest = torch.cdist(X_val, X_tr).min(dim=1).values    # (200,)
+# [2]
+print(f"shift moves farther than the nearest training image: "
+      f"{(moved > nearest).float().mean().item():.1%} of validation images")
+print(f"median distances: shifted copy {moved.median().item():.2f}, "
+      f"nearest training image {nearest.median().item():.2f}")
+```
+::::
+To any rule that compares images coordinate by coordinate, a garment moved two pixels is
+usually farther from itself than from a different training garment. Tolerance by data
+alone would require every garment at every position the classifier must accept,
+multiplying a sample size that the uniform-cube count already puts out of reach. A
+template shared across positions needs none of those copies: it scores the shifted
+garment with the same weights it used before the shift.
+
+## Inductive bias: constraints as knowledge
 
 Return to the word planted on the very first pages of this book
 (@sec-01-linear-regression): **inductive bias**, the nudge that steers a learner
@@ -441,6 +570,13 @@ batches and measure both what it buys on the shift curve and what it costs on cl
 images. The corresponding estimator and distribution contracts are summarized in
 @sec-a5-statistical-learning.
 
+Augmentation teaches an MLP translation tolerance by making it fit shifted copies. In a
+dense architecture that tolerance has a capacity price: no weight is shared across
+positions, so a pattern the network must recognize at several positions has to be
+represented separately at each of them, in different first-layer weights (Exercise 2
+measures what that costs). Augmentation buys tolerance through the data; Part II builds
+translation equivariance into the architecture.
+
 We can now place three familiar levers side by side:
 
 1. **Architecture-side bias** changes which functions are available or easy to learn.
@@ -469,7 +605,7 @@ third as many. Sharing is a massive economy.
 
 <!-- NOVEL: needs sign-off -->
 ::: {.callout-tip}
-## Constraints are knowledge
+## Why a constraint can add knowledge
 
 A constraint looks like a *reduction* in power: the constrained model is a strict
 subset of the MLP. That is exactly the point. By @sec-01-linear-regression's
@@ -482,18 +618,18 @@ weakly-biased model enough data and it can win again: a trade we will meet at th
 frontier in @sec-16-vit-scaling.
 :::
 
-## The pivot
+## The pivot: toward local, shared detectors
 
 Look once more at the templates figure. The fix is almost visible in it: the templates
 should not span the frame. They should be **small and local**, and they should
 **slide**, scoring every neighborhood of the image with the same little pattern,
 so that a sleeve found anywhere is the same sleeve.
 
-A local template, slid across the image, scoring each position by dot product. That
-machine has a name; it predates deep learning by decades, and Part II opens by building
-it with our bare hands, then asking this book's favorite question about it:
-
-*What if the template were learnable?*
+A local template, slid across an image, scores each position via a dot product. By
+constraining the template to a small receptive window and sharing its weights across all
+spatial coordinates, this operation enforces spatial locality and translation
+equivariance by construction. Part II begins by analyzing this classical filter before
+making its weights learnable.
 
 ## One sealed test check
 
@@ -527,7 +663,7 @@ images becomes 42.0% after the predeclared two-pixel shift.
 
 Close the book for one minute and retrieve the argument before reading the recap.
 
-- What two experiments reveal that the MLP learned coordinates rather than image structure?
+- Which two experiments, under which protocols, reveal that the MLP learned coordinates rather than image structure?
 - Where can inductive bias enter: architecture, objective, or data? Give one example of each.
 - Why can high clean validation accuracy coexist with collapse after a two-pixel shift?
 :::
@@ -539,11 +675,13 @@ Close the book for one minute and retrieve the argument before reading the recap
    scored well on clean held-out data while its hypothesis class showed no adjacency
    preference (fixed shuffle) and its fitted predictions were hypersensitive to a
    nuisance shift.
-2. **The autopsy is visual**: global templates, tuned to position, blind to adjacency.
+2. **The weights show why**: full-frame templates tied to pixel positions, and a
+   dense layer closed under every permutation of its input coordinates
+   (@eq-permutation-symmetry), so adjacency is invisible to it.
 3. **Capacity is not the culprit in this experiment.** The U-curve barely appears in
    one seeded sweep, while the uniform-cube example shows why unconstrained ambient
    coverage becomes expensive.
-4. **The cure is inductive bias**: encode knowledge through architecture, objective,
+4. **The remedy is inductive bias**: encode knowledge through architecture, objective,
    training procedure, or data. Part II chooses locality and translation structure as
    architectural constraints; augmentation is the data-side alternative and companion.
 
@@ -558,6 +696,15 @@ training budget, not 100% on ImageNet. Capacity is abundant enough that fitting 
 is easy (Exercise 4 reproduces the phenomenon on our subset). Capacity alone therefore
 does not explain generalization; the data, optimizer, and architecture must enter the
 account.
+
+**Confident far from the data.** A trained ReLU network is piecewise affine: its input
+space splits into polyhedral regions, and on each one the logits
+$o_k = \vect{w}_k^\top\vect{x} + b_k$ are affine in $\vect{x}$. Along almost every ray
+leaving the data, the logits therefore grow linearly, the largest one pulls away, and
+the softmax probability of one class approaches 1. Hein, Andriushchenko, and Bitterwolf
+prove this for ReLU classifiers, which is why confident predictions on inputs far from
+the training data, noise included, are a structural property rather than a quirk of
+one model.
 
 **The bias–variance picture, updated.** Our flattened U-curve is a mild case of a
 broader phenomenon: with modern training, test error can even *descend again* beyond
@@ -575,10 +722,9 @@ underfit regime; the overparameterized regime plays by subtler rules.
 - Belkin et al.,
   ["Reconciling modern machine-learning practice and the classical bias–variance trade-off"](https://doi.org/10.1073/pnas.1903070116)
   (PNAS 2019), a primary account of double descent.
-- 3Blue1Brown,
-  [*Gradient descent, how neural networks learn*](https://www.youtube.com/watch?v=IHZwWFHWa-w),
-  the visual companion to this chapter's pacing, including the demonstration that a
-  trained MLP can classify pure noise confidently.
+- Hein, Andriushchenko, and Bitterwolf,
+  ["Why ReLU networks yield high-confidence predictions far away from the training data and how to mitigate the problem"](https://openaccess.thecvf.com/content_CVPR_2019/html/Hein_Why_ReLU_Networks_Yield_High-Confidence_Predictions_Far_Away_From_the_CVPR_2019_paper.html)
+  (CVPR 2019), the theorem behind confident predictions far from the data.
 :::
 
 ## Sources and further reading {.unnumbered}
@@ -600,10 +746,14 @@ underfit regime; the overparameterized regime plays by subtler rules.
 
 ## Exercises {.unnumbered}
 
-1. **(Pencil.)** Explain algebraically why the pixel shuffle costs the MLP nothing:
-   if $\matr{P}$ is a permutation matrix and we train on $\matr{P}\vect{x}$ instead of
-   $\vect{x}$, exhibit the weight matrix that makes the two networks identical. Why
-   does no analogous argument work for the shift?
+1. **(Pencil.)** @eq-permutation-symmetry handles a fixed permutation. (a) Write the
+   zero-fill two-pixel shift as a $784\times784$ matrix $\matr{S}$ and show that it is
+   a *partial* permutation: which rows are zero, and why can no $\matr{W}_1'$ satisfy
+   $\matr{W}_1'\matr{S}\vect{x} = \matr{W}_1\vect{x}$ for every image? (b) Argue that
+   if the initialization is exchangeable across input coordinates and the optimizer
+   treats coordinates alike, training on $\matr{P}\vect{x}$ produces, in distribution,
+   the weights $\matr{W}_1\matr{P}^\top$. Why, then, does the seeded run print 77.0%
+   rather than exactly 76.0%?
 2. **(Code.)** Augment the training set with random shifts of ±3 pixels and retrain.
    Re-plot the cliff. How much robustness did augmentation buy, what did it cost in
    clean accuracy and compute, and (the real question) what data-side inductive bias

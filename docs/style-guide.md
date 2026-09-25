@@ -70,7 +70,7 @@ Professor Shakeri's teaching voice is fundamentally principle-first and concrete
 | **Magnifying glass / detective expertise** | Coding transcript m04 (CNN lesson) | Convolution kernels as specialized detectors; one kernel per feature type; parameter sharing as reuse of same tool |
 | **Valve/gate for LSTM** | Not yet in detailed transcripts; likely in Lecture 7 | LSTM forget/input/output gates controlling information flow through cell state |
 | **Weight as a knob to turn** | Lecture 1 (foundational image) | Parameters as tuning knobs for the loss landscape; optimization as knob-turning |
-| **Blame propagation** | Lecture 2 (Backpropagation) | Error signal flowing backward; delta as "blame signal" for each layer; "tell the network it's bad" |
+| **Blame propagation** (retired 2026-09-25) | Lecture 2 (Backpropagation) | The author asked for this metaphor to be used very minimally: say *sensitivity* for $\delta^{(l)}=\partial L/\partial \vect{z}^{(l)}$ and *adjoint* for the automatic-differentiation term. Chapter 5, the Preface, and the Chapter 5 replays no longer use it |
 | **House on a foundation** (super() init) | Coding transcript m03 (MLP lesson) | Building a class on top of nn.Module foundation; super().__init__() as laying groundwork |
 | **Magnifying glass on full image** (MLP inefficiency) | Coding m04 (CNN) | Why MLPs flatten images and lose spatial structure; CNNs look locally |
 | **Feature detectors talking to each other** (multi-channel convolution) | Coding m04 (CNN) | How output channels of one conv layer feed as input channels to the next; experts combining expertise |

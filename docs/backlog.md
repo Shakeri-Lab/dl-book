@@ -92,9 +92,9 @@ Prioritize difficult mechanisms rather than animating every chapter.
    Differentiation is not a parameter update, and one chain does not teach branch
    accumulation; the panel says both. Source composition: `6050-Ch5/lecture.jsx`,
    `SOneChain` L356–391, and the storyboard's **OneChain** scene, 0:46–1:30. The book's
-   fixture and loss definition govern. One open decision for the author, E1: the panel
-   draws the backward pass in wine and reserves orange for `w`, where the chapter's static
-   `fig-chain-graph` draws its backward arrows orange.
+   fixture and loss definition govern. Decision E1 (the panel's wine backward pass
+   against the static figure's orange arrows) was resolved on 2026-09-25: the redesigned
+   `fig-chain-graph` uses the panel's colours.
 2. **Kernel weighting — approved for publication (Chapter 12, beside `fig-kernel-lookup`).** Ask which
    observation gains influence as the query moves. Reveal distance, Gaussian
    affinity, normalized weights, weighted values, and their sum; then move only the
@@ -234,7 +234,7 @@ carries its own receipt.
   Successive halving drawn as area: each round keeps a third and triples the budget, so
   the rungs cost 27, 18, 18, 18 and the staircase is 81 of the square's 729. The nearer
   heading sits inside a callout, which is why the split section's heading is the anchor.
-- **Shift versus shuffle** (Chapter 6, before "The autopsy, in pictures";
+- **Shift versus shuffle** (Chapter 6, before "Inside the weights: full-frame matched filters";
   `shift-shuffle-excerpt`, [receipt](shift-shuffle-excerpt.md)). The arithmetic under the
   chapter's two experiments: a permutation applied to the weights as well moves every
   product without changing one (0.39 either way), and a two-pixel slide re-pairs them

@@ -367,8 +367,8 @@ move it; the cache chips sit still on screen while the live values move. Each of
 local derivatives gets its own beat and fills only when its own ray arrives — which is what
 lets reduced motion reveal them one at a time. The product lands beside the measurement,
 never before it. The excerpt draws the backward pass in wine and reserves orange for `w`,
-which differs from the chapter's static `fig-chain-graph`; that divergence is stated in the
-panel and is an open decision in the receipt.
+and since 2026-09-25 the chapter's static `fig-chain-graph` uses the same colours (decision
+E1, resolved by repainting the figure).
 
 Fixture, source hashes, timing, and checks:
 [Wave 1 receipt](wave1-excerpts.md), `chapters/part1/05-backpropagation.qmd`, and

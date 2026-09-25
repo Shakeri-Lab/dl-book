@@ -151,7 +151,7 @@ optimizers or `backward()` before Chapter 5.
 
 ## 4. His signature analogies (use them; don't invent competitors)
 
-Blindfolded descent (GD), knobs (parameters), blame (gradients), gradient
+Blindfolded descent (GD), knobs (parameters), gradient
 superhighway (ch. 5/9/10 relay), ball rolling (momentum), house-and-foundation
 (pretrain/finetune), magnifying glass (kernels), detectives + cross-talk
 (channels, ch. 8), conveyor belt + valves / ball-valve (LSTM), gold rail
@@ -161,4 +161,6 @@ learnable?" (the book's refrain — every part pivots on it), “train a judge, 
 to please the judge” (reward model then policy, ch. 18), model card as nutritional
 label (ch. 18), the job interview for tuned contenders (experimentation interlude), and
 “PCA on steroids” (nonlinear autoencoders bend the reconstruction class, autoencoder
-interlude).
+interlude). The author retired "blame" for gradients on 2026-09-25: write *sensitivity* for
+$\delta^{(l)}$ and *adjoint* for the automatic-differentiation term, and use the metaphor
+very minimally, if at all.

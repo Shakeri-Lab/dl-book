@@ -10,27 +10,25 @@ Recall the update rule that ended @sec-01-linear-regression: new parameters come
 old parameters by stepping against the gradient,
 $\vect{w}^{(t+1)} = \vect{w}^{(t)} - \eta\,\nabla_{\vect{w}}\loss$. For linear
 regression we could write that gradient down by hand. But a modern network has millions,
-sometimes billions, of knobs, tangled through layer after layer of composed functions
-$\rightarrow$ computing each partial derivative naively, one at a time, is hopeless.
+sometimes billions, of knobs, tangled through layer after layer of composed functions,
+so computing each partial derivative separately, one extra forward pass per knob, is
+hopeless. @sec-03-nonlinearity-mlp named the underlying difficulty: with no targets for
+the hidden units, how much of the output error should each hidden weight answer for?
+That is the credit assignment problem.
 
-Backpropagation is the algorithm that computes *all* of them, exactly, in one backward
-sweep whose cost is a small constant multiple of the graph's elementary operations.
-It is not a new kind of calculus. It is the chain rule, *organized*. By the end of this
-chapter you will have derived it, implemented it by hand, rebuilt it as a tiny scalar
-autograd engine, and then checked that `torch.autograd` agrees with you to machine
-precision.
-
-This chapter owns the mechanics. For reverse accumulation as a memory and numerical
-diagnostic (including fan-out accumulation, vector–Jacobian products, retained state,
-and checkpoint replay) continue in
-[*The Gradient Has a Memory*](https://shakeri-lab.github.io/opt-book/chapters/act2/11-reverse-accumulation.html#c11).
+Backpropagation answers it exactly. It computes *all* the partial derivatives in one
+backward sweep whose cost is a small constant multiple of the graph's elementary
+operations. It is not a new kind of calculus. It is the chain rule, *organized*. By the
+end of this chapter you will have derived it as a recursion on sensitivities,
+implemented it by hand on a batch, counted what it costs in arithmetic and in memory,
+and checked that `torch.autograd` agrees with you to machine precision.
 
 ## One neuron, one chain
 
 Start with the smallest possible case: one neuron on one training example. The
 previous activation $a^{(l-1)}$ is multiplied by a weight $w$, giving the
 pre-activation $z = w\,a^{(l-1)} + b$; the activation function produces
-$a = \sigma(z)$; and $a$ feeds a loss $L$.
+$a^{(l)} = \sigma(z)$, written $a$ below; and $a$ feeds a loss $L$.
 
 Now turn the knob $w$ a little. How much does $L$ change? Follow the chain: turning
 $w$ changes $z$; the change in $z$ changes $a$; the change in $a$ changes $L$. The
@@ -46,29 +44,61 @@ $$ {#eq-chain}
 ```{python}
 #| label: fig-chain-graph
 #| echo: false
-#| fig-alt: "Four boxes form a forward chain from weight to pre-activation to activation to loss. Arrows above move left to right, while derivative-labeled arrows below traverse the same links right to left."
-#| fig-cap: "Computation as a graph: the forward pass (top, blue) computes and caches values; the backward pass (bottom, orange) multiplies local derivatives along the same edges, in reverse."
+#| fig-alt: "Four boxes in a row, joined by blue forward arrows: the weight w, the pre-activation z equals w times a superscript l minus 1 plus b, the activation a superscript l equals sigma of z, and the loss L. The middle two boxes note the values they keep. Below, dark-red arrows run right to left through four sensitivity boxes, from 1 under L to dL/da, dL/dz equals delta, and dL/dw, each arrow labeled with the local derivative it multiplies. Dotted arrows carry the kept values down to the derivatives that reuse them."
+#| fig-cap: "Computation as a graph. The forward pass (top, blue) computes each value and keeps what the backward pass will reuse. The backward pass (bottom, dark red) starts from $\\partial L/\\partial L = 1$ and multiplies one local derivative per edge, right to left. Each box on the lower lane is the loss's sensitivity to the node above it; the one at $z$ is the $\\delta$ of the next section."
 #| code-summary: "Code: draw the computation graph"
 import matplotlib.pyplot as plt
 import matplotlib.patches as mp
 
-fig, ax = plt.subplots(figsize=(7.2, 2.4))
-nodes = {r"$w$": 0, r"$z = w a^{(l-1)} + b$": 1, r"$a=\sigma(z)$": 2, r"$L$": 3}
-for label, i in nodes.items():
-    ax.add_patch(mp.FancyBboxPatch((i * 2.1, 0), 1.5, 0.7, boxstyle="round,pad=0.08",
-                                   fc="#E8EEF7", ec="#232D4B", lw=1.4))
-    ax.text(i * 2.1 + 0.75, 0.35, label, ha="center", va="center", fontsize=11)
-fwd = dict(arrowstyle="-|>", color="#5379AA", lw=1.8)
-bwd = dict(arrowstyle="-|>", color="#E57200", lw=1.8)
-lbl = [r"$\frac{\partial z}{\partial w}$", r"$\frac{\partial a}{\partial z}$",
-       r"$\frac{\partial L}{\partial a}$"]
-for i in range(3):
-    ax.annotate("", xy=(2.1 * (i + 1) - 0.1, 0.55), xytext=(2.1 * i + 1.6, 0.55),
-                arrowprops=fwd)
-    ax.annotate("", xy=(2.1 * i + 1.6, 0.12), xytext=(2.1 * (i + 1) - 0.1, 0.12),
-                arrowprops=bwd)
-    ax.text(2.1 * i + 1.85, -0.28, lbl[i], ha="center", fontsize=12, color="#E57200")
-ax.set_xlim(-0.3, 8.3); ax.set_ylim(-0.7, 1.1); ax.axis("off")
+BLUE, ORANGE, GREEN, WINE, INK = "#2B6CB0", "#C05621", "#2F855A", "#722F37", "#232D4B"
+fig, ax = plt.subplots(figsize=(7.6, 3.3))
+# (x centre, width, role, formula, cached value, colour)
+nodes = [(0.8, 1.1, "parameter", r"$w$", None, ORANGE),
+         (3.35, 2.45, "pre-activation", r"$z = w\,a^{(l-1)} + b$",
+          r"keeps $a^{(l-1)}$", INK),
+         (6.35, 2.05, "activation", r"$a^{(l)} = \sigma(z)$",
+          r"keeps $a^{(l)}$", GREEN),
+         (8.95, 1.1, "loss", r"$L$", None, WINE)]
+y0, h = 2.35, 0.78
+for xc, wd, role, formula, cache, col in nodes:
+    ax.add_patch(mp.FancyBboxPatch((xc - wd / 2, y0 - h / 2), wd, h,
+                                   boxstyle="round,pad=0.02,rounding_size=0.12",
+                                   fc="white", ec=col, lw=1.6))
+    ax.text(xc, y0 + h / 2 + 0.14, role, ha="center", va="bottom",
+            fontsize=8.5, color="#555555")
+    ax.text(xc, y0 + (0.1 if cache else 0), formula, ha="center",
+            va="center", fontsize=12, color=col if col != INK else "black")
+    if cache:
+        ax.text(xc, y0 - 0.23, cache, ha="center", va="center",
+                fontsize=8, color="#555555")
+for (x1, w1, *_), (x2, w2, *_) in zip(nodes, nodes[1:]):   # forward lane
+    ax.annotate("", xy=(x2 - w2 / 2 - 0.06, y0), xytext=(x1 + w1 / 2 + 0.06, y0),
+                arrowprops=dict(arrowstyle="-|>", color=BLUE, lw=1.8))
+ax.text(0.25, 3.55, "forward: compute each value and keep what the backward pass reuses",
+        color=BLUE, fontsize=9, va="center")
+
+yb = 0.72                                                   # backward lane
+chips = [r"$\partial L/\partial w$", r"$\partial L/\partial z = \delta$",
+         r"$\partial L/\partial a$", r"$1$"]
+for (xc, *_), chip in zip(nodes, chips):
+    ax.text(xc, yb, chip, ha="center", va="center", fontsize=11, color=WINE,
+            bbox=dict(boxstyle="round,pad=0.3", fc="#F6EEEF", ec=WINE, lw=1.0))
+local = [r"$\times\, a^{(l-1)}$", r"$\times\, \sigma'(z) = a^{(l)}(1-a^{(l)})$",
+         r"$\times\, \partial L/\partial a$"]
+gaps = [(0.8, 3.35, 0.58, 0.8), (3.35, 6.35, 0.8, 0.56), (6.35, 8.95, 0.56, 0.26)]
+for (xl, xr, pl, pr), lab in zip(gaps, local):
+    ax.annotate("", xy=(xl + pl, yb), xytext=(xr - pr, yb),
+                arrowprops=dict(arrowstyle="-|>", color=WINE, lw=1.8))
+    ax.text((xl + pl + xr - pr) / 2, yb + 0.2, lab, ha="center", va="bottom",
+            fontsize=9.5, color=WINE)
+for x_keep, (xl, xr, pl, pr) in [(3.35, gaps[0]), (6.35, gaps[1])]:   # reuse links
+    ax.annotate("", xy=((xl + pl + xr - pr) / 2 + 0.15, yb + 0.62),
+                xytext=(x_keep - 0.35, y0 - 0.3),
+                arrowprops=dict(arrowstyle="-|>", color="#8A8A8A", lw=1.0,
+                                ls=(0, (2, 2)), connectionstyle="arc3,rad=0.25"))
+ax.text(9.5, 0.05, "backward: multiply local derivatives, right to left",
+        color=WINE, fontsize=9, ha="right", va="center")
+ax.set_xlim(0, 9.6); ax.set_ylim(-0.15, 3.75); ax.axis("off")
 plt.tight_layout(); plt.show()
 ```
 
@@ -78,34 +108,39 @@ Two things about this picture generalize to any network, however deep:
    ($z$, $a$) along the way; we keep them, because the backward pass will need them.
 2. **The backward pass reuses.** Each edge contributes one *local* derivative, and the
    derivative of $L$ with respect to anything is the product of local derivatives along
-   the path back to it. Nothing is recomputed $\rightarrow$ the whole sweep costs about
-   as much as one forward pass.
+   the path back to it. Nothing is recomputed, so the whole sweep costs a small
+   constant multiple of one forward pass; for matrix-multiply layers the multiple is
+   about two, as the batched code below makes visible.
 
-## The game of blame
+## Sensitivity propagation: the four layer equations
 
 For a full layer of neurons the bookkeeping threatens to become a tangled mess of sums.
-The cure is to pick the right intermediate quantity and track only that. At the output
-of the network the error is obvious: it is just the gap to the target. What is *not*
-obvious is how much of that error is the fault of a weight buried ten layers deep.
-Backpropagation sends this blame backward, from where it is obvious to where it is not.
+The cure is to choose one intermediate quantity per layer and track only that. At the
+output, the loss is an explicit function of the network's last values; for a weight ten
+layers deep, the dependence runs through every layer in between. Backpropagation carries
+the loss's sensitivity from the output, where it is explicit, back to each layer that
+needs it.
 
 ::: {.callout-note}
-## The blame signal
+## The layer sensitivity
 
-Define, for each layer $l$, the **blame signal**
+Define, for each layer $l$, the **sensitivity**
 
 $$
 \delta^{(l)} \;:=\; \frac{\partial L}{\partial \vect{z}^{(l)}} ,
 $$
 
-the sensitivity of the loss to that layer's *pre-activations*. It answers: how much did
-each neuron's $z$ contribute to the final loss?
+the gradient of the loss with respect to that layer's *pre-activations*. Entry $j$
+answers a first-order question: if $z^{(l)}_j$ moved by a small $\varepsilon$, the loss
+would move by about $\delta^{(l)}_j\,\varepsilon$. Automatic differentiation calls such
+a quantity an **adjoint**: the derivative of the final output with respect to an
+intermediate value, computed backward from the output.
 :::
 
 Everything now unfolds in four short equations. With $\odot$ denoting elementwise
 (Hadamard) product:
 
-**1. Start where blame is obvious (output layer $L$):**
+**1. Start at the output layer $L$, where the sensitivity is explicit:**
 
 $$
 \delta^{(L)} = \frac{\partial L}{\partial \vect{a}^{(L)}} \odot \sigma'(\vect{z}^{(L)}) .
@@ -118,25 +153,28 @@ $\vect{a}^{(L)} - \vect{y}$. Other conventions contribute a known scale: mean sq
 error, for example, contributes $2/n$ for $n$ scalar outputs. In every case the output
 error is then gated by how sensitive the activation was to its input.
 
-**2. Propagate blame one layer back:**
+**2. Propagate one layer back:**
 
 $$
 \delta^{(l)} = \Bigl( (\matr{W}^{(l+1)})^\top \delta^{(l+1)} \Bigr) \odot \sigma'(\vect{z}^{(l)}) .
 $$ {#eq-bp2}
 
-Blame flows backward through the same weights the signal flowed forward through, hence
-the transpose; then the local gate $\sigma'(\vect{z}^{(l)})$ scales it. This recursion
-runs from the last layer to the first.
+The sensitivity travels backward through the same weights the signal traveled forward
+through. Unit $j$ of layer $l$ fed every unit $i$ of layer $l+1$ through the weight
+$W^{(l+1)}_{ij}$, so it collects $\sum_i W^{(l+1)}_{ij}\,\delta^{(l+1)}_i$, which is entry
+$j$ of $(\matr{W}^{(l+1)})^\top\delta^{(l+1)}$: hence the transpose. The local gate
+$\sigma'(\vect{z}^{(l)})$ then scales it. This recursion runs from the last layer to the
+first.
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
 1. Prepare the inputs and fixed settings for the example.
-2. Compute the backward blame signal through every layer.
+2. Cache the forward pass, then apply equations 1 and 2 from the output back.
 :::
 
 ```{python}
-#| label: blame-flow-values
-#| code-summary: "Code: compute the blame flow"
+#| label: sensitivity-values
+#| code-summary: "Code: propagate the sensitivities"
 #| code-fold: false
 import torch
 import matplotlib.pyplot as plt
@@ -164,34 +202,61 @@ delta[0] = (Ws[1].T @ delta[1]) * sp(zs[0])          # eq. 2 again
 
 ```{python}
 #| echo: false
-#| label: fig-blame-flow
-#| fig-alt: "Four network columns run from three inputs through two four-unit hidden layers to one output. Connections carry blame backward, and node size and shading show the blame magnitudes changing across layers."
-#| fig-cap: "Equations 1 and 2 in action on a real network (sizes 3–4–4–1, random weights, one example). Node size and color show each neuron's blame $|\\delta_j|$: it starts at the output, where the error is obvious, and flows backward through $W^\\top$, shrinking wherever a sigmoid gate is nearly closed."
-fig, ax = plt.subplots(figsize=(7, 3.2))
-blames = [torch.full((3,), float("nan"))] + delta    # input layer: no blame needed
-vmax = max(d.abs().max() for d in delta)
-for col, (n_units, bl) in enumerate(zip(sizes, blames)):
-    ys = torch.linspace(-1, 1, n_units + 2)[1:-1]
-    mag = bl.abs() if col > 0 else torch.zeros(n_units)
-    ax.scatter([col] * n_units, ys, s=200 + 2200 * mag / vmax,
-               c=mag, cmap="Oranges", vmin=0, vmax=float(vmax),
-               edgecolors="#232D4B", zorder=3)
-    if col > 0:                                       # backward arrows
-        prev = torch.linspace(-1, 1, sizes[col - 1] + 2)[1:-1]
-        for yj in ys:
-            for yi in prev:
-                ax.plot([col, col - 1], [yj, yi], color="#B8B8B8",
-                        lw=0.5, zorder=1)
-ax.annotate("blame flows this way", xy=(0.4, 1.25), xytext=(2.2, 1.25),
-            arrowprops=dict(arrowstyle="-|>", color="#E57200", lw=2),
-            color="#E57200", va="center")
-ax.set_xticks(range(4))
-ax.set_xticklabels(["input", r"$\delta^{(1)}$", r"$\delta^{(2)}$", r"$\delta^{(3)}$"])
-ax.set_yticks([]); ax.set_ylim(-1.4, 1.6)
-for s in ax.spines.values(): s.set_visible(False)
+#| label: fig-delta-pullback
+#| fig-alt: "Seven vertical strips of numbers read right to left: the single output sensitivity, its product with the transposed weights, the layer's four sigmoid-derivative gates in gray, the resulting four-entry sensitivity, and the same three steps again for the first hidden layer. Arrows labeled W transpose join each sensitivity to the next pulled-back strip; equals signs and elementwise-product signs sit between the others. Color fades toward the input. One row is outlined where a nearly closed gate shrinks a large pulled-back value."
+#| fig-cap: "@eq-bp2 as two operations, run right to left on a 3–4–4–1 network (random weights, one example): multiply by $W^\\top$, which sends each sensitivity back to every unit that fed it, then gate elementwise by $\\sigma'(z) \\le 0.25$ (gray). The numbers are the executed values; blue is negative and dark red positive on one shared scale, so the fading toward the input is the gates at work. The outlined row is the most nearly closed gate: a large pulled-back value leaves it as a small sensitivity."
+import matplotlib.patches as mp
+from matplotlib.colors import LinearSegmentedColormap
+
+signed = LinearSegmentedColormap.from_list("signed", ["#2B6CB0", "#FFFFFF", "#722F37"])
+pulled = [Ws[1].T @ delta[1], Ws[2].T @ delta[2]]           # W^T delta, before the gate
+gates = [sp(zs[0]), sp(zs[1])]
+strips = [(delta[0], "s", r"$\delta^{(1)}$"), (gates[0], "g", r"$\sigma'(z^{(1)})$"),
+          (pulled[0], "s", r"$W^{(2)\top}\delta^{(2)}$"),
+          (delta[1], "s", r"$\delta^{(2)}$"), (gates[1], "g", r"$\sigma'(z^{(2)})$"),
+          (pulled[1], "s", r"$W^{(3)\top}\delta^{(3)}$"), (delta[2], "s", r"$\delta^{(3)}$")]
+between = ["=", r"$\odot$", "W", "=", r"$\odot$", "W"]
+vmax = float(max(v.abs().max() for v in pulled + delta))
+fig, ax = plt.subplots(figsize=(7.6, 3.0))
+cw, ch, gap, x = 0.78, 0.46, 0.5, 0.0
+lefts = []
+for k, (vec, kind, label) in enumerate(strips):
+    n = len(vec)
+    y_top = ch * n / 2
+    for i, v in enumerate(vec.tolist()):
+        if kind == "g":
+            face = plt.cm.Greys(0.05 + 0.35 * v / 0.25)       # gate: 0 to 0.25
+            ink = "black"
+        else:
+            face = signed(0.5 + 0.5 * v / vmax)
+            ink = "white" if abs(v) > 0.55 * vmax else "black"
+        ax.add_patch(mp.Rectangle((x, y_top - (i + 1) * ch), cw, ch, fc=face,
+                                  ec="#232D4B", lw=0.8))
+        ax.text(x + cw / 2, y_top - (i + 0.5) * ch, f"{v:.3f}", ha="center",
+                va="center", fontsize=8, color=ink)
+    ax.text(x + cw / 2, -1.25, label, ha="center", va="center", fontsize=10.5)
+    lefts.append(x)
+    if k < len(between):
+        op = between[k]
+        xm = x + cw + gap / 2
+        if op == "W":
+            ax.annotate("", xy=(x + cw + 0.06, 0), xytext=(x + cw + gap - 0.06, 0),
+                        arrowprops=dict(arrowstyle="-|>", color="#722F37", lw=1.6))
+            ax.text(xm, 0.16, r"$W^\top$", ha="center", va="bottom", fontsize=10,
+                    color="#722F37")
+        else:
+            ax.text(xm, 0, op, ha="center", va="center", fontsize=13)
+        x += cw + gap
+closed = int(torch.argmin(gates[0]))                      # the most nearly closed gate
+for xl in lefts[:3]:
+    ax.add_patch(mp.Rectangle((xl, ch * 2 - (closed + 1) * ch), cw, ch, fill=False,
+                              ec="black", lw=2.4, zorder=4))
+ax.text(lefts[0], 1.2, "backward, right to left: pull back through $W^\\top$, then gate",
+        fontsize=9, color="#722F37", va="center")
+ax.set_xlim(-0.1, x + cw + 0.1); ax.set_ylim(-1.5, 1.4); ax.axis("off")
 plt.tight_layout(); plt.show()
 ```
-**3. Convert blame into weight gradients:**
+**3. Convert sensitivities into weight gradients:**
 
 $$
 \frac{\partial L}{\partial \matr{W}^{(l)}} = \delta^{(l)} \, (\vect{a}^{(l-1)})^\top .
@@ -204,11 +269,12 @@ $$
 $$ {#eq-bp4}
 
 @eq-bp3 deserves a pause, because its shapes tell the story. With $m$ neurons
-in layer $l$ and $n$ in layer $l-1$: $\delta^{(l)}$ is $(m \times 1)$, and
-$(\vect{a}^{(l-1)})^\top$ is $(1 \times n)$. Their **outer product** is an $m \times n$
-matrix, exactly the shape of $\matr{W}^{(l)}$, and entry $(i,j)$ is the blame of neuron
-$i$ times the activation of neuron $j$ that fed it. The update for a weight is
-*blame out times signal in*:
+in layer $l$ and $k$ in layer $l-1$: $\delta^{(l)}$ is $(m \times 1)$, and
+$(\vect{a}^{(l-1)})^\top$ is $(1 \times k)$. Their **outer product** is an $m \times k$
+matrix, exactly the shape of $\matr{W}^{(l)}$, and entry $(i,j)$ is the sensitivity of
+neuron $i$ times the activation of neuron $j$ that fed it,
+$\partial L/\partial W^{(l)}_{ij} = \delta^{(l)}_i\,a^{(l-1)}_j$. A weight's gradient is
+*sensitivity out times signal in*:
 
 :::: {.plan-code}
 ::: {.plan}
@@ -220,7 +286,7 @@ $i$ times the activation of neuron $j$ that fed it. The update for a weight is
 #| code-summary: "Code: form the outer-product gradient"
 #| code-fold: false
 # [1]
-d2 = delta[1]                              # layer-2 blame        (4,)
+d2 = delta[1]                              # layer-2 sensitivity  (4,)
 a1 = torch.sigmoid(zs[0])                  # layer-1 activations  (4,)
 G = torch.outer(d2, a1)                    # eq. 3
 ```
@@ -229,18 +295,48 @@ G = torch.outer(d2, a1)                    # eq. 3
 ```{python}
 #| echo: false
 #| label: fig-outer-product
-#| fig-alt: "A four-entry blame column and a four-entry activation row sit beside their four-by-four outer-product matrix. Each matrix cell is numerically the product of its corresponding row and column entries."
-#| fig-cap: "Equation 3, pictured with the blame and activations from the network above: a $(4 \\times 1)$ blame column times a $(1 \\times 4)$ activation row yields the full $(4 \\times 4)$ gradient matrix in one stroke: entry $(i,j)$ is blame out $\\times$ signal in."
-fig, axes = plt.subplots(1, 3, figsize=(7.6, 2.6),
-                         gridspec_kw={"width_ratios": [1, 4, 4.6]})
-panels = [(d2[:, None], r"$\delta^{(2)}$"), (a1[None, :], r"$(a^{(1)})^\top$"),
-          (G, r"$\partial L/\partial W^{(2)} = \delta^{(2)}(a^{(1)})^\top$")]
-for ax, (M, title) in zip(axes, panels):
-    ax.imshow(M, cmap="Oranges", vmin=-G.abs().max(), vmax=G.abs().max())
-    for (i, j), v in [((i, j), M[i, j]) for i in range(M.shape[0])
-                      for j in range(M.shape[1])]:
-        ax.text(j, i, f"{v:.2f}", ha="center", va="center", fontsize=8)
-    ax.set_title(title, fontsize=11); ax.set_xticks([]); ax.set_yticks([])
+#| fig-alt: "A four-entry sensitivity column times a four-entry activation row equals a four-by-four gradient matrix. Signed values are shaded blue for negative and dark red for positive; the positive activations are green. One entry of the column, one of the row, and their product cell in the matrix are outlined, with the multiplication written beside the matrix."
+#| fig-cap: "@eq-bp3 with the sensitivities and activations from the network above: a $(4 \\times 1)$ sensitivity column times a $(1 \\times 4)$ activation row gives the whole $(4 \\times 4)$ gradient at once. The outlined cells trace the largest entry, $\\delta_i\\,a_j$; every other cell is built the same way. Sensitivities and gradients share the signed blue-to-dark-red scale; the activations, all positive, are green."
+import matplotlib.patches as mp
+from matplotlib.colors import LinearSegmentedColormap
+
+signed = LinearSegmentedColormap.from_list("signed", ["#2B6CB0", "#FFFFFF", "#722F37"])
+i0, j0 = divmod(int(G.abs().argmax()), G.shape[1])       # the largest entry
+fig, ax = plt.subplots(figsize=(7.6, 3.1))
+c = 0.5                                                   # cell size
+
+def block(M, x0, y0, colour, label, shape, scale):
+    rows, cols = M.shape
+    for i in range(rows):
+        for j in range(cols):
+            v = float(M[i, j])
+            ax.add_patch(mp.Rectangle((x0 + j * c, y0 - (i + 1) * c), c, c,
+                                      fc=colour(v), ec="#232D4B", lw=0.8))
+            ax.text(x0 + (j + 0.5) * c, y0 - (i + 0.5) * c, f"{v:.2f}",
+                    ha="center", va="center", fontsize=8,
+                    color="white" if abs(v) > 0.6 * scale else "black")
+    ax.text(x0 + cols * c / 2, y0 + 0.28, label, ha="center", fontsize=11)
+    ax.text(x0 + cols * c / 2, y0 - rows * c - 0.3, shape, ha="center",
+            fontsize=9, color="#555555")
+
+gmax = float(G.abs().max())
+dmax = float(d2.abs().max())
+block(d2[:, None], 0.0, 1.0, lambda v: signed(0.5 + 0.5 * v / dmax),
+      r"$\delta^{(2)}$", r"$4 \times 1$", dmax)
+ax.text(0.95, 0.0, r"$\times$", ha="center", va="center", fontsize=14)
+block(a1[None, :], 1.4, 0.25, lambda v: plt.cm.Greens(0.1 + 0.5 * v),
+      r"$(a^{(1)})^\top$", r"$1 \times 4$", 2.0)
+ax.text(3.8, 0.0, "=", ha="center", va="center", fontsize=14)
+block(G, 4.25, 1.0, lambda v: signed(0.5 + 0.5 * v / gmax),
+      r"$\partial L/\partial W^{(2)}$", r"$4 \times 4$, the shape of $W^{(2)}$", gmax)
+for x0, y0, i, j in [(0.0, 1.0, i0, 0), (1.4, 0.25, 0, j0), (4.25, 1.0, i0, j0)]:
+    ax.add_patch(mp.Rectangle((x0 + j * c, y0 - (i + 1) * c), c, c, fill=False,
+                              ec="black", lw=2.4, zorder=4))
+ax.text(6.55, 0.0, (f"entry $({i0 + 1},{j0 + 1})$:\n"
+                    f"${float(d2[i0]):.2f} \\times {float(a1[j0]):.2f}"
+                    f" = {float(G[i0, j0]):.2f}$"),
+        ha="left", va="center", fontsize=9.5)
+ax.set_xlim(-0.1, 7.9); ax.set_ylim(-1.45, 1.45); ax.axis("off")
 plt.tight_layout(); plt.show()
 ```
 No messy summations: the matrix form performs them all at once, and it maps directly
@@ -250,7 +346,7 @@ a toy network and a billion-parameter model; only the matrix sizes change.
 ## Build it, then check it against autograd
 
 Let us implement the four equations on a two-layer network, with no autograd anywhere,
-and then ask `torch.autograd` to differentiate the same network. If our blame algebra is
+and then ask `torch.autograd` to differentiate the same network. If our algebra is
 right, the two answers must agree to machine precision.
 
 :::: {.plan-code}
@@ -267,10 +363,28 @@ import torch
 _ = torch.manual_seed(6050)
 ```
 ::::
+
+One change of layout before the code: it processes $n$ examples at once, stored as rows
+as in @sec-01-linear-regression. Stack the activations into
+$\matr{A}^{(l-1)} \in \mathbb{R}^{n\times k}$ and the sensitivities into
+$\matr{\Delta}^{(l)} \in \mathbb{R}^{n\times m}$, row $i$ holding example $i$'s
+$\delta^{(l)}$. The single-example outer product of @eq-bp3 then becomes one matrix
+product that sums the per-example outer products,
+
+$$
+\frac{\partial L}{\partial \matr{W}^{(l)}}
+= (\matr{\Delta}^{(l)})^\top \matr{A}^{(l-1)}
+= \sum_{i=1}^{n} \delta^{(l)}_i \,(\vect{a}^{(l-1)}_i)^\top ,
+$$
+
+which is the code's `delta2.T @ A1`; and @eq-bp2, transposed row by row, becomes
+`delta1 = (delta2 @ W2) * sig_prime`. The mean's $1/n$ already sits inside `delta2`, so
+the sum is the batch average.
+
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
 1. Prepare the inputs and fixed settings for the example.
-2. Cache the forward pass, propagate blame backward, and form both gradients.
+2. Cache the forward pass, propagate the sensitivities backward, and form the gradients.
 3. Report or visualize the measured result.
 :::
 
@@ -294,8 +408,8 @@ L = ((Z2.squeeze() - y) ** 2).mean()
 # backward pass -- the four equations (batch-averaged)
 sig_prime = A1 * (1 - A1)                     # sigma'(z) = sigma(z)(1 - sigma(z))
 delta2 = 2 * (Z2.squeeze() - y)[:, None] / n  # eq. 1 (identity output: no gate)
-delta1 = (delta2 @ W2) * sig_prime            # eq. 2: blame through W^T, gated
-grads = {                                     # eqs. 3 & 4: blame out x signal in
+delta1 = (delta2 @ W2) * sig_prime            # eq. 2: back through W^T, then gated
+grads = {                                     # eqs. 3 & 4: sensitivity out x signal in
     "W2": delta2.T @ A1, "b2": delta2.sum(0),
     "W1": delta1.T @ X,  "b1": delta1.sum(0),
 }
@@ -315,21 +429,48 @@ for k in grads:
 ```
 ::::
 The largest discrepancy is $3.73\times10^{-9}$, consistent with float32 rounding. The
-blame equations *are* what autograd computes; the framework simply builds the
+four equations *are* what autograd computes; the framework simply builds the
 computation graph for us as we go and then walks it backward, caching and reusing
 exactly as we did.
 
-## A tiny scalar autograd engine
+**Two products backward for each product forward.** The forward pass computed the
+output layer with one matrix product, `A1 @ W2.T`. Its backward pass needed two, one for
+each input of that product: `delta2 @ W2` carries the sensitivity to the layer's input,
+and `delta2.T @ A1` forms the weight gradient. For an $n\times k$ input and an
+$m\times k$ weight, each of the three products costs $2nmk$ floating-point operations,
+so a matrix-multiply layer's backward pass costs about twice its forward pass and a
+training step about three forward passes. That is the small constant multiple promised
+at the start. (The first layer needs no input gradient, because nothing upstream of
+`X` is trained; our code never forms one.)
 
-To remove the last trace of magic, let us build the graph ourselves. Each `Value` node
-remembers how it was made (its parents and the local derivative rule); calling
-`backward()` walks the graph in reverse topological order, accumulating blame into every
-node's `grad`.
+**The price of caching.** The backward pass read `A1`, for `sig_prime` and the `W2`
+gradient, and `X`, for the `W1` gradient, so both had to survive the forward pass. Here
+`A1` alone holds $32 \times 8 = 256$ numbers, more than all $57$ parameters of the
+network, and it grows with the batch size while the parameter count does not. A deep
+network keeps about one such block per layer until the backward pass consumes it,
+which is why training a network takes more memory than running it, and why evaluation
+code runs under `torch.no_grad()`, where no graph is recorded and nothing is kept for a
+backward pass. Recomputing some activations during the backward pass instead of storing
+them, *gradient checkpointing*, trades extra arithmetic for memory (Chen et al., 2016).
+
+## Order and accumulation: a scalar autograd engine
+
+The four equations assume a chain of layers. A program is a graph: one value can feed
+several later operations, and the backward pass must visit nodes in an order that
+respects every dependency. Two rules make any graph work, and a small engine shows both.
+Each `Value` node records its parents and a local derivative rule; its `grad` field
+holds its adjoint $\partial L/\partial v$, and the rule passes that adjoint on to the
+parents. Then `backward()`:
+
+1. sorts the recorded nodes topologically and visits them in reverse, so that every
+   consumer of a node has contributed before the node's own rule runs; and
+2. *adds* each contribution with `+=`, so a value used twice receives the sum over both
+   paths.
 
 This teaching implementation is adapted from Andrej Karpathy's
 [micrograd](https://github.com/karpathy/micrograd), released under the MIT License. We
-use only the scalar reverse-mode pattern needed for this derivation; the upstream
-copyright and license notice are preserved in the repository's
+use only the scalar reverse-mode pattern, as a readable model of these two rules; the
+upstream copyright and license notice are preserved in the repository's
 [third-party notices](https://github.com/Shakeri-Lab/dl-book/blob/main/THIRD_PARTY_NOTICES.md).
 
 :::: {.plan-code .plan-code-wide}
@@ -385,7 +526,7 @@ class Value:
                     topo(p)
                 order.append(v)
         topo(self)
-        self.grad = 1.0                  # dL/dL = 1: blame starts here
+        self.grad = 1.0                  # dL/dL = 1: seed the output adjoint
         for v in reversed(order):
             v._backward_rule()
 ```
@@ -415,19 +556,29 @@ print(f"micro-autograd: dL/dw = {w.grad:.6f}")
 print(f"by hand:        dL/dw = {2 * (s - 0.3) * s * (1 - s) * 2.0:.6f}")
 ```
 ::::
-In a few dozen lines, it is the real thing: PyTorch's autograd is this idea with tensors
-instead of scalars, a compiled graph walker, and thousands of derivative rules.
+The check exercised both rules. The loss writes `a` twice, in both factors of
+`(a + (-0.3)) * (a + (-0.3))`, so `a.grad` is the sum of two contributions, and the sort
+guarantees that both arrive before `a`'s own rule passes the total on toward `w`.
+PyTorch's autograd keeps the same two rules and changes the unit of work: its nodes hold
+tensors, and each local rule is a **vector–Jacobian product**, which maps the adjoint of
+an output to the adjoints of the inputs without ever forming a Jacobian. For the layer
+product $\matr{Z} = \matr{A}\matr{W}^\top$, the rule is the pair from the batched code,
+$\bar{\matr{A}} = \bar{\matr{Z}}\matr{W}$ and $\bar{\matr{W}} = \bar{\matr{Z}}^\top\matr{A}$,
+where a bar marks an adjoint. The scalar engine models the bookkeeping, not the speed.
 
 ## `torch.autograd` in practice: five rules
 
 Autograd is doing exactly what we just built by hand, and knowing that mechanics tells
 you why each of its rules exists. These five cover nearly every autograd bug you will
-meet; the worked cases below isolate each path before the full network combines them.
+meet; @fig-autograd-rules pictures four of them in PyTorch syntax, and the worked cases
+below isolate each path before the full network combines them.
+
+![Four autograd rules in PyTorch syntax. (a) After `backward()`, the leaf `w` holds its gradient; the non-leaf `y_hat` used its gradient and released it. (b) A second `backward()` adds into `w.grad` until `optimizer.zero_grad()` resets it. (c) Of four ways to write an update, only the in-place one under `torch.no_grad()` keeps `w` a trainable leaf. (d) A loss stored from a pass that never reaches `backward()` keeps its graph and cached activations alive; `loss.item()` and `loss.detach()` keep only the value.](../../figures/generated/5_5_autograd_rules.svg){#fig-autograd-rules width=100% fig-alt="Four panels. Panel a: the code w equals torch.randn of 3 with requires_grad True, y_hat equals w times 2 summed, y_hat.backward. An orange leaf box w with is_leaf True points to a gray box y_hat with grad_fn SumBackward0; a dark-red backward arrow fills w.grad with 2, 2, 2, while y_hat.grad is None. Panel b: w.grad reads 2, 2, 2 after one backward call and 4, 4, 4 after a second, then None after optimizer.zero_grad. Panel c: four update lines; only with torch.no_grad, w minus-equals lr times w.grad, is checked, giving the same leaf with new values; rebinding w gives a non-leaf whose next grad is None, an in-place update with recording on raises RuntimeError, and rebinding under no_grad gives requires_grad False. Panel d: appending loss to a list during evaluation keeps the loss, its grad_fn chain, and cached activations alive; appending loss.item gives a Python float, and loss.detach gives the same value with its history cut."}
 
 **Rule 1: by default, only leaf tensors retain gradients.** A *leaf* is a tensor you
 created directly (your parameters); a *non-leaf* is the result of an operation
 (activations, losses). After `backward()`, leaves have `.grad` populated while
-intermediate blame is used and released. Call `.retain_grad()` on a non-leaf before
+intermediate gradients are used and released. Call `.retain_grad()` on a non-leaf before
 `backward()` only when you explicitly need its gradient for inspection.
 
 **Rule 2: gradients accumulate.** `backward()` *adds* into `.grad`. Zero them before
@@ -458,11 +609,16 @@ print(f"non-leaf grad:  {y_hat.grad}")                 # None -- rule 1
 print(f"after 2nd pass: {w.grad.tolist()}")            # doubled -- rule 2
 ```
 ::::
-**Rule 3: parameter updates happen outside the graph.** For a raw leaf tensor, the
-update `w = w - lr * w.grad` inside autograd's view records the update and rebinds `w`
-to a non-leaf, so its `.grad` will not be retained by default on the next pass.
-Assigning a plain tensor over a registered `nn.Parameter` may instead fail loudly. The
-safe idiom below covers both cases:
+**Rule 3: update parameters in place, with recording paused.** Write the update as
+`w -= lr * w.grad` inside `with torch.no_grad():`. Both halves matter. `torch.no_grad()`
+keeps the step itself off the graph, and the in-place `-=` changes the values of the
+existing leaf, so `w` remains the same trainable tensor that the optimizer and the next
+`backward()` refer to. Drop either half and the update breaks
+(@fig-autograd-rules, panel c): the rebinding `w = w - lr * w.grad` creates a new
+non-leaf whose `.grad` stays `None` on the next pass; an in-place update with recording
+on raises an error; and a rebinding under `no_grad()` yields a tensor that no longer
+requires gradients, so learning silently stops. Assigning a plain tensor over a
+registered `nn.Parameter` fails loudly instead. The idiom:
 
 :::: {.plan-code}
 ::: {.plan}
@@ -494,26 +650,29 @@ assert w.is_leaf
 forward cache. Inside `no_grad()` parameter updates they are safe; anywhere else,
 prefer creating a new tensor.
 
-**Rule 5: the graph lives until you let it go.** Every forward pass builds a fresh
-graph, freed after `backward()`. But any tensor you keep (say, appending `loss` to a
-list for plotting) keeps its whole graph alive with it. Store `loss.item()` (a plain
-float) or `loss.detach()` instead: `detach()` returns the same value with the history
-cut.
+**Rule 5: a graph lives as long as something refers to it.** Every forward pass
+builds a fresh graph, and `backward()` frees the activations that graph cached. A tensor
+you keep, say `loss` appended to a list for plotting, still holds its `grad_fn`
+history; one kept from a pass that never reaches `backward()` (an evaluation loop
+outside `torch.no_grad()`, for example) holds every cached activation as well. Store
+`loss.item()` (a plain float) or `loss.detach()` instead: `detach()` returns the same
+value with the history cut.
 
 ::: {.callout-warning}
 ## Keep updates outside the graph
 
-Rules 1 and 3 combine into a classic raw-tensor bug: rebinding
-`w = w - lr * w.grad` creates a **new non-leaf**. Its `.grad` then comes back `None` by
-default on the next pass. A registered `nn.Parameter` assignment can raise an error
-instead. In either case, update the existing parameter under `torch.no_grad()`.
+The one safe manual update is in place and unrecorded: `w -= lr * w.grad` inside
+`with torch.no_grad():`, then clear `w.grad` (Rule 2) before the next `backward()`.
+Rules 1 and 3 combine into the classic raw-tensor bug: the rebinding
+`w = w - lr * w.grad` creates a **new non-leaf**, and its `.grad` comes back `None` on
+the next pass.
 :::
 
 ## The gate, and the problem with deep chains
 
 Look again at @eq-bp2. Every backward step multiplies by $\sigma'(\vect{z}^{(l)})$. That
-derivative acts as a **gate** on the blame: wide open, and the signal passes; nearly
-closed, and it dies.
+derivative acts as a **gate** on the sensitivity: wide open, and the signal passes;
+nearly closed, and it dies.
 
 Now examine the sigmoid's gate. From $\sigma'(z) = \sigma(z)(1-\sigma(z))$, its maximum
 value, at $z = 0$, is exactly $0.25$; away from zero the neuron *saturates* and the gate
@@ -734,8 +893,8 @@ they all serve: *keep the signal, forward and backward, at constant energy*.
 
 Close the book for one minute and run the chain rule backward.
 
-- What does each layer cache on the forward pass?
-- Why does the blame signal pass through a transposed weight matrix?
+- What does each layer cache on the forward pass, and what does that cost in memory?
+- Why does the sensitivity $\delta$ pass through a transposed weight matrix?
 - How do activation derivatives and initialization together control gradient scale with depth?
 :::
 
@@ -743,13 +902,15 @@ Close the book for one minute and run the chain rule backward.
 
 1. **The graph.** Any network is a computation graph; the forward pass computes and
    caches, the backward pass multiplies local derivatives in reverse.
-2. **The blame signal.** $\delta^{(l)} = \partial L / \partial \vect{z}^{(l)}$ turns
+2. **The sensitivity.** $\delta^{(l)} = \partial L / \partial \vect{z}^{(l)}$ turns
    the tangle into four equations: start at the output (@eq-bp1), propagate through
    $\matr{W}^\top$ and the gate (@eq-bp2), then read off weight and bias gradients
-   (@eq-bp3, @eq-bp4). The backward sweep costs a small constant multiple of the
-   forward graph's operations, for *every* gradient at once.
+   (@eq-bp3, @eq-bp4). On a batch, each forward matrix product costs two backward
+   ones, so the sweep delivers *every* gradient for about twice the forward
+   arithmetic, paid for in cached activations.
 3. **We verified it**: our hand-built equations match `torch.autograd` to
-   $10^{-8}$, and a tiny scalar `Value` class reproduces the machinery end to end.
+   $10^{-8}$, and a scalar `Value` engine exposes the two rules any graph needs:
+   reverse topological order and accumulation with `+=`.
 4. **The gate rules the depth.** The sigmoid-derivative product along a path is bounded
    above by $0.25^k$ after $k$ gates;
    ReLU's open gate is a gradient superhighway. Initialization sets the signal's
@@ -778,19 +939,25 @@ reaching the early layers? what is gating it? what is its energy?*
   experiment.
 - [CS231n, “Gradient Checks”](https://cs231n.github.io/neural-networks-3/#gradcheck):
   the centered-difference and relative-error safeguards used in Exercise 6.
-- Ioffe and Szegedy,
-  ["Batch Normalization"](https://proceedings.mlr.press/v37/ioffe15.html)
-  (2015): the coupled minibatch normalization whose backward pass is audited in
-  Exercise 7.
+- Chen, Xu, Zhang, and Guestrin,
+  ["Training Deep Nets with Sublinear Memory Cost"](https://arxiv.org/abs/1604.06174)
+  (2016): stores a subset of activations and recomputes the rest during the backward
+  pass, trading arithmetic for memory.
+- Shakeri, *Deep Learning: Making It Trainable*, Chapter 11,
+  ["The Gradient Has a Memory: Reverse Accumulation and Checkpointing"](https://shakeri-lab.github.io/opt-book/chapters/act2/11-reverse-accumulation.html#c11)
+  (2026): the companion volume's graduate treatment of reverse accumulation as a memory
+  and numerical diagnostic, including fan-out accumulation, vector–Jacobian products,
+  retained state, and checkpoint replay.
 
 ## Exercises {.unnumbered}
 
-1. **(Pencil.)** Derive the four blame equations for a network whose output layer uses
+1. **(Pencil.)** Derive the four layer equations for a network whose output layer uses
    the identity activation and squared-error loss (the network of our verification
    cell). Confirm that your $\delta^{(2)}$ matches the `delta2` line in the code.
-2. **(Pencil.)** In @eq-bp2, why does the blame flow through $(\matr{W}^{(l+1)})^\top$
-   rather than $\matr{W}^{(l+1)}$? Argue from shapes: what are the dimensions of
-   $\delta^{(l)}$, $\delta^{(l+1)}$, and $\matr{W}^{(l+1)}$?
+2. **(Pencil.)** In @eq-bp2, why does the sensitivity pass through
+   $(\matr{W}^{(l+1)})^\top$ rather than $\matr{W}^{(l+1)}$? Argue from shapes: what
+   are the dimensions of $\delta^{(l)}$, $\delta^{(l+1)}$, and $\matr{W}^{(l+1)}$? Then
+   check that the batched form `(delta2 @ W2) * sig_prime` has consistent shapes too.
 3. **(Code.)** Extend the `Value` class with `tanh` and use it to train the one-neuron
    model from the check cell for 50 steps (write the update loop yourself). Verify the
    loss decreases.
@@ -810,10 +977,18 @@ reaching the early layers? what is gating it? what is its energy?*
    several randomly selected parameters under seed 6050. *Named wrong answer:*
    “absolute error below $10^{-4}$ proves the gradient”: absolute error ignores the
    scale of the quantity being checked.
-7. **(Pencil.)** Derive $\partial\mathcal{L}/\partial x$ through BatchNorm's batch
-   mean and variance. Mark the direct normalized-input term and the two terms created
-   by coupling every example through those statistics.
-   **(Code.)** Verify all three terms against autograd on the experimentation
-   interlude's BatchNorm module. Then delete the two coupling terms deliberately,
-   compare the gradient error, and rerun the interlude's training curve under the
-   same data, initialization, minibatch schedule, and seed panel.
+7. **(Pencil.)** Let $\hat{\vect{y}} = \operatorname{softmax}(\vect{o})$ for logits
+   $\vect{o} \in \mathbb{R}^K$. Show that its Jacobian is
+   $\partial\hat{\vect{y}}/\partial\vect{o} = \operatorname{diag}(\hat{\vect{y}}) -
+   \hat{\vect{y}}\hat{\vect{y}}^\top$, and that for any upstream sensitivity
+   $\vect{u} = \partial L/\partial\hat{\vect{y}}$ the vector–Jacobian product is
+   $\partial L/\partial\vect{o} = \hat{\vect{y}} \odot \bigl(\vect{u} -
+   \langle\vect{u}, \hat{\vect{y}}\rangle\,\mathbf{1}\bigr)$, which costs $O(K)$
+   where forming the Jacobian costs $O(K^2)$. Choose $\vect{u}$ for
+   $L = -\log \hat{y}_c$ and recover @eq-ce-grad; choose it for squared error against a
+   one-hot target and recover the row formula in Exercise 4 of
+   @sec-02-logistic-softmax.
+   **(Code.)** Implement `softmax_vjp(y_hat, u)`, check it against
+   `torch.autograd.grad` in float64 for random logits and upstream vectors under seed
+   6050, and time it against multiplying by the materialized Jacobian for
+   $K = 10^2, 10^3, 10^4$.

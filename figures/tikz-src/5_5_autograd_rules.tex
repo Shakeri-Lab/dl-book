@@ -1,0 +1,107 @@
+% Chapter 5, Section "torch.autograd in practice: five rules".
+% Four panels, one per rule that has a picture: leaf versus non-leaf (Rule 1),
+% accumulation into .grad (Rule 2), the four ways to write an update (Rule 3),
+% and a kept tensor keeping its history (Rule 5). PyTorch syntax on the figure.
+\begin{tikzpicture}[
+  >=Stealth,
+  every node/.style={font=\small},
+  code/.style={font=\ttfamily\footnotesize, inner sep=1pt, anchor=west},
+  note/.style={font=\footnotesize, text=black!70},
+  title/.style={font=\small\bfseries, anchor=west},
+  leaf/.style={draw=dlorange, fill=dlorange!6, thick, rounded corners=3pt,
+    minimum width=2.0cm, minimum height=0.95cm, align=center},
+  nonleaf/.style={draw=black!55, fill=black!4, thick, rounded corners=3pt,
+    minimum width=2.5cm, minimum height=0.95cm, align=center},
+  slot/.style={draw=dlwine, fill=dlwine!7, rounded corners=2pt,
+    minimum width=2.0cm, minimum height=0.55cm, font=\ttfamily\footnotesize,
+    text=dlwine},
+  empty/.style={draw=black!45, dashed, rounded corners=2pt, minimum width=1.6cm,
+    minimum height=0.55cm, font=\ttfamily\footnotesize, text=black!60},
+  fwd/.style={->, thick, dlblue},
+  bwd/.style={->, thick, dlwine},
+  panel/.style={draw=black!18, rounded corners=4pt}
+]
+  % ---------------------------------------------------------------- frames
+  \draw[panel] (-0.2,0.45) rectangle (7.7,-4.75);
+  \draw[panel] (8.1,0.45) rectangle (16.0,-4.75);
+  \draw[panel] (-0.2,-5.1) rectangle (7.7,-10.05);
+  \draw[panel] (8.1,-5.1) rectangle (16.0,-10.05);
+
+  % ------------------------------------------------ (a) Rule 1: leaf / non-leaf
+  \node[title] at (0,0.1) {(a) Rule 1: only leaves keep \texttt{.grad}};
+  \node[code] at (0,-0.45) {w = torch.randn(3, requires\char95 grad=True)};
+  \node[code] at (0,-0.85) {y\char95 hat = (w * 2).sum()};
+  \node[code] at (0,-1.25) {y\char95 hat.backward()};
+  \node[leaf] (w) at (1.25,-2.35)
+    {\texttt{w}\\[-1pt]{\ttfamily\scriptsize is\char95 leaf: True}};
+  \node[nonleaf] (y) at (5.75,-2.35)
+    {\texttt{y\char95 hat}\\[-1pt]{\ttfamily\scriptsize grad\char95 fn: SumBackward0}};
+  \draw[fwd] (w) -- node[above, font=\ttfamily\scriptsize, text=dlblue]
+    {(w * 2).sum()} (y);
+  \node[slot, minimum width=2.9cm] (wg) at (1.6,-3.75) {w.grad: [2., 2., 2.]};
+  \node[empty, minimum width=2.4cm] (yg) at (6.1,-3.75) {y\char95 hat.grad: None};
+  \draw[black!40] (w.south) -- (w.south |- wg.north);
+  \draw[black!40, dashed] (y.south -| yg.north) -- (yg.north);
+  \draw[bwd] (y.south west) to[out=-120, in=0] node[pos=0.35, left=2pt,
+    font=\ttfamily\scriptsize, text=dlwine] {backward()} (wg.east);
+
+  % ---------------------------------------------- (b) Rule 2: accumulation
+  \node[title] at (8.3,0.1) {(b) Rule 2: \texttt{backward()} adds into \texttt{.grad}};
+  \node[note, anchor=west] at (8.3,-0.45) {The same \texttt{w} and loss as in (a):};
+  \node[slot] (g1) at (9.45,-1.9) {[2., 2., 2.]};
+  \node[slot] (g2) at (12.05,-1.9) {[4., 4., 4.]};
+  \node[empty, minimum width=1.45cm] (g3) at (14.75,-1.9) {None};
+  \node[note, above=2pt of g1] {1st \texttt{backward()}};
+  \node[note, above=2pt of g2] {2nd \texttt{backward()}};
+  \node[note, above=2pt of g3] {after reset};
+  \draw[bwd] (g1) -- node[below=2pt, font=\ttfamily\scriptsize] {+=} (g2);
+  \draw[->, thick, black!55] (g2) -- (g3);
+  \node[code, anchor=north] at (13.4,-2.35) {optimizer.zero\char95 grad()};
+  \node[note, align=left, anchor=west] at (8.3,-3.4)
+    {Without the reset, a step follows the sum of all\\
+     gradients since the last reset, not the current one.};
+
+  % ------------------------------------------ (c) Rule 3: the four updates
+  \node[title] at (0,-5.45) {(c) Rule 3: update in place, off the tape};
+  \node[code] at (0.55,-6.15) {with torch.no\char95 grad():};
+  \node[code] at (0.55,-6.55) {\ \ \ \ w -= lr * w.grad};
+  \node[text=dlgreen, font=\large] at (0.2,-6.35) {$\checkmark$};
+  \node[note, anchor=west, text=dlgreen!80!black] at (4.3,-6.35) {same leaf, new values};
+  \draw[black!15] (0,-6.9) -- (7.5,-6.9);
+  \node[text=dlwine, font=\large] at (0.2,-7.3) {$\times$};
+  \node[code] at (0.55,-7.3) {w = w - lr * w.grad};
+  \node[note, anchor=west] at (4.3,-7.3) {new non-leaf: next};
+  \node[note, anchor=west] at (4.3,-7.65) {\texttt{w.grad} is \texttt{None}};
+  \draw[black!15] (0,-8.0) -- (7.5,-8.0);
+  \node[text=dlwine, font=\large] at (0.2,-8.4) {$\times$};
+  \node[code] at (0.55,-8.4) {w -= lr * w.grad};
+  \node[note, anchor=west] at (4.3,-8.4) {\texttt{RuntimeError}: leaf};
+  \node[note, anchor=west] at (4.3,-8.75) {used in an in-place op};
+  \draw[black!15] (0,-9.1) -- (7.5,-9.1);
+  \node[text=dlwine, font=\large] at (0.2,-9.5) {$\times$};
+  \node[code] at (0.55,-9.35) {with torch.no\char95 grad():};
+  \node[code] at (0.55,-9.7) {\ \ \ \ w = w - lr * w.grad};
+  \node[note, anchor=west] at (4.3,-9.5) {\texttt{requires\char95 grad=False}};
+  \node[note, anchor=west] at (4.3,-9.82) {learning silently stops};
+
+  % ---------------------------------- (d) Rule 5: kept tensors keep history
+  \node[title] at (8.3,-5.45) {(d) Rule 5: a kept tensor keeps its history};
+  \node[note, anchor=west] at (8.3,-6.0)
+    {Evaluation outside \texttt{torch.no\char95 grad()}, no \texttt{backward()}:};
+  \node[code] at (8.3,-6.65) {val\char95 losses.append(loss)};
+  \node[nonleaf, minimum width=1.2cm, minimum height=0.6cm] (L1) at (13.25,-6.65)
+    {\texttt{loss}};
+  \foreach \k in {0,1,2} {
+    \node[draw=dlblue, fill=dlblue!8, minimum width=0.55cm, minimum height=0.3cm]
+      (s\k) at (15.15,-6.27-0.38*\k) {};
+  }
+  \draw[black!55, ->] (12.25,-6.65) -- (L1.west);
+  \draw[black!55, ->] (L1.east) -- (s1.west);
+  \node[note, anchor=west] at (8.3,-7.45)
+    {its \texttt{grad\char95 fn} chain and cached activations stay alive};
+  \draw[black!15] (8.3,-7.95) -- (15.8,-7.95);
+  \node[code] at (8.3,-8.45) {val\char95 losses.append(loss.item())};
+  \node[note, anchor=west] at (8.55,-8.82) {a Python float: the graph can be freed};
+  \node[code] at (8.3,-9.35) {val\char95 losses.append(loss.detach())};
+  \node[note, anchor=west] at (8.55,-9.72) {the same value with its history cut};
+\end{tikzpicture}

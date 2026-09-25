@@ -1,3 +1,63 @@
+# Rolling post-v1.3 — Chapters 5 and 6 revised; published-source hygiene (September 25, 2026)
+
+- **No authoring records in published pages.** Hidden provenance comments (lecture
+  transcripts, seed files, and machine-local paths such as a local copy of a lecture PDF)
+  reached the HTML page source because Pandoc passes raw HTML comments through. A new
+  last-run filter, `filters/strip-html-comments.lua`, removes them from every page; the
+  `.qmd` sources keep them for the drafting workflow. The filter acts only on HTML output
+  and leaves Quarto's own `quarto-file-metadata` markers alone: stripping those in a
+  first build cost the print PDF its appendix mode (Appendix A printed as Chapter 26).
+- **Chapter 5, framing.** The inline pointer to the companion volume becomes a Sources
+  entry (*Making It Trainable*, Chapter 11). The opening harvests Chapter 3's credit
+  assignment problem. Section 5.2 is retitled "Sensitivity propagation: the four layer
+  equations": $\delta^{(l)}$ is defined as the layer sensitivity, named as an adjoint, and
+  the transpose in the recursion is derived by index. The "blame" metaphor is retired from
+  the chapter, the Preface's engine figure and bullets, and the visible text of the two
+  Chapter 5 replays (static frames regenerated).
+- **Chapter 5, figures.** Figure 5.1 is redrawn with $a^{(l)}$, the values each node keeps,
+  and the backward lane as running sensitivities in the book's semantic colours, which
+  also resolves replay decision E1. The node-size network figure is replaced by a
+  right-to-left pull-back figure ($\delta$, $\matr{W}^\top\delta$, gate, next $\delta$,
+  executed values). Figure 5.3 uses a signed scale and traces one entry. A new TikZ figure
+  (`figures/tikz-src/5_5_autograd_rules.tex`) shows four autograd rules in PyTorch syntax.
+- **Chapter 5, mechanics.** Section 5.3 states the batch layout
+  ($\matr{\Delta}^\top\matr{A}$ as a sum of per-example outer products), counts two
+  backward matrix products per forward product, and adds the price of caching (activation
+  memory against the network's 57 parameters, `torch.no_grad()`, gradient checkpointing
+  with Chen et al. 2016 in Sources). Section 5.4 reframes the scalar engine around
+  topological order and `+=` accumulation and gives the tensor vector–Jacobian pair for
+  $\matr{Z}=\matr{A}\matr{W}^\top$. Rule 3 states the in-place update under
+  `torch.no_grad()` and its three failure variants, each checked on PyTorch 2.13; Rule 5
+  says that `backward()` frees cached activations while a kept tensor keeps its history.
+- **Exercises.** Chapter 5's Exercise 7 is now the softmax vector–Jacobian product, which
+  recovers Chapter 2's cross-entropy gradient and its Exercise 4 formula. The BatchNorm
+  backward exercise moves to Chapter 9 as Exercise 7, where BatchNorm is introduced.
+- **Chapter 6.** The opening states the chapter's claim instead of a trailer, and the
+  section titles are retitled in the book's voice ("The baseline fit: empirical risk and
+  clean validation", "Two experiments that challenge the baseline", "Inside the weights:
+  full-frame matched filters", "Diagnosing the failure: capacity versus geometry",
+  "Inductive bias: constraints as knowledge", "The pivot: toward local, shared
+  detectors"). Three new executed cells: an edge-crop control (35.0% of validation
+  images have ink in the two columns a shift crops, only 1.2% of all ink; zeroing them in
+  place costs two points, so misalignment, not cropping, drives the collapse); the
+  two-by-two protocol matrix (clean model on scrambled pixels 8.0%, retrained on shifted
+  images 76.5%), presented in a callout; and a pixel-space check that a two-pixel shift
+  moves 91.0% of validation images farther than their nearest training image. Section
+  6.3 derives the permutation symmetry $\matr{W}_1\matr{P}^\top\matr{P}=\matr{W}_1$ and
+  explains the full-frame templates from the batch gradient of Chapter 5. Section 6.5
+  states the capacity price of augmentation in a dense network. The Deeper dive replaces
+  a video citation with Hein, Andriushchenko, and Bitterwolf (CVPR 2019) on confident
+  predictions far from the data. Exercise 1 now asks for the partial-permutation matrix of
+  the shift and the distributional equivariance of training. A proposed note that
+  garments keep a black margin was measured and found false for this dataset (Xiao et
+  al. scale the longest edge to 28 pixels), so the crop control replaces it. The Chapter 6
+  stdout contracts cover the three new blocks, and the shift-shuffle replay anchor follows
+  the new heading.
+- **Evidence.** Chapters 5 and 9 were re-executed with byte-identical printed stdout.
+  Chapter 6 was re-executed: its four existing stdout blocks are byte-identical, and it
+  gains the three new ones. The print PDF has 556 pages and the continuous PDF 530, each
+  with 399 outline entries.
+
 # Rolling post-v1.3 — Preface, Chapters 1–4, reference audit, and em-dash sweep (September 25, 2026)
 
 - **Preface.** Rewritten around the author's Lecture 0: why this moment (scale as a design

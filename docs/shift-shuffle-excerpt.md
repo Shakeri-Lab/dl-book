@@ -1,7 +1,7 @@
 # Shift versus shuffle — `shift-shuffle-excerpt`
 
 An optional, HTML-only mechanism excerpt for Chapter 6, inserted before the level-2
-heading `The autopsy, in pictures` — that is, after both experiments and the diagnosis
+heading `Inside the weights: full-frame matched filters` (retitled from `The autopsy, in pictures` on 2026-09-25) — that is, after both experiments and the diagnosis
 they share, and before the chapter turns to the fitted weights. The PDF is untouched:
 `filters/mechanism-excerpts.lua` returns `{}` for any non-HTML format on its first
 executable line.
@@ -136,4 +136,4 @@ templates, the U-curve — are left where they are.
 
 | Source | SHA-256 |
 |---|---|
-| `chapters/part1/06-generalization-inductive-bias.qmd` | `fc0eebf9c2ae30f34d89e135f2f9a5abdfc492bda37091308f216c391bc8a6e3` |
+| `chapters/part1/06-generalization-inductive-bias.qmd` | `0f33bb0100e011b83fa65e6604bd7dd330434dbc6fa01582bbbbc0b46f3ac1bb` |

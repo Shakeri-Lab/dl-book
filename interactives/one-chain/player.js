@@ -24,8 +24,8 @@
   // lists them in the same order.
   const beats = pane.dataset.beats.trim().split(/\s+/).map(Number);
   const stageAt = time => beats.reduce((stage, beat, index) => (time >= beat ? index : stage), 0);
-  const STAGES = ['Ask', 'Forward', 'Nudge', 'Measured', 'Blame reaches a', 'Blame reaches z',
-    'Blame reaches w', 'Chain rule', 'Hold'];
+  const STAGES = ['Ask', 'Forward', 'Nudge', 'Measured', 'Backward reaches a', 'Backward reaches z',
+    'Backward reaches w', 'Chain rule', 'Hold'];
   const NODES = ['w', 'z', 'a', 'L'];
   // A ramp is exactly 0 before its window and exactly 1 after it: a ray that has arrived
   // reports 1, not 0.9999999999999984, so "revealed on arrival" is one comparison.
