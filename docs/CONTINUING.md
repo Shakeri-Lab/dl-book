@@ -25,7 +25,10 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > author's request, replaced "blame" in Chapters 2, 8, 9, 10, 13, 17, and 18 and the
 > epilogue (Chapter 10's heading is now "Gradients through time"; Chapter 18's figure
 > labels read "WHERE MAY THE GRADIENT WRITE?" and "WHAT DEFINES THE LOSS?"). The only
-> remaining use is Chapter 3's literal credit-assignment question. Chapter 6: headings retitled in the book's voice, a two-by-two protocol
+> remaining use is Chapter 3's literal credit-assignment question. The experimentation
+> interlude's Figure EX.1 now nests the inner training loop inside the outer
+> experiment cycle, and its job-interview analogy became engines at one shared shaft
+> speed (arc-seeds updated). Chapter 6: headings retitled in the book's voice, a two-by-two protocol
 > matrix (zero-shot versus retrained, shift versus scramble), an edge-crop control, a
 > permutation-symmetry derivation, a pixel-space shift-distance check, and Hein et al.
 > (2019) in place of the 3Blue1Brown citation; Chapter 6 now prints seven stdout blocks,

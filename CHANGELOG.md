@@ -62,6 +62,14 @@
   18's objective-and-location map labels its axes "Where may the gradient write?" and
   "What defines the loss?". Chapter 3 keeps "blame" in its statement of the credit
   assignment problem, where the word is literal.
+- **Experimentation interlude.** Figure EX.1 now draws the two levels of learning it
+  introduces: the inner loop of one run (forward, loss, backward, update; backpropagation
+  learns $\vect{w}$, written $\vect{w}^{*}=\mathrm{Train}(a,\lambda,s,b)$) nested inside the
+  outer declare, design, spend, audit cycle, with the hand-off (runs launched within
+  budget $b$, metric $J_D$ returned to the audit) and the note that no gradient reaches
+  $a$ or $\lambda$. The job-interview analogy for per-design tuning becomes a physical one:
+  an engine and an electric motor compared at one shared shaft speed, where one operating
+  point can sit at one machine's peak and far from the other's.
 - **Evidence.** Chapters 5 and 9 were re-executed with byte-identical printed stdout.
   Chapter 6 was re-executed: its four existing stdout blocks are byte-identical, and it
   gains the three new ones. The print PDF has 556 pages and the continuous PDF 530, each

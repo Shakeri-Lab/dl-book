@@ -159,7 +159,8 @@ superhighway (ch. 5/9/10 relay), ball rolling (momentum), house-and-foundation
 movement, Appendix C), "Okay, so —" (recaps), "what if X were
 learnable?" (the book's refrain — every part pivots on it), “train a judge, then try
 to please the judge” (reward model then policy, ch. 18), model card as nutritional
-label (ch. 18), the job interview for tuned contenders (experimentation interlude), and
+label (ch. 18), engines compared at one shared shaft speed for tuned contenders
+(experimentation interlude; replaced the job interview on 2026-09-25), and
 “PCA on steroids” (nonlinear autoencoders bend the reconstruction class, autoencoder
 interlude). The author retired "blame" for gradients on 2026-09-25: write *sensitivity* for
 $\delta^{(l)}$ and *adjoint* for the automatic-differentiation term, and use the metaphor
