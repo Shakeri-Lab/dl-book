@@ -1,5 +1,9 @@
 # Style Guide: Heman Shakeri's Deep Learning Teaching Voice
 
+> **Register is governed by `VOICE.md`** (2026-09-26): no "Let us", contractions,
+> exclamation marks, or em dashes in prose; recap headings read `Okay, so: <claim>`;
+> one guard per section. Where this guide suggests otherwise, follow `VOICE.md`.
+
 ## Format Authority
 
 The **HTML edition is the book's source of truth**. Author and review the reading

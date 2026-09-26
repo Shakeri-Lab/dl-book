@@ -87,6 +87,9 @@ COVER_PATH = ROOT / "figures/cover.png"
 PDF_ASSET_MATERIALIZER = ROOT / "scripts/materialize_frozen_pdf_assets.py"
 PDF_FIXPOINT_RENDERER = ROOT / "scripts/render_pdf_profiles.py"
 PUBLISH_WORKFLOW = ROOT / ".github/workflows/publish.yml"
+VOICE_CONTRACT = ROOT / "VOICE.md"
+VOICE_LEDGER = ROOT / "scripts/audit_voice_ledger.py"
+VOICE_CHECK_CALL = "python scripts/audit_voice_ledger.py --check _book"
 EXECUTION_WORKFLOW = ROOT / ".github/workflows/execute-audit.yml"
 DISCLOSURE_SCRIPT = ROOT / "disclosure-interactions.html"
 RESPONSIVE_SCRIPT = ROOT / "responsive-figures.html"
@@ -957,6 +960,15 @@ def main() -> None:
                     errors,
                     f"scripts/render_pdf_profiles.py: missing contract {required}",
                 )
+    if not VOICE_CONTRACT.is_file():
+        fail(errors, "VOICE.md: the narrator contract is missing")
+    if not VOICE_LEDGER.is_file():
+        fail(errors, "scripts/audit_voice_ledger.py: the rendered voice ledger is missing")
+    if workflow_job(workflow_text, "build-deploy").count(VOICE_CHECK_CALL) != 1:
+        fail(
+            errors,
+            "publish workflow must run the rendered voice check once in build-deploy",
+        )
     if workflow_text.count("render: false") != 1:
         fail(errors, "publish workflow must deploy the audited bundle without re-rendering")
     if "chapters/ index.qmd download.html README.md" not in workflow_text:
@@ -1032,7 +1044,8 @@ def main() -> None:
         raise SystemExit(1)
     print(
         "PASS: 20 chapter retrieval/source contracts, canonical exercise tags, "
-        "book voice and splice hygiene, five prose-only part transitions, hidden "
+        "book voice and splice hygiene (with the VOICE.md register check wired into "
+        "the rendered build), five prose-only part transitions, hidden "
         "display-only figures, interlude "
         "figure/table namespaces, the epilogue namespace and source contract, the Part III "
         "learnability callback, the complete temperature arc, and canonical-edition "
