@@ -205,7 +205,7 @@ projection.
 
 | path | sha256 |
 |---|---|
-| `chapters/part1/01-linear-regression.qmd` | `c9e53515d298f172ee8000d7b4790054cc9d9aa923eeb97cc285553092a583c9` |
+| `chapters/part1/01-linear-regression.qmd` | `7934ebaf9224f7dd6f520c87152760501ca0cd368f0f05b49789acd475c89008` |
 | `Video_lectures/6050-Ch1-enhanced/STORYBOARD.md` | `061e5954970c22dcb4dae6a353271e3e33237d31c90b6525577c1d01bcf0e28e` |
 | `Video_lectures/6050-Ch1-enhanced/lecture.jsx` | `0bb929f8b92b19fc6da96f8158edbe4734f82c4b569ecbdbb723551b93a62584` |
 

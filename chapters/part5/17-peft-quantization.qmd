@@ -22,7 +22,7 @@
 
 Chapter 9 left us a transfer rule: importing a representation is most promising
 when **labels are scarce, the target is feature-hungry, and the source supplies
-useful coverage at a matched scale**. Chapter 15 showed the conventional next
+useful coverage at a matched scale**. BERT's recipe showed the conventional next
 step: fine-tuning changes every encoder weight. Chapter 16 then planted a second
 warning: **training-optimal is not serving-optimal**. Chinchilla's allocation can
 spend a pretraining budget well while leaving us with a backbone that is expensive
@@ -38,7 +38,8 @@ bills:
 3. the **transient work**: context tokens, activations, gradients, optimizer state,
    and caches needed while adapting or running the model.
 
-These bills are related, but they are not interchangeable. Freezing a billion
+These bills are related, but they are not interchangeable: every lever can affect more
+than one bill, and none removes all backbone storage or transient work. Freezing a billion
 weights removes their gradients; it does not make the billion weights disappear.
 Packing each weight into fewer bits reduces a storage lower bound; it does not prove
 that a particular kernel will run faster. Adding demonstrations changes no weight; it
@@ -51,8 +52,7 @@ They are **where does task-specific information live, and which object does the
 method change?** Hard prompts and retrieved documents place task information in
 context. Parameter-efficient fine-tuning (PEFT) places it in a restricted set of
 learned values. Quantization need not add task information at all; it changes the numerical
-representation of a base or adapter. QLoRA composes the last two; it is not a fourth
-kind of objective.
+representation of a base or adapter. QLoRA composes the last two.
 
 ```{python}
 #| echo: false
@@ -75,7 +75,7 @@ navy, orange, green, wine = "#232D4B", "#E57200", "#2E7D32", "#722F37"
 ```{python}
 #| label: fig-adaptation-map
 #| echo: false
-#| fig-cap: "Three levers act on three different objects. Prompting changes the context presented to a fixed model; PEFT lets only a small learned state receive gradient updates; quantization changes how fixed values are represented. QLoRA combines a quantized frozen base with a trainable low-rank branch. The separate cost ledger below is deliberately not column-matched: every lever can affect more than one bill, and none removes all backbone storage or transient work."
+#| fig-cap: "Three levers act on three different objects. Prompting changes the context presented to a fixed model; PEFT lets only a small learned state receive gradient updates; quantization changes how fixed values are represented. QLoRA combines a quantized frozen base with a trainable low-rank branch. The separate cost ledger below is deliberately not column-matched."
 #| fig-alt: "Three top boxes label context, trainable state, and representation. A separate dashed ledger below lists backbone storage, incremental state, and transient work, explicitly marked as not column-matched."
 #| fig-width: 10
 #| fig-height: 4.6
@@ -154,16 +154,15 @@ With no demonstrations, this is **zero-shot** prompting. With a few, it is
 its forward computation, we call the behavior **in-context learning (ICL)**. The
 word *learning* names a behavioral change with context, not a checkpoint update.
 
-Brown and colleagues found that few-shot gains often grew with model scale in
-GPT-3, but that is an empirical result over particular models and tasks. It does
-not establish universal parameter thresholds, nor does it settle the mechanism by
-which a Transformer uses demonstrations. Attention makes earlier examples visible
-and routable; saying it literally “performs analogy” would outrun the evidence.
-Prompt order, label words, formatting, and example choice can all matter.
-Controlled ablations have found that demonstration inputs, the label space and its
-mapping, formatting, and ordering can contribute differently across tasks. Those
-results constrain simple stories about copying examples, but they do not settle one
-universal causal mechanism for ICL.
+One caution governs the evidence that follows: none of it settles a universal causal
+mechanism for how a Transformer uses demonstrations. Brown and colleagues found that
+few-shot gains often grew with model scale in GPT-3, an empirical result over particular
+models and tasks that does not establish universal parameter thresholds. Attention
+makes earlier examples visible and routable; saying it literally “performs analogy”
+would outrun the evidence. Prompt order, label words, formatting, and example choice
+can all matter. Controlled ablations have found that demonstration inputs, the label
+space and its mapping, formatting, and ordering can contribute differently across
+tasks. Those results constrain simple stories about copying examples.
 
 Instructions that ask for intermediate steps can improve some multi-step tasks.
 Those visible steps are generated tokens, however, not a guaranteed faithful window
@@ -685,7 +684,10 @@ The assertions belong beside the implementation, not in a comment after training
 
 ### Make the rank bottleneck fail on purpose
 
-Low rank is a hypothesis about the update, not a free compression theorem. We can
+Low rank is a hypothesis about the update, not a free compression theorem, and this
+test's toy layer is built for inspectability rather than an impressive compression
+ratio: real LoRA savings depend on wide matrices, small ranks, and which layers are
+targeted. We can
 make its boundary visible by planting a target correction with exactly six
 independent diagonal directions. The frozen base is a $32\times32$ map. Full tuning
 may move all 1,024 entries; LoRA may use ranks $1,2,4,6,$ or $8$. Inputs are fixed
@@ -931,9 +933,7 @@ is bitwise intact, and the largest merged–unmerged discrepancy is below
 $2\times10^{-6}$.
 
 In this toy $32\times32$ layer, rank 6 still trains 384 values, 37.5% of a full
-matrix. The point is inspectability, not an impressive compression ratio. Real
-LoRA savings depend on wide matrices, small ranks, and which layers are targeted.
-Likewise, the experiment was built from a low-rank shift, a task whose useful
+matrix. The experiment was also built from a low-rank shift; a task whose useful
 correction is not well captured at the chosen rank will retain error no matter how
 fashionable the adapter is.
 
