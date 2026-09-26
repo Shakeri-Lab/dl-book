@@ -48,6 +48,8 @@ ROOT = Path(__file__).resolve().parents[1]
 VOICE_SCOPE: tuple[str, ...] = (
     "chapters/part1/01-linear-regression.qmd",
     "chapters/part1/06-generalization-inductive-bias.qmd",
+    "chapters/part2/08-cnn.qmd",
+    "chapters/part2/09-modern-cnns-transfer.qmd",
     "chapters/part4/13-attention.qmd",
     "chapters/interludes/attention-as-test-time-regression.qmd",
     "chapters/part5/17-peft-quantization.qmd",

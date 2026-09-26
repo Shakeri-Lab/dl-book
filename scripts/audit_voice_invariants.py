@@ -357,6 +357,8 @@ def source_invariants(base: str, files: list[str], exceptions: dict, checklist: 
                         notes["I7"].append(f"{path}: recap heading {to!r} -> {tn!r}")
                     elif to.replace(EM_DASH, "") != to:
                         notes["I7"].append(f"{path}: R6 heading {to!r} -> {tn!r}")
+                    elif expand_contractions(to) == tn:
+                        notes["I7"].append(f"{path}: R5 heading {to!r} -> {tn!r}")
                     else:
                         fails["I7"].append(f"{path}: heading text changed {to!r} -> {tn!r}")
 
@@ -416,6 +418,23 @@ def source_invariants(base: str, files: list[str], exceptions: dict, checklist: 
         exercise_total["before"] == exercise_total["after"],
         f"exercise count over checked files {exercise_total['before']} -> {exercise_total['after']}",
     )
+
+
+CONTRACTIONS = {
+    "you're": "you are", "we're": "we are", "they're": "they are", "won't": "will not",
+    "don't": "do not", "doesn't": "does not", "can't": "cannot", "isn't": "is not",
+    "aren't": "are not", "couldn't": "could not", "wouldn't": "would not",
+    "we'll": "we will", "you'll": "you will", "it's": "it is", "that's": "that is",
+}
+
+
+def expand_contractions(text: str) -> str:
+    """R5: the heading a contraction-only edit should produce."""
+    out = text.replace("\u2019", "'")
+    for short_form, long_form in CONTRACTIONS.items():
+        out = re.sub(rf"\b{re.escape(short_form)}\b", long_form, out)
+        out = re.sub(rf"\b{re.escape(short_form.capitalize())}\b", long_form.capitalize(), out)
+    return out
 
 
 def ledger_tags(section: str) -> list[str]:
