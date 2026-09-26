@@ -43,9 +43,12 @@ const expected = {
     const e = shifted.map(Math.exp), total = e.reduce((x, y) => x + y);
     return [`(${shifted.map(v => minus(String(v))).join(', ')})`, `(${e.map(v => fixed(v / total, 4)).join(', ')})`];
   },
-  // The check swaps the ambient dimension for the intrinsic one: the spread goes as one
-  // over the square root of the dimension the data actually varies in, so the band is
-  // wider than the ambient number suggests by the square root of their ratio.
+  // The check scales the scene to LeNet: pooling halves space and keeps all six maps, and
+  // the next kernels are as deep as the stack they read.
+  'what-where': root => {
+    const size = Number(root.dataset.size), pool = Number(root.dataset.pool), channels = 6, k = 5;
+    return [`${channels} × ${size / pool} × ${size / pool}`, `${channels} × ${k} × ${k}`, 'six deep'];
+  },
   // The check widens the window: the count follows n - k + 1, and the centre never
   // reaches the first or last (k - 1) / 2 samples, which is the slice the plot needs.
   'box-average': root => {
@@ -66,6 +69,9 @@ const expected = {
     assert.equal(onSide, 0, 'the transposed kernel is silent on the left side');
     return [`${onTop.toFixed(1)} on the top edge`, `${onSide} on the left side`, 'bottom minus top', `climbs by ${level}`];
   },
+  // The check swaps the ambient dimension for the intrinsic one: the spread goes as one
+  // over the square root of the dimension the data actually varies in, so the band is
+  // wider than the ambient number suggests by the square root of their ratio.
   'distance-band': root => {
     const ambient = Number(root.dataset.focus), intrinsic = 12;
     const widen = Math.sqrt(ambient / intrinsic);
