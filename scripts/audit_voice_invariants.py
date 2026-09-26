@@ -194,10 +194,23 @@ def anchors(text: str) -> set[str]:
     return set(ANCHOR_RE.findall(text)) | set(LABEL_RE.findall(text))
 
 
+XREF_PREFIXES = ("sec-", "fig-", "eq-", "tbl-", "exr-", "exfig-", "aefig-", "ttrfig-", "epfig-", "extbl-", "lst-")
+
+
+def normalize_target(target: str) -> str:
+    """`@sec-x`, `#sec-x`, and `file.qmd#sec-x` all name the cross-reference `sec-x`."""
+    if "#" in target:
+        fragment = target.rsplit("#", 1)[1]
+        if fragment.startswith(XREF_PREFIXES):
+            return fragment
+    return target
+
+
 def link_targets(prose: str) -> collections.Counter:
+    """Every link instance, by normalized target (a multiset: S2 keeps link instances)."""
     text = without_comments(prose)
     targets = LINK_TARGET_RE.findall(text) + XREF_RE.findall(text)
-    return collections.Counter(targets)
+    return collections.Counter(normalize_target(target) for target in targets)
 
 
 def alt_texts(text: str, blocks: list[str]) -> list[str]:
@@ -318,16 +331,16 @@ def source_invariants(base: str, files: list[str], exceptions: dict, checklist: 
             if TRAINABLE_RE.search(line) and line not in new.split("\n"):
                 fails["I5"].append(f"{path}: cross-volume pointer line changed: {line[:80]}")
 
-        # I6 links (set identity; multiset changes reported)
+        # I6 links: every link instance survives, except declared S2 collapses of two
+        # links to one target inside one paragraph (exceptions file, key "I6").
         old_links, new_links = link_targets(old_prose), link_targets(new_prose)
-        if set(old_links) != set(new_links):
-            fails["I6"].append(
-                f"{path}: link targets removed {sorted(set(old_links) - set(new_links))} "
-                f"added {sorted(set(new_links) - set(old_links))}"
-            )
-        elif old_links != new_links:
-            removed, added = counter_diff(old_links, new_links)
-            notes["I6"].append(f"{path}: duplicate links collapsed {removed} added {added}")
+        removed, added = counter_diff(old_links, new_links)
+        declared = exceptions.get("I6", {}).get(path, {})
+        unexplained = {k: v for k, v in removed.items() if declared.get(k, 0) < v}
+        if unexplained or added:
+            fails["I6"].append(f"{path}: link instances removed {unexplained} added {added}")
+        elif removed:
+            notes["I6"].append(f"{path}: declared S2 collapses {removed}")
 
         # I7 headings (recap heading text may change under R1)
         old_heads, new_heads = headings(old_prose), headings(new_prose)
@@ -384,7 +397,7 @@ def source_invariants(base: str, files: list[str], exceptions: dict, checklist: 
         ("I3", "math multiset identical per file"),
         ("I4", "numeric tokens identical in classes A to E (cross-reference numerals excluded)"),
         ("I5", "anchor ids and labels identical; cross-volume pointer lines byte-identical"),
-        ("I6", "link-target sets identical"),
+        ("I6", "link instances identical per target (declared S2 collapses excepted)"),
         ("I7", "heading sequence and levels identical (recap text under R1)"),
         ("I8", "figure references and alt text identical (alt text only under R6)"),
         ("I9", "exercise text and tags identical"),

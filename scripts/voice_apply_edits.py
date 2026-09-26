@@ -155,7 +155,7 @@ def receipts(paths: list[Path], before: Path | None, after: Path | None, out: Pa
             )
         lines.append("")
     out.write_text("\n".join(lines), encoding="utf-8")
-    print(f"wrote {out.relative_to(ROOT)}")
+    print(f"wrote {out}")
 
 
 def guards(paths: list[Path], out: Path) -> None:
@@ -179,7 +179,7 @@ def guards(paths: list[Path], out: Path) -> None:
                 f"{cell(guard['destination'])} | {cell(guard['claim'])} | {cell(guard['text'])} |"
             )
     out.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    print(f"wrote {out.relative_to(ROOT)}")
+    print(f"wrote {out}")
 
 
 def flags(paths: list[Path], out: Path) -> None:
