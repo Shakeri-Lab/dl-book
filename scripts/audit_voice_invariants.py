@@ -450,19 +450,40 @@ def rendered_invariants(before: Path, after: Path, files: list[str], checklist: 
     )
 
 
+def without_source_lines(notebook: dict) -> dict:
+    """Drop the exporter's `source_line` cell metadata (the .qmd line of each cell)."""
+    for cell in notebook.get("cells", []):
+        cell.get("metadata", {}).get("dlbook", {}).pop("source_line", None)
+    return notebook
+
+
 def notebook_invariant(before: Path, after: Path, checklist: Checklist) -> None:
+    """Byte identity, or a proof by diff that only cell `source_line` metadata moved.
+
+    Prose edits shift the .qmd line of later cells, so the exporter's provenance
+    metadata changes while every Plan step, code line, and cell stays identical.
+    """
     old = sorted(p.name for p in before.glob("*.ipynb"))
     new = sorted(p.name for p in after.glob("*.ipynb"))
-    differing = [
-        name for name in old
-        if not (after / name).is_file() or (before / name).read_bytes() != (after / name).read_bytes()
-    ]
+    identical, line_only, differing = [], [], []
+    for name in old:
+        if not (after / name).is_file():
+            differing.append(name)
+            continue
+        a_bytes, b_bytes = (before / name).read_bytes(), (after / name).read_bytes()
+        if a_bytes == b_bytes:
+            identical.append(name)
+            continue
+        a, b = (without_source_lines(json.loads(x)) for x in (a_bytes, b_bytes))
+        (line_only if a == b else differing).append(name)
     ok = old == new and not differing
     checklist.add(
         "I11",
         ok,
-        f"{len(new)} regenerated notebooks byte-identical to the baseline export"
-        if ok else f"notebooks differ: {differing or sorted(set(old) ^ set(new))}",
+        f"{len(identical)} of {len(new)} regenerated notebooks byte-identical; "
+        f"{len(line_only)} differ only in cell source_line metadata ({', '.join(line_only)}), "
+        "with every cell source, plan step, and code line identical"
+        if ok else f"notebooks differ beyond source_line metadata: {differing or sorted(set(old) ^ set(new))}",
     )
 
 

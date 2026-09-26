@@ -10,7 +10,25 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 
 ---
 
-> **Current work — Chapters 5 and 6 revised; published-source hygiene, September 25, 2026.**
+> **Current work: voice-coherence pass, Stage A (branch `voice-coherence`, not pushed),
+> September 26, 2026.** The author's brief asks for one narrator at one warmth in every
+> chapter without changing a claim, number, equation, code cell, output, figure, citation,
+> exercise task, plan step, or anchor. `VOICE.md` (repo root) is the contract; the style
+> guide defers to it on register. `scripts/audit_voice_ledger.py` measures rendered pages
+> (ledger per text class) and, with `--check`, blocks R1 to R6 for the pages in
+> `VOICE_SCOPE`; CI runs it in `build-deploy`. `scripts/voice_apply_edits.py` applies
+> reviewed edit lists (`audits/voice/edits/*.json`) with guarded replacements and renders
+> the receipts; `scripts/audit_voice_invariants.py` checks I1 to I16 against the baseline
+> `86ec60b`; `scripts/refresh_excerpt_receipts.py` refreshes replay chapter hashes after a
+> reviewed prose edit. Stage A revised Chapters 1, 6, 13, and 17 and the test-time
+> regression interlude and stopped at the author's gate: read
+> `audits/voice/stage_a_report.md` and `audits/voice/decisions_pending.md` before Stage B.
+> Lessons: S2 keeps every link instance (reword the link text, as in
+> `[the SGD chapter](04-training-loss-sgd.qmd#sec-04-training-loss-sgd)`); captions stored
+> in `#| fig-cap` count as captions, not code; recap headings can be replay anchors
+> (`interactives/manifest.json`).
+>
+> **Previous — Chapters 5 and 6 revised; published-source hygiene, September 25, 2026.**
 > Provenance comments no longer reach published HTML: `filters/strip-html-comments.lua`
 > runs last and strips raw HTML comments (keep writing provenance in hidden comments; the
 > filter is what keeps local paths out of the page source). Chapter 5 was revised at the
