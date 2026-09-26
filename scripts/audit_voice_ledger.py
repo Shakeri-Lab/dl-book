@@ -29,6 +29,8 @@ from __future__ import annotations
 
 import argparse
 import csv
+import itertools
+import json
 import math
 import re
 import statistics
@@ -60,13 +62,15 @@ REFERENCE_PROFILE = {
     "metaphor_hits_per1k": 5.822,
     "guards_A_per1k": 1.192,
     "chapter_refs_A_per1k": 5.911,
+    # Stage B: reader address counts sentence-initial imperatives as well as "you".
+    "reader_address_total_per1k": 5.271,
 }
 WARMTH_FLOOR = 0.6
 GUARD_CEILING = 1.25
 CHAPTER_REF_CEILING = 1.5
 OPENER_CHAPTER_REF_CAP = 2
 PARAGRAPH_CHAPTER_REF_CAP = 2
-RECAP_CLAIM_WORDS = 8
+RECAP_CLAIM_WORDS = 10  # D1 as amended for Stage B: a phrase or a claim of at most ten words
 VERDICT_WORDS = 12
 
 CLASSES = ("A", "B", "C", "D", "E", "F", "H", "T", "R")
@@ -91,9 +95,60 @@ I_RE = re.compile(
 METAPHOR_RE = re.compile(
     r"\b(?:knobs?|landscapes?|slopes?|downhill|hood|engines?|relays?|hand-?offs?|"
     r"bottlenecks?|bridges?|address(?:es)?|templates?|dials?|referees?|rulers?)\b"
-    r"|\bfilter slid(?:es|ing)?\b|\bslid(?:e|es|ing) the filter\b",
+    r"|\bfilter slid(?:es|ing)?\b|\bslid(?:e|es|ing) the filter\b"
+    # Stage B additions: the book's own recurring images outside the first lexicon.
+    r"|\b(?:bills?|ledgers?|prices?|price tags?|purchases?|purchased|currency|currencies|"
+    r"tax(?:es)?|report cards?|demerits?|IOUs?|walls?|seeds?|contracts?|recipes?|"
+    r"appliances?|detectives?|committees?|cliffs?|budgets?)\b",
     re.I,
 )
+# Reader-directed imperatives at the start of a class A sentence count as reader address.
+IMPERATIVE_RE = re.compile(
+    r"^(?:Run|Rerun|Try|Watch|Predict|Write|Change|Compare|Notice|Check|Count|Read|Pause|"
+    r"Skip|Return|Test|Keep)\b"
+)
+# Cold-prose proxy (report only; I18 compares it before and after an edit).
+NOMINALIZATION_RE = re.compile(r"\b[A-Za-z]{3,}(?:tion|sion|ity|ness|ment|ance|ence)s?\b")
+# Words that end in those suffixes but are usually verbs or plain nouns here, not
+# nominalizations of a verb ("implement it by hand", "the experiment", "a sentence").
+NOMINALIZATION_EXCLUDE = {
+    word + suffix
+    for word in (
+        "implement", "augment", "supplement", "complement", "document", "comment",
+        "experiment", "segment", "advance", "enhance", "balance", "reference", "influence",
+        "sentence",
+    )
+    for suffix in ("", "s")
+}
+
+
+def nominalizations(text: str) -> int:
+    return sum(
+        1 for word in NOMINALIZATION_RE.findall(text) if word.lower() not in NOMINALIZATION_EXCLUDE
+    )
+# V3 signature phrases: book-wide counts over every visible text class.
+PHRASES = {
+    "one_caution": re.compile(r"\bone caution\b", re.I),
+    "that_is_the_whole": re.compile(r"\bthat is the whole\b", re.I),
+    # The promise formula only; Chapter 10's "By the end of a sentence" is literal.
+    "by_the_end": re.compile(r"\bBy the end(?=,| of (?:the|this) chapter\b| we\b| you\b)"),
+    "you_will_be_able_to": re.compile(r"\byou will be able to\b", re.I),
+    "in_one_sentence": re.compile(r"\bin one sentence\b", re.I),
+    "deliberately": re.compile(r"\bdeliberately\b", re.I),
+    "honest": re.compile(r"\bhonest(?:ly|y)?\b", re.I),
+    "is_exactly": re.compile(r"\bis exactly\b", re.I),
+    "here_is_the": re.compile(r"\bhere is the\b", re.I),
+    "is_the_whole": re.compile(r"\bis the whole\b", re.I),
+}
+# Blocking caps, whole book (V3). The rest are report-only habit words (S5).
+PHRASE_CAPS = {
+    "one_caution": 0,
+    "that_is_the_whole": 0,
+    "by_the_end": 2,
+    "you_will_be_able_to": 1,
+    "in_one_sentence": 3,
+}
+PHRASE_CLASSES = ("A", "B", "C", "D", "E", "F", "H", "T")
 REGISTER_PATTERNS = {
     "okay": re.compile(r"\bOkay\b", re.I),
     "let_us": re.compile(r"\b[Ll]et us\b"),
@@ -124,7 +179,7 @@ BLOCKING = {
     "R6": ("em_dash", ("A", "B", "C", "D", "E", "F", "H", "T")),
 }
 RECAP_RE = re.compile(r"^Okay, so\b")
-RECAP_TEMPLATE_RE = re.compile(r"^Okay, so: (?P<claim>[^?!\u2014]+)$")
+RECAP_TEMPLATE_RE = re.compile(r"^Okay, so: (?P<claim>[^!\u2014]+)$")
 
 WORD_RE = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9'’\-]*[A-Za-z0-9])?")
 SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])[\"”’)\]]*\s+(?=[A-Z“\"(\d])")
@@ -207,6 +262,18 @@ def transplant_scope(source: str) -> bool:
 
 def part_one(source: str) -> bool:
     return source.startswith("chapters/part1/")
+
+
+def guard_ceiling(source: str) -> float:
+    """S1 as amended: 1.5 per 1,000 words in Parts I to III, 2.5 in Parts IV and V and the interludes."""
+    if source.startswith(("chapters/part1/", "chapters/part2/", "chapters/part3/")):
+        return 1.5
+    return 2.5
+
+
+def reader_floor_factor(source: str) -> float:
+    """Reader address floor: 0.6 of the Part I profile inside Part I, 0.5 elsewhere."""
+    return WARMTH_FLOOR if part_one(source) else 0.5
 
 
 # ------------------------------------------------------------------------ extraction
@@ -506,6 +573,13 @@ def page_metrics(page: Page) -> dict[str, object]:
         len(CHAPTER_REF_RE.findall(b.text)) for b in prose if b.opener
     )
     reader = sum(len(READER_RE.findall(b.text)) for b in prose)
+    imperatives = sum(
+        1
+        for b in prose
+        for sentence in sentences(b.text)
+        if IMPERATIVE_RE.match(sentence.lstrip("“\"("))
+    )
+    nominal_count = sum(nominalizations(b.text) for b in prose)
     verdicts = sum(1 for b in prose if is_verdict(b))
     metaphors = sum(len(METAPHOR_RE.findall(b.text)) for b in prose)
     we = sum(len(WE_RE.findall(b.text)) for b in prose)
@@ -531,6 +605,11 @@ def page_metrics(page: Page) -> dict[str, object]:
             "chapter_refs_max_paragraph": max(chapter_counts, default=0),
             "reader_address": reader,
             "reader_address_per1k": per1k(reader, words_a),
+            "imperatives": imperatives,
+            "reader_address_total": reader + imperatives,
+            "reader_address_total_per1k": per1k(reader + imperatives, words_a),
+            "nominalizations": nominal_count,
+            "nominalizations_per1k": per1k(nominal_count, words_a),
             "verdicts": verdicts,
             "verdicts_per1k": per1k(verdicts, words_a),
             "metaphor_hits": metaphors,
@@ -552,11 +631,15 @@ def page_metrics(page: Page) -> dict[str, object]:
         )
     replay_dashes = sum(b.text.count("\u2014") for b in by_class["R"])
     row["em_dash_R"] = replay_dashes
+    for name, pattern in PHRASES.items():
+        row[f"phrase_{name}"] = sum(
+            len(pattern.findall(b.text)) for b in page.blocks if b.cls in PHRASE_CLASSES
+        )
     return row
 
 
 BAND_METRICS = (
-    ("reader_address_per1k", "floor"),
+    ("reader_address_total_per1k", "floor"),
     ("verdicts_per1k", "floor"),
     ("metaphor_hits_per1k", "floor"),
     ("guards_A_per1k", "ceiling"),
@@ -578,15 +661,21 @@ def reference_profile(rows: list[dict[str, object]] | None = None) -> dict[str, 
 
 def band_status(row: dict[str, object], profile: dict[str, float]) -> dict[str, str]:
     status = {}
+    source = str(row["page"])
     for key, direction in BAND_METRICS:
+        if key not in row or row[key] in ("", None):
+            continue
         value = float(row[key])
         reference = profile[key]
         if direction == "floor":
-            limit = WARMTH_FLOOR * reference
-            status[key] = "ok" if value >= limit else f"low (<{limit:.2f})"
-        else:
-            factor = GUARD_CEILING if key.startswith("guards") else CHAPTER_REF_CEILING
+            factor = reader_floor_factor(source) if key.startswith("reader_address") else WARMTH_FLOOR
             limit = factor * reference
+            status[key] = "ok" if value >= limit else f"low (<{limit:.2f})"
+        elif key.startswith("guards"):
+            limit = guard_ceiling(source)
+            status[key] = "ok" if value <= limit else f"high (>{limit:.2f})"
+        else:
+            limit = CHAPTER_REF_CEILING * reference
             status[key] = "ok" if value <= limit else f"high (>{limit:.2f})"
     opener = int(row["chapter_refs_opener"])
     paragraph = int(row["chapter_refs_max_paragraph"])
@@ -602,9 +691,146 @@ def band_status(row: dict[str, object], profile: dict[str, float]) -> dict[str, 
 def distance(row: dict[str, object], profile: dict[str, float]) -> float:
     total = 0.0
     for key, _ in BAND_METRICS:
+        if key not in row or row[key] in ("", None):
+            continue
         reference = profile[key] or 1.0
         total += ((float(row[key]) - profile[key]) / reference) ** 2
     return round(math.sqrt(total), 3)
+
+
+# ------------------------------------------------------------------ added sentences (I17)
+EDITS_DIR = ROOT / "audits" / "voice" / "edits"
+BOOK_QUESTION = ("what", "if", "we", "made", "this", "learnable")
+PARAGRAPH_BREAK = "\u2029"
+CAPTION_OPTION_RE = re.compile(r'^\s*#\|\s*(?:fig-cap|tbl-cap|fig-subcap)\s*:\s*"?(.*?)"?\s*$')
+
+
+def source_prose(text: str) -> str:
+    """Reader-visible prose of a .qmd fragment or page, normalized for sentence matching.
+
+    Code is dropped except caption options; headings, fenced-div markers, comments,
+    and plan steps are dropped; math and cross-references become placeholders.
+    """
+    text = re.sub(r"<!--.*?-->", " ", text, flags=re.S)
+    kept: list[str] = []
+    fence: str | None = None
+    in_plan = False
+    for line in text.split("\n"):
+        stripped = line.strip()
+        if not stripped or re.match(r"^(?:[-*+]|\d+\.)\s", stripped):
+            kept.append(PARAGRAPH_BREAK)  # paragraphs and list items never share a sentence
+            line = re.sub(r"^\s*(?:[-*+]|\d+\.)\s+", "", line)
+            stripped = line.strip()
+        match = re.match(r"^(`{3,}|~{3,})", stripped)
+        if fence is None and match:
+            fence = match.group(1)
+            continue
+        if fence is not None:
+            if re.fullmatch(rf"{re.escape(fence[0])}{{{len(fence)},}}", stripped):
+                fence = None
+                continue
+            caption = CAPTION_OPTION_RE.match(line)
+            if caption:
+                kept.append(caption.group(1))
+            continue
+        if re.match(r"^:{3,}\s*\{[^}]*\.plan\b", stripped):
+            in_plan = True
+            continue
+        if stripped.startswith(":::"):
+            in_plan = False
+            continue
+        if in_plan or re.match(r"^#{1,6}\s", stripped):
+            continue
+        caption = CAPTION_OPTION_RE.match(line)
+        kept.append(caption.group(1) if caption else line)
+    text = " ".join(kept)
+    text = re.sub(r"\$\$.*?\$\$", " MATH ", text, flags=re.S)
+    text = re.sub(r"\$[^$]+\$", " MATH ", text)
+    text = re.sub(r"!?\[([^\]]*)\]\([^)]*\)(\{[^}]*\})?", r"\1", text)
+    text = re.sub(r"@(?:sec|fig|eq|tbl|exr|exfig|aefig|ttrfig|epfig|extbl|lst)-[A-Za-z0-9_-]+", " REF ", text)
+    text = re.sub(r"\{[#.][^}]*\}", " ", text)
+    text = text.replace("**", "").replace("*", "").replace("`", "").replace("\\\\", "\\")
+    return re.sub(r"[ \t\r\n]+", " ", text).strip()
+
+
+def prose_sentences(text: str) -> list[str]:
+    """Sentences of a source_prose string; paragraph and list boundaries always split."""
+    out = []
+    for chunk in text.split(PARAGRAPH_BREAK):
+        out.extend(piece.strip() for piece in sentences(chunk.strip()) if piece.strip())
+    return out
+
+
+def tokens(sentence: str) -> list[str]:
+    return re.findall(r"[a-z0-9]+(?:'[a-z]+)?", sentence.lower().replace("’", "'"))
+
+
+def added_sentences(include_restored: bool = False) -> dict[str, list[tuple[str, str]]]:
+    """Per page: (edit id, full current sentence) for every sentence this pass added.
+
+    A sentence counts as added when an applied edit's new text contains it and the
+    edit's old text did not; it is expanded to the full sentence in the current page
+    and kept only while it is still there (later edits can supersede earlier ones).
+    Heading edits are skipped: every recap heading must begin "Okay, so:" (D1).
+    """
+    result: dict[str, list[tuple[str, str]]] = {}
+    for path in sorted(EDITS_DIR.glob("*.json")):
+        data = json.loads(path.read_text(encoding="utf-8"))
+        page = data["page"]
+        current = prose_sentences(source_prose((ROOT / page).read_text(encoding="utf-8")))
+        seen: set[str] = set()
+        found: list[tuple[str, str]] = []
+        for edit in data["edits"]:
+            if not edit.get("applied") or re.match(r"^\s*#{1,6}\s", edit["new"]):
+                continue
+            if not include_restored and edit.get("justification", "").startswith("restored"):
+                continue  # earlier author text put back verbatim is not new phrasing (V2)
+            old_parts = set(prose_sentences(source_prose(edit["old"])))
+            for part in prose_sentences(source_prose(edit["new"])):
+                if part in old_parts or len(tokens(part)) < 2:
+                    continue
+                for sentence in current:
+                    if part in sentence and sentence not in seen:
+                        seen.add(sentence)
+                        found.append((edit["id"], sentence))
+        result[page] = found
+    return result
+
+
+def grams(sentence: str) -> set[tuple[str, ...]]:
+    words_ = tokens(sentence)
+    question = " ".join(BOOK_QUESTION)
+    out = set()
+    for index in range(len(words_) - 3):
+        gram = tuple(words_[index:index + 4])
+        if " ".join(gram) in question:
+            continue
+        out.add(gram)
+    return out
+
+
+def i17_violations(added: dict[str, list[tuple[str, str]]]) -> list[str]:
+    """V2: no shared four-word sequence and no shared first three words across chapters."""
+    problems = []
+    flat = [(page, edit_id, sentence) for page, items in added.items() for edit_id, sentence in items]
+    for (page_a, id_a, s_a), (page_b, id_b, s_b) in itertools.combinations(flat, 2):
+        if page_a == page_b:
+            continue
+        shared = sorted(grams(s_a) & grams(s_b))
+        if shared:
+            problems.append(
+                f"I17 shared four-word sequence {' '.join(shared[0])!r}: {id_a} {s_a[:90]!r} / {id_b} {s_b[:90]!r}"
+            )
+        head_a, head_b = tokens(s_a)[:3], tokens(s_b)[:3]
+        if len(head_a) == 3 and head_a == head_b:
+            problems.append(
+                f"I17 shared first three words {' '.join(head_a)!r}: {id_a} {s_a[:90]!r} / {id_b} {s_b[:90]!r}"
+            )
+    return problems
+
+
+def phrase_totals(rows: list[dict[str, object]]) -> dict[str, int]:
+    return {name: sum(int(row[f"phrase_{name}"]) for row in rows) for name in PHRASES}
 
 
 # ------------------------------------------------------------------------------ check
@@ -643,11 +869,13 @@ def run_check(html_root: Path) -> int:
     failures = 0
     warnings = 0
     profile = reference_profile()
+    rows = []
     for source in book_sources():
         html = html_for(source, html_root)
         if not html.is_file():
             continue
         page = extract(html, source)
+        rows.append(page_metrics(page))
         if source in VOICE_SCOPE:
             errors, exemptions = blocking_violations(page)
             for error in errors:
@@ -656,11 +884,29 @@ def run_check(html_root: Path) -> int:
                 print(f"{source}: {exemption}")
             failures += len(errors)
         if transplant_scope(source):
-            row = page_metrics(page)
+            row = rows[-1]
             for key, status in band_status(row, profile).items():
                 if status != "ok":
                     warnings += 1
                     print(f"warning: {source}: {key} {row[key]} {status}")
+    totals = phrase_totals(rows)
+    for name, cap in PHRASE_CAPS.items():
+        if totals[name] > cap:
+            failures += 1
+            pages = ", ".join(
+                f"{short(str(row['page']))} {row[f'phrase_{name}']}" for row in rows if int(row[f"phrase_{name}"])
+            )
+            print(f"V3 cap exceeded: {name} {totals[name]} > {cap} ({pages})", file=sys.stderr)
+    added = added_sentences()
+    problems = i17_violations(added)
+    for problem in problems:
+        print(problem, file=sys.stderr)
+    failures += len(problems)
+    count = sum(len(items) for items in added.values())
+    print(
+        f"I17: {count} added sentence(s) on {len(added)} page(s); {len(problems)} shared-phrasing "
+        "violation(s); V3 caps " + ", ".join(f"{name} {totals[name]}/{cap}" for name, cap in PHRASE_CAPS.items())
+    )
     scope = len(VOICE_SCOPE)
     if failures:
         print(
@@ -730,6 +976,7 @@ def delta_markdown(
 ) -> str:
     before_by_page = {row["page"]: row for row in before}
     keys = [key for key, _ in BAND_METRICS] + [
+        "reader_address_per1k", "nominalizations_per1k",
         "chapter_refs_opener", "chapter_refs_max_paragraph", "words_A",
         "let_us", "aka", "exclamation", "contractions", "em_dash",
     ]
@@ -745,7 +992,7 @@ def delta_markdown(
         cells = []
         for key in keys:
             previous = old.get(key, "")
-            current = row[key]
+            current = row.get(key, "")
             cells.append(f"{previous} → {current}" if str(previous) != str(current) else f"{current}")
         status = band_status(row, profile)
         flagged = [f"{key}: {value}" for key, value in status.items() if value != "ok"]
@@ -755,6 +1002,53 @@ def delta_markdown(
             + " | ".join(cells)
             + f" | {'; '.join(flagged) if flagged else 'ok'} |"
         )
+    return "\n".join(lines) + "\n"
+
+
+PHRASE_LABELS = {
+    "one_caution": '"One caution"',
+    "that_is_the_whole": '"that is the whole"',
+    "by_the_end": '"By the end" (promise formula)',
+    "you_will_be_able_to": '"you will be able to"',
+    "in_one_sentence": '"in one sentence"',
+    "deliberately": '"deliberately"',
+    "honest": '"honest", "honestly", "honesty"',
+    "is_exactly": '"is exactly"',
+    "here_is_the": '"Here is the"',
+    "is_the_whole": 'verdict form "X is the whole Y"',
+}
+
+
+def phrases_markdown(before: list[dict[str, object]], after: list[dict[str, object]]) -> str:
+    """V3 ledger: book-wide phrase counts before and after, caps, and heavy pages (S5)."""
+    lines = [
+        "# Signature-phrase ledger (V3)",
+        "",
+        "Book-wide counts on rendered HTML over every visible text class (prose, captions,",
+        "callouts, exercises, sources, plan steps, alt text and tables, headings; replay",
+        "panels excluded). Blocking caps fail `audit_voice_ledger.py --check`; the other",
+        "phrases are habit words (S5): thin them only where one page carries three or more.",
+        "",
+        "| phrase | cap | before | now | pages with 3+ now |",
+        "|---|---|---:|---:|---|",
+    ]
+    total_before, total_after = phrase_totals(before), phrase_totals(after)
+    for name in PHRASES:
+        cap = PHRASE_CAPS.get(name)
+        heavy = ", ".join(
+            f"{short(str(row['page']))} {row[f'phrase_{name}']}"
+            for row in after if int(row[f"phrase_{name}"]) >= 3
+        )
+        lines.append(
+            f"| {PHRASE_LABELS[name]} | {'blocking, ' + str(cap) if cap is not None else 'report only'} | "
+            f"{total_before[name]} | {total_after[name]} | {heavy or 'none'} |"
+        )
+    lines += ["", "## Pages that carry the phrases now", "", "| page | " + " | ".join(PHRASES) + " |",
+              "|---|" + "---:|" * len(PHRASES)]
+    for row in after:
+        values = [int(row[f"phrase_{name}"]) for name in PHRASES]
+        if any(values):
+            lines.append(f"| {short(str(row['page']))} | " + " | ".join(str(v) for v in values) + " |")
     return "\n".join(lines) + "\n"
 
 
@@ -816,6 +1110,7 @@ def main() -> int:
     parser.add_argument("--baseline", type=Path, help="ledger CSV that defines the Part I profile")
     parser.add_argument("--delta", nargs=2, type=Path, metavar=("BEFORE", "AFTER"))
     parser.add_argument("--check", type=Path, metavar="HTML_ROOT")
+    parser.add_argument("--phrases", nargs=2, type=Path, metavar=("BEFORE_ROOT", "AFTER_ROOT"))
     parser.add_argument("--sections", type=Path, metavar="HTML_PAGE")
     parser.add_argument("--hits", type=Path, metavar="HTML_PAGE")
     parser.add_argument("--metric", default="guards")
@@ -834,6 +1129,13 @@ def main() -> int:
 
     if args.check:
         return run_check(args.check)
+    if args.phrases:
+        text = phrases_markdown(ledger_rows(args.phrases[0]), ledger_rows(args.phrases[1]))
+        if args.markdown:
+            args.markdown.write_text(text, encoding="utf-8")
+        else:
+            print(text)
+        return 0
     if args.ledger:
         rows = ledger_rows(args.ledger)
         baseline = read_csv(args.baseline) if args.baseline else rows

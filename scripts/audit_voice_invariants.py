@@ -336,7 +336,9 @@ def source_invariants(base: str, files: list[str], exceptions: dict, checklist: 
         old_links, new_links = link_targets(old_prose), link_targets(new_prose)
         removed, added = counter_diff(old_links, new_links)
         declared = exceptions.get("I6", {}).get(path, {})
+        declared_added = exceptions.get("I6_added", {}).get(path, {})
         unexplained = {k: v for k, v in removed.items() if declared.get(k, 0) < v}
+        added = {k: v for k, v in added.items() if declared_added.get(k, 0) < v}
         if unexplained or added:
             fails["I6"].append(f"{path}: link instances removed {unexplained} added {added}")
         elif removed:
@@ -487,6 +489,123 @@ def notebook_invariant(before: Path, after: Path, checklist: Checklist) -> None:
     )
 
 
+# ------------------------------------------------------------------ I18 concreteness
+N6_SENTENCE_GROWTH = 1.15
+QUESTION_RE = re.compile(r"[Ww]hat if [^?]{0,80}learnable\?")
+
+
+def paragraph_blocks(text: str) -> list[str]:
+    """Split a .qmd into blank-line blocks, keeping each fenced code block whole."""
+    blocks: list[str] = []
+    current: list[str] = []
+    fence: str | None = None
+    for line in text.split("\n"):
+        stripped = line.strip()
+        match = re.match(r"^(`{3,}|~{3,})", stripped)
+        if fence is None and match:
+            fence = match.group(1)
+            current.append(line)
+            continue
+        if fence is not None:
+            current.append(line)
+            if re.fullmatch(rf"{re.escape(fence[0])}{{{len(fence)},}}", stripped):
+                fence = None
+            continue
+        if not stripped:
+            if current:
+                blocks.append("\n".join(current))
+                current = []
+            continue
+        current.append(line)
+    if current:
+        blocks.append("\n".join(current))
+    return blocks
+
+
+def concreteness(sentences_: list[str]) -> tuple[int, float, int]:
+    text = " ".join(sentences_)
+    nominal = ledger.nominalizations(text)
+    lengths = [ledger.words(s) for s in sentences_ if ledger.words(s)]
+    mean = sum(lengths) / len(lengths) if lengths else 0.0
+    return nominal, mean, text.count("(")
+
+
+def exempt_edit(edit: dict) -> bool:
+    """New material, relocated caveats, and restorations are outside the N6 comparison.
+
+    T-rule sentences are new material by definition; S1 only merges or moves caveats
+    that already existed (guards_moved.md audits every one); restorations put back
+    earlier author text.
+    """
+    if edit["rule"].startswith("T") or edit["rule"] == "S1":
+        return True
+    justification = edit.get("justification", "")
+    return justification.startswith(("new material", "restored", "author text"))
+
+
+def i18(base: str, checklist: Checklist) -> None:
+    edits_by_page: dict[str, list[dict]] = {}
+    for path in sorted((ROOT / "audits/voice/edits").glob("*.json")):
+        data = json.loads(path.read_text())
+        edits_by_page[data["page"]] = [e for e in data["edits"] if e.get("applied")]
+    added = ledger.added_sentences(include_restored=True)
+    failures, checked = [], 0
+    for page, edits in edits_by_page.items():
+        exempt_ids = {e["id"] for e in edits if exempt_edit(e)}
+        exempt = {sentence for edit_id, sentence in added.get(page, []) if edit_id in exempt_ids}
+        old = git_show(base, page) or ""
+        new = (ROOT / page).read_text(encoding="utf-8")
+        old_blocks, new_blocks = paragraph_blocks(old), paragraph_blocks(new)
+        matcher = __import__("difflib").SequenceMatcher(None, old_blocks, new_blocks, autojunk=False)
+        for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+            if tag == "equal":
+                continue
+            checked += 1
+            before_raw = "\n\n".join(old_blocks[i1:i2])
+            after_raw = "\n\n".join(new_blocks[j1:j2])
+            before = ledger.prose_sentences(ledger.source_prose(before_raw))
+            after = [s for s in ledger.prose_sentences(ledger.source_prose(after_raw)) if s not in exempt]
+            n0, m0, p0 = concreteness(before)
+            n1, m1, p1 = concreteness(after)
+            problems = []
+            if n1 > n0:
+                problems.append(f"nominalizations {n0}->{n1}")
+            if after and before and m1 > N6_SENTENCE_GROWTH * m0:
+                problems.append(f"mean sentence length {m0:.1f}->{m1:.1f}")
+            if after and not before:
+                problems.append("new unjustified text")
+            if p1 > p0:
+                problems.append(f"parentheses {p0}->{p1}")
+            removed, _ = counter_diff(link_targets(before_raw), link_targets(after_raw))
+            if removed:
+                problems.append(f"links removed {dict(removed)}")
+            if len(QUESTION_RE.findall(after_raw)) < len(QUESTION_RE.findall(before_raw)):
+                problems.append("book question removed")
+            if problems:
+                snippet = (after[0] if after else ledger.source_prose(after_raw).replace(ledger.PARAGRAPH_BREAK, " "))[:80]
+                failures.append(f"{page}: {', '.join(problems)} [{snippet!r}]")
+    checklist.add(
+        "I18",
+        not failures,
+        "; ".join(failures) if failures else
+        f"{checked} changed paragraph group(s) on {len(edits_by_page)} page(s): no rise in "
+        "nominalizations or parentheses, no mean-sentence growth above 15%, no link or book-question "
+        "removal (new material, relocated caveats, and restorations exempt)",
+    )
+
+
+def i17(checklist: Checklist) -> None:
+    added = ledger.added_sentences()
+    problems = ledger.i17_violations(added)
+    count = sum(len(items) for items in added.values())
+    checklist.add(
+        "I17",
+        not problems,
+        "; ".join(problems) if problems else f"{count} added sentences on {len(added)} page(s); no shared "
+        "four-word sequence or opening across chapters",
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--base", required=True)
@@ -506,6 +625,8 @@ def main() -> int:
         rendered_invariants(args.html_before, args.html_after, files, checklist)
     if args.notebooks_before and args.notebooks_after:
         notebook_invariant(args.notebooks_before, args.notebooks_after, checklist)
+    i17(checklist)
+    i18(args.base, checklist)
     checklist.print()
     return 1 if checklist.failed() else 0
 
