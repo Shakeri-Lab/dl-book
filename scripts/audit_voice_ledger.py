@@ -855,7 +855,17 @@ def main() -> int:
         profile = reference_profile(before)
         text = delta_markdown(before, after, profile)
         if args.markdown:
-            args.markdown.write_text(text, encoding="utf-8")
+            header = (
+                "# Voice ledger delta\n\n"
+                f"`{args.delta[0].name}` to `{args.delta[1].name}`, one row per page, sorted by "
+                "distance from the Part I profile after the change. Rates are per 1,000 words "
+                "of class A prose; `a → b` marks a change. Part I profile: "
+                + ", ".join(f"{key} {value}" for key, value in profile.items())
+                + ". Bands: warmth at least 0.6 times the profile, guards at most 1.25 times, "
+                "chapter references at most 1.5 times, at most two in the opener and in any "
+                "paragraph.\n\n"
+            )
+            args.markdown.write_text(header + text, encoding="utf-8")
         else:
             print(text)
         return 0
