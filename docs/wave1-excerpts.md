@@ -52,7 +52,7 @@ Digests recomputed with `shasum -a 256` while writing this receipt:
 | Source | SHA-256 |
 |---|---|
 | `chapters/part1/02-logistic-softmax.qmd` | `52b67ee4cccc87933257188f4f23f0badbb4a5bd22a21d3e86c40b80390b654e` |
-| `chapters/part1/05-backpropagation.qmd` | `aef8ab70c8c68b7fa87a2e6db3e94b46aeb1094a17e03451dddd70945c18fa82` |
+| `chapters/part1/05-backpropagation.qmd` | `657d3521a0572e616ed9b2242567158ac02e08e77604d172f9ae5225de9f7dd5` |
 | `chapters/part3/10-sequences-rnn.qmd` | `8bf8e3cd4b3b5f7e6e623ed923791cfad448a173a4ae86c86d1da85a50f77e02` |
 | `chapters/appendices/a3-precision-performance.qmd` | `9b272cccbda05fd1e1cdc94b7bf5b7746dadec2514438f7374977c36ad880da3` |
 

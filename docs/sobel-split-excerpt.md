@@ -166,5 +166,5 @@ Lecture paths are relative to the lecture repository root.
 
 | Source | SHA-256 |
 |---|---|
-| `chapters/part2/07-filters-convolution.qmd` | `5506b4f0d5c67efc51800b1416951374c1ddc54451866ab0f004d0602800c06d` |
+| `chapters/part2/07-filters-convolution.qmd` | `44335a09dce3b3f878f09d752a35fbfb53122bc219d625328e9ef9d58cd4fd4f` |
 | `6050-Ch7/STORYBOARD.md` | `20c9ea57814657b4ac0756cc1c3e86c3065b968d93477ccec6da357a88130492` |

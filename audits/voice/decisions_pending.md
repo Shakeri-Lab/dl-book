@@ -5,38 +5,10 @@ five pilot pages.
 
 ## 1. Recap headings (D1)
 
-Template: `Okay, so: <one-line claim, at most eight words>`. Two headings changed in
-the pilot; six more (five chapters and one interlude) need a new claim; the other
-fifteen already comply and stay.
-
-| Page | Current heading | Proposed | Status |
-|---|---|---|---|
-| Ch 1 | Okay, so: what did we just build? | Okay, so: the smallest model tells the whole story | applied (pilot) |
-| Ch 2 | Okay, so: classification is regression plus a normalizer | unchanged | complies |
-| Ch 3 | Okay, so: one bend changed everything | unchanged | complies |
-| Ch 4 | Okay, so: the training loop | Okay, so: one loop trains every model | proposed (noun phrase) |
-| Ch 5 | Okay, so: the chain rule, organized | Okay, so: backpropagation is the chain rule, organized | proposed (noun phrase) |
-| Ch 6 | Okay, so: the lesson of Part I | Okay, so: the missing ingredient is inductive bias | applied (pilot) |
-| Ch 7 | Okay, so: the machine before the learning | Okay, so: the machine works before it learns | proposed (noun phrase) |
-| Ch 8 | Okay, so: the kernel became learnable | unchanged | complies |
-| Ch 9 | Okay, so: modern CNNs are an optimization story | unchanged | complies |
-| Ch 10 | Okay, so: weight sharing moved into time | unchanged | complies |
-| Ch 11 | Okay, so: the fixed-size handoff is the bottleneck | unchanged | complies |
-| Ch 12 | Okay, so: attention is normalized memory mixing | unchanged | complies |
-| Ch 13 | Okay, so: attention softens the address | unchanged | complies (pilot) |
-| Ch 14 | Okay, so: the Transformer routes, then computes | unchanged | complies |
-| Ch 15 | Okay, so: pretraining manufactures supervision | unchanged | complies |
-| Ch 16 | Okay, so: patches become tokens, but regime still matters | unchanged | complies (7 words) |
-| Ch 17 | Okay, so: adaptation has three separate bills | unchanged | complies (pilot) |
-| Ch 18 | Okay, so: where to update and what to optimize are separate | Okay, so: update location and objective are separate | proposed (9 words; echoes recap item 1) |
-| Ch 19 | Okay, so: generation needs a sampling contract | unchanged | complies |
-| Ch 20 | Okay, so: two towers learn a comparison, not a world model | Okay, so: two towers learn only a comparison | proposed (9 words and a guard; "only" keeps the boundary) |
-| Interlude, experiment | Okay, so: tune the contender, ablate the claim | unchanged | complies |
-| Interlude, autoencoders | Okay, so: PCA became a network, then the code became a bottleneck | Okay, so: PCA became a learnable bottleneck | proposed (10 words) |
-| Interlude, test-time regression | Okay, so: the solver is part of the architecture | unchanged | complies (pilot) |
-
-Before any recap heading changes, check `interactives/manifest.json` for a
-`before-heading` anchor that targets it (Chapter 1's did; the anchor moved with it).
+Settled by the Stage B brief (C10): D1 now allows `Okay, so: ` plus a phrase or a claim
+of at most ten words, all 23 recap headings comply, and none changes further. The two
+pilot changes (Chapters 1 and 6) stand. Explicit ids (`{#sec-NN-recap}`) are planned for
+Stage B3 once the course site is checked for inbound links.
 
 ## 2. Rule interpretations that need sign-off
 
