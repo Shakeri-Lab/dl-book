@@ -617,10 +617,11 @@ def i17(checklist: Checklist) -> None:
     added = ledger.added_sentences()
     problems = ledger.i17_violations(added)
     count = sum(len(items) for items in added.values())
+    pages = sum(1 for items in added.values() if items)
     checklist.add(
         "I17",
         not problems,
-        "; ".join(problems) if problems else f"{count} added sentences on {len(added)} page(s); no shared "
+        "; ".join(problems) if problems else f"{count} added sentences on {pages} page(s); no shared "
         "four-word sequence or opening across chapters",
     )
 

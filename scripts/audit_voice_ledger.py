@@ -68,7 +68,6 @@ REFERENCE_PROFILE = {
     "reader_address_total_per1k": 5.271,
 }
 WARMTH_FLOOR = 0.6
-GUARD_CEILING = 1.25
 CHAPTER_REF_CEILING = 1.5
 OPENER_CHAPTER_REF_CAP = 2
 PARAGRAPH_CHAPTER_REF_CAP = 2
@@ -905,8 +904,9 @@ def run_check(html_root: Path) -> int:
         print(problem, file=sys.stderr)
     failures += len(problems)
     count = sum(len(items) for items in added.values())
+    pages = sum(1 for items in added.values() if items)
     print(
-        f"I17: {count} added sentence(s) on {len(added)} page(s); {len(problems)} shared-phrasing "
+        f"I17: {count} added sentence(s) on {pages} page(s); {len(problems)} shared-phrasing "
         "violation(s); V3 caps " + ", ".join(f"{name} {totals[name]}/{cap}" for name, cap in PHRASE_CAPS.items())
     )
     scope = len(VOICE_SCOPE)
@@ -1165,9 +1165,11 @@ def main() -> int:
                 "distance from the Part I profile after the change. Rates are per 1,000 words "
                 "of class A prose; `a → b` marks a change. Part I profile: "
                 + ", ".join(f"{key} {value}" for key, value in profile.items())
-                + ". Bands: warmth at least 0.6 times the profile, guards at most 1.25 times, "
-                "chapter references at most 1.5 times, at most two in the opener and in any "
-                "paragraph.\n\n"
+                + ". Bands (VOICE.md): reader address at least 0.6 times the profile in Part I "
+                "and 0.5 times elsewhere; verdicts and metaphors at least 0.6 times; prose guards "
+                "at most 1.5 per 1,000 words in Parts I to III and 2.5 in Parts IV and V and the "
+                "interludes; chapter references at most 1.5 times, at most two in the opener and "
+                "in any paragraph.\n\n"
             )
             args.markdown.write_text(header + text, encoding="utf-8")
         else:
