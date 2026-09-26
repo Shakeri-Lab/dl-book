@@ -1,3 +1,12 @@
+# Rolling post-v1.3: Chapter 1 footnotes in every edition (September 26, 2026)
+
+- **Content parity.** Chapter 1's three notes (bias augmentation, the case for Gaussian
+  residuals, and the radial shrink of weight decay) were raw `\footnote{}` commands, which
+  Pandoc passes to LaTeX and drops from HTML, so only the PDF editions carried them. They
+  are now Quarto footnotes (`^[...]`) with the same text; the two `\emph{}` terms became
+  Markdown emphasis. The HTML edition gains three notes, and both PDF profiles still
+  typeset them. No other chapter used a raw `\footnote{}`.
+
 # Rolling post-v1.3 — Chapter 7 replays: the moving average and the vertical Sobel kernel (September 25, 2026)
 
 - **Two HTML-only replays in Chapter 7**, on the author's request, so the chapter reads
