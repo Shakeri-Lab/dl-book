@@ -25,7 +25,15 @@ fixes in all of them and to four contract changes below (prose budget, plain-tex
 format, never spoil a prediction, four-decimal geometry). See
 [the review-pass receipt](excerpt-review-pass.md). No new scene is authorized by it.
 
-**Source state — September 21, 2026:** thirty-eight scenes are registered in
+**Source state — September 25, 2026:** forty scenes are registered in
+`interactives/manifest.json`. The two newest open Chapter 7 as a sequence the author asked
+for: [the moving average, one window at a time](box-average-excerpt.md) under the
+chapter's moving-average figure, then the existing convolution walkthrough, then
+[the vertical Sobel kernel taken apart](sobel-split-excerpt.md) before the zoo's code.
+The Sobel scene introduced the `before-cell` anchor, which keeps a panel ahead of a
+cell's whole Plan → Code wrapper.
+
+**Prior source state — September 21, 2026:** thirty-eight scenes are registered in
 `interactives/manifest.json`, the four most recent being the film picks built together:
 [branch accumulation](branch-blame-excerpt.md) (Chapter 5),
 [search under a budget](halving-budget-excerpt.md) (the Trainer interlude),
@@ -702,8 +710,9 @@ rebuild touches them.
   `interactives/manifest.json` with `pandoc.json.decode`, the same way
   `filters/chapter-tools.lua` reads `scripts/notebook_manifest.json`, and inserts every
   scene the manifest gives the document being rendered — after the div of an
-  `after-cell` anchor, or immediately before the level-2/3 heading of a
-  `before-heading` one — failing if a
+  `after-cell` anchor, before the block that presents the cell of a `before-cell` anchor
+  (its Plan → Code wrapper when it has one, the bare cell otherwise), or immediately
+  before the level-2/3 heading of a `before-heading` one — failing if a
   required insertion point is absent or duplicated. The shared stylesheet is emitted once
   per document, each scene adds its own `<style>`, and `shared/loader.js` is emitted once,
   after the last panel on the page, so it sees every root there.

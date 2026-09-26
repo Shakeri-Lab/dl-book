@@ -558,7 +558,7 @@ test('integration: the manifest, not the filter, names the chapters; LaTeX guard
   // What used to be an if/elseif over two chapter names is now a read of the index.
   assert.match(filter, /manifest\.json/);
   assert.match(filter, /pandoc\.json\.decode/, 'the manifest is decoded, not parsed by hand');
-  for (const type of ['after-cell', 'before-heading'])
+  for (const type of ['after-cell', 'before-cell', 'before-heading'])
     assert(filter.includes(`"${type}"`), `the filter places no ${type} anchor`);
   assert.match(filter, /assert\(inserted == 1/, 'each scene still fails closed');
   assert.match(filter, /block\.level == 2 or block\.level == 3/,

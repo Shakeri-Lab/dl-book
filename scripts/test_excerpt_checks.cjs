@@ -46,6 +46,26 @@ const expected = {
   // The check swaps the ambient dimension for the intrinsic one: the spread goes as one
   // over the square root of the dimension the data actually varies in, so the band is
   // wider than the ambient number suggests by the square root of their ratio.
+  // The check widens the window: the count follows n - k + 1, and the centre never
+  // reaches the first or last (k - 1) / 2 samples, which is the slice the plot needs.
+  'box-average': root => {
+    const n = nums(root.dataset.samples).length, k = 25, half = (k - 1) / 2;
+    assert.equal(Number(root.dataset.width), 9, 'the scene itself uses the chapter\'s nine');
+    return [`${n - k + 1}`, `t[${half}:-${half}]`, `300 \u2212 25 + 1 = ${n - k + 1}`, `within ${half} samples`];
+  },
+  // The check transposes the kernel: the zoo's horizontal Sobel, computed on the same crop.
+  'sobel-split': root => {
+    const kernel = nums(root.dataset.kernel), along = nums(root.dataset.along), across = nums(root.dataset.across);
+    const [top, left] = nums(root.dataset.crop), [r0, r1, c0, c1] = nums(root.dataset.rect), level = Number(root.dataset.level);
+    const px = (r, c) => (top + r >= r0 && top + r < r1 && left + c >= c0 && left + c < c1 ? level : 0);
+    const transposed = across.flatMap(b => along.map(a => a * b));
+    assert.deepEqual(along.flatMap(a => across.map(b => a * b)), kernel);
+    const respond = (w, r, c) => [0, 1, 2].reduce((s, a) => s + [0, 1, 2].reduce((u, b) => u + w[3 * a + b] * px(r - 1 + a, c - 1 + b), 0), 0);
+    const stops = nums(root.dataset.stops), side = [stops[2], stops[3]], topEdge = [stops[4], stops[5]];
+    const onTop = respond(transposed, ...topEdge), onSide = respond(transposed, ...side);
+    assert.equal(onSide, 0, 'the transposed kernel is silent on the left side');
+    return [`${onTop.toFixed(1)} on the top edge`, `${onSide} on the left side`, 'bottom minus top', `climbs by ${level}`];
+  },
   'distance-band': root => {
     const ambient = Number(root.dataset.focus), intrinsic = 12;
     const widen = Math.sqrt(ambient / intrinsic);
@@ -337,7 +357,11 @@ for (const entry of manifest.scenes) {
     const words = text => text.trim().split(/\s+/).length;
     assert(words(summary) <= 40, `question has ${words(summary)} words`);
     assert(words(answer) <= 70, `answer has ${words(answer)} words`);
-    assert.doesNotMatch(summary + answer, /\d-\d|(?<![\w.])-\d|\de[-+]?\d/, 'no ASCII minus or e-notation');
+    // Prose takes a true minus; quoted code keeps the ASCII one it is written with, so a
+    // <code> span is set aside before the typography scan and nowhere else.
+    const prose = node => { const copy = node.cloneNode(true); copy.querySelectorAll('code').forEach(c => c.remove()); return copy.textContent; };
+    assert.doesNotMatch(prose(check.querySelector('summary')) + prose(check.querySelector('p')),
+      /\d-\d|(?<![\w.])-\d|\de[-+]?\d/, 'no ASCII minus or e-notation');
     for (const piece of expected[entry.scene](root, doc)) assert(answer.includes(piece), `answer lacks “${piece}”: ${answer}`);
   });
 }

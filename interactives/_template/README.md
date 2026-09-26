@@ -51,9 +51,11 @@ A copied directory is inert until all four of these exist. Nothing infers a scen
 the filesystem.
 
 1. **`interactives/manifest.json`** — one object in `scenes`, with every key the audit
-   knows and no others: `id`, `scene`, `qmd`, `anchor` (`{type, target}` where `type` is
-   `after-cell` — a labelled executable cell, giving Quarto's `cell-<label>` div — or
-   `before-heading`, the exact text of a level-2 heading), `filter`
+   knows and no others: `id`, `scene`, `qmd`, `anchor` (`{type, target}`, where `type` is
+   `after-cell` for the panel after a labelled executable cell, whose Quarto div is
+   `cell-<label>`; `before-cell` for the panel before the block that presents that cell,
+   its Plan → Code wrapper when it has one; or `before-heading` for the panel before a
+   level-2 heading, named by its exact text), `filter`
    (`filters/mechanism-excerpts.lua` for anything using the shared transport), `transport`
    (`shared`), `duration`, `beats`, `fixture` (`{literals, computedVariants}`) and
    `receipt`. This entry is what makes the scene ship: the filter inserts every manifest

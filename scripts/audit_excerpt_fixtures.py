@@ -37,7 +37,7 @@ SCENE_KEYS = {
     "fixture",
     "receipt",
 }
-ANCHOR_TYPES = {"after-cell", "before-heading"}
+ANCHOR_TYPES = {"after-cell", "before-cell", "before-heading"}
 HEADING_RE = re.compile(r"^#{2,}\s+(.*?)\s*$", re.M)
 # Pandoc's smart extension replaces ASCII quotes, apostrophes and dashes in the rendered
 # heading, so both sides compare this form (mirrored in filters/mechanism-excerpts.lua).
@@ -123,8 +123,9 @@ def reserved_classes(scene_dir: Path) -> set[str]:
 
 def anchor_present(anchor: dict, chapter: str) -> bool:
     target = anchor["target"]
-    if anchor["type"] == "after-cell":
-        # Quarto derives the div id `cell-<label>` from the executable cell's label.
+    if anchor["type"] in ("after-cell", "before-cell"):
+        # Quarto derives the div id `cell-<label>` from the executable cell's label; the
+        # two cell anchors differ only in which side of the cell's block the panel takes.
         label = target[len("cell-"):] if target.startswith("cell-") else target
         return re.search(rf"^#\|\s*label:\s*{re.escape(label)}\s*$", chapter, re.M) is not None
     # Headings are compared in the normalized form filters/mechanism-excerpts.lua uses,

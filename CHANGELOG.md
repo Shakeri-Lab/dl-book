@@ -1,3 +1,27 @@
+# Rolling post-v1.3 — Chapter 7 replays: the moving average and the vertical Sobel kernel (September 25, 2026)
+
+- **Two HTML-only replays in Chapter 7**, on the author's request, so the chapter reads
+  as one sequence: the moving average (1-D, equal weights), the existing convolution
+  walkthrough (one 2-D patch), then the vertical Sobel kernel (unequal, signed weights).
+  The PDF is unchanged; both panels are optional disclosures, closed and paused.
+- **The moving average, one window at a time** (`box-average-excerpt`, after
+  `fig-moving-average`). A nine-wide window slides along the chapter's 300 seeded
+  samples; a magnified view shows the nine covered samples shrink to a ninth and gather
+  into the average, which lands at the window's centre. The prediction is the chapter's
+  own `t[4:-4]`: the first and last four samples never get an average, so 300 samples
+  give 292. The samples are the executed cell's output (torch 2.12.1), bound by SHA-256.
+- **The vertical Sobel kernel, taken apart** (`sobel-split-excerpt`, before the zoo's
+  code). The kernel is shown as a (1, 2, 1) average down the rows times a (−1, 0, 1)
+  difference across them, on the top-left corner of `make_shapes()`'s rectangle: a flat
+  patch gives 0, the left side 3.6, and the top edge, withheld for a prediction, 0,
+  because every row there is flat. Every response agrees with torch's `conv2d`.
+- **A `before-cell` anchor** in `filters/mechanism-excerpts.lua`, the fixture audit and
+  the authoring contract: the panel precedes the block that presents a cell, its
+  Plan → Code wrapper when it has one, so a replay never lands between a plan and its
+  code. Verified by running the real filter on Chapter 7's frozen markdown.
+- **Transfer-check scan.** `scripts/test_excerpt_checks.cjs` sets `<code>` spans aside
+  before its ASCII-minus scan, so quoted code keeps the minus it is written with.
+
 # Rolling post-v1.3 — Chapters 5 and 6 revised; published-source hygiene (September 25, 2026)
 
 - **No authoring records in published pages.** Hidden provenance comments (lecture

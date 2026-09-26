@@ -245,6 +245,18 @@ carries its own receipt.
   d, so the relative spread is the square root of 0.35 over d. Evaluated at 784 that gives
   0.89, the digit the chapter measures.
 
+#### Chapter 7's sequence — September 25, 2026
+
+At the author's request, two Chapter 7 scenes now bracket the existing convolution
+walkthrough: [the moving average, one window at a time](box-average-excerpt.md), under
+the moving-average figure, and [the vertical Sobel kernel taken apart](sobel-split-excerpt.md),
+before the filter zoo's code. The film's MovingAverage scene was earlier set aside as a
+duplicate of the convolution walkthrough; the author overruled that, and the two differ
+in what they teach (the 1-D slide, the centre convention behind `t[4:-4]` and the lost
+ends, against one 2-D patch scored), so they are kept as complements. The Sobel scene
+reads the kernel as a (1, 2, 1) average along times a (−1, 0, 1) difference across,
+which is why it fires on the rectangle's side and returns exactly zero on its top.
+
 Still scoped and unbuilt from the same picks, recorded so they are not re-derived: the
 experiment ledger table, the capacity U-curve, Chapter 5's §5.1 local-slope zoom and its
 outer product, the three splits, Chapter 3's §3.4 tile-the-gaps, and Adam. Each was set

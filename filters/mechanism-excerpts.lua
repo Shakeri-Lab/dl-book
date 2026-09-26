@@ -42,7 +42,8 @@ local function scenes_for(source)
     if normalize(scene.filter) == SELF and normalize(scene.qmd) == source then
       local anchor = scene.anchor
       assert(type(anchor) == "table" and type(anchor.target) == "string" and
-        (anchor.type == "after-cell" or anchor.type == "before-heading"),
+        (anchor.type == "after-cell" or anchor.type == "before-cell"
+          or anchor.type == "before-heading"),
         "Mechanism excerpt has no usable anchor: " .. tostring(scene.id))
       table.insert(mine, scene)
     end
@@ -62,11 +63,29 @@ local function normalize_heading(text)
     :gsub("`", ""))
 end
 
+-- Whether a block holds the div with this identifier anywhere inside it.
+local function holds(block, identifier)
+  local found = false
+  block:walk({Div = function(div)
+    if div.identifier == identifier then found = true end
+  end})
+  return found
+end
+
 -- after-cell: the exact div Quarto derives from an executable cell's label.
+-- before-cell: the same cell, but the panel goes BEFORE the block that presents it. A
+--   cell written inside a Plan -> Code wrapper is presented by that wrapper, so the panel
+--   precedes the wrapper and never lands between a plan and its code; a bare cell is
+--   its own block. scene.wrapped is settled once per document, before any insertion.
 -- before-heading: a level-2/3 heading whose text matches the target after normalization.
 local function is_anchor(scene, block)
   if scene.anchor.type == "after-cell" then
     return block.t == "Div" and block.identifier == scene.anchor.target
+  end
+  if scene.anchor.type == "before-cell" then
+    if block.t ~= "Div" then return false end
+    if block.classes:includes("plan-code") then return holds(block, scene.anchor.target) end
+    return block.identifier == scene.anchor.target and not scene.wrapped
   end
   return block.t == "Header" and (block.level == 2 or block.level == 3)
     and normalize_heading(pandoc.utils.stringify(block.content))
@@ -103,6 +122,19 @@ return {{Pandoc = function(doc)
   local scenes = scenes_for(source)
   if #scenes == 0 then return doc end
 
+  -- A before-cell anchor needs to know, once and before anything moves, whether its
+  -- cell sits inside a Plan -> Code wrapper.
+  for _, scene in ipairs(scenes) do
+    if scene.anchor.type == "before-cell" then
+      scene.wrapped = false
+      doc:walk({Div = function(div)
+        if div.classes:includes("plan-code") and holds(div, scene.anchor.target) then
+          scene.wrapped = true
+        end
+      end})
+    end
+  end
+
   -- Document order, not manifest order, decides which panel carries the shared
   -- stylesheet and which panel the loader follows.
   local order = {}
@@ -121,6 +153,7 @@ return {{Pandoc = function(doc)
       Div = function(div)
         if is_anchor(scene, div) then
           inserted = inserted + 1
+          if scene.anchor.type == "before-cell" then return {block, div} end
           return {div, block}
         end
       end,
