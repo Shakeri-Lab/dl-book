@@ -45,10 +45,10 @@ Digests recomputed with `shasum -a 256` while writing this receipt:
 
 | Source | SHA-256 |
 |---|---|
-| `chapters/part2/08-cnn.qmd` | `a427fe6ef337d38012ce82b76f7203e2d6c0ed5f65cb071dfb14603e1e780c46` |
-| `chapters/part1/03-nonlinearity-mlp.qmd` | `73d271cb3176527b7f79f4f8accbc37cabe59daabe26448c76e08d37574f7e32` |
-| `chapters/part5/17-peft-quantization.qmd` | `df5203bf7f8a059181ee9da004b4c3969f8d55a6e2b9a6c912624cd790b91ccd` |
-| `chapters/part3/10-sequences-rnn.qmd` | `6280ecf1ea8406fa6db122c05c26f8a5f89b293b83d78e7d603c34260700a28f` |
+| `chapters/part2/08-cnn.qmd` | `33aa5122d822dee6095852379dc924d09a65ad10aefbbbf8cc22301bc6d0ed71` |
+| `chapters/part1/03-nonlinearity-mlp.qmd` | `86731b0e01caf92d1f2f3bc071ef95334f2aaba5cf606e66c2a900046cd5dde4` |
+| `chapters/part5/17-peft-quantization.qmd` | `f2e6c766138d5e59fe35a7667e23339327701cfcd9bb7d7d9b02afdb80e82011` |
+| `chapters/part3/10-sequences-rnn.qmd` | `8bf8e3cd4b3b5f7e6e623ed923791cfad448a173a4ae86c86d1da85a50f77e02` |
 
 ## Lecture sources adapted
 

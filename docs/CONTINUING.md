@@ -29,9 +29,9 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > interlude's Figure EX.1 now nests the inner training loop inside the outer
 > experiment cycle, and its job-interview analogy became engines at one shared shaft
 > speed (arc-seeds updated). Chapter 7's opening and closing were rewritten without
-> trailers, and its generic plan steps now describe their cells; 119 of the same
-> "Prepare the inputs and fixed settings for the example." plan steps remain elsewhere
-> in the book. Chapter 18's signed-zero CI failure is fixed at the source (see the
+> trailers, and its generic plan steps now describe their cells. A follow-up sweep
+> replaced every remaining placeholder plan step book-wide (181 of them, including
+> "Report or visualize the measured result."); write specific plan steps for new cells. Chapter 18's signed-zero CI failure is fixed at the source (see the
 > resolved note below). Chapter 6: headings retitled in the book's voice, a two-by-two protocol
 > matrix (zero-shot versus retrained, shift versus scramble), an edge-crop control, a
 > permutation-symmetry derivation, a pixel-space shift-distance check, and Hein et al.

@@ -106,6 +106,11 @@
   round-off-sized negative zero (`round(x, 6) + 0.0`), so the line no longer prints
   `-0.0` on some runners and `0.0` on others. This one frozen character changed from
   `-0.0` to `0.0` with the author's approval; no tolerance changed.
+- **Plan panels.** The 181 placeholder plan steps ("Prepare the inputs and fixed settings
+  for the example." and "Report or visualize the measured result.") across 25 chapters now
+  say what their code does, each checked against the lines its marker selects. Three
+  neighbouring steps that had drifted from their code were corrected, and Chapter 5's
+  hand-built backpropagation cell was re-marked into four steps that match its plan.
 - **Evidence.** Chapters 5 and 9 were re-executed with byte-identical printed stdout.
   Chapter 6 was re-executed: its four existing stdout blocks are byte-identical, and it
   gains the three new ones. The print PDF has 556 pages and the continuous PDF 530, each
