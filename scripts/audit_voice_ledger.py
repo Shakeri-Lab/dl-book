@@ -43,7 +43,13 @@ ROOT = Path(__file__).resolve().parents[1]
 
 # Pages whose register rules R1 to R6 block CI. The voice-coherence sweep adds pages
 # here as each one is revised; VOICE.md records the same list.
-VOICE_SCOPE: tuple[str, ...] = ()
+VOICE_SCOPE: tuple[str, ...] = (
+    "chapters/part1/01-linear-regression.qmd",
+    "chapters/part1/06-generalization-inductive-bias.qmd",
+    "chapters/part4/13-attention.qmd",
+    "chapters/interludes/attention-as-test-time-regression.qmd",
+    "chapters/part5/17-peft-quantization.qmd",
+)
 
 # Frozen Part I reference profile (medians of Chapters 1 to 6 in the baseline ledger,
 # rates per 1,000 words of class A prose). VOICE.md, section "Ledger", holds the same
