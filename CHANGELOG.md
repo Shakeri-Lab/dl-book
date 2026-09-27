@@ -1,3 +1,15 @@
+# Rolling post-v1.3: Chapter 1 setup cell and display results in the output audit (September 26, 2026)
+
+- **Chapter 1's setup cell** now ends `torch.manual_seed(6050);`. Without the semicolon
+  the notebook displayed the returned `torch._C.Generator`, whose memory address changed
+  on every execution: the committed HTML and TeX freezes disagreed about it, and every
+  re-execution changed the PDF text.
+- **`scripts/audit_frozen_stdout.py` compares text display results** (the value of a
+  cell's last expression) as well as printed output, across HTML and TeX and exactly
+  against `--base`. Image displays stay out: their captions are prose, and figures are
+  checked when they are regenerated. The book now holds one text display, Chapter 1's
+  tensor shapes.
+
 # Rolling post-v1.3: Chapter 1 footnotes in every edition (September 26, 2026)
 
 - **Content parity.** Chapter 1's three notes (bias augmentation, the case for Gaussian
