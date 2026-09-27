@@ -7,7 +7,7 @@ number is not necessarily wrong (design constants, references to other pages, an
 values computed but not printed appear here too); it is a number the page does not
 print. The printout is the source of truth.
 
-120 numbers listed.
+119 numbers listed.
 
 ## a3-precision-performance (2)
 
@@ -79,12 +79,11 @@ print. The printout is the source of truth.
 | 615 | …28 images to an equal-sized output would own \(784 \times 784 \approx 615{,}000\) weights. The Sobel detector own… |
 | 615,000 | …a matrix, convolution is almost-all-zero with nine numbers repeating: 615,000 weights collapsed to 9.… |
 
-## 08-cnn (4)
+## 08-cnn (3)
 
 | number | context |
 |---|---|
 | 784 | …Note the shapes. In Part I we flattened every image into a 784-vector before the model ever saw it. Th… |
-| 43% | …lean accuracy and LeNet at a two-pixel shift. The MLP managed 76% and 43%.… |
 | 1,200 | …ion loss, pulling gradients backward through Equation 8.1 for roughly 1,200 optimizer steps, chose these local meas… |
 | 1,200 | … shift size, and the two reported metrics. We refit each model on all 1,200 development images, then open the 600-i… |
 

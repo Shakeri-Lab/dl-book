@@ -27,14 +27,12 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > renders receipts and Section A (`gate`); `scripts/audit_voice_invariants.py` checks I1
 > to I18. Done: Stage A; B0 and B1; B2a (the B2 corrections, reader passes, S6 on the ten
 > pages in scope, the PCA interlude and Chapters 10 and 11), stopped at the B2a gate:
-> read `audits/voice/stage_b2a_report.md` (Sections A and B) before B2b. `main` has
-> moved past this branch's base (`86ec60b`): #5 (Chapter 1's footnotes in HTML), #6
-> (Chapter 1's generator display; the frozen-output audit widened to display results),
-> the HTML-only website (no PDF offered or built in CI; see `CLAUDE.md`), and the
-> author's Chapter 8 and 9 replays (`b2a1ad0`). Merge `main` into this branch before
-> B2b; expect conflicts in Chapter 1's source and freeze, `publish.yml`,
-> `audit_book_contract.py`, and the replay receipts. An author patch to Equation 8.1
-> waits, uncommitted, in the `author-corrections` worktree. Lessons: the readers must
+> read `audits/voice/stage_b2a_report.md` (Sections A and B). The B2a gate closed on
+> September 27, 2026: `main` and Patch 1 were merged in, the author's rulings and
+> corrections applied (`audits/voice/author_corrections_b2a.md`), and the branch merged
+> to `main`. The remaining voice batches (B2b to B3) pause for the press program
+> (`docs/press-program.md`, branch `press`) and resume on `main` with the final chapter
+> numbers. Lessons: the readers must
 > be calibrated to this author's habits (short verdicts, fragments, "Here is ..."); the
 > printout is the source of truth for every number in prose; mechanical fixes (R5, R9)
 > stay out of the added-sentence population; a freeze-patched render (prose edits

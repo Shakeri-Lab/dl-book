@@ -321,3 +321,29 @@ python scripts/audit_voice_ledger.py --numbers B2A --markdown audits/voice/numbe
 python scripts/audit_voice_ledger.py --grades B2A --markdown audits/voice/grades.md
 python scripts/voice_apply_edits.py gate audits/voice/edits/*.json --stage B2 B2a --html B2A --out SECTION_A
 ```
+
+## Gate close (September 27, 2026)
+
+The branch merged `main` (PRs #5 and #6, the HTML-only website, the Chapter 8 and 9
+replays) and `author-corrections` (Patch 1: `u, v` offsets in Equations 7.1 and 8.1),
+then took three commits outside the voice rules on the author's instruction: the rulings
+(B3.1 moves Part III to the 2.5 guard ceiling), the three plan steps (B3.5), and the
+author corrections (`author_corrections_b2a.md`). Chapters 1, 6, 7, 8, 9, 10, 11, and
+13, the PCA and test-time-regression interludes, and Chapter 17 were re-executed; the 47
+regenerated figures were pixel-identical and keep their committed bytes.
+
+The invariants ran against `863e391`, a base built from `86ec60b` with only the
+non-voice changes applied (main, Patch 1, B3.5, and the author corrections), so what
+remains is the voice work. Against it every invariant passes except three, each
+explained by measurement:
+
+- I2 (frozen output): Chapter 1's HTML freeze at the prior HEAD still showed the
+  generator display PR #6 removed; the re-execution drops it. Nothing else differs.
+- I11 (notebooks): the two exports pin different commits, and the exporter embeds the
+  commit. With the commit and `source_line` normalized, all 26 notebooks are identical.
+- I12 (words): Chapter 1 grows 7.3% against the `86ec60b` render because PR #5's three
+  footnotes now render in HTML (200 words); without them the page is within 0.5%.
+
+All other audits pass: book contract, Plan to Code, Python sources, public anchors in
+source and rendered HTML, replay fixtures (45 excerpts), HTML assets (36 pages, no PDF),
+the print PDF audit (556 pages), the HTML interaction suite, and the voice register check.
