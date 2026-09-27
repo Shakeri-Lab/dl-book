@@ -625,7 +625,7 @@ source vocab 37, target vocab 14</code></pre>
 </div>
 </div>
 <p>The rejection loop is evaluation hygiene, not decoration. It removes duplicate source strings <strong>before</strong> the 8,000/500/500 train/validation/test split. We use validation sources for every learning curve and reserve test sources for one final audit after the design is fixed. The same underlying date may appear in another written dialect, which is the structural generalization we want; exact-string memorization is no longer available.</p>
-<p>Three special tokens run the show, the same conventions as the course’s full translation pipeline: <code>&lt;pad&gt;</code> fills the short sequences of a batch out to a rectangle, <code>&lt;bos&gt;</code> tells the decoder “begin,” and <code>&lt;eos&gt;</code> lets the <em>model</em> say “I’m done”: remember, the machine must be free to choose its output length.</p>
+<p>Three special tokens run the show, the same conventions as the course’s full translation pipeline: <code>&lt;pad&gt;</code> fills the short sequences of a batch out to a rectangle, <code>&lt;bos&gt;</code> tells the decoder “begin,” and <code>&lt;eos&gt;</code> lets the <em>model</em> say “I am done”: remember, the machine must be free to choose its output length.</p>
 <p>One more new tool, and it earns a pause. Chapter 10 fed characters in as one-hot vectors. This chapter gives each token a learned vector instead: <code>nn.Embedding</code>, a table with one trainable row per vocabulary entry. There is no new math: an embedding is exactly a one-hot vector times a weight matrix, Chapter 1’s linear map wearing a lookup table’s clothes, but the reading matters: <em>the address is hard, the content is learned</em>. Row 17 is fetched by index, rigidly; what lives in row 17 is whatever training decides that token should mean. Keep the phrase “hard address, learned content” nearby: in <a href="../part4/13-attention.html" class="quarto-xref"><span>Chapter 13</span></a> we soften the address too, and that will be the whole story.</p>
 <div class="plan-code">
 <div class="plan">
@@ -817,7 +817,7 @@ packed (true lengths): validation exact match 95.7%</code></pre>
 <img src="11-encoder-decoder_files/figure-html/fig-padding-drift-output-1.png" loading="lazy" decoding="async" alt="A line plot shows the hidden-state distance from the last real character as right-padding timesteps are processed. The green point marks zero drift at the sentence end; the navy trajectory rises through the orange-shaded padding region, showing that padding continues to move the state." width="604" height="268" class="figure-img">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-padding-drift-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;11.2: Why naive right-padding hurts: the encoder state does not stop when the sentence does. One short validation source is encoded by the naive model; at its last real character (green) the state is exactly what the decoder should receive. A <em>single</em> <pad> step already throws the state most of the way to its final drift, and each further step compounds it (navy); the decoder is handed the endpoint of the shaded excursion, a state the unpadded inference-time encoder never produces. Packing simply stops the clock at the green dot.
+Figure&nbsp;11.2: Why naive right-padding hurts: the encoder state does not stop when the sentence does. One short validation source is encoded by the naive model; at its last real character (green) the state is exactly what the decoder should receive. A <em>single</em> <pad> step already throws the state most of the way to its final drift, and each further step compounds it (navy); the decoder is handed the endpoint of the shaded excursion, a state the unpadded inference-time encoder never produces. Packing simply stops the clock at the last real character.
 </pad></figcaption>
 </figure>
 </div>
@@ -840,7 +840,7 @@ Figure&nbsp;11.2: Why naive right-padding hurts: the encoder state does not stop
 <section id="teacher-forcing-training-on-the-gold-rail" class="level2" data-number="11.3">
 <h2 data-number="11.3" class="anchored" data-anchor-id="teacher-forcing-training-on-the-gold-rail"><span class="header-section-number">11.3</span> Teacher forcing: training on the gold rail</h2>
 <p>Look back at the two <code>mode</code> branches in the training loop; they are this section. When the decoder is trained, what should it see as <em>its own previous output</em>?</p>
-<p><strong>Free-running</strong> (“fr”) is the honest answer: feed the model’s own predictions back in, exactly as at inference. But its flaws are structural. Early in training those predictions are garbage <span class="math inline">\(\rightarrow\)</span> the decoder learns conditioned on garbage <span class="math inline">\(\rightarrow\)</span> every sequence must be generated token-by-token in a Python loop, because step <span class="math inline">\(t\)</span>’s input does not exist until step <span class="math inline">\(t-1\)</span> is computed. Slow, and unstable exactly when training is young.</p>
+<p><strong>Free-running</strong> (“fr”) is the straightforward answer: feed the model’s own predictions back in, exactly as at inference. But its flaws are structural. Early in training those predictions are garbage <span class="math inline">\(\rightarrow\)</span> the decoder learns conditioned on garbage <span class="math inline">\(\rightarrow\)</span> every sequence must be generated token-by-token in a Python loop, because step <span class="math inline">\(t\)</span>’s input does not exist until step <span class="math inline">\(t-1\)</span> is computed. Slow, and unstable exactly when training is young.</p>
 <p><strong>Teacher forcing</strong> (“tf”) conditions each step on the <em>ground-truth</em> previous token instead, the gold rail. Every conditioning input is then known in advance <span class="math inline">\(\rightarrow\)</span> the whole target can be submitted in <strong>one fused decoder call</strong> (the <code>model(S, L, T[:, :-1])</code> line), rather than a Python feedback loop. The LSTM still processes time recurrently inside that call; teacher forcing does not make its timesteps mathematically parallel. Every step nevertheless learns from a sensible context from epoch one. Watch both effects:</p>
 <div class="plan-code">
 <div class="plan">
@@ -888,7 +888,7 @@ Figure&nbsp;11.3: Learning curves on a fixed subset of 400 unambiguous validatio
 <div class="plan">
 <ol type="1">
 <li>Collect the unambiguous test dates <code>tf_model</code> gets wrong and print how many there are.</li>
-<li>Implement the residual errors, up close.</li>
+<li>Print the first three errors, each beside its truth.</li>
 </ol>
 </div>
 <div id="error-gallery" class="cell" data-execution_count="9">
@@ -907,7 +907,7 @@ Figure&nbsp;11.3: Learning curves on a fixed subset of 400 unambiguous validatio
 </div>
 </div>
 </div>
-<p>The errors are plausible-looking digit substitutions and order slips. The decoder has learned a date-shaped language, but no hard mechanism forces each output field to copy the corresponding source fact. Off the gold rail, one wrong character can alter the context for every character after it. Hold that thought two sections.</p>
+<p>The errors are plausible-looking digit substitutions and order slips. The decoder has learned a date-shaped language, but no hard mechanism forces each output field to copy the corresponding source fact. Off the gold rail, one wrong character can alter the context for every character after it. Hold that thought for two sections.</p>
 <div class="callout callout-style-default callout-note callout-titled">
 <div class="callout-header d-flex align-content-center">
 <div class="callout-icon-container">
@@ -919,7 +919,7 @@ Figure&nbsp;11.3: Learning curves on a fixed subset of 400 unambiguous validatio
 </div>
 <div class="callout-body-container callout-body">
 <p>The engineered compromise (Bengio et al., 2015): during training, at <em>each timestep</em> flip a biased coin (probability <span class="math inline">\(\epsilon\)</span> of the gold token, <span class="math inline">\(1 -
-\epsilon\)</span> of the model’s own prediction) and anneal <span class="math inline">\(\epsilon\)</span> from 1 toward 0 as training matures. Early epochs enjoy the gold rail; late epochs practice recovery. One design detail from the original paper worth repeating: flip <strong>per token, not per sequence</strong>, committing a whole sequence to model predictions early in training lets consecutive errors amplify. Exercise 3 has you build it.</p>
+\epsilon\)</span> of the model’s own prediction) and anneal <span class="math inline">\(\epsilon\)</span> from 1 toward 0 as training matures. Early epochs enjoy the gold rail; late epochs practice recovery. One design detail from the original paper worth repeating: flip <strong>per token, not per sequence</strong>; committing a whole sequence to model predictions early in training lets consecutive errors amplify. Exercise 3 has you build it.</p>
 </div>
 </div>
 </section>
@@ -1288,7 +1288,7 @@ Table&nbsp;11.1: A tiny decoder with normalized next-token choices at each liste
 </div>
 </div>
 </div>
-<p>Each displayed score is the sum of token log-probabilities along that one sequence, including <code>&lt;eos&gt;</code> when it was reached. These are <strong>raw joint log scores</strong>, not a normalized distribution over the printed beam, so exponentiating two of them and calling the result a 70/30 posterior would be wrong. Some pairs correspond cleanly to the month/day and day/month readings. Others include a high-scoring hybrid that matches neither convention, an honest reminder that beam search searches the model; it does not install a calendar constraint. The ranking still exposes alternatives that greedy search hides.</p>
+<p>Each displayed score is the sum of token log-probabilities along that one sequence, including <code>&lt;eos&gt;</code> when it was reached. These are <strong>raw joint log scores</strong>, not a normalized distribution over the printed beam, so exponentiating two of them and calling the result a 70/30 posterior would be wrong. Some pairs correspond cleanly to the month/day and day/month readings. One pair includes a high-scoring hybrid that matches neither convention, a reminder that beam search searches the model; it does not install a rule that copies each source field. The ranking still exposes alternatives that greedy search hides.</p>
 <p>Honesty requires the other half of the report:</p>
 <div class="plan-code">
 <div class="plan">
