@@ -29,9 +29,15 @@ function Cite(el)
     return nil
   end
 
-  local text = string.format("Chapter~%d", chapter)
+  local text, plain = string.format("Chapter~%d", chapter), string.format("Chapter %d", chapter)
   if citation.mode == "SuppressAuthor" then
-    text = string.format("%d", chapter)
+    text, plain = string.format("%d", chapter), string.format("%d", chapter)
   end
-  return pandoc.RawInline("latex", string.format("\\hyperref[%s]{%s}", citation.id, text))
+  -- \texorpdfstring keeps the link in the text and gives PDF bookmarks plain words,
+  -- so a heading such as "Return to @sec-11-encoder-decoder's date task" outlines
+  -- as "Return to Chapter 13's date task".
+  return pandoc.RawInline(
+    "latex",
+    string.format("\\texorpdfstring{\\hyperref[%s]{%s}}{%s}", citation.id, text, plain)
+  )
 end
