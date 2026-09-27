@@ -50,6 +50,9 @@ VOICE_SCOPE: tuple[str, ...] = (
     "chapters/part1/06-generalization-inductive-bias.qmd",
     "chapters/part2/08-cnn.qmd",
     "chapters/part2/09-modern-cnns-transfer.qmd",
+    "chapters/interludes/making-pca-learnable.qmd",
+    "chapters/part3/10-sequences-rnn.qmd",
+    "chapters/part3/11-encoder-decoder.qmd",
     "chapters/part4/13-attention.qmd",
     "chapters/interludes/attention-as-test-time-regression.qmd",
     "chapters/part5/17-peft-quantization.qmd",
@@ -201,6 +204,7 @@ VERDICT_LEAD_IN_RE = re.compile(
 FUTURE_RE = re.compile(r"\bwill\b", re.I)
 MATH_TOKEN = "MATH"
 CODE_TOKEN = "CODE"
+KEEP_MATH_TEXT = False  # I19 reads numbers inside inline math; everything else uses the token
 DISPLAY_BREAK = "\u0000"
 EM_OPEN, EM_CLOSE = "\u0001", "\u0002"
 
@@ -343,7 +347,10 @@ def inline_text(tag: Tag, mark_emphasis: bool) -> str:
             continue
         classes = set(child.get("class") or [])
         if "math" in classes:
-            parts.append(DISPLAY_BREAK if "display" in classes else MATH_TOKEN)
+            if KEEP_MATH_TEXT and "display" not in classes:
+                parts.append(child.get_text())
+            else:
+                parts.append(DISPLAY_BREAK if "display" in classes else MATH_TOKEN)
             continue
         if child.name == "mjx-container":
             parts.append(MATH_TOKEN)
@@ -800,8 +807,9 @@ def added_sentences(include_restored: bool = False) -> dict[str, list[tuple[str,
                 continue
             if not include_restored and edit.get("justification", "").startswith("restored"):
                 continue  # earlier author text put back verbatim is not new phrasing (V2)
-            old_parts = set(prose_sentences(source_prose(edit["old"])))
+            old_parts = {part.rstrip('"') for part in prose_sentences(source_prose(edit["old"]))}
             for part in prose_sentences(source_prose(edit["new"])):
+                part = part.rstrip('"')  # a caption option's closing quote is not prose
                 if part in old_parts or len(tokens(part)) < 2:
                     continue
                 for sentence in current:
@@ -1178,6 +1186,101 @@ def phrases_markdown(before: list[dict[str, object]], after: list[dict[str, obje
     return "\n".join(lines) + "\n"
 
 
+# ------------------------------------------------------------ printed numbers (I19)
+PERCENT_RE = re.compile(r"(?<![\w.])(\d+(?:\.\d+)?)\s*\\?%")
+COUNT_RE = re.compile(r"(?<![\w.,])(\d{1,3}(?:,\d{3})+|\d{3,})(?![\w.]*\d)")
+NUMBER_RE = re.compile(r"-?\d+(?:,\d{3})*(?:\.\d+)?(?:e[-+]?\d+)?", re.I)
+REFERENCE_WORDS_RE = re.compile(
+    r"\b(?:Chapters?|Figures?|Equations?|Sections?|Exercises?|Tables?|Listings?|Appendix|Parts?|Module)\s*$"
+)
+
+
+def evidence_values(html_path: Path, page: Page) -> list[float]:
+    """Every number printed in a cell output or written in a caption on the page."""
+    soup = BeautifulSoup(html_path.read_text(encoding="utf-8"), "html.parser")
+    main = soup.find("main", id="quarto-document-content") or soup.find("main") or soup
+    texts = [node.get_text(" ") for node in main.select("div.cell-output pre, div.cell-output-display pre")]
+    texts += [block.text for block in page.blocks if block.cls == "B"]
+    values = []
+    for text in texts:
+        for match in NUMBER_RE.finditer(text):
+            try:
+                values.append(float(match.group(0).replace(",", "")))
+            except ValueError:
+                continue
+    return values
+
+
+def printed_number_misses(html_path: Path, source: str) -> list[tuple[str, str]]:
+    """I19 (report only): percentages and counts in class A prose that no printed output
+    or caption on the same page shows at the prose's own precision."""
+    global KEEP_MATH_TEXT
+    KEEP_MATH_TEXT = True
+    try:
+        page = extract(html_path, source)
+    finally:
+        KEEP_MATH_TEXT = False
+    values = evidence_values(html_path, page)
+    misses = []
+    for block in page.blocks:
+        if block.cls != "A":
+            continue
+        text = block.text
+        for match in PERCENT_RE.finditer(text):
+            token = match.group(1)
+            decimals = len(token.split(".")[1]) if "." in token else 0
+            target = float(token)
+            ok = any(
+                abs(round(candidate, decimals) - target) < 10 ** (-decimals) / 2
+                for value in values for candidate in (value, value * 100)
+            )
+            if not ok:
+                misses.append((token + "%", text[max(0, match.start() - 70): match.end() + 40]))
+        for match in COUNT_RE.finditer(text):
+            token = match.group(1)
+            number = float(token.replace(",", ""))
+            before = text[max(0, match.start() - 14): match.start()]
+            if 1900 <= number <= 2099 and "," not in token:
+                continue  # a year
+            if 6050 <= number <= 6054:
+                continue  # a seed
+            if REFERENCE_WORDS_RE.search(before) or text[match.end(): match.end() + 1] == "%":
+                continue
+            if number not in values:
+                misses.append((token, text[max(0, match.start() - 70): match.end() + 40]))
+    return misses
+
+
+def numbers_markdown(html_root: Path) -> str:
+    lines = [
+        "# Printed-number audit (I19, report only)",
+        "",
+        "Every percentage and every count of three or more digits in running prose (class A)",
+        "that no printed cell output or caption on the same page shows at the prose's own",
+        "precision. Years, the book's seeds, and cross-reference numerals are skipped. A listed",
+        "number is not necessarily wrong (design constants, references to other pages, and",
+        "values computed but not printed appear here too); it is a number the page does not",
+        "print. The printout is the source of truth.",
+        "",
+    ]
+    total = 0
+    for source in book_sources():
+        html = html_for(source, html_root)
+        if not html.is_file():
+            continue
+        misses = printed_number_misses(html, source)
+        if not misses:
+            continue
+        total += len(misses)
+        lines += [f"## {short(source)} ({len(misses)})", "", "| number | context |", "|---|---|"]
+        for token, context in misses:
+            lines.append(f"| {token} | …{plain(context).replace('|', chr(92) + '|')}… |")
+        lines.append("")
+    lines.insert(9, f"{total} numbers listed.")
+    lines.insert(10, "")
+    return "\n".join(lines) + "\n"
+
+
 # ---------------------------------------------------------------------- diagnostics
 def section_counts(html_path: Path, source: str) -> list[tuple[str, str, int, int]]:
     page = extract(html_path, source)
@@ -1237,6 +1340,7 @@ def main() -> int:
     parser.add_argument("--delta", nargs=2, type=Path, metavar=("BEFORE", "AFTER"))
     parser.add_argument("--check", type=Path, metavar="HTML_ROOT")
     parser.add_argument("--phrases", nargs=2, type=Path, metavar=("BEFORE_ROOT", "AFTER_ROOT"))
+    parser.add_argument("--numbers", type=Path, metavar="HTML_ROOT", help="I19 printed-number report")
     parser.add_argument("--sections", type=Path, metavar="HTML_PAGE")
     parser.add_argument("--hits", type=Path, metavar="HTML_PAGE")
     parser.add_argument("--metric", default="guards")
@@ -1255,6 +1359,13 @@ def main() -> int:
 
     if args.check:
         return run_check(args.check)
+    if args.numbers:
+        text = numbers_markdown(args.numbers)
+        if args.markdown:
+            args.markdown.write_text(text, encoding="utf-8")
+        else:
+            print(text)
+        return 0
     if args.phrases:
         text = phrases_markdown(ledger_rows(args.phrases[0]), ledger_rows(args.phrases[1]))
         if args.markdown:

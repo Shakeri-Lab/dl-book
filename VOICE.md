@@ -52,7 +52,9 @@ two-narrators problem again: the reader hears a formula instead of a person.
 ## How sentences get written (P1 to P5)
 
 The rules filter sentences; they never generate them. A sentence that exists because a
-count needed it does not go in.
+count needed it does not go in. A sentence quoted in a brief is a candidate, never text
+to place: the page decides, and if the quoted sentence does not fit the paragraph it
+lands in, write the one that does, or write nothing.
 
 - **P1 One writer per page.** One agent writes all the prose edits of a page, in one
   sitting, after reading the whole page. Subagents may read, measure, render, and
@@ -64,13 +66,21 @@ count needed it does not go in.
   the candidates.
 - **P3 Rule-blind reader pass.** After a page's edits and before the invariant suite, a
   separate reviewer that sees no rules, receipts, or edit lists reads the rendered page
-  with one instruction: "Read this as a student. Mark every sentence that reads as
-  written to satisfy a rule, announces instead of states, refers to the book's own
-  apparatus (recap, section, table, callout, receipt), is a fragment, has a punctuation
-  slip, or sounds like a different person from the surrounding paragraph. Quote each
-  one; do not fix." The writer fixes the marks on edited sentences, re-renders, and only
-  then runs the checks. Marks on baseline sentences go to the gate's decisions with a
-  default. Receipts record the reader's marks in a `reader` column.
+  with one instruction: "Read this as a student. Mark every sentence that contradicts a
+  printed number, figure, or caption on the page, reads as written to satisfy a rule,
+  announces instead of states, refers to the book's own apparatus (recap, section,
+  table, callout, receipt), is a fragment, has a punctuation slip, or sounds like a
+  different person from the surrounding paragraph. Do not mark the author's habits:
+  this author writes short verdict sentences, fragments, and 'Here is ...' openers on
+  purpose. Mark a sentence only if it breaks from the paragraph around it, or is broken:
+  contradicts a printed number, is a fragment where the paragraph is not, has a slip, or
+  names the book's own apparatus. Rank your marks and give at most ten per page, with
+  counts for the rest. Quote each one; do not fix." The writer fixes each mark on an
+  edited or added sentence under P2, or overrules it with a one-line reason in the
+  receipt's `reader` column; deleting a T-rule sentence is a valid fix. Number
+  mismatches go to the gate's decisions with the printed value, the prose value, and a
+  one-token fix for the author. Other marks on baseline text are counted per page and
+  reason, with the five highest-ranked kept as examples.
 - **P4 Thinning re-reads.** After removing a habit word, re-read the sentence as a
   sentence. If it needs recasting, recast it (with a receipt) or put the word back.
 - **P5 Gate report for a human.** `audits/voice/stage_<batch>_report.md` opens with
@@ -194,6 +204,10 @@ the invariants, then S, R, T.
 - **R1 to R8** Recap heading form (D1); "Let us" (D2); "aka" (D3); exclamation marks
   (D4) and contractions (D5), including headings and callouts; em dashes (D6); colour
   words (D7); pronouns as above.
+- **R9 Slips.** An unambiguous typo or punctuation slip in baseline text may be fixed,
+  each with a receipt: a hyphen after an -ly adverb, a comma splice, a stray comma, a
+  line break that Pandoc misreads as a list marker. Never a fragment or an announcement:
+  those are this author's voice.
 - **N1** Never change code, outputs, math, figures, plan steps, front matter, licenses,
   citations, exercise tasks, numbers, claims, or replay fixture literals.
 - **N2** Edit sentences, not paragraphs. **N3** No device outside the kit.
@@ -264,6 +278,10 @@ counts, CI, voice lint, cross-volume references, em dashes), plus:
   at most 15 percent, no link or book-question removed. New material (T rules, or an
   edit marked "new material"), S1 relocations, and restorations of earlier author text
   are exempt.
+- **I19 Printed-number audit (report only).** Every percentage, and every count of three
+  or more digits, in running prose that no printed cell output or caption on the same
+  page shows at the prose's own precision, listed per page for the author
+  (`audit_voice_ledger.py --numbers`). The printout is the source of truth.
 
 ## Enforcement
 
@@ -271,6 +289,7 @@ counts, CI, voice lint, cross-volume references, em dashes), plus:
 python scripts/audit_voice_ledger.py --check _book            # CI, build-deploy job
 python scripts/audit_voice_invariants.py --base 86ec60b --files <pages>
 python scripts/audit_voice_ledger.py --phrases BEFORE AFTER --markdown audits/voice/phrases.md
+python scripts/audit_voice_ledger.py --numbers _book --markdown audits/voice/numbers.md   # I19
 ```
 
 `--check` blocks on R1 to R6 for the pages in `VOICE_SCOPE`, and on the V3 caps and I17

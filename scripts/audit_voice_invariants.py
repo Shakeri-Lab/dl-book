@@ -379,7 +379,9 @@ def source_invariants(base: str, files: list[str], exceptions: dict, checklist: 
         new_ex = level2_section(new_prose, "Exercises")
         exercise_total["before"] += len(re.findall(r"^\d+\.\s+\*\*\(", old_ex, re.M))
         exercise_total["after"] += len(re.findall(r"^\d+\.\s+\*\*\(", new_ex, re.M))
-        if old_ex != new_ex and EM_DASH not in old_ex:
+        # Exercise text means the words: a rewrap that keeps every word and space passes
+        # (R9 fixes line breaks that Pandoc misread as list markers).
+        if " ".join(old_ex.split()) != " ".join(new_ex.split()) and EM_DASH not in old_ex:
             fails["I9"].append(f"{path}: exercise text changed")
         if ledger_tags(old_ex) != ledger_tags(new_ex):
             fails["I9"].append(f"{path}: exercise tags changed")
