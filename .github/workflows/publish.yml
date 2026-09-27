@@ -312,9 +312,8 @@ jobs:
         uses: quarto-dev/quarto-actions/setup@v2
         with:
           version: "1.10.18"
-          tinytex: true
         env:
-          # Authenticated API calls — avoids rate-limit failures resolving tinytex
+          # Authenticated API calls avoid rate-limit failures resolving Quarto
           # releases. The action reads GH_TOKEN; set both to be safe.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -330,16 +329,6 @@ jobs:
       - name: Install Python deps
         run: pip install -r requirements.txt
 
-      - name: Install PDF text tooling
-        run: sudo apt-get update && sudo apt-get install -y poppler-utils
-
-      - name: Install PDF layout dependencies
-        run: |
-          tlmgr_path=$(find "$HOME/.TinyTeX" \( -type f -o -type l \) -name tlmgr -print -quit)
-          test -n "$tlmgr_path"
-          "$tlmgr_path" update --self
-          "$tlmgr_path" install fvextra
-
       - name: Audit manuscript contracts
         run: |
           python scripts/audit_plan_code.py
@@ -348,14 +337,11 @@ jobs:
           python scripts/audit_public_anchors.py
           python scripts/audit_excerpt_fixtures.py
 
-      - name: Render both PDF profiles to an exact outline fixpoint
-        run: python scripts/render_pdf_profiles.py
-
-      # PDF profiles share _book with the website and may prune Quarto's
-      # generated site_libs. Restore the canonical edition after both PDFs.
-      - name: Render canonical HTML bundle last
+      # The website serves the HTML edition only: CI builds no PDF, and the
+      # asset audit below fails if a PDF file or a link to one enters the bundle.
+      - name: Render the HTML bundle
         run: >-
-          quarto render --to html --no-clean --debug
+          quarto render --to html --debug
           --log build/quarto-html-final-render.log
 
       - name: Add validated notebooks to the HTML bundle
@@ -371,15 +357,6 @@ jobs:
       - name: Audit rendered HTML support assets
         run: python scripts/audit_html_assets.py _book
 
-      - name: Audit PDF geometry, glyphs, and accessible icon text
-        run: |
-          python scripts/audit_pdf.py \
-            _book/Deep-Learning--Making-It-Learnable.pdf \
-            --log-root .
-          python scripts/audit_pdf.py \
-            _book/Deep-Learning--Making-It-Learnable--Continuous.pdf \
-            --log-root .
-
       - name: Audit rendered public anchors
         run: python scripts/audit_public_anchors.py --rendered _book
 
@@ -390,8 +367,8 @@ jobs:
         uses: quarto-dev/quarto-actions/publish@v2
         with:
           target: gh-pages
-          # Publish the exact bundle that passed the audits above. Re-rendering
-          # here can replace audited PDFs and needlessly repeat both profiles.
+          # Publish the exact bundle that passed the audits above; re-rendering
+          # here would deploy a bundle the audits never saw.
           render: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -407,5 +384,5 @@ jobs:
       - name: Check links in sources
         uses: lycheeverse/lychee-action@v2
         with:
-          args: --no-progress --accept 200,201,202,204,206,301,302,303,307,308,403,429 chapters/ index.qmd download.html README.md
+          args: --no-progress --accept 200,201,202,204,206,301,302,303,307,308,403,429 chapters/ index.qmd README.md
           fail: false

@@ -1,3 +1,22 @@
+# Rolling post-v1.3: the website serves the HTML edition only (September 26, 2026)
+
+- **No PDF on the website.** The sidebar's "Get the PDF" action, the `download.html`
+  landing page, its stylesheet, and the WebP cover are removed. The Preface no longer
+  offers a PDF: its edition note links the v1.3 tagged source, its support note says the
+  book is free to read, and a revision note records the change. Quarto's `gh-pages`
+  publish replaces the whole tree, so the next deploy removes both book PDFs and the
+  112 print figures (`*_files/figure-pdf/*.pdf`) that the PDF renders left in the site.
+- **CI builds no PDF.** The publish job drops TinyTeX, poppler, fvextra, the two PDF
+  profile renders, and the PDF audit, and renders the HTML bundle once.
+  `scripts/render_pdf_profiles.py` remains for local print proofs.
+- **The audits enforce it.** `scripts/audit_book_contract.py` fails if `_quarto.yml`
+  configures a PDF action or the download page, if a retired file returns, if either
+  workflow builds or audits a PDF, or if a frozen HTML result lists its whole `_files`
+  folder as supporting, which would copy the chapter's print figures into the site.
+  `scripts/audit_html_assets.py` fails if the bundle ships any PDF file or links to a
+  PDF on this site or to `download.html`; links to papers hosted elsewhere are
+  unaffected. The `--allow-missing-generated-pdfs` exemption is gone.
+
 # Rolling post-v1.3: Chapter 1 setup cell and display results in the output audit (September 26, 2026)
 
 - **Chapter 1's setup cell** now ends `torch.manual_seed(6050);`. Without the semicolon

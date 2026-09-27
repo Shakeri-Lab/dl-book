@@ -766,16 +766,13 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > searchable title page and title verso. The Preface closes with one optional support
 > invitation in all formats: the book remains free at $0, nothing is gated, and the
 > single Buy Me a Coffee link leaves contribution amounts to the external account.
-> Do not invent amount-specific URLs or embed a tracking widget. The sidebar PDF
-> action opens the cover-led `download.html`, which is copied as a project resource
-> and offers direct free links to both PDF editions. It states a $0 minimum, marks $20
-> as suggested, and links that amount directly to Buy Me a Coffee. Do not recreate a
-> local amount picker that cannot transfer its choice; support never gates downloads.
+> Do not invent amount-specific URLs or embed a tracking widget. Support never gates
+> content. The website serves HTML only since September 26, 2026: the sidebar PDF
+> action and the cover-led `download.html` landing page are retired, CI builds and
+> publishes no PDF, and the contract audits reject their return.
 > Ancillary web surfaces now begin quiet: the **About this edition** and **Revision
 > notes** callouts and all root chapter groups are closed by default, while Quarto
-> expands the active chapter's parent Part for orientation. The **Get the PDF** action
-> sits immediately below the sidebar title, resolves correctly from every
-> chapter depth, and leads to that landing page. `disclosure-interactions.html`
+> expands the active chapter's parent Part for orientation. `disclosure-interactions.html`
 > supplies keyboard and deep-link
 > behavior for collapsed callouts and keyboard access to collapsed chapter groups;
 > narrative tips, traps, and retrieval checks remain open under the momentum-first
