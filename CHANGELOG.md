@@ -1,3 +1,38 @@
+# Rolling post-v1.3: Chapter 10 revised with six requirements, the GRU in the memory test, a running translator (September 27, 2026)
+
+- **Six requirements open Chapter 10**: any length, order, streaming, parameters
+  independent of length, reach, and trainable reach. Each design is scored against
+  them in prose, and the closing names the two needs no recurrent design meets:
+  revisiting earlier evidence and computing time in parallel. The author declined a
+  book-wide running scorecard; later chapters call back to the list in prose only.
+- **The GRU enters the memory test.** The GRU section now precedes the lag-80 test,
+  which trains six configurations and reports each one's *signal at birth*, the
+  gradient reaching the first input before any training. The default GRU and the GRU
+  with the LSTM's $+1$ keep bias stay at chance on every seed; $+2$ solves every seed.
+  The original three rows reproduce exactly.
+- **From the 2026 classroom lectures (DL7.1–7.3):** the masked update that freezes the
+  state on padded steps, orthogonal $W_{hh}$ initialization, and fixed versus
+  randomized truncation horizons (Tallec and Ollivier).
+- **New exercises:** orthogonal initialization and the clip rate (Exercise 2), a GRU
+  audit with a named wrong answer (3), both cells from scratch on IMDb reviews (6),
+  Running translator v1 (7), and a marked research bridge to parallel linear
+  recurrences and state-space layers (8), with verified further reading.
+- **Running translator.** The autoencoder interlude's new Exercise 6 starts a project
+  that later chapters extend one version at a time, from a one-shot code to pretrained
+  models. Corpora are named as examples (Tatoeba, Multi30K); the exercises stay open.
+- **Figures corrected.** Figure 10.1's recurrent arrow now leaves the cell and loops
+  back into it (it had been drawn inside the box, pointing out), and every state arrow
+  in the unrolled chain carries its label, $h_0$ through $h_4$. The LSTM conveyor now
+  feeds $[h_{t-1}, x_t]$ to all four learned layers (the forget and output gates had
+  no inputs drawn) and multiplies the belt by $f_t$ instead of routing the old cell
+  state through the forget gate's box. The forget-gate diagnostic labels its
+  $\sigma(0)$ line; the WikiText scale plot's "large" label no longer crosses the
+  frame; the interlude's decoder-ambiguity label no longer runs into $g_2$.
+- **A GRU cell diagram** joins the GRU section, drawn on the conveyor's layout: one
+  state line where $z_t$ keeps and $1 - z_t$ writes the candidate, both gates reading
+  $[h_{t-1}, x_t]$, and the reset gate scaling $h_{t-1}$ before the candidate reads it
+  (the reset-before form of the chapter's GRU equations).
+
 # Rolling post-v1.3 — Chapters 8 and 9 replays: pooling, output size, LeNet; stacked kernels and the 1 × 1 convolution (September 26, 2026)
 
 - **Channels say what, pooling says roughly where** (`what-where-excerpt`, Chapter 8,

@@ -8,7 +8,7 @@ new rows here. The pedagogical-efficiency rule (drafting-template) depends on
 this file: a concept with no payoff chapter listed here should be an exercise or
 a cut.*
 
-*Updated: 2026-08-06, after the course-alignment, structural-review,
+*Updated: 2026-09-27 (Chapter 10 requirements, GRU ladder, running translator v0–v1); 2026-08-06, after the course-alignment, structural-review,
 test-time memory/control, show-then-name pacing, Chapter 20 temperature, and
 statistical-contract coherence passes.*
 
@@ -38,6 +38,11 @@ statistical-contract coherence passes.*
 | LayerNorm: "same equation, different axis — remember @eq-batchnorm when you meet it" | ch. 9 | ch. 14 | done |
 | Transfer decision rule (labels scarce ∧ task feature-hungry ∧ coverage at matched scale) | ch. 9 | ch. 15 ✓ (controlled generated-token transfer); ch. 17 ✓ (adaptation changes cost and permitted writes, not source coverage) | done |
 | Third weight sharing (examples → space → time) | ch. 10 | ch. 14 (stationarity retained; one comparison rule shared across ordered pairs) | done |
+| Six requirements of a sequence model: any length, order, streaming, parameters independent of length, reach, trainable reach; each Ch. 10 design is scored in prose, and revisiting plus time in parallel surface as the two unmet needs | ch. 10 (2026-09-27 revision) | ch. 11 (the fixed handoff makes revisiting concrete), ch. 13 (cross-attention revisits), ch. 14 (self-attention computes time in parallel). The author declined a book-wide running scorecard: later chapters may call back to the list in prose only | planted |
+| Masked update freezes the state on padded steps ($h_t=m_t f(h_{t-1},x_t)+(1-m_t)h_{t-1}$, @eq-masked-update) | ch. 10 | ch. 11 padding trap: packing is the framework's form of the same bookkeeping (harvest when Ch. 11 is revised) | planted |
+| Keep a recurrence simple enough to compute in parallel: input-only gates make the cell update linear, and a doubling scan computes all states in $\lceil\log_2 T\rceil$ rounds (marked research-bridge Exercise 8; the author asked for an exercise, not a section) | ch. 10 Exercise 8 | test-time-regression interlude (fixed-state recurrences; the delta rule's state-space form) | planted |
+| The LSTM's $+1$ does not transfer to the GRU: at lag 80 the GRU needs $+2$; the signal at birth (gradient to the first input before training) sorts all six configurations' outcomes | ch. 10 memory test | ch. 10 Exercise 3 (Audit, named wrong answer) | done |
+| Running translator: one corpus (general; Tatoeba English–French or Multi30K as examples), one split and evaluation, one ledger, one change per version; exercises stay open, no reference numbers (author decision 2026-09-27) | AE interlude Exercise 6 (v0 one-shot and mean-pooled codes) | ch. 10 Ex. 7 v1 recurrent encoder ✓; ch. 11 v2 seq2seq; ch. 13 v3 cross-attention; ch. 14 v4 Transformer; TTR v4b fixed-state decoder memory; ch. 15 v5 denoising pretraining; ch. 17 v6 adapt and quantize a pretrained translator | v0–v1 done; later versions pending, one chapter at a time |
 | Finite-state bottleneck; "the book ends Part III when we refuse to pay that price" | ch. 10–11 | ch. 12 (retain the memory bank), ch. 13 (learn the access rule), test-time-regression interlude (the fixed state returns as a chosen regression tradeoff) | done |
 | Fixed attention matrix; "what if the similarity itself were learnable?" | ch. 12 | ch. 13 (learned compatibility and the date-task rematch) | done |
 | The kernel supplies the weights; the local-constant fit supplies the average | ch. 12 | test-time-regression interlude — exact softmax as one solver, then the sufficient-state and delta alternatives | done |
@@ -130,7 +135,7 @@ optimizers or `backward()` before Chapter 5.
 | 8 | `nn.Conv2d`, channels, padding/stride, `F.max_pool2d`, receptive fields, NCHW, LeNet, parameter audits |
 | 9 | BatchNorm (+train/eval modes), conv-BN-ReLU atom, 1×1 convs, GAP (`nn.AdaptiveAvgPool2d`), residual blocks, `weight_decay`, transfer mechanics (`requires_grad=False`, param groups/two LRs), `F.interpolate`, torchvision model loading from committed weights |
 | Autoencoder interlude (after 9) | encoder–code–decoder reconstruction contract; PCA as a tied undercomplete linear autoencoder; projector rather than basis comparison; nonlinear/manifold reconstruction; denoising input–target contracts; convolutional autoencoders; transposed convolution as adjoint, not inverse; fixed-code versus variable-length-process distinction. `torch.linalg.svd` is a labeled Appendix A baseline preview and `nn.Tanh` a labeled ch. 10 activation preview. |
-| 10 | `nn.RNN`/`nn.LSTM` (+GRU eqs), BPTT, truncated chunks, `clip_grad_norm_`, `F.one_hot` (in models), sampling with temperature, `torch.multinomial` |
+| 10 | six sequence-model requirements; `nn.RNN`/`nn.LSTM`/`nn.GRU` (GRU keep-gate slice and bias ladder), masked recurrent update for padded minibatches, orthogonal $W_{hh}$ initialization, BPTT, truncated chunks (fixed versus randomized horizons), `clip_grad_norm_`, signal-at-birth diagnostic, `F.one_hot` (in models), sampling with temperature, `torch.multinomial` |
 | 11 | encoder–decoder, `nn.Embedding`, PAD/BOS/EOS, `pad_sequence`, `pack_padded_sequence`, `ignore_index`, teacher forcing/free-running, exposure bias, scheduled sampling (concept), greedy/beam search, length normalization |
 | 12 | kernels/bandwidth, Nadaraya–Watson, queries/keys/values, row-softmax over log-kernel scores, attention-weight matrices (fixed), query-local constant-fit characterization of softmax attention, test-time-regression research lens |
 | 13 | learned Q/K/V, additive and scaled dot-product cross-attention, source-padding attention masks, attention-augmented seq2seq, alignment heatmaps; multi-head preview only |

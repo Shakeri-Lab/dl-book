@@ -39,6 +39,26 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > applied to the frozen markdown, nothing executed) is a faithful preview for reader
 > passes because code never changes.
 >
+> **Also current: Part III revision begun on `main`, September 27, 2026.** The author asked for
+> sequence models to be taught as a development (minimal requirements, the smallest
+> design, engineering patches, research directions) and for a running translator threaded
+> through the exercises. The plan and the author's seven decisions are in
+> `docs/part3-sequence-plan.md` (§6). Chapter 10 and the autoencoder interlude are done:
+> six requirements in Chapter 10's opening, the GRU moved ahead of a six-row memory test
+> with a signal-at-birth column (GRU needs a $+2$ keep bias at lag 80), the masked update,
+> orthogonal $W_{hh}$, randomized truncation, a GRU cell diagram, corrected Figure 10.1
+> and LSTM conveyor drawings, and Exercises 2, 3, 6–8 revised or added;
+> interlude Exercise 6 starts the translator. Next: Chapter 11 (harvest the masked update,
+> translator v2), then 13, 14, the TTR interlude, 15, 17, one chapter per pass.
+>
+> Re-executing the interlude (only its exercises and Sources changed) under torch 2.12.1
+> moved two stdout blocks within their reviewed numeric portability contracts; two runs in
+> that environment gave identical stdout. The convolutional-autoencoder endpoint MSEs quoted
+> below for the interlude's first pass are now 0.020652/0.033025 (plain, clean/noisy) and
+> 0.026290/0.023770 (denoising), from block 3 of
+> `_freeze/chapters/interludes/making-pca-learnable/execute-results/html.json`. The prose
+> quotes none of these values, and every ordering it relies on holds.
+>
 > **Previous — Chapters 5 and 6 revised; published-source hygiene, September 25, 2026.**
 > Provenance comments no longer reach published HTML: `filters/strip-html-comments.lua`
 > runs last and strips raw HTML comments (keep writing provenance in hidden comments; the

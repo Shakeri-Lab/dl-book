@@ -1365,8 +1365,9 @@ test('gate-product: the boundary states the approximation, the non-claim, the ma
   assert.match(boundary, /remains the chapter's evidence/);
   const frozen = JSON.stringify(JSON.parse(fs.readFileSync(path.join(ROOT,
     '_freeze/chapters/part3/10-sequences-rnn/execute-results/html.json'), 'utf8')));
-  assert(frozen.includes('LSTM, default init     24%   26%   26%'));
-  assert(frozen.includes('LSTM, forget bias +1   100%   100%   100%'));
+  // The recall table's rows carry a signal-at-birth column before the three accuracies.
+  assert.match(frozen, /LSTM, default init\s+\d\.\de-\d+\s+24%\s+26%\s+26%/);
+  assert.match(frozen, /LSTM, forget bias \+1\s+\d\.\de-\d+\s+100%\s+100%\s+100%/);
   for (const row of [['24%', '26%', '26%'], ['100%', '100%', '100%']]) assert(boundary.includes(row.join(' / ')));
   assert(!/we (?:trained|measured|learned)/i.test(f.root.textContent));
   // Nowhere does the panel claim the word arrives intact.
