@@ -332,9 +332,11 @@ author corrections (`author_corrections_b2a.md`). Chapters 1, 6, 7, 8, 9, 10, 11
 13, the PCA and test-time-regression interludes, and Chapter 17 were re-executed; the 47
 regenerated figures were pixel-identical and keep their committed bytes.
 
-The invariants ran against `863e391`, a base built from `86ec60b` with only the
-non-voice changes applied (main, Patch 1, B3.5, and the author corrections), so what
-remains is the voice work. Against it every invariant passes except three, each
+The invariants ran against a base built from `86ec60b` with only the non-voice changes
+applied (main, Patch 1, B3.5, the author corrections, and the five pre-merge review
+fixes), so what remains is the voice work. That base was a local commit (`9fe94d8`,
+first built as `863e391` before the review fixes); `invariant_base_b2a.patch` holds
+its difference from `86ec60b` in the chapters, code, and Preface, so it can be rebuilt. Against it every invariant passes except three, each
 explained by measurement:
 
 - I2 (frozen output): Chapter 1's HTML freeze at the prior HEAD still showed the
