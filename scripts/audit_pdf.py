@@ -372,13 +372,19 @@ def main() -> None:
                 "known Transformer sample token is missing from the PDF text layer: "
                 f"{sample_token}"
             )
-    for prefix in ("EX", "AE", "TTR", "E"):
-        if f"Figure {prefix}.1" not in normalized_text:
-            errors.append(f"independent Figure {prefix}. namespace is missing")
-        if re.search(rf"Figure {prefix}\.\d+\.\d+", normalized_text):
-            errors.append(
-                f"Figure {prefix}. namespace still inherits a chapter counter"
-            )
+    # The unnumbered epilogue keeps its own E. figure sequence. The three interludes
+    # are numbered chapters (7, 11, 17) whose floats number with the chapter; the
+    # retired EX., AE., and TTR. prefixes must not return.
+    if "Figure E.1" not in normalized_text:
+        errors.append("independent Figure E. namespace is missing")
+    if re.search(r"Figure E\.\d+\.\d+", normalized_text):
+        errors.append("Figure E. namespace still inherits a chapter counter")
+    for caption in ("Figure 7.1", "Table 7.1", "Figure 11.1", "Figure 17.1"):
+        if caption not in normalized_text:
+            errors.append(f"interlude chapter caption {caption} is missing")
+    for retired in ("EX", "AE", "TTR"):
+        if re.search(rf"(?:Figure|Table) {retired}\.\d", normalized_text):
+            errors.append(f"retired {retired}. float prefix remains")
     for icon_word in ("LIGHTBULB", "Exclamation-Triangle", "INFO"):
         if icon_word in text:
             errors.append(f"decorative callout icon leaked into text: {icon_word}")

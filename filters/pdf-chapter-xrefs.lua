@@ -53,17 +53,25 @@ function Cite(el)
   return pandoc.Link({ pandoc.Str(text) }, "#" .. citation.id)
 end
 
-local function unnumbered_page(doc)
-  for _, block in ipairs(doc.blocks) do
-    if block.t == "Header" and block.level == 1 then
-      return block.classes:includes("unnumbered")
+-- Quarto moves a chapter's title heading into metadata before this filter runs, so
+-- read the unnumbered flag from the source's first "# " line.
+local function unnumbered_page()
+  local handle = io.open(quarto.doc.input_file, "r")
+  if handle == nil then
+    return false
+  end
+  for line in handle:lines() do
+    if line:match("^# ") then
+      handle:close()
+      return line:find(".unnumbered", 1, true) ~= nil
     end
   end
+  handle:close()
   return false
 end
 
 function Pandoc(doc)
-  if not quarto.doc.is_format("html") or not unnumbered_page(doc) then
+  if not quarto.doc.is_format("html") or not unnumbered_page() then
     return nil
   end
   local here = pandoc.path.directory(quarto.doc.input_file)
@@ -80,7 +88,9 @@ function Pandoc(doc)
       if citation.mode ~= "SuppressAuthor" then
         words = { pandoc.Str("Chapter"), pandoc.Space(), pandoc.Str(number) }
       end
-      return pandoc.Link(words, href, "", pandoc.Attr("", { "quarto-xref" }))
+      -- Not class "quarto-xref": Quarto rewrites the text of those links after the
+      -- filters run, which on these pages reinstates the title.
+      return pandoc.Link(words, href, "", pandoc.Attr("", { "chapter-xref" }))
     end,
   })
 end
