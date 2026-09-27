@@ -27,7 +27,7 @@ drive:
 1. **Why $5 \times 5$?** Could smaller filters do the same job with fewer parameters?
 2. **How do we go deeper** without gradients dying on the way down?
 3. **Where do the parameters actually live**, and how do we evict them?
-4. **Can we design reusable blocks**: optimized layer-combinations we stack, keeping
+4. **Can we design reusable blocks**: optimized layer combinations we stack, keeping
    a bird's-eye view instead of re-designing what already works?
 
 Each question has a famous answer (VGG, ResNet, NiN's $1\times1$ + global pooling,
@@ -108,9 +108,9 @@ def count(model: nn.Module) -> int:
     return sum(p.numel() for p in model.parameters())
 ```
 ::::
-One evaluation label needs an honesty note. Chapter 8 already opened the 600-image
-holdout, and this chapter queries it repeatedly while comparing architectures. We
-keep the familiar `X_te` name, but treat it as the book's fixed **benchmark**. These
+Chapter 8 already opened the 600-image holdout, and this chapter queries it
+repeatedly while comparing architectures, so we keep the familiar `X_te` name but treat
+it as the book's fixed **benchmark**. These
 comparisons are descriptive, not an unbiased estimate after model selection; a final
 claim would require a fresh, untouched test set.
 
@@ -120,7 +120,8 @@ evaluation. Why that matters is the subject of the second section.
 
 ## Question 1: why $5 \times 5$? Stack small kernels instead
 
-VGG's answer (Simonyan & Zisserman, 2014) is the cleanest idea in this chapter. Recall
+VGG's answer (Simonyan & Zisserman, 2014): never use a $5 \times 5$ kernel; stack
+$3 \times 3$s until the field is as wide as you need. Recall
 the receptive-field ledger of @sec-08-cnn: stacking grows the field. Two stacked
 $3 \times 3$ convolutions let the second layer see $5 \times 5$ of the input, the
 *same* receptive field as one $5 \times 5$ kernel. But compare the bills, for a layer
@@ -158,7 +159,7 @@ print(f"one 5x5:  {count(one_5x5):,} parameters, 1 ReLU after")
 print(f"two 3x3s: {count(two_3x3):,} parameters, 2 ReLUs")
 ```
 ::::
-One honest caveat before you re-derive the field equations of vision from this: the
+One caveat before you re-derive the field equations of vision from this: the
 $18C^2 < 25C^2$ arithmetic assumes the channel width stays $C$ through the stack.
 When a layer *grows* channels (as LeNet's $6 \rightarrow 16$ did), splitting it into
 two growing $3\times3$s can cost more, not less. VGG's design sidesteps this by
@@ -218,7 +219,8 @@ for tag, network in [("without BN", plain_stack), ("with BN   ", bn_stack)]:
 ```
 ::::
 Without normalization the signal's spread collapses by an order of magnitude within a
-few layers and keeps sagging. Forward activation scales and backward gradients are not
+few layers and never recovers: every printed layer after the first stays between 0.043
+and 0.061. Forward activation scales and backward gradients are not
 the same quantity, but both are shaped by the stack's weights and nonlinearities;
 poorly scaled activations are therefore a warning to inspect gradient flow directly,
 as we do below.
@@ -236,16 +238,16 @@ $$ {#eq-batchnorm}
 
 The $\gamma, \beta$ pair matters: normalization is a *reset to a healthy scale*, not a
 straitjacket. The network can learn to restore any mean and spread that helps, but
-it starts every layer from sane numbers. In the printout above, the BN column holds
-near a constant spread through all twelve layers: every layer trains from day one.
+it starts every layer from sane numbers. In the printout above, the BN row holds
+a near-constant spread through all twelve layers: every layer trains from day one.
 The standard placement we adopt is conv $\rightarrow$ BN $\rightarrow$ ReLU, with
 `bias=False` on the convolution, since $\beta$ already provides the shift.
 
 ::: {.callout-warning}
-## BN is two different machines: tell PyTorch which one you're running
+## BN is two different machines: tell PyTorch which one you are running
 
 At training time BN normalizes by the *current batch's* statistics. At evaluation
-time there may be no batch (one image!), so it uses running averages collected during
+time there may be no batch (one image), so it uses running averages collected during
 training. `model.train()` and `model.eval()` switch between the two. Forgetting the
 switch is the classic BN bug: evaluate in train mode and your predictions depend on
 whatever else happens to be in the batch; train in eval mode and BN never learns its
@@ -405,7 +407,7 @@ print(f"test accuracy {accuracy(nin, X_te, y_te):.1%}")
 ::::
 The parameter story is a rout: 35,034 total, a 650-parameter head, six times smaller
 than VGGSmall. The accuracy is 76.2%, and that dip is worth more attention than the
-win, so let us not rush past it. First, though, collect the promised payoff. Chapter
+win. First, though, collect the promised payoff. Chapter
 8 said the remaining shift-cliff was the flatten head's fault: it reads the final
 grid *positionally*. GAP averages over positions, so the head no longer assigns a
 different weight to every location. What remains is Chapter 2's classification head
@@ -498,7 +500,7 @@ enabling trick is the $1\times1$ *bottleneck*: compress channels before the expe
 spatial kernels. For one $5\times5$ branch at 256 channels:
 direct, $5^2 \times 256 \times 128 \approx 819$k parameters; with a $1\times1$
 squeeze to 32 first, $256 \times 32 + 5^2 \times 32 \times 128 \approx 111$k, an
-86% cut for the same nominal operation. We won't build Inception here (the principle,
+86% cut for the same nominal operation. We will not build Inception here (the principle,
 channel compression before spatial expense, is the transferable part), but Exercise 2
 walks the arithmetic and the course assignment has you build the block itself.
 :::
@@ -524,7 +526,7 @@ concatenation along the feature-channel axis, not another kind of residual addit
 
 VGG says depth is the direction. So push it: stack twenty of our two-conv blocks
 (with BN, per the recipe, on a $14\times14$ grid so the experiment fits a laptop) and
-compare against the *identical* stack with one change we'll reveal after the numbers.
+compare against the *identical* stack with one change we will reveal after the numbers.
 
 Predict before running: two networks, identical parameter counts, twenty
 blocks each: one plain, one residual. Will the plain net merely trail, or fail
@@ -657,7 +659,7 @@ plt.tight_layout(); plt.show()
 Read the right-hand side with Chapter 5 eyes. A gradient arriving at a block's output
 reaches its input through two additive terms: the learned branch $\partial F /\partial
 x$ and the identity $I$. The identity contribution gives gradient flow a direct route
-that does not itself multiply by the learned weights. It is powerful, not magical:
+that does not itself multiply by the learned weights. It is not magical:
 the learned Jacobian can still reinforce, distort, or even partly cancel that term.
 Chapter 5 called ReLU's open gate a *gradient superhighway* through a single unit; a
 skip connection builds a direct lane into every block. The block only needs to learn
@@ -744,7 +746,7 @@ resolution, and accumulator roles behind that distinction are gathered in
 Residual connections are not only a CNN trick. They became a central design device in
 many deep architectures; when we assemble a transformer in
 @sec-14-self-attention-transformer, every attention layer and every feedforward
-layer will be wrapped as $x + F(x)$, and the freshly-met layer normalization will sit
+layer will be wrapped as $x + F(x)$, and the freshly met layer normalization will sit
 beside each skip. The picture to carry forward: a *residual stream* with direct
 additive routes through the network, each block reading from it and writing a
 correction back. Those routes improve conditioning without making the stream immune
@@ -844,6 +846,9 @@ story, so imported features should dominate. Three contenders:
    frozen, linear probe on its 512-dimensional features. (Fashion images get
    upsampled to 96×96 and repeated to three channels to fit its expectations. That
    awkwardness is part of the experiment, and part of the lesson.)
+
+Rank the three contenders before you run them, and write down how far ahead you expect
+the ImageNet backbone to finish.
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
@@ -1061,7 +1066,7 @@ did not guarantee the best final endpoint.
 ::: {.callout-tip}
 ## When to reach for a pretrained backbone
 
-The honest decision rule supported by the experiments is: transfer
+The decision rule supported by the experiments is this: transfer
 pays when (your labels are scarce) *and* (the target task is feature-hungry) *and*
 (the pretraining data plausibly covers the target's features at a matched scale). At
 224 pixels and 18 landmark classes (the course assignment), all three hold, and
@@ -1162,16 +1167,16 @@ Close the book for one minute and reconstruct the architecture and transfer choi
    continue in
    [*Normalization Chooses an Invariance*](https://shakeri-lab.github.io/opt-book/chapters/act2/15-normalization.html#c15).
 3. **$1\times1$ convolutions** run Chapter 1's linear model across channels at every
-   pixel: summarize channels, don't discard them. With **global average pooling**
+   pixel: summarize channels, do not discard them. With **global average pooling**
    they fire the flatten head: parameters collapse (218k $\rightarrow$ 35k) and
    position-specific weights leave the head, at a clean-accuracy price our small
    dataset makes visible. Boundaries and downsampling still prevent exact invariance.
 4. **Depth can hit an optimization wall**: our plain 40-layer net
-   couldn't fit its own training set. The residual connection $H(x) = F(x) + x$ adds
+   could not fit its own training set. The residual connection $H(x) = F(x) + x$ adds
    an identity lane to the Jacobian, Chapter 5's gradient superhighway as
    infrastructure, and the same-depth twin trains to 100%. Transformer stacks will
    reuse this residual pattern around each attention and feedforward sublayer.
-5. **Transfer learning** = freeze + probe, or gently fine-tune. Our honest experiment
+5. **Transfer learning** = freeze + probe, or gently fine-tune. Our experiment
    found scratch and the ImageNet probe in a near tie across three seeds at 28-pixel
    scale. Pretraining is curriculum, gaps are taxed, and small targets may leave
    little room for imports. The pinned full-scale Rivanna runs report

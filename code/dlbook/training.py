@@ -1,6 +1,6 @@
 """Next-token training loop — Chapter 10's listing, importable.
 
-The loop is printed and taught in Chapter 10 (truncated-BPTT chunk sampling,
+The loop is printed and taught in Chapter 10 (fixed-window chunk sampling,
 gradient clipping); later chapters import it and print only their deltas.
 """
 import torch
@@ -26,7 +26,7 @@ def fit_next_token(
     """Train `model` to predict data[t+1] from data[t-context+1 .. t].
 
     With `schedule=None`, chunk starts are drawn fresh each step (Chapter 10's
-    truncated-BPTT sampling, consuming the global RNG exactly as printed there).
+    fixed-window sampling, consuming the global RNG exactly as printed there).
     A precomputed `schedule` of start tensors makes the minibatch order an
     explicit, shareable part of the protocol (Chapter 14's paired comparison).
     """

@@ -22,13 +22,13 @@
 
 Chapter 9 left us a transfer rule: importing a representation is most promising
 when **labels are scarce, the target is feature-hungry, and the source supplies
-useful coverage at a matched scale**. Chapter 15 showed the conventional next
+useful coverage at a matched scale**. BERT's recipe showed the conventional next
 step: fine-tuning changes every encoder weight. Chapter 16 then planted a second
 warning: **training-optimal is not serving-optimal**. Chinchilla's allocation can
 spend a pretraining budget well while leaving us with a backbone that is expensive
 to copy, update, or store once per downstream task.
 
-Let us put those promises on one ledger. A pretrained model creates three different
+Put those promises on one ledger. A pretrained model creates three different
 bills:
 
 1. the **backbone storage**: a base shared across tasks, or a full task-specific copy
@@ -38,7 +38,8 @@ bills:
 3. the **transient work**: context tokens, activations, gradients, optimizer state,
    and caches needed while adapting or running the model.
 
-These bills are related, but they are not interchangeable. Freezing a billion
+These bills are related, but they are not interchangeable: every lever can affect more
+than one bill, and none removes all backbone storage or transient work. Freezing a billion
 weights removes their gradients; it does not make the billion weights disappear.
 Packing each weight into fewer bits reduces a storage lower bound; it does not prove
 that a particular kernel will run faster. Adding demonstrations changes no weight; it
@@ -51,8 +52,7 @@ They are **where does task-specific information live, and which object does the
 method change?** Hard prompts and retrieved documents place task information in
 context. Parameter-efficient fine-tuning (PEFT) places it in a restricted set of
 learned values. Quantization need not add task information at all; it changes the numerical
-representation of a base or adapter. QLoRA composes the last two; it is not a fourth
-kind of objective.
+representation of a base or adapter. QLoRA composes the last two.
 
 ```{python}
 #| echo: false
@@ -75,7 +75,7 @@ navy, orange, green, wine = "#232D4B", "#E57200", "#2E7D32", "#722F37"
 ```{python}
 #| label: fig-adaptation-map
 #| echo: false
-#| fig-cap: "Three levers act on three different objects. Prompting changes the context presented to a fixed model; PEFT lets only a small learned state receive gradient updates; quantization changes how fixed values are represented. QLoRA combines a quantized frozen base with a trainable low-rank branch. The separate cost ledger below is deliberately not column-matched: every lever can affect more than one bill, and none removes all backbone storage or transient work."
+#| fig-cap: "Three levers act on three different objects. Prompting changes the context presented to a fixed model; PEFT lets only a small learned state receive gradient updates; quantization changes how fixed values are represented. QLoRA combines a quantized frozen base with a trainable low-rank branch. The separate cost ledger below is deliberately not column-matched."
 #| fig-alt: "Three top boxes label context, trainable state, and representation. A separate dashed ledger below lists backbone storage, incremental state, and transient work, explicitly marked as not column-matched."
 #| fig-width: 10
 #| fig-height: 4.6
@@ -149,7 +149,8 @@ y\mid I,(x_1,y_1),\ldots,(x_k,y_k),x_\star
 \theta_{\text{after}}=\theta_{\text{before}}=\theta_0.
 $$ {#eq-icl-fixed-weights}
 
-With no demonstrations, this is **zero-shot** prompting. With a few, it is
+The weights never move; only the context does. With no demonstrations, this is
+**zero-shot** prompting. With a few, it is
 **few-shot prompting**; when the model uses those examples to infer the task inside
 its forward computation, we call the behavior **in-context learning (ICL)**. The
 word *learning* names a behavioral change with context, not a checkpoint update.
@@ -515,7 +516,7 @@ $$
 =\vect{h}
 +\matr{W}_{\mathrm{up}}
 \sigma(\matr{W}_{\mathrm{down}}\vect{h}+\vect{b}_{\mathrm{down}})
-+\vect{b}_{\mathrm{up}},
++\vect{b}_{\mathrm{up}}.
 $$
 
 This module adds $2dd_b+d+d_b$ parameters. **BitFit** takes the selective-update idea to an
@@ -866,7 +867,7 @@ print("largest merged/unmerged difference:",
 ```{python}
 #| echo: false
 #| label: fig-lora-rank-capacity
-#| fig-cap: "LoRA's rank is a real capacity constraint in a problem constructed to expose it. Five factor initializations converge to the same rank-limited relative update errors (left), closely tracking the analytic best floors from the planted diagonal magnitudes. Validation error (right) falls sharply but remains nonzero below the planted rank six; rank six, rank eight, and the unrestricted full update reach numerical zero. Counts label trainable adapter values in this deliberately small layer."
+#| fig-cap: "LoRA's rank is a real capacity constraint in a problem constructed to expose it. Five factor initializations converge to the same rank-limited relative update errors (left), closely tracking the analytic best floors from the planted diagonal magnitudes. Validation error (right) falls sharply but remains nonzero below the planted rank six; rank six, rank eight, and the unrestricted full update reach numerical zero. The counts are the trainable adapter values in this small layer."
 #| fig-alt: "Two logarithmic line plots. Relative correction error follows a calculated floor at ranks one, two, and four, then drops near zero at the planted rank six. Validation MSE shows the same boundary."
 #| fig-width: 9
 #| fig-height: 3.8
@@ -925,15 +926,15 @@ plt.show()
 The failure is orderly. Rank 1 leaves relative correction error $0.710$; rank 2
 leaves $0.472$; rank 4 leaves $0.142$. Their mean validation MSEs are
 $0.04535,0.02022,$ and $0.001888$. Rank 6 and rank 8 recover the target to below
-$10^{-7}$ relative correction error. The unrestricted update reaches numerical-zero
+$10^{-6}$ relative correction error. The unrestricted update reaches numerical-zero
 validation MSE and $2.39\times10^{-7}$ relative correction error. Every frozen base
 is bitwise intact, and the largest merged–unmerged discrepancy is below
 $2\times10^{-6}$.
 
 In this toy $32\times32$ layer, rank 6 still trains 384 values, 37.5% of a full
-matrix. The point is inspectability, not an impressive compression ratio. Real
-LoRA savings depend on wide matrices, small ranks, and which layers are targeted.
-Likewise, the experiment was built from a low-rank shift, a task whose useful
+matrix. The point is inspectability rather than an impressive compression ratio; real
+LoRA savings depend on wide matrices, small ranks, and which layers are targeted. The
+experiment was also built from a low-rank shift; a task whose useful
 correction is not well captured at the chosen rank will retain error no matter how
 fashionable the adapter is.
 
@@ -1355,12 +1356,12 @@ efficiently as a good one.
 |---|---|---|
 | Hard prompt / ICL | State in ordinary context; no gradients during use | No learned task checkpoint; longer context |
 | RAG | State in index and retrieved context; writes depend on design | Fresher evidence; retrieval failure surface |
-| Prompt tuning | State in continuous input vectors; write prompt vectors, plus any deliberately unfrozen head | Small learned state; virtual positions remain |
+| Prompt tuning | State in continuous input vectors; write prompt vectors, plus any unfrozen head | Small learned state; virtual positions remain |
 | Prefix / adapters | State in per-layer prefixes or bottlenecks; write added modules | Small checkpoint; extra inference path |
-| LoRA | State in $\matr{A},\matr{B}$; write factors, plus any deliberately unfrozen head | Conditionally mergeable; rank bottleneck |
+| LoRA | State in $\matr{A},\matr{B}$; write factors, plus any unfrozen head | Conditionally mergeable; rank bottleneck |
 | Full fine-tuning | State in a changed backbone; write all permitted parameters | Maximum update freedom; one full task copy |
 | PTQ | No task state: representation only; no gradients in ordinary PTQ | Smaller weight representation; approximation error |
-| QLoRA | Task state in LoRA factors; codes/scales describe the frozen base; write factors plus any deliberately unfrozen head | Smaller base representation during PEFT; mixed dtypes |
+| QLoRA | Task state in LoRA factors; codes/scales describe the frozen base; write factors plus any unfrozen head | Smaller base representation during PEFT; mixed dtypes |
 
 The instructor's practical instinct remains useful: when a carefully evaluated
 prompt or retrieval pipeline solves the task, avoid fine-tuning merely because it
