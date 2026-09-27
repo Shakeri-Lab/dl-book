@@ -42,18 +42,15 @@ function Cite(el)
     return nil
   end
 
-  local number = math.floor(chapter.number)
-  local text, plain = string.format("Chapter~%d", number), string.format("Chapter %d", number)
+  -- A Pandoc link to the chapter's label, not raw LaTeX: the LaTeX writer emits
+  -- \hyperref[label]{...}, and a heading that holds the reference still stringifies
+  -- to "Chapter N" for its PDF bookmark (raw LaTeX would stringify to nothing).
+  local number = string.format("%d", math.floor(chapter.number))
+  local text = "Chapter\u{A0}" .. number
   if citation.mode == "SuppressAuthor" then
-    text, plain = string.format("%d", number), string.format("%d", number)
+    text = number
   end
-  -- \texorpdfstring keeps the link in the text and gives PDF bookmarks plain words,
-  -- so a heading such as "Return to @sec-11-encoder-decoder's date task" outlines
-  -- as "Return to Chapter 13's date task".
-  return pandoc.RawInline(
-    "latex",
-    string.format("\\texorpdfstring{\\hyperref[%s]{%s}}{%s}", citation.id, text, plain)
-  )
+  return pandoc.Link({ pandoc.Str(text) }, "#" .. citation.id)
 end
 
 local function unnumbered_page(doc)
