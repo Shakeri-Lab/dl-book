@@ -305,10 +305,15 @@ def source_invariants(base: str, files: list[str], exceptions: dict, checklist: 
         if changed_options:
             notes["I1"].append(f"{path}: {changed_options} cell(s) changed only in caption/alt options")
 
-        # I3 math
+        # I3 math (math that an author-dictated sentence adds is declared, key "I3_added")
         if math_multiset(old_prose) != math_multiset(new_prose):
             removed, added = counter_diff(math_multiset(old_prose), math_multiset(new_prose))
-            fails["I3"].append(f"{path}: math removed {list(removed)[:3]} added {list(added)[:3]}")
+            declared_math = exceptions.get("I3_added", {}).get(path, {})
+            undeclared = {k: v for k, v in added.items() if declared_math.get(k, 0) < v}
+            if removed or undeclared:
+                fails["I3"].append(f"{path}: math removed {list(removed)[:3]} added {list(added)[:3]}")
+            else:
+                notes["I3"].append(f"{path}: declared math additions {added}")
 
         # I4 numbers
         removed, added = counter_diff(

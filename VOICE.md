@@ -69,8 +69,9 @@ lands in, write the one that does, or write nothing.
   with one instruction: "Read this as a student. Mark every sentence that contradicts a
   printed number, figure, or caption on the page, reads as written to satisfy a rule,
   announces instead of states, refers to the book's own apparatus (recap, section,
-  table, callout, receipt), is a fragment, has a punctuation slip, or sounds like a
-  different person from the surrounding paragraph. Do not mark the author's habits:
+  table, callout, receipt), is a fragment, has a punctuation slip, grades the material
+  by taste instead of showing why, or sounds like a different person from the
+  surrounding paragraph. Do not mark the author's habits:
   this author writes short verdict sentences, fragments, and 'Here is ...' openers on
   purpose. Mark a sentence only if it breaks from the paragraph around it, or is broken:
   contradicts a printed number, is a fragment where the paragraph is not, has a slip, or
@@ -198,6 +199,14 @@ the invariants, then S, R, T.
   more of the same habit word, thin it by replacing it with a plain word or deleting
   it, never changing a claim, with a receipt. Every thinned sentence is re-read as a
   sentence (P4).
+- **S6 Show, don't grade.** Applies to baseline as well as added text. A sentence or
+  clause whose content is the narrator's taste-grade of the material (cleanest, elegant,
+  beautiful, remarkable, striking, satisfying, powerful, and their kin) is deleted when
+  the paragraph already shows the reason, or replaced by the reason or by the thing
+  itself, with a receipt. Stakes verdicts ("the whole game", "the deepest point", "most
+  important") are not grades; they stay when the paragraph earns them. "Magic" used to
+  say what the book refuses to treat as magic is a stance and stays. The ledger reports
+  the remaining hits per page (`audit_voice_ledger.py --grades`).
 - **T1 to T5** as the kit table says, written under P2. Budget: at most four added
   sentences per chapter beyond them; none on a page that already meets its bands. T1 is
   optional.
@@ -269,7 +278,8 @@ link instances, headings, figures and alt text, exercises, sources, plan steps, 
 counts, CI, voice lint, cross-volume references, em dashes), plus:
 
 - **I17 Added-sentence audit (blocking).** Every sentence this pass added or recast
-  (from the edit lists, kept while it is still in the book; restorations excluded) is
+  (from the edit lists, kept while it is still in the book; restorations and the
+  mechanical fixes R5 and R9 excluded) is
   checked against every other chapter's: no shared four-word sequence, and no two
   promise sentences with the same first three words (V2). The V3 caps hold on added
   sentences, and no added sentence uses an apparatus word. Runs in `--check`.
@@ -290,6 +300,7 @@ python scripts/audit_voice_ledger.py --check _book            # CI, build-deploy
 python scripts/audit_voice_invariants.py --base 86ec60b --files <pages>
 python scripts/audit_voice_ledger.py --phrases BEFORE AFTER --markdown audits/voice/phrases.md
 python scripts/audit_voice_ledger.py --numbers _book --markdown audits/voice/numbers.md   # I19
+python scripts/audit_voice_ledger.py --grades _book --markdown audits/voice/grades.md     # S6 hits
 ```
 
 `--check` blocks on R1 to R6 for the pages in `VOICE_SCOPE`, and on the V3 caps and I17

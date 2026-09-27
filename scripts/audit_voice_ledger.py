@@ -722,6 +722,7 @@ def distance(row: dict[str, object], profile: dict[str, float]) -> float:
 
 # ------------------------------------------------------------------ added sentences (I17)
 EDITS_DIR = ROOT / "audits" / "voice" / "edits"
+MECHANICAL_RULES = {"R5", "R9"}
 BOOK_QUESTION = ("what", "if", "we", "made", "this", "learnable")
 PARAGRAPH_BREAK = "\u2029"
 CAPTION_OPTION_RE = re.compile(r'^\s*#\|\s*(?:fig-cap|tbl-cap|fig-subcap)\s*:\s*"?(.*?)"?\s*$')
@@ -805,6 +806,8 @@ def added_sentences(include_restored: bool = False) -> dict[str, list[tuple[str,
         for edit in data["edits"]:
             if not edit.get("applied") or re.match(r"^\s*#{1,6}\s", edit["new"]):
                 continue
+            if edit.get("rule") in MECHANICAL_RULES:
+                continue  # a contraction expanded or a slip fixed: the sentence is still the author's
             if not include_restored and edit.get("justification", "").startswith("restored"):
                 continue  # earlier author text put back verbatim is not new phrasing (V2)
             old_parts = {part.rstrip('"') for part in prose_sentences(source_prose(edit["old"]))}
@@ -1281,6 +1284,60 @@ def numbers_markdown(html_root: Path) -> str:
     return "\n".join(lines) + "\n"
 
 
+# ------------------------------------------------------------------ grades (S6)
+GRADE_RE = re.compile(
+    r"\b(?:clean(?:est|er)|elegan(?:t|tly|ce)|beautiful(?:ly)?|beauty|remarkabl[ey]|"
+    r"striking(?:ly)?|satisfying|powerful(?:ly)?|lovely|gorgeous|delightful(?:ly)?|"
+    r"wonderful(?:ly)?|amazing(?:ly)?|stunning(?:ly)?|impressive(?:ly)?|brilliant(?:ly)?|"
+    r"exquisite(?:ly)?|magic(?:al|ally)?|seductive|marvel(?:ous|ously)?|fascinating|"
+    r"breathtaking|spectacular|graceful(?:ly)?|compelling)\b",
+    re.I,
+)
+STANCE_RE = re.compile(r"\bnot\s+(?:\w+\s+)?magic(?:al|ally)?\b", re.I)
+
+
+def grade_hits(page: Page) -> list[tuple[str, str, str]]:
+    """S6: taste-grade words in narrator text (classes A, B, C, T), each with a reading."""
+    hits = []
+    for block in page.blocks:
+        if block.cls not in {"A", "B", "C", "T"}:
+            continue
+        for match in GRADE_RE.finditer(block.text):
+            context = block.text[max(0, match.start() - 70): match.end() + 50]
+            window = block.text[max(0, match.start() - 20): match.end()]
+            reading = "stance (kept)" if STANCE_RE.search(window) else "grade?"
+            hits.append((block.cls, match.group(0), plain(context), reading))
+    return hits
+
+
+def grades_markdown(html_root: Path) -> str:
+    lines = [
+        "# Taste-grade words (S6, report)",
+        "",
+        "Every taste-grade word left in narrator text (running prose, captions, callouts,",
+        "and headings). A negated \"magic\" is a stance and stays; everything else is listed",
+        "for reading: a grade goes when the paragraph already shows the reason, or becomes the",
+        "reason or the thing itself; a technical use or a stakes verdict stays.",
+        "",
+    ]
+    total = 0
+    for source in book_sources():
+        html = html_for(source, html_root)
+        if not html.is_file():
+            continue
+        hits = grade_hits(extract(html, source))
+        if not hits:
+            continue
+        total += len(hits)
+        lines += [f"## {short(source)} ({len(hits)})", "", "| class | word | reading | context |", "|---|---|---|---|"]
+        for cls, word, context, reading in hits:
+            lines.append(f"| {cls} | {word} | {reading} | …{context.replace('|', chr(92) + '|')}… |")
+        lines.append("")
+    lines.insert(7, f"{total} hits.")
+    lines.insert(8, "")
+    return "\n".join(lines) + "\n"
+
+
 # ---------------------------------------------------------------------- diagnostics
 def section_counts(html_path: Path, source: str) -> list[tuple[str, str, int, int]]:
     page = extract(html_path, source)
@@ -1341,6 +1398,7 @@ def main() -> int:
     parser.add_argument("--check", type=Path, metavar="HTML_ROOT")
     parser.add_argument("--phrases", nargs=2, type=Path, metavar=("BEFORE_ROOT", "AFTER_ROOT"))
     parser.add_argument("--numbers", type=Path, metavar="HTML_ROOT", help="I19 printed-number report")
+    parser.add_argument("--grades", type=Path, metavar="HTML_ROOT", help="S6 taste-grade report")
     parser.add_argument("--sections", type=Path, metavar="HTML_PAGE")
     parser.add_argument("--hits", type=Path, metavar="HTML_PAGE")
     parser.add_argument("--metric", default="guards")
@@ -1359,6 +1417,13 @@ def main() -> int:
 
     if args.check:
         return run_check(args.check)
+    if args.grades:
+        text = grades_markdown(args.grades)
+        if args.markdown:
+            args.markdown.write_text(text, encoding="utf-8")
+        else:
+            print(text)
+        return 0
     if args.numbers:
         text = numbers_markdown(args.numbers)
         if args.markdown:
