@@ -3,8 +3,9 @@
 
 Quarto numbers the chapters of a book in the order `_quarto.yml` lists them,
 skipping any whose title heading is `.unnumbered`. This script applies the same
-rule and writes `filters/chapter-numbers.json` ({label: number}), which
-`filters/pdf-chapter-xrefs.lua` uses to print chapter references in the PDF.
+rule and writes `filters/chapter-numbers.json` ({label: {number, html}}), which
+`filters/pdf-chapter-xrefs.lua` uses to print chapter references in the PDF and on
+the unnumbered HTML pages, where Quarto would print the target's title instead.
 Labels and file names never change; numbers follow the order.
 
 Usage: chapter_numbers.py            write the map
@@ -34,8 +35,8 @@ def chapter_files() -> list[str]:
     return files
 
 
-def chapter_numbers() -> dict[str, int]:
-    numbers: dict[str, int] = {}
+def chapter_numbers() -> dict[str, dict[str, object]]:
+    numbers: dict[str, dict[str, object]] = {}
     count = 0
     for relative in chapter_files():
         title = next(line for line in (ROOT / relative).read_text().split("\n") if line.startswith("# "))
@@ -45,7 +46,7 @@ def chapter_numbers() -> dict[str, int]:
         count += 1
         if label is None:
             raise SystemExit(f"{relative}: numbered chapter title has no #sec- label")
-        numbers[label.group(1)] = count
+        numbers[label.group(1)] = {"number": count, "html": relative.replace(".qmd", ".html")}
     return numbers
 
 

@@ -1,37 +1,51 @@
--- Quarto's PDF book pipeline can resolve references to chapter-level `sec-*`
+-- Chapter references that print the right number everywhere.
+--
+-- PDF: Quarto's book pipeline can resolve references to chapter-level `sec-*`
 -- labels as the chapter-local number 1. Keep the automatic HTML cross-reference,
 -- but give LaTeX an explicit, correctly numbered, hyperlinked chapter label.
+--
+-- HTML, unnumbered pages only (the Preface, the Epilogue): Quarto prints a chapter
+-- reference made from an unnumbered page as the target's number and full title
+-- ("6 When It Fails: ..."). There the filter writes the link itself, "Chapter 6",
+-- to the chapter's page. Numbered pages keep Quarto's own cross-references.
 --
 -- Numbers come from filters/chapter-numbers.json, which scripts/chapter_numbers.py
 -- derives from the reading order in _quarto.yml; a label's digits are not its
 -- number. `@sec-x` prints "Chapter N"; the prefix-suppressed `[-@sec-x]` prints
 -- only "N", so "Chapters [-@sec-a] and [-@sec-b]" reads "Chapters 9 and 10".
-local numbers = nil
+local chapters = nil
 
-local function chapter_numbers()
-  if numbers == nil then
+local function chapter_map()
+  if chapters == nil then
     local path = pandoc.path.join({ pandoc.path.directory(PANDOC_SCRIPT_FILE), "chapter-numbers.json" })
     local handle = assert(io.open(path, "r"), "missing " .. path)
-    numbers = pandoc.json.decode(handle:read("a"))
+    chapters = pandoc.json.decode(handle:read("a"))
     handle:close()
   end
-  return numbers
+  return chapters
+end
+
+local function single_chapter(el)
+  if #el.citations ~= 1 then
+    return nil, nil
+  end
+  local citation = el.citations[1]
+  return citation, chapter_map()[citation.id]
 end
 
 function Cite(el)
-  if not quarto.doc.is_format("latex") or #el.citations ~= 1 then
+  if not quarto.doc.is_format("latex") then
     return nil
   end
-
-  local citation = el.citations[1]
-  local chapter = chapter_numbers()[citation.id]
+  local citation, chapter = single_chapter(el)
   if chapter == nil then
     return nil
   end
 
-  local text, plain = string.format("Chapter~%d", chapter), string.format("Chapter %d", chapter)
+  local number = math.floor(chapter.number)
+  local text, plain = string.format("Chapter~%d", number), string.format("Chapter %d", number)
   if citation.mode == "SuppressAuthor" then
-    text, plain = string.format("%d", chapter), string.format("%d", chapter)
+    text, plain = string.format("%d", number), string.format("%d", number)
   end
   -- \texorpdfstring keeps the link in the text and gives PDF bookmarks plain words,
   -- so a heading such as "Return to @sec-11-encoder-decoder's date task" outlines
@@ -40,4 +54,36 @@ function Cite(el)
     "latex",
     string.format("\\texorpdfstring{\\hyperref[%s]{%s}}{%s}", citation.id, text, plain)
   )
+end
+
+local function unnumbered_page(doc)
+  for _, block in ipairs(doc.blocks) do
+    if block.t == "Header" and block.level == 1 then
+      return block.classes:includes("unnumbered")
+    end
+  end
+  return false
+end
+
+function Pandoc(doc)
+  if not quarto.doc.is_format("html") or not unnumbered_page(doc) then
+    return nil
+  end
+  local here = pandoc.path.directory(quarto.doc.input_file)
+  local root = quarto.project.directory
+  return doc:walk({
+    Cite = function(el)
+      local citation, chapter = single_chapter(el)
+      if chapter == nil then
+        return nil
+      end
+      local number = string.format("%d", math.floor(chapter.number))
+      local href = pandoc.path.make_relative(pandoc.path.join({ root, chapter.html }), here, true)
+      local words = { pandoc.Str(number) }
+      if citation.mode ~= "SuppressAuthor" then
+        words = { pandoc.Str("Chapter"), pandoc.Space(), pandoc.Str(number) }
+      end
+      return pandoc.Link(words, href, "", pandoc.Attr("", { "quarto-xref" }))
+    end,
+  })
 end

@@ -28,7 +28,7 @@ The shared manuscript owns the mathematics and fixtures. Neither QMD is edited.
 
 | Source at baseline commit above | SHA-256 |
 |---|---|
-| `chapters/part4/12-kernel-regression.qmd` | `6ddc05c99e886ea85b4d027dd00ff8df8f5324d769110b5783b23844d6b3212c` |
+| `chapters/part4/12-kernel-regression.qmd` | `bbeba9c6ddb1ce8c9672f77d7800f98e21de15d1be2a5f2df5c765430fb47763` |
 | `chapters/part4/15-bert-pretraining.qmd` | `4c93cd1c55ad6e2845962f2fd78766e928df6e6c865b13f141dcc53f6352733f` |
 
 Read-only instructor collection:

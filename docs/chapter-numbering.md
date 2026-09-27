@@ -13,9 +13,12 @@ renders "Chapters 8 and 9". Never type a chapter number into prose, a caption, o
 callout. Where a reference cannot resolve (a `code-summary` label, alt text, a replay
 panel's HTML), write the number from the table below and check it after any reordering.
 
-`scripts/chapter_numbers.py` derives `filters/chapter-numbers.json` from the reading
-order; `filters/pdf-chapter-xrefs.lua` uses it to print chapter references in the PDF, and
-`scripts/audit_book_contract.py` fails when the map is stale. Maintainer documents under
+`scripts/chapter_numbers.py` derives `filters/chapter-numbers.json` (each label's number
+and page) from the reading order. `filters/pdf-chapter-xrefs.lua` uses it to print chapter
+references in the PDF, and on the unnumbered HTML pages (the Preface and the Epilogue),
+where Quarto would print the target's number and full title instead. A section reference
+from an unnumbered page has the same problem, so the Preface's one link to a section stays
+a Markdown link. `scripts/audit_book_contract.py` fails when the map is stale. Maintainer documents under
 `docs/` and the file names keep the old two-digit numbers; hand-numbered listings follow
 the chapter number (Listing 12.1 is in Chapter 12, file `10-sequences-rnn.qmd`).
 
