@@ -346,6 +346,36 @@ const expected = {
     return [`(${x.map(value => fixed((value - mean) / Math.sqrt(v + 1e-5), 3)).join(', ')})`];
   },
   'derivative-gates': () => [fixed(sigmoid(-6) * (1 - sigmoid(-6)), 6), fixed(sigmoid(-6), 4), '¼'],
+  // The check stacks a 3 x 3 on a 5 x 5: each layer adds its width minus one.
+  'stacked-sight': root => {
+    const k = Number(root.dataset.small), l = Number(root.dataset.large), field = 1 + (k - 1) + (l - 1);
+    return [`${field} × ${field}`, `${k} + ${l - 1} = ${field}`, `${k * k} + ${l * l} = ${k * k + l * l}`, `against ${field * field}`];
+  },
+  // The check turns the flatten count into fc1's bill, against the audit's conv total.
+  'lenet-flow': root => {
+    const [, n0] = root.dataset.input.trim().split(/\s+/).map(Number), cv = root.dataset.convs.trim().split(/\s+/).map(Number);
+    const pool = Number(root.dataset.pool), head = root.dataset.head.trim().split(/\s+/).map(Number);
+    const size = (n, k, p, s) => Math.floor((n + 2 * p - k) / s) + 1;
+    const n1 = size(size(size(size(n0, cv[1], cv[2], 1), pool, 0, pool), cv[4], cv[5], 1), pool, 0, pool);
+    const flat = cv[3] * n1 * n1, fc1 = flat * head[0] + head[0];
+    const convs = cv[0] * 1 * cv[1] ** 2 + cv[0] + cv[3] * cv[0] * cv[4] ** 2 + cv[3];
+    assert.equal(convs, 2572);
+    return [fc1.toLocaleString('en-US'), `${head[0]} × ${flat} weight matrix`, `${head[0]} biases`, convs.toLocaleString('en-US'),
+      Math.floor(fc1 / convs) === 18 ? 'eighteen times' : 'MISMATCH'];
+  },
+  // The check runs the formula on the chapter's own 28 with a padded, strided 3-wide window.
+  'out-size': root => {
+    const k = Number(root.dataset.k), n = 28, p = 1, s = 2, travel = n + 2 * p - k;
+    return [`${Math.floor(travel / s) + 1}:`, `travel ${travel}`, `⌊${travel} / ${s}⌋ + 1 = ${Math.floor(travel / s)} + 1 = ${Math.floor(travel / s) + 1}`];
+  },
+  // The check moves the layer to a sequence at the chapter's own compression, 64 maps into
+  // 32: a 1 x 1 convolution is the same linear layer at every step, whatever the length.
+  'pixel-skewer': () => {
+    const chapter = fs.readFileSync(path.join(ROOT, 'chapters/part2/09-modern-cnns-transfer.qmd'), 'utf8');
+    const [, inC, outC] = /compressing (\d+) feature maps into (\d+)/.exec(chapter).map(Number);
+    return [(inC * outC + outC).toLocaleString('en-US'), `${outC} × ${inC} weight matrix and ${outC} biases`,
+      `nn.Linear(${inC}, ${outC})`, `${inC} feature maps compressed into ${outC}`];
+  },
 };
 
 for (const entry of manifest.scenes) {

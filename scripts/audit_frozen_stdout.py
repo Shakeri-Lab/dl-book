@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-"""Compare frozen stdout against a Git revision and across render formats."""
+"""Compare frozen output against a Git revision and across render formats.
+
+Two kinds of cell output are compared: printed output (``cell-output-stdout``) and
+text display results (``cell-output-display`` blocks that hold text, such as the
+value of a cell's last expression). Image displays are figures: their captions are
+prose and their pixels are checked when figures are regenerated, so they are not
+compared here.
+"""
 
 from __future__ import annotations
 
@@ -28,6 +35,27 @@ def stdout_records(raw_json: str) -> list[tuple[int, str]]:
     block's portability rule.
     """
 
+    return output_records(raw_json, ".cell-output-stdout", text_only=False)
+
+
+def display_records(raw_json: str) -> list[tuple[int, str]]:
+    """Return ``(native cell ordinal, text)`` records for text display results.
+
+    A display block whose content is not a plain code fence (a figure) is skipped.
+    """
+
+    return output_records(raw_json, ".cell-output-display", text_only=True)
+
+
+def output_records(
+    raw_json: str, output_class: str, *, text_only: bool
+) -> list[tuple[int, str]]:
+    """Walk a freeze JSON and collect the code-fenced text of one output class.
+
+    With ``text_only`` false, every block of the class must hold a plain code
+    fence; with it true, blocks that do not are skipped.
+    """
+
     document = json.loads(raw_json)
     markdown = document["result"]["markdown"]
     stack: list[tuple[int, int | None]] = []
@@ -40,19 +68,23 @@ def stdout_records(raw_json: str) -> list[tuple[int, str]]:
         stripped = line.rstrip("\r\n")
         if pending_stdout is not None:
             ordinal, buffer = pending_stdout
-            if not capturing_stdout:
+            if capturing_stdout:
                 if stripped == "```":
-                    capturing_stdout = True
-                elif stripped:
-                    raise ValueError("stdout div does not begin with a plain code fence")
+                    records.append((ordinal, "".join(buffer)))
+                    pending_stdout = None
+                    capturing_stdout = False
+                else:
+                    buffer.append(line)
+                continue
+            if not stripped:
                 continue
             if stripped == "```":
-                records.append((ordinal, "".join(buffer)))
-                pending_stdout = None
-                capturing_stdout = False
-            else:
-                buffer.append(line)
-            continue
+                capturing_stdout = True
+                continue
+            if not text_only:
+                raise ValueError("stdout div does not begin with a plain code fence")
+            # A figure or other non-text display: parse this line as ordinary markdown.
+            pending_stdout = None
 
         if code_fence is not None:
             marker, width = code_fence
@@ -74,7 +106,7 @@ def stdout_records(raw_json: str) -> list[tuple[int, str]]:
             count_match = EXECUTION_COUNT_RE.search(attributes)
             own_ordinal = int(count_match.group(1)) if count_match else None
             stack.append((len(opened.group(1)), own_ordinal))
-            if ".cell-output-stdout" in attributes.split():
+            if output_class in attributes.split():
                 ordinal = next(
                     (candidate for _, candidate in reversed(stack) if candidate is not None),
                     None,
@@ -153,7 +185,9 @@ def main() -> int:
     accepted_deviations: list[str] = []
     checked_pairs = 0
     stdout_total = 0
+    display_total = 0
     current_by_path: dict[Path, tuple[list[str], list[int]]] = {}
+    displays_by_path: dict[Path, list[tuple[int, str]]] = {}
     for unit_dir in unit_dirs:
         result_dir = unit_dir / "execute-results"
         html_path = result_dir / "html.json"
@@ -167,6 +201,9 @@ def main() -> int:
         html_blocks = [text for _, text in html_records]
         stdout_total += len(html_blocks)
         current_by_path[html_path] = (html_blocks, html_ordinals)
+        html_displays = display_records(html_path.read_text())
+        display_total += len(html_displays)
+        displays_by_path[html_path] = html_displays
 
         if tex_path.exists():
             tex_records = stdout_records(tex_path.read_text())
@@ -175,6 +212,8 @@ def main() -> int:
             checked_pairs += 1
             if tex_blocks != html_blocks or tex_ordinals != html_ordinals:
                 failures.append(f"{unit_dir}: HTML/TeX stdout differs")
+            if display_records(tex_path.read_text()) != html_displays:
+                failures.append(f"{unit_dir}: HTML/TeX display results differ")
 
     if args.units:
         base_paths = [
@@ -195,6 +234,14 @@ def main() -> int:
         )
     for base_path in base_paths:
         base_raw = git_text(args.base, base_path)
+        if base_raw is not None and base_path in displays_by_path:
+            # Display results have no portability rule: they must match exactly.
+            base_displays = display_records(base_raw)
+            if base_displays != displays_by_path[base_path]:
+                failures.append(
+                    f"{base_path}: text display results differ from {args.base} "
+                    f"({len(displays_by_path[base_path])} current, {len(base_displays)} baseline)"
+                )
         if base_raw is not None:
             checked_base += 1
             baseline_records = stdout_records(base_raw)
@@ -258,7 +305,8 @@ def main() -> int:
 
     print(
         "PASS: "
-        f"{stdout_total} stdout blocks satisfy the book-wide {args.base} "
+        f"{stdout_total} stdout blocks and {display_total} text display results "
+        f"satisfy the book-wide {args.base} "
         f"{args.policy} snapshot "
         f"across {checked_base} baseline units; "
         f"{checked_pairs} HTML/TeX pairs match; "

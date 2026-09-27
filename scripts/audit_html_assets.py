@@ -27,17 +27,23 @@ def is_focusable(tag: str, values: dict[str, str | None]) -> bool:
     return bool(tabindex and tabindex.lstrip("+").isdigit())
 
 
+def offers_site_pdf(href: str) -> bool:
+    """True for a link to a PDF on this site or to the retired download page."""
+    parsed = urlsplit(href)
+    name = Path(unquote(parsed.path)).name
+    if parsed.scheme or parsed.netloc:
+        if parsed.netloc != SITE_HOST or not parsed.path.startswith(SITE_PATH_PREFIX):
+            return False
+    return name.lower().endswith(".pdf") or name == RETIRED_DOWNLOAD_PAGE
+
+
 class SupportAssetParser(HTMLParser):
     def __init__(self) -> None:
         super().__init__()
         self.assets: list[tuple[str, str]] = []
         self.metadata: dict[str, list[str]] = {}
         self.mathjax_urls: list[str] = []
-        self.download_pages: list[str] = []
-        self.direct_pdf_links: list[tuple[str, bool]] = []
-        self.support_links: list[str] = []
-        self.cover_alts: list[str] = []
-        self.picture_sources: list[dict[str, str | None]] = []
+        self.pdf_offers: list[str] = []
         self.coffee_icons: list[str | None] = []
         self.canonical_urls: list[str] = []
         self.body_depth = 0
@@ -190,31 +196,15 @@ class SupportAssetParser(HTMLParser):
                 self.assets.append(("deferred playback", playback))
         elif tag == "img" and (src := values.get("src")):
             self.assets.append(("image", src))
-            if Path(urlsplit(src).path).name == "cover.png":
-                self.cover_alts.append(values.get("alt") or "")
         elif tag == "source" and (srcset := values.get("srcset")):
             source = srcset.split(",", 1)[0].strip().split(" ", 1)[0]
             self.assets.append(("image source", source))
-            self.picture_sources.append(
-                {
-                    "srcset": srcset,
-                    "type": values.get("type"),
-                }
-            )
         elif tag == "meta" and (key := values.get("name") or values.get("property")):
             self.metadata.setdefault(key, []).append(values.get("content") or "")
 
-        if tag == "a" and values.get("aria-label") == "Get the PDF":
-            if href := values.get("href"):
-                self.download_pages.append(href)
         if tag == "a" and (href := values.get("href")):
-            if Path(urlsplit(href).path).name in {
-                PRINT_PDF_NAME,
-                CONTINUOUS_PDF_NAME,
-            }:
-                self.direct_pdf_links.append((href, "download" in values))
-            if href == SUPPORT_URL:
-                self.support_links.append(href)
+            if offers_site_pdf(href) or values.get("aria-label") == "Get the PDF":
+                self.pdf_offers.append(href)
         if (
             tag == "span"
             and "support-project-icon" in (values.get("class") or "").split()
@@ -299,12 +289,12 @@ REQUIRED_CITATION_METADATA = {
     "citation_public_url",
 }
 PINNED_MATHJAX_URL = "https://cdn.jsdelivr.net/npm/mathjax@4.1.3/tex-chtml.js"
-PRINT_PDF_NAME = "Deep-Learning--Making-It-Learnable.pdf"
-CONTINUOUS_PDF_NAME = "Deep-Learning--Making-It-Learnable--Continuous.pdf"
-DOWNLOAD_PAGE_NAME = "download.html"
-DOWNLOAD_COVER_WEBP = "figures/cover.webp"
-MAX_DOWNLOAD_COVER_BYTES = 250 * 1024
-SUPPORT_URL = "https://buymeacoffee.com/hshakeri"
+# The website serves the HTML edition only: no PDF file in the bundle, and no link
+# to a PDF on this site or to the retired download page. Links to papers hosted
+# elsewhere are unaffected.
+SITE_HOST = "shakeri-lab.github.io"
+SITE_PATH_PREFIX = "/dl-book/"
+RETIRED_DOWNLOAD_PAGE = "download.html"
 EXPECTED_REPO_URL = "https://github.com/Shakeri-Lab/dl-book"
 EXPECTED_REPO_BRANCH = "main"
 LECTURE_MANIFEST = Path(__file__).resolve().parents[1] / "data/lectures.yml"
@@ -327,7 +317,7 @@ EXPECTED_NOTEBOOK_PLACEHOLDER_COUNT = 4
 MINIMUM_SPECIFIC_LECTURE_PAGES = 20
 EXPECTED_SPECIFIC_LECTURE_PAGES = 27
 EXPECTED_FALLBACK_LECTURE_PAGES = 3
-EXPECTED_HTML_PAGES = 37
+EXPECTED_HTML_PAGES = 36
 EXPECTED_PART_PAGES = {
     "chapters/parts/p1-lines-to-networks.html": "From Lines to Networks",
     "chapters/parts/p2-vision.html": "Vision: Learning the Filters",
@@ -812,7 +802,6 @@ def html_source_errors() -> list[str]:
 
     for contract in (
         "- filters/lazy-images.lua",
-        "- figures/cover.webp",
     ):
         if contract not in quarto_config:
             errors.append(f"_quarto.yml: missing Phase E contract {contract!r}")
@@ -868,14 +857,6 @@ def main() -> int:
         default="_book",
         type=Path,
         help="rendered HTML root (default: _book)",
-    )
-    parser.add_argument(
-        "--allow-missing-generated-pdfs",
-        action="store_true",
-        help=(
-            "Allow an HTML-only execution audit to omit generated PDF files while "
-            "still checking both download links and every other landing-page contract"
-        ),
     )
     parser.add_argument(
         "--allow-missing-generated-notebooks",
@@ -940,8 +921,23 @@ def main() -> int:
         )
         return 1
 
+    shipped_pdfs = sorted(
+        str(path.relative_to(root))
+        for path in root.rglob("*")
+        if path.suffix.lower() == ".pdf"
+    )
+    if shipped_pdfs:
+        sample = ", ".join(shipped_pdfs[:3])
+        if len(shipped_pdfs) > 3:
+            sample += ", …"
+        print(
+            f"FAILED: the HTML-only bundle ships {len(shipped_pdfs)} PDF file(s): "
+            f"{sample}"
+        )
+        return 1
+
     page_names = {str(page.relative_to(root)) for page in pages}
-    expected_standalone_pages = {"404.html", DOWNLOAD_PAGE_NAME}
+    expected_standalone_pages = {"404.html"}
     if set(expected_source_pages) != page_names - expected_standalone_pages:
         missing_source_pages = sorted(set(expected_source_pages) - page_names)
         unexpected_pages = sorted(
@@ -1154,27 +1150,26 @@ def main() -> int:
                 f"{page_name}: edition stamp must link once to {revision_url}"
             )
 
-        if page.name != DOWNLOAD_PAGE_NAME:
-            first = html_parser.first_focusable
-            if (
-                first is None
-                or first[0] != "a"
-                or first[1] != "#quarto-document-content"
-                or "visually-hidden-focusable" not in first[2].split()
-            ):
-                publication_errors.append(
-                    f"{page_name}: first focusable element is not the main-content "
-                    f"skip link: {first}"
-                )
-            if html_parser.skip_links != ["#quarto-document-content"]:
-                publication_errors.append(
-                    f"{page_name}: expected one main-content skip link, "
-                    f"found {html_parser.skip_links}"
-                )
-            if "quarto-document-content" not in html_parser.body_ids:
-                publication_errors.append(
-                    f"{page_name}: skip-link target #quarto-document-content is missing"
-                )
+        first = html_parser.first_focusable
+        if (
+            first is None
+            or first[0] != "a"
+            or first[1] != "#quarto-document-content"
+            or "visually-hidden-focusable" not in first[2].split()
+        ):
+            publication_errors.append(
+                f"{page_name}: first focusable element is not the main-content "
+                f"skip link: {first}"
+            )
+        if html_parser.skip_links != ["#quarto-document-content"]:
+            publication_errors.append(
+                f"{page_name}: expected one main-content skip link, "
+                f"found {html_parser.skip_links}"
+            )
+        if "quarto-document-content" not in html_parser.body_ids:
+            publication_errors.append(
+                f"{page_name}: skip-link target #quarto-document-content is missing"
+            )
 
         rendered_content_errors.extend(
             rendered_leak_errors(page_name, html_parser.main_text)
@@ -1204,7 +1199,7 @@ def main() -> int:
                     f"{page_name}: missing citation metadata "
                     f"{', '.join(absent_citation)}"
                 )
-        if page.name not in {"404.html", DOWNLOAD_PAGE_NAME}:
+        if page.name != "404.html":
             expected_mathjax = (
                 [] if page_name in EXPECTED_PART_PAGES else [PINNED_MATHJAX_URL]
             )
@@ -1213,114 +1208,11 @@ def main() -> int:
                     f"{page_name}: expected MathJax URLs {expected_mathjax}, "
                     f"found {html_parser.mathjax_urls}"
                 )
-            if len(html_parser.download_pages) != 1:
-                navigation_errors.append(
-                    f"{page_name}: expected one PDF landing-page action, "
-                    f"found {len(html_parser.download_pages)}"
-                )
-            else:
-                raw_download = html_parser.download_pages[0]
-                download = local_asset(page, root, raw_download)
-                if Path(urlsplit(raw_download).path).name != DOWNLOAD_PAGE_NAME:
-                    navigation_errors.append(
-                        f"{page_name}: PDF action targets {raw_download}, not "
-                        f"{DOWNLOAD_PAGE_NAME}"
-                    )
-                elif download is None or not download.resolve().is_file():
-                    navigation_errors.append(
-                        f"{page_name}: PDF action target does not exist: {raw_download}"
-                    )
-        elif html_parser.download_pages:
+        if html_parser.pdf_offers:
             navigation_errors.append(
-                f"{page_name}: standalone page must not duplicate the sidebar PDF action"
+                f"{page_name}: the HTML-only site must not offer a PDF, found "
+                f"{html_parser.pdf_offers}"
             )
-
-        if page.name == DOWNLOAD_PAGE_NAME:
-            expected_pdfs = {PRINT_PDF_NAME, CONTINUOUS_PDF_NAME}
-            linked_pdfs = {
-                Path(urlsplit(href).path).name
-                for href, _ in html_parser.direct_pdf_links
-            }
-            if linked_pdfs != expected_pdfs or len(html_parser.direct_pdf_links) != 2:
-                navigation_errors.append(
-                    f"{page_name}: expected one direct link to each PDF edition, found "
-                    f"{sorted(linked_pdfs)}"
-                )
-            for raw_pdf, is_download in html_parser.direct_pdf_links:
-                target = local_asset(page, root, raw_pdf)
-                if (
-                    (target is None or not target.resolve().is_file())
-                    and not args.allow_missing_generated_pdfs
-                ):
-                    navigation_errors.append(
-                        f"{page_name}: direct PDF target does not exist: {raw_pdf}"
-                    )
-                if not is_download:
-                    navigation_errors.append(
-                        f"{page_name}: direct PDF link must carry download: {raw_pdf}"
-                    )
-            if html_parser.support_links != [SUPPORT_URL]:
-                navigation_errors.append(
-                    f"{page_name}: expected one stable Buy Me a Coffee link"
-                )
-            if html_parser.cover_alts != [
-                "Cover of Deep Learning: Making It Learnable by Heman Shakeri"
-            ]:
-                navigation_errors.append(
-                    f"{page_name}: cover must have one specific accessible description"
-                )
-            if html_parser.picture_sources != [
-                {"srcset": DOWNLOAD_COVER_WEBP, "type": "image/webp"}
-            ]:
-                navigation_errors.append(
-                    f"{page_name}: cover picture must prefer one WebP source, found "
-                    f"{html_parser.picture_sources}"
-                )
-            cover_webp = root / DOWNLOAD_COVER_WEBP
-            if (
-                cover_webp.is_file()
-                and cover_webp.stat().st_size > MAX_DOWNLOAD_COVER_BYTES
-            ):
-                navigation_errors.append(
-                    f"{page_name}: WebP cover is {cover_webp.stat().st_size:,} bytes; "
-                    f"limit is {MAX_DOWNLOAD_COVER_BYTES:,}"
-                )
-            for contract in (
-                "$0 · Free",
-                "Suggested contribution",
-                "$20",
-                "Contribution and download are independent.",
-                'id="download-options" tabindex="-1"',
-                'class="price-support-link"',
-                "Download Deep Learning: Making It Learnable",
-                "downloadOptions.focus();",
-                'downloadOptions.scrollIntoView({ block: "start" })',
-            ):
-                if contract not in page_text:
-                    navigation_errors.append(
-                        f"{page_name}: missing free/support contract: {contract}"
-                    )
-            if not re.search(
-                rf'<a class="price-support-link"\s+'
-                rf'href="{re.escape(SUPPORT_URL)}">\$20</a>',
-                page_text,
-            ):
-                navigation_errors.append(
-                    f"{page_name}: suggested $20 must link to the support page"
-                )
-            for removed in (
-                "Choose your PDF",
-                "Choose an optional contribution",
-                'name="contribution"',
-            ):
-                if removed in page_text:
-                    navigation_errors.append(
-                        f"{page_name}: redundant picker copy remains: {removed}"
-                    )
-            if 'target="_blank"' in page_text:
-                navigation_errors.append(
-                    f"{page_name}: support link opens an unannounced new tab"
-                )
 
         if page_name == "index.html":
             depth_one_groups = re.findall(
@@ -1470,6 +1362,7 @@ def main() -> int:
         f"{notebook_linked_pages} published notebook routes with "
         f"{notebook_placeholder_pages} honest unavailable placeholders, "
         "canonical URLs, edition stamps, skip links, image alternatives, "
+        "no PDF file or on-site PDF link, "
         f"and leak-free rendered content; {len(advisories)} cross-volume "
         "advisory warning(s))"
     )

@@ -1,3 +1,73 @@
+# Rolling post-v1.3 — Chapters 8 and 9 replays: pooling, output size, LeNet; stacked kernels and the 1 × 1 convolution (September 26, 2026)
+
+- **Channels say what, pooling says roughly where** (`what-where-excerpt`, Chapter 8,
+  before "LeNet: the whole machine"). The chapter's two edge experts on its square,
+  stacked as two channels, then each map max-pooled on its own as LeNet pools: the side
+  still reads (4, 0) and the top (0, 4), where one maximum across maps would read 4 at
+  both. Convolution changes the depth; pooling changes only height and width.
+- **A 1 × 1 convolution is one linear layer, run at every pixel** (`pixel-skewer-excerpt`,
+  Chapter 9, directly after the paragraph that introduces the 1 × 1 kernel), the author's
+  "Pixel Skewer". One pixel's column of 16 channel values is read by every row of W into
+  new channels at the same pixel; another pixel, then every pixel, runs through the same
+  W, 16 × 16 + 16 = 272 parameters for all 784 pixels. A dial sets the output depth
+  (16 × C + C parameters; the map stays 28 × 28). The shapes are NINSmall's; the values
+  are a declared illustrative toy, since the chapter prints no trained weights.
+- **Counting the window's stops** (`out-size-excerpt`, Chapter 8, after the paragraph
+  that reads the output-size formula aloud). The `shapes` cell's row of 8 and window of
+  3 in one dimension: the travel n + 2p − k on a ruler, one tick per hop, and the three
+  regimes' 6, 8 and 4; at stride 2 the unused padded cell shows what the floor drops.
+- **LeNet's tensor, one layer at a time** (`lenet-flow-excerpt`, Chapter 8, after "convolve,
+  shrink, deepen; repeat; then decide"). Each tensor grows out of the last: 1 × 28 × 28,
+  6 × 28 × 28, 6 × 14 × 14, a withheld prediction of conv2's unpadded 16 × 10 × 10, then
+  16 × 5 × 5, flattened to 400 and narrowed to 120, 84 and 10 logits.
+- **Two 3 × 3s see what one 5 × 5 sees** (`stacked-sight-excerpt`, Chapter 9, after "Same
+  sight, fewer parameters, more nonlinearity."). One output pixel traced back through two
+  stacked 3 × 3s: a 3 × 3 window on the hidden map, then its nine pixels' own windows swept
+  onto the input until they cover 5 × 5, the single 5 × 5's patch. The kernels are counted
+  square by square, 9 + 9 against 25, then at C = 32 the cell's 18,496 against 25,632.
+- **An `after-paragraph` anchor** in `filters/mechanism-excerpts.lua`, the fixture audit
+  and the authoring contract: the panel follows the one paragraph whose text contains a
+  plain-text phrase. Verified by running the real filter on Chapter 9's source.
+# Rolling post-v1.3: the website serves the HTML edition only (September 26, 2026)
+
+- **No PDF on the website.** The sidebar's "Get the PDF" action, the `download.html`
+  landing page, its stylesheet, and the WebP cover are removed. The Preface no longer
+  offers a PDF: its edition note links the v1.3 tagged source, its support note says the
+  book is free to read, and a revision note records the change. Quarto's `gh-pages`
+  publish replaces the whole tree, so the next deploy removes both book PDFs and the
+  112 print figures (`*_files/figure-pdf/*.pdf`) that the PDF renders left in the site.
+- **CI builds no PDF.** The publish job drops TinyTeX, poppler, fvextra, the two PDF
+  profile renders, and the PDF audit, and renders the HTML bundle once.
+  `scripts/render_pdf_profiles.py` remains for local print proofs.
+- **The audits enforce it.** `scripts/audit_book_contract.py` fails if `_quarto.yml`
+  configures a PDF action or the download page, if a retired file returns, if either
+  workflow builds or audits a PDF, or if a frozen HTML result lists its whole `_files`
+  folder as supporting, which would copy the chapter's print figures into the site.
+  `scripts/audit_html_assets.py` fails if the bundle ships any PDF file or links to a
+  PDF on this site or to `download.html`; links to papers hosted elsewhere are
+  unaffected. The `--allow-missing-generated-pdfs` exemption is gone.
+
+# Rolling post-v1.3: Chapter 1 setup cell and display results in the output audit (September 26, 2026)
+
+- **Chapter 1's setup cell** now ends `torch.manual_seed(6050);`. Without the semicolon
+  the notebook displayed the returned `torch._C.Generator`, whose memory address changed
+  on every execution: the committed HTML and TeX freezes disagreed about it, and every
+  re-execution changed the PDF text.
+- **`scripts/audit_frozen_stdout.py` compares text display results** (the value of a
+  cell's last expression) as well as printed output, across HTML and TeX and exactly
+  against `--base`. Image displays stay out: their captions are prose, and figures are
+  checked when they are regenerated. The book now holds one text display, Chapter 1's
+  tensor shapes.
+
+# Rolling post-v1.3: Chapter 1 footnotes in every edition (September 26, 2026)
+
+- **Content parity.** Chapter 1's three notes (bias augmentation, the case for Gaussian
+  residuals, and the radial shrink of weight decay) were raw `\footnote{}` commands, which
+  Pandoc passes to LaTeX and drops from HTML, so only the PDF editions carried them. They
+  are now Quarto footnotes (`^[...]`) with the same text; the two `\emph{}` terms became
+  Markdown emphasis. The HTML edition gains three notes, and both PDF profiles still
+  typeset them. No other chapter used a raw `\footnote{}`.
+
 # Rolling post-v1.3 — Chapter 7 replays: the moving average and the vertical Sobel kernel (September 25, 2026)
 
 - **Two HTML-only replays in Chapter 7**, on the author's request, so the chapter reads

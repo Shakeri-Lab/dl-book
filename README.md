@@ -8,9 +8,8 @@ Written in the open; every figure and result is produced by code in the source.
 Experiments show their code, while concept diagrams keep their drawing source in the
 repository. The examples are written directly in Python and PyTorch and are CPU-friendly.
 
-**Read it:** <https://shakeri-lab.github.io/dl-book/> (canonical HTML edition) ·
-[print PDF](https://shakeri-lab.github.io/dl-book/Deep-Learning--Making-It-Learnable.pdf) ·
-[continuous-screen PDF](https://shakeri-lab.github.io/dl-book/Deep-Learning--Making-It-Learnable--Continuous.pdf)
+**Read it:** <https://shakeri-lab.github.io/dl-book/> (the canonical HTML edition; the
+website serves HTML only)
 
 **Support it:** The complete book remains free at $0. Optional contributions toward
 continued corrections, figures, and open releases are welcome at
@@ -18,7 +17,7 @@ continued corrections, figures, and open releases are welcome at
 
 **Stable release:** [v1.3 (September 2, 2026)](https://github.com/Shakeri-Lab/dl-book/releases/tag/v1.3).
 This is the fixed edition to cite and pitch. The live canonical HTML is a rolling
-post-v1.3 build; the released PDFs remain fixed.
+post-v1.3 build; the tagged release remains fixed.
 
 ## The idea
 
@@ -46,12 +45,13 @@ self-contained voice.
 ```bash
 python3.12 -m venv ~/.venvs/dl-book && ~/.venvs/dl-book/bin/pip install -r requirements.txt
 export QUARTO_PYTHON="$HOME/.venvs/dl-book/bin/python"
-"$QUARTO_PYTHON" scripts/render_pdf_profiles.py
-quarto render --to html --no-clean
+quarto render --to html
 ```
 
-The helper renders both derived PDF profiles until every outline destination lands
-on its heading. HTML is rendered last because it is the canonical edition.
+CI publishes this HTML bundle and builds no PDF. For a local print proof,
+`"$QUARTO_PYTHON" scripts/render_pdf_profiles.py` renders both PDF profiles into
+`_book` until every outline destination lands on its heading; render HTML again
+afterwards, because the publication audit rejects a bundle that contains a PDF.
 
 Execution uses Quarto **freeze** — CI never runs cells; after exporting
 `QUARTO_PYTHON`, refresh a chapter's cache with

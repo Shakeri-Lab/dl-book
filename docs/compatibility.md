@@ -88,16 +88,17 @@ real changes.
 - **Frozen PDF assets:** Quarto records executed PDF figures under `_freeze`, while
   LuaLaTeX resolves them through ignored `*_files/figure-latex` directories. Run
   `python scripts/materialize_frozen_pdf_assets.py` immediately before each PDF
-  profile on a clean checkout. The publication workflow does this twice because one
-  profile may prune another profile's transient directories.
+  profile on a clean checkout. `scripts/render_pdf_profiles.py` does this before each
+  local print proof because one profile may prune another profile's transient
+  directories. CI builds no PDF.
 - **Audited publication bundle:** the Pages publish step uses `render: false`. Rendering
   after the audits can silently replace the artifacts that were checked, so deployment
   must publish the existing `_book` directory unchanged.
-- **Navigation disclosures and PDF landing:** Quarto 1.10.18 owns the depth-correct
-  `download.html` sidebar-tool URL and `collapse-level: 1` sidebar state. The static
-  landing source, stylesheet, and cover are copied through `project.resources`; both
-  derived PDFs must already be present before the final HTML asset audit checks its
-  free links. `disclosure-interactions.html` adds the keyboard role, focusability,
+- **Navigation disclosures and the HTML-only site:** Quarto 1.10.18 owns the
+  `collapse-level: 1` sidebar state. The website serves HTML only: the retired PDF
+  landing page (`download.html`, its stylesheet, and the WebP cover) must not return,
+  and the asset audit fails on any PDF file in `_book` or any link to a PDF on this
+  site. `disclosure-interactions.html` adds the keyboard role, focusability,
   Enter/Space activation, and hash-target opening that this renderer does not emit for
   collapsible callout headers and chapter-group controls. Recheck those contracts when
   Quarto changes its sidebar or callout markup.
@@ -106,9 +107,8 @@ real changes.
   numbered step. A scoped layout override is necessary because Bootstrap otherwise
   applies `display: none !important` to hidden content; browsers without `beforematch`
   retain the ordinary collapsed panel. The first content image in each document stays
-  eager and all later images carry `loading="lazy"` plus `decoding="async"`. The static
-  PDF landing page serves `figures/cover.webp` first and keeps `cover.png` as its
-  fallback and as the derived-PDF cover source.
+  eager and all later images carry `loading="lazy"` plus `decoding="async"`.
+  `figures/cover.png` remains the cover of local print proofs.
 - **Public notebook pipeline:** `scripts/notebook_manifest.json` is the sole map for
   the 26 exported units and their required assets. The generated bootstrap pins Python
   3.12's numerical stack through `scripts/notebook_requirements.txt`, embeds a full Git

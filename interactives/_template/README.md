@@ -54,8 +54,10 @@ the filesystem.
    knows and no others: `id`, `scene`, `qmd`, `anchor` (`{type, target}`, where `type` is
    `after-cell` for the panel after a labelled executable cell, whose Quarto div is
    `cell-<label>`; `before-cell` for the panel before the block that presents that cell,
-   its Plan → Code wrapper when it has one; or `before-heading` for the panel before a
-   level-2 heading, named by its exact text), `filter`
+   its Plan → Code wrapper when it has one; `before-heading` for the panel before a
+   level-2 heading, named by its exact text; or `after-paragraph` for the panel after
+   the one paragraph containing a plain-text phrase, which may span a source line break),
+   `filter`
    (`filters/mechanism-excerpts.lua` for anything using the shared transport), `transport`
    (`shared`), `duration`, `beats`, `fixture` (`{literals, computedVariants}`) and
    `receipt`. This entry is what makes the scene ship: the filter inserts every manifest

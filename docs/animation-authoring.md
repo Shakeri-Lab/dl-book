@@ -25,7 +25,19 @@ fixes in all of them and to four contract changes below (prose budget, plain-tex
 format, never spoil a prediction, four-decimal geometry). See
 [the review-pass receipt](excerpt-review-pass.md). No new scene is authorized by it.
 
-**Source state — September 25, 2026:** forty scenes are registered in
+**Source state — September 26, 2026:** forty-five scenes are registered in
+`interactives/manifest.json`. The five newest follow the author's requests for Chapters 8
+and 9: [channels say what, pooling says roughly where](what-where-excerpt.md) before
+LeNet; [counting the window's stops](out-size-excerpt.md) after the output-size formula;
+[LeNet's tensor, one layer at a time](lenet-flow-excerpt.md) after the paragraph that
+states its rhythm; [two 3 × 3s see what one 5 × 5 sees](stacked-sight-excerpt.md) in
+Chapter 9's first design question; and [a 1 × 1 convolution as one linear layer at every
+pixel](pixel-skewer-excerpt.md), the author's "Pixel Skewer", whose output-channel dial
+is the scene's one parameter control and whose values are a declared illustrative toy,
+since the chapter prints no trained weights. The last four use the new `after-paragraph`
+anchor, which places a panel directly after the paragraph that introduces its idea.
+
+**Prior source state — September 25, 2026:** forty scenes are registered in
 `interactives/manifest.json`. The two newest open Chapter 7 as a sequence the author asked
 for: [the moving average, one window at a time](box-average-excerpt.md) under the
 chapter's moving-average figure, then the existing convolution walkthrough, then
@@ -711,8 +723,10 @@ rebuild touches them.
   `filters/chapter-tools.lua` reads `scripts/notebook_manifest.json`, and inserts every
   scene the manifest gives the document being rendered — after the div of an
   `after-cell` anchor, before the block that presents the cell of a `before-cell` anchor
-  (its Plan → Code wrapper when it has one, the bare cell otherwise), or immediately
-  before the level-2/3 heading of a `before-heading` one — failing if a
+  (its Plan → Code wrapper when it has one, the bare cell otherwise), immediately
+  before the level-2/3 heading of a `before-heading` one, or after the one paragraph
+  whose text contains an `after-paragraph` target (plain text, compared in the heading's
+  normalized form, free to span a source line break) — failing if a
   required insertion point is absent or duplicated. The shared stylesheet is emitted once
   per document, each scene adds its own `<style>`, and `shared/loader.js` is emitted once,
   after the last panel on the page, so it sees every root there.

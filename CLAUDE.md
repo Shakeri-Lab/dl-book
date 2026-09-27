@@ -59,8 +59,10 @@ export GH_TOKEN=$(printf "protocol=https\nhost=github.com\n" | git credential fi
 ```
 
 Remote: `https://github.com/Shakeri-Lab/dl-book` (push to `main` → CI renders and
-publishes HTML plus print and continuous-screen PDFs to `gh-pages` →
-https://shakeri-lab.github.io/dl-book/). Never commit to
+publishes the HTML edition to `gh-pages` → https://shakeri-lab.github.io/dl-book/).
+The website serves HTML only (author's decision, September 26, 2026): CI builds no
+PDF, and the contract and asset audits fail if a PDF, a PDF link, or the retired
+`download.html` page returns. PDFs are local print proofs only. Never commit to
 `gh-pages` manually.
 
 **This repo lives in Box** (author's decision, July 25 2026):
@@ -120,17 +122,18 @@ compositions for figures. Full guide: `docs/dl-course-code.md`.
    ```bash
    export QUARTO_PYTHON="$HOME/.venvs/dl-book/bin/python"
    quarto render chapters/partN/XX-*.qmd  # NO --to flag!
-   "$QUARTO_PYTHON" scripts/render_pdf_profiles.py
-   quarto render --to html --no-clean  # canonical HTML last
+   quarto render --to html  # the published bundle: HTML only
    ```
-   An `--to html` single-file render leaves the PDF freeze (`tex.json`) stale → the
-   book PDF ships without your changes. Any later prose edit invalidates the freeze
-   and re-executes the whole chapter — batch fixes before re-rendering.
-   The PDF helper renders both profiles through the three-pass LaTeX floor, audits
-   every outline destination exactly, and retries to a bounded fixpoint. Do not replace
-   it with ad hoc profile commands in a publication build.
+   An `--to html` single-file render leaves the TeX freeze (`tex.json`) stale, and
+   CI's frozen-stdout audit compares the HTML and TeX freezes. Any later prose edit
+   invalidates the freeze and re-executes the whole chapter, so batch fixes before
+   re-rendering. For a local print proof, `"$QUARTO_PYTHON" scripts/render_pdf_profiles.py`
+   renders both profiles into `_book` through the three-pass LaTeX floor and a bounded
+   outline fixpoint; render HTML again (without `--no-clean`) before auditing `_book`,
+   because the asset audit rejects any PDF in the bundle.
 8. **Verify before pushing**: grep the built HTML for the cells' printed numbers and
-   confirm they support the prose; check both PDFs; skim for unrendered math.
+   confirm they support the prose; check any local print proof; skim for unrendered
+   math.
 9. **Commit `_freeze/` together with the chapter.** Push; then confirm CI:
    `gh run list -R Shakeri-Lab/dl-book -L 1` and spot-check the live URL (mind CDN
    cache, ~1 min).

@@ -257,6 +257,20 @@ ends, against one 2-D patch scored), so they are kept as complements. The Sobel 
 reads the kernel as a (1, 2, 1) average along times a (−1, 0, 1) difference across,
 which is why it fires on the rectangle's side and returns exactly zero on its top.
 
+#### Chapters 8 and 9 — September 26, 2026
+
+Five author requests followed. Chapter 8: [channels say what, pooling says roughly
+where](what-where-excerpt.md) before LeNet; [counting the window's stops](out-size-excerpt.md),
+the output-size formula in one dimension on the `shapes` cell's three regimes; and
+[LeNet's tensor, one layer at a time](lenet-flow-excerpt.md), with a withheld prediction of
+the unpadded conv2's 10 × 10 that the prose rounds past. Chapter 9: [two 3 × 3s see what one
+5 × 5 sees](stacked-sight-excerpt.md), and [the Pixel Skewer](pixel-skewer-excerpt.md), a
+1 × 1 convolution as one linear layer run at every pixel. The author asked for the last at
+the move from single- to multi-channel convolutions and then placed it in Chapter 9, where
+the manuscript already teaches the 1 × 1 kernel; its values are a declared illustrative toy,
+since the chapter prints no trained weights. Four of the five use the new `after-paragraph`
+anchor.
+
 Still scoped and unbuilt from the same picks, recorded so they are not re-derived: the
 experiment ledger table, the capacity U-curve, Chapter 5's §5.1 local-slope zoom and its
 outer product, the three splits, Chapter 3's §3.4 tile-the-gaps, and Adam. Each was set

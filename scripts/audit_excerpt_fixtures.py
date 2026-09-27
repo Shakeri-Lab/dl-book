@@ -37,7 +37,7 @@ SCENE_KEYS = {
     "fixture",
     "receipt",
 }
-ANCHOR_TYPES = {"after-cell", "before-cell", "before-heading"}
+ANCHOR_TYPES = {"after-cell", "before-cell", "before-heading", "after-paragraph"}
 HEADING_RE = re.compile(r"^#{2,}\s+(.*?)\s*$", re.M)
 # Pandoc's smart extension replaces ASCII quotes, apostrophes and dashes in the rendered
 # heading, so both sides compare this form (mirrored in filters/mechanism-excerpts.lua).
@@ -128,6 +128,15 @@ def anchor_present(anchor: dict, chapter: str) -> bool:
         # two cell anchors differ only in which side of the cell's block the panel takes.
         label = target[len("cell-"):] if target.startswith("cell-") else target
         return re.search(rf"^#\|\s*label:\s*{re.escape(label)}\s*$", chapter, re.M) is not None
+    if anchor["type"] == "after-paragraph":
+        # The filter finds the one paragraph whose string form contains the target; Pandoc
+        # joins a paragraph's source lines with single spaces, so compare with whitespace
+        # collapsed. Markup never reaches that string form unchanged, so a target carrying
+        # any is refused, and a target found twice would give the filter two paragraphs.
+        if re.search(r"[*_`$\\\[\]]", target):
+            return False
+        prose = normalize_heading(" ".join(chapter.split()))
+        return prose.count(normalize_heading(" ".join(target.split()))) == 1
     # Headings are compared in the normalized form filters/mechanism-excerpts.lua uses,
     # so a target written in plain ASCII still names a heading Pandoc renders with
     # typographic quotes, apostrophes or dashes.

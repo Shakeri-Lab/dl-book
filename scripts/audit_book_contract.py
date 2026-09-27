@@ -63,7 +63,7 @@ RMSPROP_PROVENANCE = (
     "- Tieleman and Hinton, “Lecture 6.5 — RMSProp,” *COURSERA: Neural Networks for"
 )
 CANONICAL_EDITION_SENTENCE = (
-    "The HTML edition is canonical; the PDF is a derived print conversion."
+    "The HTML edition on this website is the canonical text."
 )
 EDITION_STATUS_RE = re.compile(
     r"^dlbook-edition-status:\s*(stable|rolling)\s*$",
@@ -75,7 +75,7 @@ HTML_EDITION_STATUS_RE = re.compile(
 )
 SUPPORT_URL = "https://buymeacoffee.com/hshakeri"
 SUPPORT_FREE_CONTRACT = (
-    "This book is free to read and download at **$0**, and no contribution unlocks\n"
+    "This book is free to read at **$0**, and no contribution unlocks\n"
     "additional content."
 )
 SUPPORT_INVITATION = (
@@ -94,8 +94,13 @@ EXECUTION_WORKFLOW = ROOT / ".github/workflows/execute-audit.yml"
 DISCLOSURE_SCRIPT = ROOT / "disclosure-interactions.html"
 RESPONSIVE_SCRIPT = ROOT / "responsive-figures.html"
 BOOK_STYLES = ROOT / "dlbook.scss"
-DOWNLOAD_PAGE = ROOT / "download.html"
-DOWNLOAD_STYLES = ROOT / "download.css"
+# The website serves the HTML edition only. These files made up the retired PDF
+# download page and must not return.
+RETIRED_DOWNLOAD_FILES = (
+    ROOT / "download.html",
+    ROOT / "download.css",
+    ROOT / "figures/cover.webp",
+)
 NOT_FOUND_PAGE = ROOT / "404.html"
 QUARTO_VERSION = "1.10.18"
 NOTEBOOK_THREAD_DEFAULTS = (
@@ -110,21 +115,24 @@ NOTEBOOK_SINGLE_THREAD_SLUGS = (
     "18-alignment",
 )
 NOTEBOOK_TORCH_THREAD_OVERRIDE = "DLBOOK_TORCH_NUM_THREADS"
-DOWNLOAD_TOOL_CONFIG = (
-    '    tools:\n'
-    '      - icon: file-pdf\n'
-    '        text: "Get the PDF"\n'
-    '        aria-label: "Get the PDF"\n'
-    '        href: download.html'
+# Configuration that would offer a PDF on the website.
+FORBIDDEN_PDF_SITE_CONFIG = (
+    "downloads:",
+    "file-pdf",
+    "Get the PDF",
+    "download.html",
+    "download.css",
+    "figures/cover.",
 )
-DOWNLOAD_RESOURCE_CONFIG = (
-    "  resources:\n"
-    "    - download.html\n"
-    "    - download.css\n"
-    "    - figures/cover.png"
+# CI steps that would build or audit a PDF. PDFs are local print proofs only.
+FORBIDDEN_PDF_CI_STEPS = (
+    "render_pdf_profiles.py",
+    "audit_pdf.py",
+    "--to pdf",
+    "tinytex",
+    "tlmgr",
+    "--allow-missing-generated-pdfs",
 )
-PRINT_PDF_NAME = "Deep-Learning--Making-It-Learnable.pdf"
-CONTINUOUS_PDF_NAME = "Deep-Learning--Making-It-Learnable--Continuous.pdf"
 SIDEBAR_COLLAPSE_CONFIG = "    collapse-level: 1"
 HTML_SOURCE_TOOL_CONFIG = (
     "    code-tools:\n"
@@ -584,7 +592,7 @@ def main() -> None:
             "index.qmd: canonical HTML cannot be stable while its derived PDF is rolling",
         )
     if index_text.count(CANONICAL_EDITION_SENTENCE) != 1:
-        fail(errors, "index.qmd: canonical HTML/PDF sentence must appear exactly once")
+        fail(errors, "index.qmd: canonical-HTML sentence must appear exactly once")
     if index_text.count(SUPPORT_URL) != 1:
         fail(errors, "index.qmd: optional support URL must appear exactly once")
     if index_text.count(SUPPORT_FREE_CONTRACT) != 1:
@@ -677,12 +685,12 @@ def main() -> None:
                     errors,
                     f"index.qmd: route table still bypasses its part page: {target}",
                 )
-    if "downloads: [pdf]" in quarto_text:
-        fail(errors, "_quarto.yml: direct native PDF action bypasses the landing page")
-    if quarto_text.count(DOWNLOAD_TOOL_CONFIG) != 1:
-        fail(errors, "_quarto.yml: cover-led PDF landing-page action is missing")
-    if quarto_text.count(DOWNLOAD_RESOURCE_CONFIG) != 1:
-        fail(errors, "_quarto.yml: download-page resources are missing or duplicated")
+    for forbidden in FORBIDDEN_PDF_SITE_CONFIG:
+        if forbidden in quarto_text:
+            fail(
+                errors,
+                f"_quarto.yml: the HTML-only website must not configure {forbidden!r}",
+            )
     if quarto_text.count(SIDEBAR_COLLAPSE_CONFIG) != 1:
         fail(errors, "_quarto.yml: root chapter groups must default closed")
     if quarto_text.count(HTML_SOURCE_TOOL_CONFIG) != 1:
@@ -742,47 +750,26 @@ def main() -> None:
                 break
     if "responsive-route-table-frame" not in BOOK_STYLES.read_text():
         fail(errors, "dlbook.scss: responsive front-door route style is missing")
-    if not DOWNLOAD_PAGE.is_file():
-        fail(errors, "download.html: cover-led PDF landing page is missing")
-    else:
-        download_text = DOWNLOAD_PAGE.read_text()
-        for required in (
-            'src="figures/cover.png"',
-            'alt="Cover of Deep Learning: Making It Learnable by Heman Shakeri"',
-            PRINT_PDF_NAME,
-            CONTINUOUS_PDF_NAME,
-            SUPPORT_URL,
-            "$0 · Free",
-            "Suggested contribution",
-            "$20",
-            "Contribution and download are independent.",
-            'id="download-options" tabindex="-1"',
-            'class="price-support-link"',
-            "Download Deep Learning: Making It Learnable",
-            "downloadOptions.focus();",
-            'downloadOptions.scrollIntoView({ block: "start" })',
-        ):
-            if required not in download_text:
-                fail(errors, f"download.html: required contract is missing: {required}")
-        if not re.search(
-            rf'<a class="price-support-link"\s+'
-            rf'href="{re.escape(SUPPORT_URL)}">\$20</a>',
-            download_text,
-        ):
-            fail(errors, "download.html: suggested $20 must link to the support page")
-        for removed in (
-            "Choose your PDF",
-            "Choose an optional contribution",
-            'name="contribution"',
-        ):
-            if removed in download_text:
-                fail(errors, f"download.html: redundant picker copy remains: {removed}")
-        if 'target="_blank"' in download_text:
-            fail(errors, "download.html: support link must not open an unannounced new tab")
-    if not DOWNLOAD_STYLES.is_file():
-        fail(errors, "download.css: PDF landing-page styles are missing")
-    elif ".contribution-picker" in DOWNLOAD_STYLES.read_text():
-        fail(errors, "download.css: removed contribution-picker styles remain")
+    for retired in RETIRED_DOWNLOAD_FILES:
+        if retired.exists():
+            fail(
+                errors,
+                f"{retired.relative_to(ROOT)}: retired PDF download-page file "
+                "must not return",
+            )
+    # A frozen HTML result that lists its whole `<stem>_files` folder as supporting
+    # carries the restored print figures (`figure-pdf`) into the website. Quarto
+    # writes that form when execution starts with no other figure folder present;
+    # restore the chapter's print figures into that folder and re-render.
+    for html_freeze in sorted((ROOT / "_freeze").glob("**/execute-results/html.json")):
+        supporting = json.loads(html_freeze.read_text())["result"].get("supporting", [])
+        stray = [entry for entry in supporting if not entry.endswith("/figure-html")]
+        if stray:
+            fail(
+                errors,
+                f"{html_freeze.relative_to(ROOT)}: supporting {stray} would publish "
+                "print figures on the HTML-only website",
+            )
     if not NOT_FOUND_PAGE.is_file():
         fail(errors, "404.html: branded not-found page is missing")
     else:
@@ -795,9 +782,13 @@ def main() -> None:
             fail(errors, "404.html: expected one first-focusable skip link")
         if '<main id="quarto-document-content">' not in not_found_text:
             fail(errors, "404.html: skip-link target is missing")
-    fixpoint_call = "python scripts/render_pdf_profiles.py"
-    if workflow_text.count(fixpoint_call) != 1:
-        fail(errors, "publish workflow must use the bounded PDF outline fixpoint")
+    for forbidden in FORBIDDEN_PDF_CI_STEPS:
+        for name, text in (
+            ("publish workflow", workflow_text),
+            ("execution audit", execution_workflow_text),
+        ):
+            if forbidden in text:
+                fail(errors, f"{name} must not build or audit a PDF: {forbidden!r}")
     quarto_pin = f'version: "{QUARTO_VERSION}"'
     quarto_jobs = ("export_notebooks", "validate_notebooks", "build-deploy")
     if workflow_text.count(quarto_pin) != len(quarto_jobs) or any(
@@ -911,18 +902,7 @@ def main() -> None:
             "Chapter 18 hidden setup must default to six threads and assert the "
             "notebook-validation override",
         )
-    html_only_flag = "--allow-missing-generated-pdfs"
     notebook_html_only_flag = "--allow-missing-generated-notebooks"
-    if execution_workflow_text.count(html_only_flag) != 1:
-        fail(
-            errors,
-            "execution audit must declare its HTML-only generated-PDF exemption",
-        )
-    if html_only_flag in workflow_text:
-        fail(
-            errors,
-            "publish workflow must require both generated PDF download targets",
-        )
     if execution_workflow_text.count(notebook_html_only_flag) != 1:
         fail(
             errors,
@@ -971,8 +951,12 @@ def main() -> None:
         )
     if workflow_text.count("render: false") != 1:
         fail(errors, "publish workflow must deploy the audited bundle without re-rendering")
-    if "chapters/ index.qmd download.html README.md" not in workflow_text:
-        fail(errors, "publish workflow must include download.html in external-link checks")
+    if "chapters/ index.qmd README.md" not in workflow_text:
+        fail(
+            errors,
+            "publish workflow must check external links in the chapters, Preface, "
+            "and README",
+        )
     tex_macros = (ROOT / "tex/macros.tex").read_text()
     if tex_macros.count("\\extratitle{") != 1:
         fail(errors, "tex/macros.tex: KOMA PDF cover hook is missing or duplicated")
@@ -1049,8 +1033,9 @@ def main() -> None:
         "display-only figures, interlude "
         "figure/table namespaces, the epilogue namespace and source contract, the Part III "
         "learnability callback, the complete temperature arc, and canonical-edition "
-        "metadata, cover, free-PDF landing, optional-support, and collapsed-disclosure "
-        "contracts; 30 non-Part HTML tool manifests (27 specific, 3 playlist-only)"
+        "metadata, print cover, HTML-only site (no PDF offered or built in CI), "
+        "optional-support, and collapsed-disclosure contracts; 30 non-Part HTML tool "
+        "manifests (27 specific, 3 playlist-only)"
     )
 
 
