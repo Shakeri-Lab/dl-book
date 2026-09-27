@@ -43,7 +43,7 @@ local function scenes_for(source)
       local anchor = scene.anchor
       assert(type(anchor) == "table" and type(anchor.target) == "string" and
         (anchor.type == "after-cell" or anchor.type == "before-cell"
-          or anchor.type == "before-heading"),
+          or anchor.type == "before-heading" or anchor.type == "after-paragraph"),
         "Mechanism excerpt has no usable anchor: " .. tostring(scene.id))
       table.insert(mine, scene)
     end
@@ -78,6 +78,11 @@ end
 --   precedes the wrapper and never lands between a plan and its code; a bare cell is
 --   its own block. scene.wrapped is settled once per document, before any insertion.
 -- before-heading: a level-2/3 heading whose text matches the target after normalization.
+-- after-paragraph: the paragraph whose text contains the target after the same
+--   normalization, for a panel that belongs right after the prose that introduces its
+--   idea. Pandoc joins the paragraph's source lines with single spaces, so a target may
+--   span a line break of the .qmd; it must be plain text, since emphasis and math do not
+--   survive into the paragraph's string form unchanged.
 local function is_anchor(scene, block)
   if scene.anchor.type == "after-cell" then
     return block.t == "Div" and block.identifier == scene.anchor.target
@@ -86,6 +91,10 @@ local function is_anchor(scene, block)
     if block.t ~= "Div" then return false end
     if block.classes:includes("plan-code") then return holds(block, scene.anchor.target) end
     return block.identifier == scene.anchor.target and not scene.wrapped
+  end
+  if scene.anchor.type == "after-paragraph" then
+    return block.t == "Para" and normalize_heading(pandoc.utils.stringify(block))
+      :find(normalize_heading(scene.anchor.target), 1, true) ~= nil
   end
   return block.t == "Header" and (block.level == 2 or block.level == 3)
     and normalize_heading(pandoc.utils.stringify(block.content))
@@ -143,7 +152,7 @@ return {{Pandoc = function(doc)
       if is_anchor(scene, block) then table.insert(order, index) end
     end
   end
-  doc:walk({Div = note, Header = note})
+  doc:walk({Div = note, Header = note, Para = note})
   local first, last = order[1], order[#order]
 
   for index, scene in ipairs(scenes) do
@@ -161,6 +170,12 @@ return {{Pandoc = function(doc)
         if is_anchor(scene, header) then
           inserted = inserted + 1
           return {block, header}
+        end
+      end,
+      Para = function(para)
+        if is_anchor(scene, para) then
+          inserted = inserted + 1
+          return {para, block}
         end
       end
     })

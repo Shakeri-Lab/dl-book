@@ -1,3 +1,33 @@
+# Rolling post-v1.3 — Chapters 8 and 9 replays: pooling, output size, LeNet; stacked kernels and the 1 × 1 convolution (September 26, 2026)
+
+- **Channels say what, pooling says roughly where** (`what-where-excerpt`, Chapter 8,
+  before "LeNet: the whole machine"). The chapter's two edge experts on its square,
+  stacked as two channels, then each map max-pooled on its own as LeNet pools: the side
+  still reads (4, 0) and the top (0, 4), where one maximum across maps would read 4 at
+  both. Convolution changes the depth; pooling changes only height and width.
+- **A 1 × 1 convolution is one linear layer, run at every pixel** (`pixel-skewer-excerpt`,
+  Chapter 9, directly after the paragraph that introduces the 1 × 1 kernel), the author's
+  "Pixel Skewer". One pixel's column of 16 channel values is read by every row of W into
+  new channels at the same pixel; another pixel, then every pixel, runs through the same
+  W, 16 × 16 + 16 = 272 parameters for all 784 pixels. A dial sets the output depth
+  (16 × C + C parameters; the map stays 28 × 28). The shapes are NINSmall's; the values
+  are a declared illustrative toy, since the chapter prints no trained weights.
+- **Counting the window's stops** (`out-size-excerpt`, Chapter 8, after the paragraph
+  that reads the output-size formula aloud). The `shapes` cell's row of 8 and window of
+  3 in one dimension: the travel n + 2p − k on a ruler, one tick per hop, and the three
+  regimes' 6, 8 and 4; at stride 2 the unused padded cell shows what the floor drops.
+- **LeNet's tensor, one layer at a time** (`lenet-flow-excerpt`, Chapter 8, after "convolve,
+  shrink, deepen; repeat; then decide"). Each tensor grows out of the last: 1 × 28 × 28,
+  6 × 28 × 28, 6 × 14 × 14, a withheld prediction of conv2's unpadded 16 × 10 × 10, then
+  16 × 5 × 5, flattened to 400 and narrowed to 120, 84 and 10 logits.
+- **Two 3 × 3s see what one 5 × 5 sees** (`stacked-sight-excerpt`, Chapter 9, after "Same
+  sight, fewer parameters, more nonlinearity."). One output pixel traced back through two
+  stacked 3 × 3s: a 3 × 3 window on the hidden map, then its nine pixels' own windows swept
+  onto the input until they cover 5 × 5, the single 5 × 5's patch. The kernels are counted
+  square by square, 9 + 9 against 25, then at C = 32 the cell's 18,496 against 25,632.
+- **An `after-paragraph` anchor** in `filters/mechanism-excerpts.lua`, the fixture audit
+  and the authoring contract: the panel follows the one paragraph whose text contains a
+  plain-text phrase. Verified by running the real filter on Chapter 9's source.
 # Rolling post-v1.3: the website serves the HTML edition only (September 26, 2026)
 
 - **No PDF on the website.** The sidebar's "Get the PDF" action, the `download.html`
