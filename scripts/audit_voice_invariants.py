@@ -562,6 +562,11 @@ def exempt_edit(edit: dict) -> bool:
     return justification.startswith(("new material", "restored", "author text"))
 
 
+def replaced_by_exempt(sentence: str, exempt_old: list[set[str]]) -> bool:
+    words = set(ledger.tokens(sentence))
+    return bool(words) and any(len(words & old) >= 0.6 * len(words) for old in exempt_old)
+
+
 def i18(base: str, checklist: Checklist) -> None:
     edits_by_page: dict[str, list[dict]] = {}
     for path in sorted((ROOT / "audits/voice/edits").glob("*.json")):
@@ -572,6 +577,13 @@ def i18(base: str, checklist: Checklist) -> None:
     for page, edits in edits_by_page.items():
         exempt_ids = {e["id"] for e in edits if exempt_edit(e)}
         exempt = {sentence for edit_id, sentence in added.get(page, []) if edit_id in exempt_ids}
+        # Baseline sentences an exempt edit replaced leave the comparison with it, so a
+        # group is judged only on its non-exempt changes.
+        exempt_old = [
+            set(ledger.tokens(sentence))
+            for e in edits if exempt_edit(e)
+            for sentence in ledger.prose_sentences(ledger.source_prose(e["old"]))
+        ]
         old = git_show(base, page) or ""
         new = (ROOT / page).read_text(encoding="utf-8")
         old_blocks, new_blocks = paragraph_blocks(old), paragraph_blocks(new)
@@ -582,8 +594,12 @@ def i18(base: str, checklist: Checklist) -> None:
             checked += 1
             before_raw = "\n\n".join(old_blocks[i1:i2])
             after_raw = "\n\n".join(new_blocks[j1:j2])
-            before = ledger.prose_sentences(ledger.source_prose(before_raw))
-            after = [s for s in ledger.prose_sentences(ledger.source_prose(after_raw)) if s not in exempt]
+            after_all = ledger.prose_sentences(ledger.source_prose(after_raw))
+            before = [
+                s for s in ledger.prose_sentences(ledger.source_prose(before_raw))
+                if s in after_all or not replaced_by_exempt(s, exempt_old)
+            ]
+            after = [s for s in after_all if s not in exempt]
             n0, m0, p0 = concreteness(before)
             n1, m1, p1 = concreteness(after)
             problems = []
@@ -615,14 +631,14 @@ def i18(base: str, checklist: Checklist) -> None:
 
 def i17(checklist: Checklist) -> None:
     added = ledger.added_sentences()
-    problems = ledger.i17_violations(added)
+    problems = ledger.i17_violations(added) + ledger.apparatus_violations(added)
     count = sum(len(items) for items in added.values())
     pages = sum(1 for items in added.values() if items)
     checklist.add(
         "I17",
         not problems,
         "; ".join(problems) if problems else f"{count} added sentences on {pages} page(s); no shared "
-        "four-word sequence or opening across chapters",
+        "four-word sequence across chapters, no shared promise opening, no apparatus word",
     )
 
 

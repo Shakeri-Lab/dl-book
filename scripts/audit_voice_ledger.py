@@ -141,14 +141,23 @@ PHRASES = {
     "here_is_the": re.compile(r"\bhere is the\b", re.I),
     "is_the_whole": re.compile(r"\bis the whole\b", re.I),
 }
-# Blocking caps, whole book (V3). The rest are report-only habit words (S5).
+# Blocking caps on the sentences this pass adds (V3 as amended for Stage B2): baseline
+# and restored uses are reported, never capped. The rest are report-only habit words (S5).
 PHRASE_CAPS = {
     "one_caution": 0,
     "that_is_the_whole": 0,
     "by_the_end": 2,
     "you_will_be_able_to": 1,
-    "in_one_sentence": 3,
+    "in_one_sentence": 0,
+    "is_the_whole": 0,
 }
+# Apparatus words (Stage B2): an added or recast sentence never names the book's machinery.
+APPARATUS_RE = re.compile(
+    r"\b(?:recaps?|sections?|subsections?|tables?|callouts?|receipts?|ledgers?)\b|\bthe pages ahead\b",
+    re.I,
+)
+LEDGER_PAGES = {"chapters/part5/17-peft-quantization.qmd"}  # Chapter 17's own bill ledger
+SEC_REF_RE = re.compile(r"@(sec-[A-Za-z0-9_-]+)")
 PHRASE_CLASSES = ("A", "B", "C", "D", "E", "F", "H", "T")
 REGISTER_PATTERNS = {
     "okay": re.compile(r"\bOkay\b", re.I),
@@ -570,8 +579,12 @@ def page_metrics(page: Page) -> dict[str, object]:
 
     guards = {name: sum(len(guard_spans(b.text)) for b in by_class[name]) for name in "ABC"}
     chapter_counts = [len(CHAPTER_REF_RE.findall(b.text)) for b in prose]
+    openings = restored_openings(page.source)
     opener_refs = sum(
-        len(CHAPTER_REF_RE.findall(b.text)) for b in prose if b.opener
+        len(CHAPTER_REF_RE.findall(b.text)) for b in prose if b.opener and not restored_block(b, openings)
+    )
+    opener_restored = sum(
+        len(CHAPTER_REF_RE.findall(b.text)) for b in prose if b.opener and restored_block(b, openings)
     )
     reader = sum(len(READER_RE.findall(b.text)) for b in prose)
     imperatives = sum(
@@ -603,6 +616,7 @@ def page_metrics(page: Page) -> dict[str, object]:
             "chapter_refs_A": sum(chapter_counts),
             "chapter_refs_A_per1k": per1k(sum(chapter_counts), words_a),
             "chapter_refs_opener": opener_refs,
+            "chapter_refs_opener_restored": opener_restored,
             "chapter_refs_max_paragraph": max(chapter_counts, default=0),
             "reader_address": reader,
             "reader_address_per1k": per1k(reader, words_a),
@@ -810,9 +824,110 @@ def grams(sentence: str) -> set[tuple[str, ...]]:
     return out
 
 
-def i17_violations(added: dict[str, list[tuple[str, str]]]) -> list[str]:
-    """V2: no shared four-word sequence and no shared first three words across chapters."""
+def edit_rules() -> dict[str, str]:
+    """Rule of every edit, by id (ids carry their page prefix, so they are unique)."""
+    rules: dict[str, str] = {}
+    for path in sorted(EDITS_DIR.glob("*.json")):
+        for edit in json.loads(path.read_text(encoding="utf-8"))["edits"]:
+            rules[edit["id"]] = edit.get("rule", "")
+    return rules
+
+
+def restored_openings(source: str) -> list[str]:
+    """Six-word openings of the paragraphs an edit restored verbatim (the S2 exemption)."""
+    out: list[str] = []
+    for path in sorted(EDITS_DIR.glob("*.json")):
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if data["page"] != source:
+            continue
+        for edit in data["edits"]:
+            if not (edit.get("applied") and edit.get("justification", "").startswith("restored")):
+                continue
+            for chunk in source_prose(edit["new"]).split(PARAGRAPH_BREAK):
+                words_ = [w for w in tokens(chunk) if w not in {"ref", "math", "code"}]
+                if len(words_) >= 6:
+                    out.append(" ".join(words_[:6]))
+    return out
+
+
+def restored_block(block: Block, openings: list[str]) -> bool:
+    if not openings:
+        return False
+    words_ = [w for w in tokens(CHAPTER_REF_RE.sub(" ", block.text)) if w not in {"math", "code"}]
+    text = " ".join(words_)
+    return any(opening in text for opening in openings)
+
+
+def page_level_ids() -> set[str]:
+    """Identifiers of whole pages (chapters, interludes, Parts, appendices): allowed pointers."""
+    ids: set[str] = set()
+    for source in book_sources():
+        for line in (ROOT / source).read_text(encoding="utf-8").splitlines():
+            match = re.match(r"^#\s.*\{#(sec-[A-Za-z0-9_-]+)", line)
+            if match:
+                ids.add(match.group(1))
+                break
+    return ids
+
+
+def heading_titles() -> set[str]:
+    """Section titles of four words or more, normalized, for the inline-title check."""
+    titles: set[str] = set()
+    for source in book_sources():
+        fence = False
+        for line in (ROOT / source).read_text(encoding="utf-8").splitlines():
+            if re.match(r"^\s*(`{3,}|~{3,})", line):
+                fence = not fence
+                continue
+            match = None if fence else re.match(r"^#{2,6}\s+(.*?)\s*(\{[^}]*\})?\s*$", line)
+            if match and not match.group(1).startswith("Okay, so"):
+                words_ = tokens(re.sub(r"[*`_]", "", match.group(1)))
+                if len(words_) >= 4:
+                    titles.add(" ".join(words_))
+    return titles
+
+
+def apparatus_violations(added: dict[str, list[tuple[str, str]]]) -> list[str]:
+    """Stage B2: added or recast sentences never name the book's apparatus."""
     problems = []
+    titles = heading_titles()
+    present = {edit_id for items in added.values() for edit_id, _ in items}
+    for page, items in added.items():
+        for edit_id, sentence in items:
+            for match in APPARATUS_RE.finditer(sentence):
+                if match.group(0).lower().startswith("ledger") and page in LEDGER_PAGES:
+                    continue
+                problems.append(f"I17 apparatus word {match.group(0)!r}: {edit_id} {sentence[:90]!r}")
+            flat = " ".join(tokens(sentence))
+            for title in sorted(titles):
+                if title in flat:
+                    problems.append(f"I17 inline section title {title!r}: {edit_id} {sentence[:90]!r}")
+    allowed = page_level_ids()
+    for path in sorted(EDITS_DIR.glob("*.json")):
+        for edit in json.loads(path.read_text(encoding="utf-8"))["edits"]:
+            if edit["id"] not in present:
+                continue
+            new_refs = set(SEC_REF_RE.findall(edit["new"])) - set(SEC_REF_RE.findall(edit["old"]))
+            for ref in sorted(new_refs - allowed):
+                problems.append(f"I17 cross-reference to a section @{ref}: {edit['id']}")
+    return problems
+
+
+def added_phrase_hits(added: dict[str, list[tuple[str, str]]]) -> dict[str, list[str]]:
+    """V3 phrases inside added sentences, by phrase: the edit ids that carry them."""
+    hits: dict[str, list[str]] = {name: [] for name in PHRASES}
+    for items in added.values():
+        for edit_id, sentence in items:
+            for name, pattern in PHRASES.items():
+                hits[name].extend(edit_id for _ in pattern.findall(sentence))
+    return hits
+
+
+def i17_violations(added: dict[str, list[tuple[str, str]]]) -> list[str]:
+    """V2: no shared four-word sequence across chapters; no shared first three words among
+    promise sentences (T1)."""
+    problems = []
+    rules = edit_rules()
     flat = [(page, edit_id, sentence) for page, items in added.items() for edit_id, sentence in items]
     for (page_a, id_a, s_a), (page_b, id_b, s_b) in itertools.combinations(flat, 2):
         if page_a == page_b:
@@ -823,7 +938,8 @@ def i17_violations(added: dict[str, list[tuple[str, str]]]) -> list[str]:
                 f"I17 shared four-word sequence {' '.join(shared[0])!r}: {id_a} {s_a[:90]!r} / {id_b} {s_b[:90]!r}"
             )
         head_a, head_b = tokens(s_a)[:3], tokens(s_b)[:3]
-        if len(head_a) == 3 and head_a == head_b:
+        promises = rules.get(id_a) == "T1" and rules.get(id_b) == "T1"
+        if promises and len(head_a) == 3 and head_a == head_b:
             problems.append(
                 f"I17 shared first three words {' '.join(head_a)!r}: {id_a} {s_a[:90]!r} / {id_b} {s_b[:90]!r}"
             )
@@ -891,23 +1007,28 @@ def run_check(html_root: Path) -> int:
                     warnings += 1
                     print(f"warning: {source}: {key} {row[key]} {status}")
     totals = phrase_totals(rows)
-    for name, cap in PHRASE_CAPS.items():
-        if totals[name] > cap:
-            failures += 1
-            pages = ", ".join(
-                f"{short(str(row['page']))} {row[f'phrase_{name}']}" for row in rows if int(row[f"phrase_{name}"])
-            )
-            print(f"V3 cap exceeded: {name} {totals[name]} > {cap} ({pages})", file=sys.stderr)
     added = added_sentences()
-    problems = i17_violations(added)
+    hits = added_phrase_hits(added)
+    for name, cap in PHRASE_CAPS.items():
+        if len(hits[name]) > cap:
+            failures += 1
+            print(
+                f"V3 cap exceeded in added sentences: {name} {len(hits[name])} > {cap} "
+                f"({', '.join(hits[name])})",
+                file=sys.stderr,
+            )
+    problems = i17_violations(added) + apparatus_violations(added)
     for problem in problems:
         print(problem, file=sys.stderr)
     failures += len(problems)
     count = sum(len(items) for items in added.values())
     pages = sum(1 for items in added.values() if items)
     print(
-        f"I17: {count} added sentence(s) on {pages} page(s); {len(problems)} shared-phrasing "
-        "violation(s); V3 caps " + ", ".join(f"{name} {totals[name]}/{cap}" for name, cap in PHRASE_CAPS.items())
+        f"I17: {count} added sentence(s) on {pages} page(s); {len(problems)} shared-phrasing or "
+        "apparatus violation(s); V3 caps on added sentences "
+        + ", ".join(f"{name} {len(hits[name])}/{cap}" for name, cap in PHRASE_CAPS.items())
+        + "; book totals (reported) "
+        + ", ".join(f"{name} {totals[name]}" for name in PHRASE_CAPS)
     )
     scope = len(VOICE_SCOPE)
     if failures:
@@ -1028,13 +1149,16 @@ def phrases_markdown(before: list[dict[str, object]], after: list[dict[str, obje
         "",
         "Book-wide counts on rendered HTML over every visible text class (prose, captions,",
         "callouts, exercises, sources, plan steps, alt text and tables, headings; replay",
-        "panels excluded). Blocking caps fail `audit_voice_ledger.py --check`; the other",
-        "phrases are habit words (S5): thin them only where one page carries three or more.",
+        "panels excluded), and the count inside the sentences this pass added. Caps apply to",
+        "added sentences only and fail `audit_voice_ledger.py --check`; baseline and restored",
+        "uses are reported, never rewritten to meet a cap. The other phrases are habit words",
+        "(S5): thin baseline uses only where one page carries three or more.",
         "",
-        "| phrase | cap | before | now | pages with 3+ now |",
-        "|---|---|---:|---:|---|",
+        "| phrase | cap on added | before | now | in added sentences | pages with 3+ now |",
+        "|---|---|---:|---:|---:|---|",
     ]
     total_before, total_after = phrase_totals(before), phrase_totals(after)
+    hits = added_phrase_hits(added_sentences())
     for name in PHRASES:
         cap = PHRASE_CAPS.get(name)
         heavy = ", ".join(
@@ -1043,7 +1167,7 @@ def phrases_markdown(before: list[dict[str, object]], after: list[dict[str, obje
         )
         lines.append(
             f"| {PHRASE_LABELS[name]} | {'blocking, ' + str(cap) if cap is not None else 'report only'} | "
-            f"{total_before[name]} | {total_after[name]} | {heavy or 'none'} |"
+            f"{total_before[name]} | {total_after[name]} | {len(hits[name])} | {heavy or 'none'} |"
         )
     lines += ["", "## Pages that carry the phrases now", "", "| page | " + " | ".join(PHRASES) + " |",
               "|---|" + "---:|" * len(PHRASES)]
