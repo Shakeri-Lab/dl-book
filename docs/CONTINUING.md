@@ -10,30 +10,36 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 
 ---
 
-> **Current work: voice-coherence pass, Stage B (branch `voice-coherence`, pushed as a
-> branch, not merged), September 26, 2026.** The author's brief asks for one narrator at
-> one warmth in every chapter without changing a claim, number, equation, code cell,
-> output, figure, citation, exercise task, plan step, or anchor. `VOICE.md` (repo root) is
-> the contract, amended for Stage B (the kit is a set of jobs: V1 to V5, N6 concreteness,
-> V3 phrase caps, I17 and I18); the style guide defers to it on register.
-> `scripts/audit_voice_ledger.py` measures rendered pages (ledger per text class) and, with
-> `--check`, blocks R1 to R6 on the pages in `VOICE_SCOPE`, the V3 caps book-wide, and I17;
-> CI runs it in `build-deploy`. `scripts/voice_apply_edits.py` applies reviewed edit lists
-> (`audits/voice/edits/*.json`) with guarded replacements and renders the receipts;
-> `scripts/audit_voice_invariants.py` checks I1 to I18 against the baseline `86ec60b`;
-> `scripts/refresh_excerpt_receipts.py` refreshes replay chapter hashes after a reviewed
-> prose edit. Stage A revised Chapters 1, 6, 13, and 17 and the test-time-regression
-> interlude; B0 corrected them and restored September 25 regressions in Chapters 6 and 7;
-> B1 revised Chapters 8 and 9 and stopped at the author's gate: read
-> `audits/voice/stage_b1_report.md` and `audits/voice/decisions_pending.md` (section 7)
-> before B2. Chapter 1's PDF-only footnotes are a separate pull request from `main`
-> (branch `ch1-footnotes-html`). Lessons: S2 keeps every link instance (reword the link
-> text, as in `[the SGD chapter](04-training-loss-sgd.qmd#sec-04-training-loss-sgd)`);
-> captions stored in `#| fig-cap` count as captions, not code; recap headings can be replay
-> anchors (`interactives/manifest.json`); V3 caps are book-wide, so read the phrase
-> ledger's baseline column before trusting a brief's count; I18 rejects added parentheses,
-> so a colour fix in a caption needs a parenthesis-free idiom; and restored author text
-> carries a `restored: <commit>^` justification, so I17 and I18 treat it as the author's.
+> **Current work: voice-coherence pass, Stage B2 (branch `voice-coherence`, pushed at each
+> gate, never merged by this pass), September 27, 2026.** The author's brief asks for one
+> narrator at one warmth in every chapter without changing a claim, number, equation,
+> code cell, output, figure, citation, exercise task, plan step, or anchor. `VOICE.md` is
+> the contract, amended for Stage B2: rules constrain added or recast sentences and
+> baseline is reported, never rewritten to satisfy a count; P1 to P5 fix how sentences
+> are written (one writer per page, three candidates chosen by ear, a calibrated
+> rule-blind reader pass, re-read after thinning, a gate report whose Section A shows each
+> changed sentence in its paragraph); a sentence quoted in a brief is a candidate, never
+> text to place; S6 deletes taste-grades or turns them into the reason; R9 fixes
+> unambiguous slips in baseline text; I19 lists prose numbers no printout shows.
+> `scripts/audit_voice_ledger.py` measures rendered pages and, with `--check`, blocks R1
+> to R6 on `VOICE_SCOPE`, the V3 caps on added sentences, and I17 (with `--phrases`,
+> `--numbers`, `--grades` reports); `scripts/voice_apply_edits.py` applies edit lists and
+> renders receipts and Section A (`gate`); `scripts/audit_voice_invariants.py` checks I1
+> to I18. Done: Stage A; B0 and B1; B2a (the B2 corrections, reader passes, S6 on the ten
+> pages in scope, the PCA interlude and Chapters 10 and 11), stopped at the B2a gate:
+> read `audits/voice/stage_b2a_report.md` (Sections A and B) before B2b. `main` has
+> moved past this branch's base (`86ec60b`): #5 (Chapter 1's footnotes in HTML), #6
+> (Chapter 1's generator display; the frozen-output audit widened to display results),
+> the HTML-only website (no PDF offered or built in CI; see `CLAUDE.md`), and the
+> author's Chapter 8 and 9 replays (`b2a1ad0`). Merge `main` into this branch before
+> B2b; expect conflicts in Chapter 1's source and freeze, `publish.yml`,
+> `audit_book_contract.py`, and the replay receipts. An author patch to Equation 8.1
+> waits, uncommitted, in the `author-corrections` worktree. Lessons: the readers must
+> be calibrated to this author's habits (short verdicts, fragments, "Here is ..."); the
+> printout is the source of truth for every number in prose; mechanical fixes (R5, R9)
+> stay out of the added-sentence population; a freeze-patched render (prose edits
+> applied to the frozen markdown, nothing executed) is a faithful preview for reader
+> passes because code never changes.
 >
 > **Previous — Chapters 5 and 6 revised; published-source hygiene, September 25, 2026.**
 > Provenance comments no longer reach published HTML: `filters/strip-html-comments.lua`

@@ -293,21 +293,27 @@ def gate(paths: list[Path], stages: list[str], html_root: Path, out: Path) -> No
         entries = []
         for edit in edits:
             new_parts = ledger.prose_sentences(ledger.source_prose(edit["new"]))
-            old_parts = set(ledger.prose_sentences(ledger.source_prose(edit["old"])))
-            changed = [part for part in new_parts if part not in old_parts] or new_parts
+            old_list = ledger.prose_sentences(ledger.source_prose(edit["old"]))
+            old_parts = set(old_list)
+            added = [part for part in new_parts if part not in old_parts]
+            removed = [part for part in old_list if part not in set(new_parts)]
             found = None
-            for part in changed:
+            for part in (added or new_parts):
                 found = locate(part, blocks)
                 if found:
                     break
             if found:
                 index, block = found
                 shown = block
-                for part in changed:
+                for part in added:
                     if locate(part, [block]):
                         shown = emphasize(part, shown)
             else:
-                index, shown = 10**6, "(heading or removed text; see the receipt) " + cell(edit["new"])[:300]
+                index, shown = 10**6, "(the paragraph could not be located; see the receipt)"
+            if removed and not added:
+                shown += "\n>\n> Removed: " + " ".join(f"“{part}”" for part in removed)
+            elif removed:
+                shown += "\n>\n> Replaced: " + " ".join(f"“{part}”" for part in removed)
             entries.append((index, edit, shown))
         lines += [f"### {title}", "", f"`{page}`", ""]
         for index, edit, shown in sorted(entries, key=lambda item: item[0]):

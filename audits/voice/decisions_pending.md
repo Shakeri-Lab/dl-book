@@ -1,4 +1,4 @@
-# Decisions pending (Stages A, B0, and B1)
+# Decisions pending (Stages A to B2a)
 
 Everything here waits for the author. Nothing in this file has been applied beyond the
 five pilot pages, the B0 corrections, and Chapters 8 and 9. Section 7 holds the items
@@ -208,3 +208,10 @@ Alt text (class H, frozen by I8; colour words describe the image for non-visual 
 11. **Course-site links (for B3).** The course site (`dl-course-site` at `4fd7616`) links
     book chapters by page URL only, in `lib/module-extras.ts`; no link carries a `#sec-`
     fragment. Explicit recap ids in B3 therefore break no inbound link.
+
+## 8. Items raised by B2a
+
+The B2a gate report holds them: `stage_b2a_report.md`, Section B (prose numbers that
+contradict a printout, content the readers raised, and eight decisions, each with a
+default). Items 2 (Chapter 5's promise) and 3 (Chapter 1's captions) of section 7 were
+settled by the B2 brief; items 4 and 6 were confirmed.
