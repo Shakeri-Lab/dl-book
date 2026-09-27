@@ -279,8 +279,8 @@ def part_one(source: str) -> bool:
 
 
 def guard_ceiling(source: str) -> float:
-    """S1 as amended: 1.5 per 1,000 words in Parts I to III, 2.5 in Parts IV and V and the interludes."""
-    if source.startswith(("chapters/part1/", "chapters/part2/", "chapters/part3/")):
+    """S1 as amended (B3.1): 1.5 per 1,000 words in Parts I and II, 2.5 in Parts III to V and the interludes."""
+    if source.startswith(("chapters/part1/", "chapters/part2/")):
         return 1.5
     return 2.5
 
@@ -1467,7 +1467,7 @@ def main() -> int:
                 + ", ".join(f"{key} {value}" for key, value in profile.items())
                 + ". Bands (VOICE.md): reader address at least 0.6 times the profile in Part I "
                 "and 0.5 times elsewhere; verdicts and metaphors at least 0.6 times; prose guards "
-                "at most 1.5 per 1,000 words in Parts I to III and 2.5 in Parts IV and V and the "
+                "at most 1.5 per 1,000 words in Parts I and II and 2.5 in Parts III to V and the "
                 "interludes; chapter references at most 1.5 times, at most two in the opener and "
                 "in any paragraph.\n\n"
             )

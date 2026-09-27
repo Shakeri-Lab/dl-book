@@ -215,3 +215,19 @@ The B2a gate report holds them: `stage_b2a_report.md`, Section B (prose numbers 
 contradict a printout, content the readers raised, and eight decisions, each with a
 default). Items 2 (Chapter 5's promise) and 3 (Chapter 1's captions) of section 7 were
 settled by the B2 brief; items 4 and 6 were confirmed.
+
+### Rulings on the B2a gate (September 27, 2026)
+
+- B3.1: Part III and the interludes share the 2.5 guard ceiling, warn only.
+- B3.2: the PCA interlude's guards stay.
+- B3.3: both stay. "The beautiful gradient" names the p minus y result; "seductive" is a
+  warning, not praise.
+- B3.4: S6 runs with every batch.
+- B3.5: authorized as one commit outside the voice rules (the three plan steps).
+- B3.6: main merged into this branch at the gate.
+- B3.7: the Equation 8.1 patch was committed with Equation 7.1 on `u, v` and merged here.
+- B3.8: agreed; no further action on the first-round marks.
+- B1 fixes and six B2 items applied as author corrections. Left for the author: Chapter
+  11's teacher-forcing default, Chapter 9's transfer claims, and the rest of B2. Chapter
+  9's decision-rule tip rests on "the course assignment", which is also an independence
+  hit, for the press brief.

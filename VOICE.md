@@ -253,7 +253,7 @@ metaphor_hits 5.822, guards_A 1.192, chapter_refs_A 5.911.
 **Bands** (warn only) for Chapters 1 to 20 and the interludes: reader address at least
 0.6 times the profile in Part I and 0.5 times elsewhere (3.16 and 2.64); verdicts and
 metaphors at least 0.6 times (0.97, 3.49); prose guards at most 1.5 per 1,000 words in
-Parts I to III and 2.5 in Parts IV and V and the interludes; chapter references at most
+Parts I and II and 2.5 in Parts III to V and the interludes (B3.1); chapter references at most
 1.5 times the profile (8.87), at most two in the opener and in any paragraph (roadmap
 sentences exempt, by reading). Distance from the profile is the root-sum-square of the
 relative deviations.
