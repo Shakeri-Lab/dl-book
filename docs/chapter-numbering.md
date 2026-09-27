@@ -18,7 +18,11 @@ and page) from the reading order. `filters/pdf-chapter-xrefs.lua` uses it to pri
 references in the PDF, and on the unnumbered HTML pages (the Preface and the Epilogue),
 where Quarto would print the target's number and full title instead. A section reference
 from an unnumbered page has the same problem, so the Preface's one link to a section stays
-a Markdown link. `scripts/audit_book_contract.py` fails when the map is stale. Maintainer documents under
+a Markdown link. `scripts/audit_book_contract.py` fails when the map is stale.
+
+One Pandoc trap: at the start of bold text, an ASCII apostrophe right after a reference
+(`**@sec-01-linear-regression's ...**`) is read as an opening quote and the bold markup
+is lost. Write the possessive there with the typographic apostrophe (U+2019). Maintainer documents under
 `docs/` and the file names keep the old two-digit numbers; hand-numbered listings follow
 the chapter number (Listing 12.1 is in Chapter 12, file `10-sequences-rnn.qmd`).
 
