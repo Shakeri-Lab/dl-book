@@ -146,7 +146,7 @@ Lecture paths are relative to
 | Source | SHA-256 |
 |---|---|
 | `chapters/interludes/making-pca-learnable.qmd` | `270d24a70820cf71442193cff7a54c1eac3082c2392b492c02d243e8e5351480` |
-| `chapters/part3/11-encoder-decoder.qmd` | `31f403f6c3c9cbe721ac3f65668424a200ff13a8aeb501c01b2ee34128fa107c` |
+| `chapters/part3/11-encoder-decoder.qmd` | `52208825aa69ff064376fa82562122d1a7d4b62c772a9372edc68cb504f74c4c` |
 | `6050-Interlude-Autoencoders/lecture.jsx` | `2d2a0d2bd4c9a8314a79e9bb7ea0afa98077a6ec30ab5e4eb7613fa6e64e91f4` |
 | `6050-Interlude-Autoencoders/STORYBOARD.md` | `3d5686f60c10edb6e5b83236adeebccb933811718e3b08d86d10fe6b2921ddba` |
 | `6050-Interlude-Autoencoders/pca-autoencoder-data.js` | `c8d4dd8da42275c0997aeaf6330b20cb1284c980f9e51be8f76a346ddd32fde9` |
