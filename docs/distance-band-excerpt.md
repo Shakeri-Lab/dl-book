@@ -135,4 +135,4 @@ supplied nothing here.
 
 | Source | SHA-256 |
 |---|---|
-| `chapters/part1/06-generalization-inductive-bias.qmd` | `6d1731eac53b88e2fd21de49c038781354f465c22b673a01958c54af8a867dc5` |
+| `chapters/part1/06-generalization-inductive-bias.qmd` | `d052ea9fc3531f0f08517e88af0903083d5eb02e235385374d461ff31cbb722d` |

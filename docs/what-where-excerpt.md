@@ -134,4 +134,4 @@ derives the pooled size from the panel's declared size and pool.
 
 | Source | SHA-256 |
 |---|---|
-| `chapters/part2/08-cnn.qmd` | `0646bcdedd5abf043d2f9f01f083e55bf93af163e47aad66988b39d45c330868` |
+| `chapters/part2/08-cnn.qmd` | `b27b217e0ad3db1631a9c2277f3654047e8a5ca3ea0847cea96ed0de5fabfaed` |

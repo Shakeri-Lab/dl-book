@@ -162,4 +162,4 @@ because no film scene draws accumulation.
 
 | Source | SHA-256 |
 |---|---|
-| `chapters/part1/05-backpropagation.qmd` | `aef8ab70c8c68b7fa87a2e6db3e94b46aeb1094a17e03451dddd70945c18fa82` |
+| `chapters/part1/05-backpropagation.qmd` | `8d0f923c47779d81825ae58c2c9e722714dbeedfbe36036c8fe64266f9036426` |

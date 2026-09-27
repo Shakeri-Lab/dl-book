@@ -173,4 +173,4 @@ Network-in-Network design".
 
 | Source | SHA-256 |
 |---|---|
-| `chapters/part2/09-modern-cnns-transfer.qmd` | `8e81868a316a7dfb2ace701cb1067928a4084cb079ae24a67f3bdac82784c05a` |
+| `chapters/part2/09-modern-cnns-transfer.qmd` | `fa01f18dad55c91c4897c197e537245fa5ba703ca5763c40f145b767b9224ba1` |

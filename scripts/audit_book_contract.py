@@ -50,14 +50,18 @@ OLD_ROUTE_TARGETS = {
     "chapters/part4/12-kernel-regression.qmd",
     "chapters/part5/17-peft-quantization.qmd",
 }
+# The interludes are numbered chapters (press W1). Their figures and tables are plain
+# `fig-`/`tbl-` floats numbered with the chapter; each retired custom-float id survives
+# only as an HTML anchor alias, so inbound links keep working.
 INTERLUDES = {
     "exfig": ROOT / "chapters/interludes/learning-by-experiment.qmd",
     "aefig": ROOT / "chapters/interludes/making-pca-learnable.qmd",
     "ttrfig": ROOT / "chapters/interludes/attention-as-test-time-regression.qmd",
 }
-EXPECTED_CUSTOM_FLOATS = {"exfig": 2, "aefig": 4, "ttrfig": 2}
+EXPECTED_INTERLUDE_FIGURES = {"exfig": 2, "aefig": 4, "ttrfig": 2}
 EXPERIMENT_INTERLUDE = ROOT / "chapters/interludes/learning-by-experiment.qmd"
 EXPECTED_EXPERIMENT_TABLES = 2
+ANCHOR_ALIAS_RE = re.compile(r'<span id="((?:exfig|aefig|ttrfig|extbl)-[\w-]+)" class="anchor-alias"></span>')
 EPILOGUE = ROOT / "chapters/epilogue.qmd"
 RMSPROP_PROVENANCE = (
     "- Tieleman and Hinton, “Lecture 6.5 — RMSProp,” *COURSERA: Neural Networks for"
@@ -160,7 +164,7 @@ CHAPTER_16_CALIBRATION_EXERCISE = (
 )
 CHAPTER_16_CALIBRATION_BOUNDARY = (
     "This is post-hoc calibration of a frozen model, not\n"
-    "   Chapter 20's training-time $\\gamma$."
+    "   @sec-20-multimodal's training-time $\\gamma$."
 )
 CHAPTER_16_CALIBRATION_POINTER = "@sec-16-vit-scaling, Exercise 6"
 CANONICAL_EXERCISE_TAGS = {"Pencil.", "Code.", "Audit."}
@@ -535,28 +539,32 @@ def main() -> None:
             fail(errors, f"{path.relative_to(ROOT)}: obsolete numbering note")
         if "{#eq-" in text:
             fail(errors, f"{path.relative_to(ROOT)}: interlude equation is numbered")
-        count = len(re.findall(rf"#({key})-[A-Za-z0-9_-]+", text))
-        if count != EXPECTED_CUSTOM_FLOATS[key]:
+        title = text.split("\n", 1)[0]
+        if ".unnumbered" in title:
+            fail(errors, f"{path.relative_to(ROOT)}: interlude title must be numbered")
+        count = len(re.findall(r"^:{3,} \{#fig-[A-Za-z0-9_-]+", text, flags=re.M))
+        if count != EXPECTED_INTERLUDE_FIGURES[key]:
             fail(
                 errors,
-                f"{path.relative_to(ROOT)}: expected {EXPECTED_CUSTOM_FLOATS[key]} "
-                f"{key} floats, found {count}",
+                f"{path.relative_to(ROOT)}: expected {EXPECTED_INTERLUDE_FIGURES[key]} "
+                f"figure floats, found {count}",
             )
+        stray = re.sub(ANCHOR_ALIAS_RE, "", text)
+        if re.search(r"(?:exfig|aefig|ttrfig|extbl)-", stray):
+            fail(errors, f"{path.relative_to(ROOT)}: retired custom-float id outside an anchor alias")
+        for alias in ANCHOR_ALIAS_RE.findall(text):
+            if text.count("{#" + ("tbl" if alias.startswith("extbl") else "fig") + "-" + alias.split("-", 1)[1]) != 1:
+                fail(errors, f"{path.relative_to(ROOT)}: anchor alias {alias} has no plain float")
 
     experiment_text = EXPERIMENT_INTERLUDE.read_text()
     experiment_tables = len(
-        re.findall(r"#extbl-[A-Za-z0-9_-]+", experiment_text)
+        re.findall(r"^:{3,} \{#tbl-[A-Za-z0-9_-]+", experiment_text, flags=re.M)
     )
     if experiment_tables != EXPECTED_EXPERIMENT_TABLES:
         fail(
             errors,
             f"{EXPERIMENT_INTERLUDE.relative_to(ROOT)}: expected "
-            f"{EXPECTED_EXPERIMENT_TABLES} extbl floats, found {experiment_tables}",
-        )
-    if re.search(r"(?:@|#)tbl-(?:experiment-claim-types|batchnorm-study-contract)", experiment_text):
-        fail(
-            errors,
-            f"{EXPERIMENT_INTERLUDE.relative_to(ROOT)}: global interlude table label remains",
+            f"{EXPECTED_EXPERIMENT_TABLES} table floats, found {experiment_tables}",
         )
 
     epilogue_text = EPILOGUE.read_text()
@@ -750,6 +758,16 @@ def main() -> None:
                 break
     if "responsive-route-table-frame" not in BOOK_STYLES.read_text():
         fail(errors, "dlbook.scss: responsive front-door route style is missing")
+    chapter_map = ROOT / "filters" / "chapter-numbers.json"
+    try:
+        sys.path.insert(0, str(ROOT / "scripts"))
+        from chapter_numbers import chapter_numbers
+        derived = chapter_numbers()
+        committed = json.loads(chapter_map.read_text()) if chapter_map.is_file() else None
+        if committed != derived:
+            fail(errors, "filters/chapter-numbers.json: stale; run scripts/chapter_numbers.py")
+    except SystemExit as error:
+        fail(errors, f"chapter numbering: {error}")
     for retired in RETIRED_DOWNLOAD_FILES:
         if retired.exists():
             fail(
