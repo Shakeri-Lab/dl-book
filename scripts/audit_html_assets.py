@@ -167,7 +167,8 @@ class SupportAssetParser(HTMLParser):
 
             if tag == "img" and self.main_suppressed_depth == 0:
                 self.main_images.append(
-                    (values.get("src") or "<image without src>", values.get("alt"))
+                    (values.get("src") or "<image without src>", values.get("alt"),
+                     values.get("class") or "")
                 )
                 self.main_image_loading.append(
                     {
@@ -703,14 +704,22 @@ def rendered_leak_errors(page_name: str, main_text: str) -> list[str]:
 
 
 def main_image_alt_errors(
-    page_name: str, images: list[tuple[str, str | None]]
+    page_name: str, images: list[tuple[str, str | None, str]]
 ) -> list[str]:
-    """Require a non-empty text alternative for every image in main content."""
-    return [
+    """Require a non-empty text alternative for every image in main content, and keep
+    every executed figure's image a sized figure-img: a broken tag (an alt text holding
+    ">" misread by a post-render rewrite) loses the class and overflows the column."""
+    errors = [
         f"{page_name}: main image has empty alt text: {source}"
-        for source, alt in images
+        for source, alt, _ in images
         if not alt or not alt.strip()
     ]
+    errors += [
+        f"{page_name}: figure image lost its figure-img class (a broken tag?): {source}"
+        for source, _, classes in images
+        if "/figure-html/" in source and "figure-img" not in classes.split()
+    ]
+    return errors
 
 
 def main_image_loading_errors(
