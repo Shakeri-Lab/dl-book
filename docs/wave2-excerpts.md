@@ -47,8 +47,8 @@ Digests recomputed with `shasum -a 256` while writing this receipt:
 |---|---|
 | `chapters/part2/08-cnn.qmd` | `df0c52b8019f8bcaad240ad2b48a96b6aca927d1ca45764ad9f2f8b185467a26` |
 | `chapters/part1/03-nonlinearity-mlp.qmd` | `30d10f02d00c528cde4e4e21843fe4a0de2a585ab311183772ccb1148dbe6534` |
-| `chapters/part5/17-peft-quantization.qmd` | `1c97a3e48939135ed37f1ec5399683b51420ce34325758a5de3a6a56bdefe338` |
-| `chapters/part3/10-sequences-rnn.qmd` | `60e65bb6b3816ef9322c56f1f3c31a20b84b97017a25cda78ac2190c9aff4ae7` |
+| `chapters/part5/17-peft-quantization.qmd` | `9c05a58a0581726a38a9c7b9087417a61b95175f489fb7bbcd1c76712849f09d` |
+| `chapters/part3/10-sequences-rnn.qmd` | `6b7ddaa17a940935ec2fdcd822c1f2de5ba6b30ed1ed107d0c560ce8ce0807d2` |
 
 ## Lecture sources adapted
 
