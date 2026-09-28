@@ -45,10 +45,10 @@ Digests recomputed with `shasum -a 256` while writing this receipt:
 
 | Source | SHA-256 |
 |---|---|
-| `chapters/part2/08-cnn.qmd` | `b27b217e0ad3db1631a9c2277f3654047e8a5ca3ea0847cea96ed0de5fabfaed` |
+| `chapters/part2/08-cnn.qmd` | `df0c52b8019f8bcaad240ad2b48a96b6aca927d1ca45764ad9f2f8b185467a26` |
 | `chapters/part1/03-nonlinearity-mlp.qmd` | `30d10f02d00c528cde4e4e21843fe4a0de2a585ab311183772ccb1148dbe6534` |
 | `chapters/part5/17-peft-quantization.qmd` | `1c97a3e48939135ed37f1ec5399683b51420ce34325758a5de3a6a56bdefe338` |
-| `chapters/part3/10-sequences-rnn.qmd` | `87bc8d26432b829618670540d7166a86566e2afce965a0d8200f3f0b4051122f` |
+| `chapters/part3/10-sequences-rnn.qmd` | `08b31e9d2a1240ba78dc8b07f6538426a3005ad22d255b628e2b6a085b2a32ee` |
 
 ## Lecture sources adapted
 

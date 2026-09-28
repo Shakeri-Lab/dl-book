@@ -1,3 +1,22 @@
+# Rolling post-v1.3: interludes numbered as chapters (September 27, 2026)
+
+- **Numbering.** The three interludes lose `.unnumbered` and become Chapters 7, 11, and
+  17; the chapters from 7 on renumber. File names, labels, anchors, and URLs do not
+  change. `docs/chapter-numbering.md` records the mapping and the rule.
+- **References by label.** Every literal chapter number in prose, captions, callouts,
+  exercises, and Part pages is now a cross-reference (`@sec-...`), so the rendered
+  numbers follow the reading order; ranges across an interlude became lists. The
+  revision notes keep the numbers of their time, and numbers inside code stay.
+  `audits/press/w1/` holds the inventory and one receipt row per conversion.
+- **Floats.** The interludes' custom float kinds became plain figures and tables
+  numbered with their chapter (Figure 7.1, Table 7.1, Figure 11.1, Figure 17.1); the old
+  ids stay as anchor aliases.
+- **PDF and unnumbered pages.** `filters/pdf-chapter-xrefs.lua` reads
+  `filters/chapter-numbers.json` (derived by `scripts/chapter_numbers.py` from the reading
+  order) instead of a label's digits, prints plain chapter words in PDF bookmarks, and
+  writes "Chapter N" links on the unnumbered Preface and Epilogue, where Quarto would
+  print the target's full title.
+
 # Rolling post-v1.3 — Chapters 8 and 9 replays: pooling, output size, LeNet; stacked kernels and the 1 × 1 convolution (September 26, 2026)
 
 - **Channels say what, pooling says roughly where** (`what-where-excerpt`, Chapter 8,
