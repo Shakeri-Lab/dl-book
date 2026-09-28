@@ -1,3 +1,18 @@
+# Rolling post-v1.4: Chapter 13 wording, Figure 13.1, and two Chapter 16 schematics (September 28, 2026)
+
+- **Chapter 13.** The author's wording edits: "The components are not new"; "One
+  constraint carries over"; "the two recurrent machines built in Chapter 12"; the encoder
+  "keeps only its final state"; five lead-ins and asides removed; "The masked update of
+  Equation 12.3 keeps the old state". Receipts 13-A-1 to 13-A-10.
+- **Figure 13.1 fits its column.** Its alt text names the token `<bos>`, and the
+  post-render alt filler read an `img` tag only up to the first `>`, spilling the tag's
+  size and class into the page; the filler now reads quoted attribute values whole, and
+  the HTML asset audit fails when a figure image loses its `figure-img` class.
+- **Chapter 16 schematics.** Figure 16.1 follows one query, *bank*, through the
+  fragment *bank by the river* (Section 16.1); Figure 16.3 draws sinusoidal position as a
+  bank of clocks for the chapter's width-8 code (Section 16.2). Printed output and every
+  existing figure are unchanged. Receipts 16-A-1 and 16-A-2.
+
 # Rolling post-v1.4: the reference machine (September 28, 2026)
 
 - **One machine for every freeze.** The freezes are executed on an M1 MacBook Air at 4 CPU

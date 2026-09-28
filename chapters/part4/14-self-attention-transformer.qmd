@@ -83,6 +83,84 @@ $$
 (n,d)(d,n)\to(n,n),\qquad (n,n)(n,d)\to(n,d).
 $$
 
+@fig-self-attention-read follows one query, *bank*, through the four-token fragment
+*bank by the river*: the same sequence supplies the queries, keys, and values, and the
+query's row of the $n\times n$ grid becomes the weights on the rows of $V$.
+
+```{python}
+#| label: fig-self-attention-read
+#| echo: false
+#| fig-cap: "Self-attention keeps the operator of @sec-13-attention and changes only where its inputs come from: one sequence $X$, through the learned projections $W_Q$, $W_K$, $W_V$, supplies the queries, keys, and values. The query for *bank* scores every key, itself included, and the row-wise softmax turns the scores into weights that sum to one; the output for *bank* is the weighted sum of the rows of $V$ (arrow width shows each weight; the numbers and shading are illustrative). The fainter rows do the same for every other token, together."
+#| fig-alt: "Diagram of self-attention on the four-token sequence bank, by, the, river. The outlined token column X feeds three routes: arrows marked W Q to four query rows, a line marked W K to four key columns above a four-by-four grid, and a line marked W V to four value rows labeled by token. The grid is the row-wise softmax of Q times K transpose over the square root of d, shape n by n. Its top row, for bank, reads 0.20, 0.05, 0.05, 0.70 and sums to 1. Arrows from all four value rows, widest from river, form the output row for bank. The other rows are faint."
+#| code-summary: "Code: draw one sequence querying itself"
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.patches import Rectangle
+
+navy, orange, green, gray = "#232D4B", "#E57200", "#2E7D32", "#9A9A9A"
+tokens = ["bank", "by", "the", "river"]
+A = np.array([[0.20, 0.05, 0.05, 0.70],        # illustrative rows, each sums to 1
+              [0.15, 0.40, 0.25, 0.20],
+              [0.10, 0.25, 0.40, 0.25],
+              [0.45, 0.10, 0.10, 0.35]])
+fig, ax = plt.subplots(figsize=(7.6, 3.4))
+ax.set_xlim(0, 15.2); ax.set_ylim(0, 6.8); ax.set_aspect("equal"); ax.axis("off")
+ys, c, g0, xv, xo = [4.1, 3.3, 2.5, 1.7], 0.8, 3.75, 8.2, 10.55
+
+def box(x, y, w, face="none", alpha=1.0, edge="none", lw=1.0, h=0.6):
+    ax.add_patch(Rectangle((x, y - h / 2), w, h, facecolor=face, alpha=alpha,
+                           edgecolor=edge, lw=lw))
+
+def arrow(a, b, color=navy, lw=1.3, alpha=1.0):
+    ax.annotate("", xy=b, xytext=a, arrowprops=dict(
+        arrowstyle="-|>,head_length=0.5,head_width=0.22", lw=lw, color=color,
+        alpha=alpha, shrinkA=0, shrinkB=0))
+
+for i, (y, t) in enumerate(zip(ys, tokens)):
+    hot, col = i == 0, orange if i == 0 else gray           # follow the bank query
+    box(0.25, y, 1.3, "white", edge=gray)                   # row i of X
+    ax.text(0.9, y, t, ha="center", va="center", fontsize=10, color=navy)
+    arrow((1.7, y), (2.4, y), col, 1.0)
+    box(2.5, y, 0.8, orange, 1.0 if hot else 0.3, h=0.45)   # row i of Q
+    arrow((3.35, y), (g0 - 0.05, y), col, 1.0)
+    box(g0 + i * c + 0.225, 5.1, 0.35, navy, 0.85, h=0.8)   # column i of K^T
+    ax.text(g0 + (i + 0.5) * c, 5.62, t, ha="center", va="bottom", fontsize=9,
+            color=navy)
+    box(xv, y, 1.0, green)                                  # row i of V
+    ax.text(xv + 0.5, y, t, ha="center", va="center", fontsize=9, color="white")
+    box(xo, y, 1.0, green, 1.0 if hot else 0.25)            # output row i
+    for j in range(4):                                      # weight grid, row i
+        box(g0 + j * c, y, c, col, (0.8 if hot else 0.6) * A[i, j] + 0.12,
+            edge="white", h=c)
+        if hot:
+            ax.text(g0 + (j + 0.5) * c, y, f"{A[0, j]:.2f}", ha="center",
+                    va="center", fontsize=9, color=navy)
+    w = A[0, i]                                             # bank's weight on i
+    arrow((xv + 1.15, y), (xo - 0.05, ys[0] + 0.24 - 0.16 * i), green,
+          0.6 + 3.5 * w, 0.4 + 0.6 * w)
+for x, y, wd, h in [(0.15, 2.9, 1.5, 3.2), (g0, 5.1, 4 * c, 0.9),
+                    (g0, 2.9, 4 * c, 4 * c), (xv - 0.1, 2.9, 1.2, 3.2)]:
+    box(x, y, wd, edge=navy, h=h)                           # X, K^T, grid, V
+box(g0, ys[0], 4 * c, edge=orange, lw=2.2, h=c)
+ax.plot([1.3, 1.3], [4.5, 5.1], color=navy, lw=1.3)                   # X to K
+arrow((1.3, 5.1), (g0 + 0.02, 5.1))
+ax.plot([1.3, 1.3, xv + 0.5], [1.3, 0.6, 0.6], color=navy, lw=1.3)    # X to V
+arrow((xv + 0.5, 0.6), (xv + 0.5, 1.3))
+for x, y, s in [(0.45, 4.55, "$X$"), (2.05, 1.12, "$W_Q$"), (2.9, 4.55, r"$Q\ (n,d)$"),
+                (2.5, 5.17, "$W_K$"), (4.6, 0.68, "$W_V$"),
+                (xv + 0.5, 4.55, r"$V\ (n,d)$"), (xo + 0.5, 4.55, "output $(n,d)$")]:
+    ax.text(x, y, s, ha="center", va="bottom", fontsize=10, color=navy)
+ax.text(g0 + 4 * c + 0.15, 5.2, r"$K^\top\ (d,n)$", va="center", fontsize=10,
+        color=navy)
+ax.text(g0 + 2 * c, 6.2, r"row-wise $\mathrm{softmax}(QK^\top/\sqrt{d})$, "
+        r"shape $(n,n)$", ha="center", va="bottom", fontsize=10, color=navy)
+for x, y, s in [(g0 + 4 * c + 0.2, ys[0], "sums\nto 1"),
+                (xo + 1.15, ys[0], "for bank: weighted\nsum of the rows of $V$"),
+                (xo + 1.15, 2.5, "other rows: computed\nthe same way, together")]:
+    ax.text(x, y, s, va="center", fontsize=9, color=navy)
+plt.tight_layout(); plt.show()
+```
+
 @sec-10-sequences-rnn named time as the book's third sharing axis. An RNN shares one transition
 rule across time. Self-attention keeps that stationarity and extends the shared rule
 across every ordered pair of positions. The weights in a particular attention row
@@ -283,6 +361,73 @@ The rotation depends on the offset, not the absolute position. This gives learne
 linear maps a convenient raw material for representing relative shifts. It is a
 property of the positional pair itself, not a guarantee that arbitrary learned
 $W_Q$ and $W_K$ will preserve or use it.
+
+@fig-position-clocks reads positions off the four clocks of a width-8 code: one step
+turns row $j$ by the same $\omega_j$ from any start, and at $i=44$, where the fast
+$j=0$ hand has nearly come back around, the slower clocks still tell the positions
+apart.
+
+```{python}
+#| label: fig-position-clocks
+#| echo: false
+#| fig-cap: "Six nearby positions and one far one, read off the four clocks of the width-8 code in the permutation audit. Row $j$ draws $(\\operatorname{PE}(i,2j),\\operatorname{PE}(i,2j+1))=(\\sin(i\\omega_j),\\cos(i\\omega_j))$ with $\\omega_j=10000^{-2j/d}$, sine horizontal and cosine vertical, so every hand starts straight up and turns clockwise; shading is the angle past the last full turn. In the two dials marked in wine, the dashed hand is the previous position and the arc shows one step turning the fast hand by the same $\\omega_0=1$ radian from two different starts, while at $i=44\\approx7\\cdot2\\pi$ the fast hand nearly repeats $i=0$ and only the slower clocks tell the two positions apart."
+#| fig-alt: "Clock dials in four rows and seven columns: positions 0 through 5, a gap, then position 44. Each row is one sine and cosine pair of a width 8 code; the top clock turns 1 radian per position, the lower ones 0.1, 0.01, and 0.001. Each hand starts straight up and turns clockwise over a shaded angle. By position 5 the top hand has swept most of a turn and the bottom two have barely moved. Arrows over the top row mark the steps 1 to 2 and 4 to 5, with an arc in each target dial showing the same turn. At position 44 the top hand is nearly vertical again; the second and third are not."
+#| code-summary: "Code: draw sinusoidal position as a grid of clock dials"
+from matplotlib.patches import Arc, Circle, FancyArrowPatch, Wedge
+
+navy, wine, gray = "#232D4B", "#722F37", "#9A9A9A"
+d, r = 8, 0.4                                     # a small width; dial radius
+omega = 10_000.0 ** (-2 * np.arange(d // 2) / d)  # 1, 0.1, 0.01, 0.001 rad per step
+columns = [(i, i) for i in range(6)] + [(6.45, 44)]  # (x on the page, position i)
+fig, ax = plt.subplots(figsize=(7.2, 3.5))
+ax.set_xlim(-2.5, 8.9); ax.set_ylim(-0.95, 4.3); ax.set_aspect("equal")
+ax.axis("off")
+
+def hand(x, y, theta, **style):                   # tip at (sin, cos): 12 o'clock at 0
+    ax.plot([x, x + r * np.sin(theta)], [y, y + r * np.cos(theta)],
+            solid_capstyle="round", **style)
+
+for j, w in enumerate(omega):
+    y = 3 - j                                     # fast clock on top
+    speed = {0: ", fast", 3: ", slow"}.get(j, "")
+    ax.text(-0.62, y + 0.11, f"$j={j}$,  $\\omega_{j}={w:g}$", ha="right",
+            va="center", fontsize=10, color=navy)
+    ax.text(-0.62, y - 0.2, f"coordinates {2 * j}–{2 * j + 1}{speed}", ha="right",
+            va="center", fontsize=9, color=navy)
+    for x, i in columns:
+        theta = i * w
+        swept = np.degrees(theta % (2 * np.pi))   # angle past the last full turn
+        if swept > 0:
+            ax.add_patch(Wedge((x, y), r, 90 - swept, 90, fc="#FDEBD7", ec="none"))
+        ax.add_patch(Circle((x, y), r, fill=False, ec=gray, lw=1))
+        ax.plot([x, x], [y + r - 0.07, y + r], color=gray, lw=1)
+        hand(x, y, theta, color=navy, lw=2, zorder=3)
+        ax.plot(x, y, "o", ms=3, color=navy, zorder=4)
+for x, i in columns:
+    ax.text(x, -0.68, f"$i={i}$", ha="center", va="center", fontsize=10, color=navy)
+ax.text(5.72, 1.5, "$\\cdots$", ha="center", va="center", fontsize=12, color=navy)
+
+# one step turns the fast hand by omega_0, from any start: dashed = one step back
+for a in [1, 4]:
+    x = a + 1
+    hand(x, 3, a * omega[0], color=wine, lw=1.5, ls=(0, (2, 1.5)), zorder=2)
+    ax.add_patch(Arc((x, 3), 0.5, 0.5, theta1=90 - np.degrees(x * omega[0]),
+                     theta2=90 - np.degrees(a * omega[0]), color=wine, lw=1.8,
+                     zorder=5))
+    ax.add_patch(FancyArrowPatch((a + 0.1, 3.5), (a + 0.9, 3.5),
+                                 connectionstyle="arc3,rad=-0.45",
+                                 arrowstyle="->", mutation_scale=11,
+                                 color=wine, lw=1.4))
+    ax.text(a + 0.5, 3.86, f"$i={a}\\to{x}$: turn $\\omega_0$", ha="center",
+            va="bottom", fontsize=10, color=wine)
+ax.text(7.0, 3.0, "$i\\to i+\\delta$ turns\nrow $j$ by $\\delta\\,\\omega_j$,\n"
+        "whatever $i$ is", ha="left", va="center", fontsize=10, color=wine,
+        linespacing=1.4)
+ax.text(7.0, 1.0, "at $i=44$ the\nfast hand nearly\nrepeats $i=0$;\nslower rows tell\n"
+        "the two apart", ha="left", va="center", fontsize=10, color=navy,
+        linespacing=1.4)
+plt.tight_layout(); plt.show()
+```
 
 ::: {.callout-note}
 ## Show the rotation, then name it
