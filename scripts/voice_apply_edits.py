@@ -335,7 +335,7 @@ def main() -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     apply_parser = sub.add_parser("apply")
     apply_parser.add_argument("edits", type=Path)
-    apply_parser.add_argument("--phase", choices=("S", "T", "R", "B0", "B2", "W2"), required=True)
+    apply_parser.add_argument("--phase", choices=("S", "T", "R", "B0", "B2", "W2", "C1"), required=True)
     receipts_parser = sub.add_parser("receipts")
     receipts_parser.add_argument("edits", type=Path, nargs="+")
     receipts_parser.add_argument("--html-before", type=Path)

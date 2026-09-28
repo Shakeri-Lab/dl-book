@@ -1,3 +1,21 @@
+# Rolling post-v1.4: the reference machine (September 28, 2026)
+
+- **One machine for every freeze.** The freezes are executed on an M1 MacBook Air at 4 CPU
+  threads (`docs/compatibility.md`, `CLAUDE.md`). A second machine moved thread-sensitive
+  numbers even at the same count; on this one, Chapter 15's year-region mass reads 96.649%
+  to 97.469% across 1 to 8 threads.
+- **Pinned threads.** Sixteen chapters' setup cells now pin `torch.set_num_threads(4)`,
+  the reference machine's default, so their printed output and figures are unchanged
+  (each re-executed and compared). Chapters 21, 22, and 23 move from 6 threads to 4 after
+  re-executions at 4 matched every stdout block and figure. Chapters 19 and 20 keep 6
+  (their output changes at 4); Appendix C keeps its one-thread pin, and Appendix A stays
+  unpinned so that CI's one-thread LAPACK pairing reaches it.
+- **The autoencoder interlude** moves from 6 threads to 4 and is re-executed on the
+  reference machine, so its freeze has one provenance. Two stdout blocks move within their
+  reviewed portability contracts and two figures follow; the prose quotes none of the
+  values, and every ordering it relies on holds.
+- **The edition** returns to rolling after v1.4, as after v1.3.
+
 # v1.4: interludes numbered as chapters, and the independence pass (September 28, 2026)
 
 Version 1.4 publishes the press program's first two gates to the website. The three

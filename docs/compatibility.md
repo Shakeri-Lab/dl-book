@@ -65,6 +65,20 @@ real changes.
   tested wrapping contract. MathJax 4's native `output.linebreaks` is a future
   replacement candidate, but enabling it is a book-wide rendering change and requires
   narrow-screen equation and cross-reference inspection first.
+- **The reference machine** (the author's decision, September 28, 2026): every freeze is
+  executed on an M1 MacBook Air (`MacBookAir10,1`, four performance cores) with
+  `~/.venvs/dl-book` (Python 3.12, torch 2.12.1) and Quarto 1.10.18, at 4 CPU threads.
+  Every executing chapter's setup cell pins `torch.set_num_threads(4)` unless it pins a
+  count of its own for a stated reason: one thread for the LAPACK pairs below (Appendix A1
+  sets none, so CI's one-thread environment reaches it; the reference machine renders it
+  at its default 4), and 6
+  threads in `16-vit-scaling.qmd` (six of its stdout blocks change at 4) and
+  `17-peft-quantization.qmd` (its in-context coverage figure changes at 4). Moving
+  either to 4 is a re-baseline, the author's call. Thread-sensitive
+  training moves with the count and the chip: on the reference machine
+  `13-attention.qmd`'s year-region mass reads 96.649% to 97.469% for 1 to 8 threads, and a MacBook Pro gives
+  96.582%, which no thread count here reproduces. A freeze made elsewhere is spliced
+  (the paused numerical-runtime migration), never committed as a new execution.
 - **Thread pinning:** the Appendix A1 and Chapter 18 notebook-validation pairs use one
   numerical thread because separate multithreaded LAPACK processes can differ in their
   final residual bits or the sign attached to a rounded zero. Chapter 18 explicitly reads

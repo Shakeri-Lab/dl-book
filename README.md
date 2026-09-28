@@ -16,8 +16,8 @@ continued corrections, figures, and open releases are welcome at
 [Buy Me a Coffee](https://buymeacoffee.com/hshakeri).
 
 **Stable release:** [v1.4 (September 28, 2026)](https://github.com/Shakeri-Lab/dl-book/releases/tag/v1.4).
-This is the fixed edition to cite and pitch. The live canonical HTML currently matches
-this release. Since v1.4 the interludes are numbered chapters, so chapter numbers from 7
+This is the fixed edition to cite and pitch. The live canonical HTML is a rolling
+post-v1.4 build; the tagged release remains fixed. Since v1.4 the interludes are numbered chapters, so chapter numbers from 7
 on differ from v1.3's.
 
 ## The idea

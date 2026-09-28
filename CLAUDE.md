@@ -31,6 +31,10 @@ chapter must respect. Those two files replace any account-local memory.
   training-heavy chapters may take 5–15 min total to execute (one-time local — CI
   uses the committed freeze). **Pre-test every experiment regime in a scratch
   script before writing prose** (see `docs/CONTINUING.md` §2 and §5).
+- **The reference machine.** Freezes are executed on the M1 MacBook Air (4 threads,
+  `~/.venvs/dl-book`, Quarto 1.10.18); setup cells pin `torch.set_num_threads(4)`. Another
+  machine moves thread-sensitive numbers even at the same count, so a re-execution made
+  elsewhere is spliced, never committed as new evidence (`docs/compatibility.md`).
 - **Numbers must match prose.** If a cell's printed output contradicts the surrounding
   narrative, fix the experiment or the narrative (see Chapter 1's ridge regime,
   tuned to n=25 so OLS genuinely overfits).

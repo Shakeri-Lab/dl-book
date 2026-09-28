@@ -900,7 +900,7 @@ def main() -> None:
     alignment_thread_contract = (
         '_alignment_thread_count = int(os.environ.get("'
         + NOTEBOOK_TORCH_THREAD_OVERRIDE
-        + '", "6"))\n'
+        + '", "4"))\n'
         + "torch.set_num_threads(_alignment_thread_count)\n"
         + "assert torch.get_num_threads() == _alignment_thread_count"
     )
@@ -919,7 +919,7 @@ def main() -> None:
     if alignment_thread_contract not in alignment_source:
         fail(
             errors,
-            "Chapter 18 hidden setup must default to six threads and assert the "
+            "Chapter 18 hidden setup must default to four threads (the reference machine) and assert the "
             "notebook-validation override",
         )
     notebook_html_only_flag = "--allow-missing-generated-notebooks"
