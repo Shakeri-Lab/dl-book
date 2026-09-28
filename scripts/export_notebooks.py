@@ -38,7 +38,7 @@ from notebook_manifest import (
 
 REPOSITORY = "Shakeri-Lab/dl-book"
 EXPECTED_VISIBLE_SURFACES = 197
-EXPECTED_HIDDEN_CELLS = 95
+EXPECTED_HIDDEN_CELLS = 97
 EXPECTED_INCLUDED_SURFACES = 4
 SUPPORT_START = "# notebook-support-start"
 SUPPORT_END = "# notebook-support-end"
