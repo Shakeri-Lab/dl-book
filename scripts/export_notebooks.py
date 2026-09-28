@@ -533,6 +533,14 @@ def _quarto_conversion(document: ParsedDocument) -> Any:
             text=True,
         )
         raw = nbformat.read(output, as_version=4)
+    for cell in raw.cells:
+        # The canonical reference runs beside the public notebook in CI, so it drops the
+        # reference machine's thread pin too (see REFERENCE_MACHINE_PIN).
+        if cell.cell_type == "code":
+            cell.source = "\n".join(
+                line for line in cell.source.split("\n")
+                if line.strip() != REFERENCE_MACHINE_PIN
+            )
     raw_code = [cell for cell in raw.cells if cell.cell_type == "code"]
     if len(raw_code) != len(document.native_cells):
         raise ValueError(
