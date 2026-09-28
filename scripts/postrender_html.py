@@ -27,9 +27,11 @@ CUSTOM_FIGURE_OPEN_RE = re.compile(
     r"^:{3,4}\s+\{#(?P<label>(?:ae|ex|ttr|ep)fig-[^}\s]+)[^}]*\}\s*$",
     re.MULTILINE,
 )
+# An attribute value may hold ">" (an alt text that names a token such as <bos>), so
+# the attributes are read as quoted values, not up to the first ">".
 LABELED_FIGURE_IMAGE_RE = re.compile(
     r'(?P<prefix><div\b(?=[^>]*\bid=["\'](?P<label>(?:fig|aefig|exfig|ttrfig|epfig)-[^"\']+)["\'])'
-    r"[^>]*>(?:(?!</div>).)*?<img\b)(?P<attrs>[^>]*)(?P<end>>)",
+    r"[^>]*>(?:(?!</div>).)*?<img\b)(?P<attrs>(?:[^>\"']|\"[^\"]*\"|'[^']*')*)(?P<end>>)",
     re.DOTALL | re.IGNORECASE,
 )
 ALT_ATTRIBUTE_RE = re.compile(
