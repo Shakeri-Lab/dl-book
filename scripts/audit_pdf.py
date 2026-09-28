@@ -385,8 +385,10 @@ def main() -> None:
     for retired in ("EX", "AE", "TTR"):
         if re.search(rf"(?:Figure|Table) {retired}\.\d", normalized_text):
             errors.append(f"retired {retired}. float prefix remains")
+    # An icon name leaks as its own token at the start of a callout title. Match it
+    # after a non-letter only: "REINFORCE" contains INFO.
     for icon_word in ("LIGHTBULB", "Exclamation-Triangle", "INFO"):
-        if icon_word in text:
+        if re.search(rf"(?<![A-Za-z]){re.escape(icon_word)}", text):
             errors.append(f"decorative callout icon leaked into text: {icon_word}")
 
     if args.log_root:
