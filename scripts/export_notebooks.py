@@ -137,6 +137,32 @@ def _included_code(source: Path, opener: str) -> tuple[str, str]:
     return "\n".join(lines[first - 1 : last]), relative
 
 
+CHAPTER_NUMBERS = PROJECT_ROOT / "filters" / "chapter-numbers.json"
+CHAPTER_REF_RE = re.compile(r"\[-@(sec-[\w-]*\w)\]|@(sec-[\w-]*\w)")
+
+
+def plain_references(text: str) -> str:
+    """Write chapter cross-references as the book prints them.
+
+    A notebook has no Quarto to resolve `@sec-...`, so a Plan says "Chapter 9"
+    (or "9" for the prefix-suppressed `[-@sec-...]`) with the number from
+    filters/chapter-numbers.json, never a label, whose digits are not its number.
+    """
+
+    numbers = {
+        label: int(entry["number"])
+        for label, entry in json.loads(CHAPTER_NUMBERS.read_text(encoding="utf-8")).items()
+    }
+
+    def replace(match: re.Match[str]) -> str:
+        label = match.group(1) or match.group(2)
+        if label not in numbers:
+            raise ValueError(f"Plan text cites @{label}, which is not a chapter label")
+        return str(numbers[label]) if match.group(1) else f"Chapter {numbers[label]}"
+
+    return CHAPTER_REF_RE.sub(replace, text)
+
+
 def _compiles(source: str) -> bool:
     try:
         compile(source, "<learner-visible-cell>", "exec")
@@ -239,7 +265,7 @@ def parse_document(source_path: str | Path) -> ParsedDocument:
                         Surface(
                             ordinal=len(surfaces) + 1,
                             source_line=index + 1,
-                            plan="\n".join(plan_lines).strip(),
+                            plan=plain_references("\n".join(plan_lines).strip()),
                             code=code,
                             label=options.get("label"),
                             include=None,
@@ -258,7 +284,7 @@ def parse_document(source_path: str | Path) -> ParsedDocument:
                     Surface(
                         ordinal=len(surfaces) + 1,
                         source_line=index + 1,
-                        plan="\n".join(plan_lines).strip(),
+                        plan=plain_references("\n".join(plan_lines).strip()),
                         code=code,
                         label=None,
                         include=include,
