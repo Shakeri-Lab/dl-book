@@ -7,7 +7,7 @@ set -euo pipefail
 
 SRC="$1"
 OUT="$2"
-QUARTO_BIN="${QUARTO_BIN:-$HOME/.local/bin/quarto}"
+QUARTO_BIN="${QUARTO_BIN:-$HOME/.local/quarto-1.10.18/bin/quarto}"
 TMP=$(mktemp -d)
 
 mkdir -p "$(dirname "$OUT")"

@@ -10,6 +10,14 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 
 ---
 
+> **Chapter numbers, from September 28, 2026.** The three interludes are numbered
+> chapters (7, 11, 17), so from Chapter 7 on the printed number differs from the file
+> prefix: `10-sequences-rnn.qmd` prints as Chapter 12 and `13-attention.qmd` as Chapter 15.
+> Name chapters in the manuscript only by label (`@sec-...`); `scripts/audit_typed_numbers.py`
+> fails CI on a typed number, and `docs/chapter-numbering.md` has the table. This document
+> and the plans use file-prefix numbers; CHANGELOG entries and revision notes keep the
+> numbers printed at their time (file prefixes before this date, reading order after).
+>
 > **Current work: voice-coherence pass, Stage B2 (branch `voice-coherence`, pushed at each
 > gate, never merged by this pass), September 27, 2026.** The author's brief asks for one
 > narrator at one warmth in every chapter without changing a claim, number, equation,

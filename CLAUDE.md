@@ -35,6 +35,15 @@ chapter must respect. Those two files replace any account-local memory.
   narrative, fix the experiment or the narrative (see Chapter 1's ridge regime,
   tuned to n=25 so OLS genuinely overfits).
 
+- **Chapters by label**: name a chapter with `@sec-...` (`[-@sec-...]` for the bare
+  number), never a typed "Chapter N". The interludes are numbered Chapters 7, 11, and
+  17, so from Chapter 7 on the printed number differs from the file prefix
+  (`10-sequences-rnn.qmd` is Chapter 12). `scripts/audit_typed_numbers.py` fails CI on a
+  typed number; `docs/chapter-numbering.md` has the table. Maintainer docs and plans keep the
+  file-prefix numbers; CHANGELOG entries and revision notes keep the numbers printed
+  at their time. The guard cannot check numbers inside code, cell labels, alt text, or
+  docstrings: after any reordering, read its `--list` inventory.
+
 ## Environment (this machine)
 
 *New Mac? `docs/NEW-MACHINE-SETUP.md` reproduces everything below from a bare
@@ -42,12 +51,12 @@ machine — toolchain, venv, credentials, and a verification pass that proves th
 new machine reproduces the committed book.*
 
 ```bash
-export PATH="$HOME/.local/bin:$HOME/Library/TinyTeX/bin/universal-darwin:/opt/homebrew/bin:$PATH"
+export PATH="$HOME/.local/quarto-1.10.18/bin:$HOME/.local/bin:$HOME/Library/TinyTeX/bin/universal-darwin:/opt/homebrew/bin:$PATH"
 ```
 
 | Tool | Where | Notes |
 |---|---|---|
-| quarto 1.10.18 | `~/.local/bin/quarto` | user-land tarball (brew cask needs sudo — unavailable) |
+| quarto 1.10.18 | `~/.local/quarto-1.10.18/bin/quarto` | user-land tarball (brew cask needs sudo, unavailable here); CI pins the same version. `~/.local/bin/quarto` is an older 1.9.38 launcher, so keep 1.10.18 first on `PATH` |
 | pandoc | bundled: `quarto pandoc` | |
 | TinyTeX | `~/Library/TinyTeX` | for PDF + TikZ; `tlmgr update --self` before `tlmgr install <pkg>` |
 | Python venv | `~/.venvs/dl-book` (python3.12, torch, matplotlib, sklearn) — **outside Box on purpose** | always render with `QUARTO_PYTHON=$HOME/.venvs/dl-book/bin/python` |
@@ -102,7 +111,7 @@ compositions for figures. Full guide: `docs/dl-course-code.md`.
    them. Never restore a D2L excerpt from a machine-local source.
 3. **Mechanical conversion** (also extracts TikZ blocks into `figures/tikz-src/`):
    ```bash
-   QUARTO_BIN=$HOME/.local/bin/quarto ./scripts/tex2qmd.sh sources/<seed>.tex drafts/partN/XX-raw.md
+   QUARTO_BIN=$HOME/.local/quarto-1.10.18/bin/quarto ./scripts/tex2qmd.sh sources/<seed>.tex drafts/partN/XX-raw.md
    ```
 4. **Draft** per `docs/drafting-template.md`: read the style guide, the seed(s), the raw
    pandoc output, and the module transcripts

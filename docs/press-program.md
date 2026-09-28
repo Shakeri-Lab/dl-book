@@ -61,7 +61,10 @@ reader pass on every page whose prose changes, and no em dashes (U+2014) anywher
   then resume on `main` with the final numbers (yes).
 - D-P2 Reader-visible numbers in cell options (`code-summary`, captions) convert with
   the prose; numbers in code comments, strings, printed output, and the tested modules
-  stay, as the brief says, and are listed for the author (yes).
+  stay, as the brief says, and are listed for the author (yes). Amended September 28,
+  2026 by the author's ruling on D-W1.3: the twenty stale numbers in code comments, plot
+  labels, and `code/dlbook` docstrings are fixed before the merge into `main`; printed
+  output still stays.
 - D-P3 The interludes' custom float kinds become plain `fig-`/`tbl-` floats that number
   with their chapters; each old id stays as an anchor alias so no inbound link breaks
   (yes).

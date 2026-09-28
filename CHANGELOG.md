@@ -1,3 +1,26 @@
+# Rolling post-v1.3: numbers in code, figures, and notebooks follow the renumbering (September 28, 2026)
+
+- **Figures and code (D-W1.3).** The Epilogue's adaptation map labels in-context
+  learning "Ch. 20" and RLHF and DPO "Ch. 21"; Chapter 16's rematch chart labels its
+  baseline "Ch. 12 LSTM"; code comments name Listings 12.1 and 12.2, Figure 9.3, and
+  Chapter 9's model; the `code/dlbook` docstrings printed on Chapter 12 name Chapters 12
+  and 16; and `supervised.py`, printed on Chapter 4, names the chapters that import it,
+  6 and 9. Replay receipts carry the new chapter hashes.
+  Receipts: rows "D-W1.3" in `audits/press/w1/conversions.csv`. Printed output is
+  unchanged; the Epilogue and Chapter 16 were re-executed for their figure labels.
+- **Notebooks.** The exporter writes a Plan's chapter cross-references as the book prints
+  them ("Chapter 12's trainer"), and the notebook audit fails on a raw `@sec-`, `@fig-`,
+  `@eq-`, `@tbl-`, or `@lst-` label in any markdown cell.
+- **Typed-number guard.** `scripts/audit_typed_numbers.py`, run in both workflows and
+  required by the contract audit, fails on a typed "Chapter N", "Ch. N", or float number
+  in prose, callouts, and captions, and on a listing number, in prose or a code comment,
+  that no chapter defines. It allows the Preface's revision notes, links whose text
+  matches their target, and second-volume citations. Numbers inside code, cell labels,
+  alt text, and docstrings stay a hand check after any reordering; `--list` prints them.
+- **Runbook.** `CLAUDE.md` puts Quarto 1.10.18 first on `PATH` (the `~/.local/bin`
+  launcher is 1.9.38) and states the label rule; `docs/CONTINUING.md` and
+  `docs/part3-sequence-plan.md` say that their numbers are file prefixes.
+
 # Rolling post-v1.3: Chapter 11 revised with writing requirements, the masked-update check, and running translator v2 (September 27, 2026)
 
 - **Writing adds three requirements** to Chapter 10's six: output of any length chosen
