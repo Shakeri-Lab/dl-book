@@ -74,7 +74,9 @@ real changes.
   at its default 4), and 6
   threads in `16-vit-scaling.qmd` (six of its stdout blocks change at 4) and
   `17-peft-quantization.qmd` (its in-context coverage figure changes at 4). Moving
-  either to 4 is a re-baseline, the author's call. Thread-sensitive
+  either to 4 is a re-baseline, the author's call. The exported notebooks omit the
+  sixteen reference-machine pins: in CI's two-core runners, 4 threads moved Chapters 6, 9,
+  10, and 13 past their portable stdout contracts, which assume the platform's default. Thread-sensitive
   training moves with the count and the chip: on the reference machine
   `13-attention.qmd`'s year-region mass reads 96.649% to 97.469% for 1 to 8 threads, and a MacBook Pro gives
   96.582%, which no thread count here reproduces. A freeze made elsewhere is spliced
