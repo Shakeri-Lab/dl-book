@@ -173,6 +173,19 @@ Each has a default; a ruling of "default" applies it.
     press-profile header in W2 phase 4, and the independence audit extended to the press
     profile's title matter.
 
+## The author's rulings (September 28, 2026)
+
+All defaults, except: ruling 2, option (c), with the pull-request job and the rule in
+`CLAUDE.md`; ruling 3, the 224-pixel case introduced as a hypothetical ("Picture a landmark
+task: 224-pixel photographs, 18 classes, a few hundred labels each"); ruling 5, the credit
+reads "Composition and reveal order follow the author's original animation."; ruling 13,
+Chapter 15's pointer fixed now (Chapter 8 becomes Chapter 9); ruling 15, the voice batches
+wait until the press program merges, two writers only, under `docs/locks.md`; ruling 16,
+tag v1.4 after the live site verifies, with the suggested citation and a mapping table
+updated first; ruling 18, the tagline changed and the audit extended now. Phase 3 (F3):
+Chapter 12's new GRU and loop diagrams stay as drawn. The applied rulings carry the stage
+`W2-R` in `edits/*.json`; `docs/press-program.md` records them.
+
 ## After the rulings
 
 The rulings are applied with receipts, the W2 phase 1 changes get a CHANGELOG entry and a
