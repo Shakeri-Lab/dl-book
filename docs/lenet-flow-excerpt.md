@@ -53,4 +53,4 @@ arrows. ReLU is named on arrows, not drawn: it changes no shape.
 
 | Source | SHA-256 |
 |---|---|
-| `chapters/part2/08-cnn.qmd` | `0646bcdedd5abf043d2f9f01f083e55bf93af163e47aad66988b39d45c330868` |
+| `chapters/part2/08-cnn.qmd` | `343a55cd54bc0d23a2e7ee4ef55a46f68a93d9e5087431b4997101078d36dfb1` |

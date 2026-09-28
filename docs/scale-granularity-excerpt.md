@@ -117,7 +117,7 @@ Lecture root:
 
 | Source | SHA-256 |
 |---|---|
-| `chapters/part5/17-peft-quantization.qmd` | `ed98b9967b640ea2dc9a5456585bd8bd4de66e0069e6e73fe5c29c0ca64062d1` |
+| `chapters/part5/17-peft-quantization.qmd` | `9c05a58a0581726a38a9c7b9087417a61b95175f489fb7bbcd1c76712849f09d` |
 | `6050-Ch17/lecture.jsx` | `aba2a4a94a52f12d3d5ed113d5f3209b0604065fc328d10566e0979bb459d3cb` |
 | `6050-Ch17/STORYBOARD.md` | `b36b1df0110b5d261ec232ed97af5ff402c67fe58db56fa2302aec71042f94fc` |
 | `6050-Ch17/ch17-data.js` | `966d73e40d3d5ac8c9a14dfb0e039d6960321acf51b675d5736d8499bba913e1` |

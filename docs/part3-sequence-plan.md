@@ -7,6 +7,11 @@ transcripts, Assignments 3–5 in `Shakeri-Lab/deep-learning-student-materials`,
 current Chapters 10, 11, 13, 14, the autoencoder interlude, the test-time-regression (TTR)
 interlude, and Chapters 15 and 17.*
 
+*Chapter numbers in this plan are file prefixes ("Ch. 13" is `13-attention.qmd`). The
+book prints chapters in reading order, with the interludes as Chapters 7, 11, and 17, so
+`13-attention` prints as Chapter 15 (`docs/chapter-numbering.md`). In the manuscript, name
+chapters only by label.*
+
 ## 1. The brief, restated
 
 - Teach sequence models as a development: state the **minimal requirements** of the
@@ -234,7 +239,9 @@ code.
    items are therefore withdrawn.
 3. **Research bridge: an exercise, not a section.** Chapter 10's Exercise 8 is marked
    "Research bridge (non-examinable)" and points to the papers listed under Sources;
-   the closing mentions it in one sentence.
+   the closing mentions it in one sentence. The label is superseded by the press ruling 1
+   (September 28, 2026): research bridges read "Research bridge (optional)" in both
+   editions, in new chapters too.
 4. **Translator data: general.** Exercises name example corpora (Tatoeba English–French,
    Multi30K) without pinning one.
 5. **Reference results: none.** The translator exercises stay open.

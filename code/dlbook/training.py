@@ -1,6 +1,6 @@
-"""Next-token training loop — Chapter 10's listing, importable.
+"""Next-token training loop — Chapter 12's listing, importable.
 
-The loop is printed and taught in Chapter 10 (fixed-window chunk sampling,
+The loop is printed and taught in Chapter 12 (fixed-window chunk sampling,
 gradient clipping); later chapters import it and print only their deltas.
 """
 import torch
@@ -25,10 +25,10 @@ def fit_next_token(
 ) -> tuple[nn.Module, list[tuple[int, float]]]:
     """Train `model` to predict data[t+1] from data[t-context+1 .. t].
 
-    With `schedule=None`, chunk starts are drawn fresh each step (Chapter 10's
+    With `schedule=None`, chunk starts are drawn fresh each step (Chapter 12's
     fixed-window sampling, consuming the global RNG exactly as printed there).
     A precomputed `schedule` of start tensors makes the minibatch order an
-    explicit, shareable part of the protocol (Chapter 14's paired comparison).
+    explicit, shareable part of the protocol (Chapter 16's paired comparison).
     """
     # [2]
     opt = torch.optim.Adam(model.parameters(), lr=lr)

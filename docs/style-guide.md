@@ -505,12 +505,11 @@ misdiagnosis deserves to be made explicit.
 - Use **minibatch** and **feedforward** in authorial prose. Use **fine-tuning** and
   **pretraining** elsewhere. Preserve exact paper titles and code identifiers such as
   *Efficient Finetuning*, *Hyper-Parameter*, and `dim_feedforward`.
-- Unnumbered interludes own independent figure namespaces in both formats:
-  **Figure EX.** for experimentation, **Figure AE.** for autoencoders, and
-  **Figure TTR.** for attention as test-time regression. The epilogue owns
-  **Figure E.**. Numbered experimentation-interlude tables use **Table EX.**.
-  Interlude display equations are unnumbered so neither format inherits a neighboring
-  chapter counter.
+- The three interludes are numbered chapters (7, 11, and 17): their figures and tables
+  number with the chapter (**Figure 11.2**, **Table 7.1**), and the retired
+  **EX.**, **AE.**, and **TTR.** ids survive only as anchor aliases. The unnumbered
+  Epilogue owns **Figure E.**. Name chapters by label, never by typed number
+  (`docs/chapter-numbering.md`).
 - The canonical HTML carries a favicon, one book-level description, Open Graph and
   Twitter-card metadata, and stable citation metadata. Social identity uses a
   restrained UVA palette and must not trigger a theme redesign. Pin third-party math

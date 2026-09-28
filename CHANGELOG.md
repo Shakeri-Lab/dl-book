@@ -1,3 +1,55 @@
+# v1.4: interludes numbered as chapters, and the independence pass (September 28, 2026)
+
+Version 1.4 publishes the press program's first two gates to the website. The three
+interludes are numbered Chapters 7, 11, and 17, so every chapter from 7 on prints one to
+three higher than in v1.3; the Preface's revision note maps the old numbers to the new.
+File names, labels, anchors, and URLs are unchanged.
+
+- **Independence (W2 phase 1).** Course vocabulary leaves the text both editions share
+  (38 receipts in `audits/press/edits/`), "non-examinable" labels read "optional", and
+  *Deep Learning: Making It Trainable* is cited as a separate work. Course-facing
+  blocks of the Preface stay in the web edition and leave the press build (8 receipts).
+- **The author's rulings at the gate.** Chapter 10's transfer rule introduces its 224-pixel
+  case as a hypothetical landmark task; the colophon's pointer to the second volume
+  returns in the web edition; the feature-space replay credits "the author's original
+  animation"; Chapter 15 points to Chapter 9's learned sliding filter; the appendices drop
+  seven parenthetical references to a chapter their sentence already names; Chapter 22 drops "of course"; the
+  PDF title page no longer names a course. Receipts: stage `W2-R` in
+  `audits/press/edits/` (title matter in `title-matter.json`).
+- **Audits.** `scripts/audit_independence.py` also reads the press title matter; it warns
+  in the publish run and fails in the weekly execution audit and in the press build. A
+  read-only pull-request job runs the source audits, and only a push to `main` publishes.
+  `docs/locks.md` locks a chapter the author is revising against press edits.
+- **Also in v1.4.** Everything on the rolling builds since v1.3: the voice-coherence pass,
+  the Part III revision of Chapters 12 and 13 (six requirements, the GRU cell, the masked
+  update, the running translator), and the HTML-only website.
+- **Unchanged from the September 27 rolling build.** Printed output (137 stdout blocks,
+  27 HTML/TeX pairs match), figures other than the two relabelled in D-W1.3, and every
+  public anchor.
+
+# Rolling post-v1.3: numbers in code, figures, and notebooks follow the renumbering (September 28, 2026)
+
+- **Figures and code (D-W1.3).** The Epilogue's adaptation map labels in-context
+  learning "Ch. 20" and RLHF and DPO "Ch. 21"; Chapter 16's rematch chart labels its
+  baseline "Ch. 12 LSTM"; code comments name Listings 12.1 and 12.2, Figure 9.3, and
+  Chapter 9's model; the `code/dlbook` docstrings printed on Chapter 12 name Chapters 12
+  and 16; and `supervised.py`, printed on Chapter 4, names the chapters that import it,
+  6 and 9. Replay receipts carry the new chapter hashes.
+  Receipts: rows "D-W1.3" in `audits/press/w1/conversions.csv`. Printed output is
+  unchanged; the Epilogue and Chapter 16 were re-executed for their figure labels.
+- **Notebooks.** The exporter writes a Plan's chapter cross-references as the book prints
+  them ("Chapter 12's trainer"), and the notebook audit fails on a raw `@sec-`, `@fig-`,
+  `@eq-`, `@tbl-`, or `@lst-` label in any markdown cell.
+- **Typed-number guard.** `scripts/audit_typed_numbers.py`, run in both workflows and
+  required by the contract audit, fails on a typed "Chapter N", "Ch. N", or float number
+  in prose, callouts, and captions, and on a listing number, in prose or a code comment,
+  that no chapter defines. It allows the Preface's revision notes, links whose text
+  matches their target, and second-volume citations. Numbers inside code, cell labels,
+  alt text, and docstrings stay a hand check after any reordering; `--list` prints them.
+- **Runbook.** `CLAUDE.md` puts Quarto 1.10.18 first on `PATH` (the `~/.local/bin`
+  launcher is 1.9.38) and states the label rule; `docs/CONTINUING.md` and
+  `docs/part3-sequence-plan.md` say that their numbers are file prefixes.
+
 # Rolling post-v1.3: Chapter 11 revised with writing requirements, the masked-update check, and running translator v2 (September 27, 2026)
 
 - **Writing adds three requirements** to Chapter 10's six: output of any length chosen
@@ -51,6 +103,25 @@
   state line where $z_t$ keeps and $1 - z_t$ writes the candidate, both gates reading
   $[h_{t-1}, x_t]$, and the reset gate scaling $h_{t-1}$ before the candidate reads it
   (the reset-before form of the chapter's GRU equations).
+
+# Rolling post-v1.3: interludes numbered as chapters (September 27, 2026)
+
+- **Numbering.** The three interludes lose `.unnumbered` and become Chapters 7, 11, and
+  17; the chapters from 7 on renumber. File names, labels, anchors, and URLs do not
+  change. `docs/chapter-numbering.md` records the mapping and the rule.
+- **References by label.** Every literal chapter number in prose, captions, callouts,
+  exercises, and Part pages is now a cross-reference (`@sec-...`), so the rendered
+  numbers follow the reading order; ranges across an interlude became lists. The
+  revision notes keep the numbers of their time, and numbers inside code stay.
+  `audits/press/w1/` holds the inventory and one receipt row per conversion.
+- **Floats.** The interludes' custom float kinds became plain figures and tables
+  numbered with their chapter (Figure 7.1, Table 7.1, Figure 11.1, Figure 17.1); the old
+  ids stay as anchor aliases.
+- **PDF and unnumbered pages.** `filters/pdf-chapter-xrefs.lua` reads
+  `filters/chapter-numbers.json` (derived by `scripts/chapter_numbers.py` from the reading
+  order) instead of a label's digits, prints plain chapter words in PDF bookmarks, and
+  writes "Chapter N" links on the unnumbered Preface and Epilogue, where Quarto would
+  print the target's full title.
 
 # Rolling post-v1.3 — Chapters 8 and 9 replays: pooling, output size, LeNet; stacked kernels and the 1 × 1 convolution (September 26, 2026)
 

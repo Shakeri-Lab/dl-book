@@ -1,4 +1,4 @@
-"""Fixed-window evaluation loss — Chapter 10's protocol, importable.
+"""Fixed-window evaluation loss — Chapter 12's protocol, importable.
 
 Scores a sequence in consecutive `window`-sized chunks with the recurrent (or
 attention) state reset at each boundary, so train and held-out numbers are

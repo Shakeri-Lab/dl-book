@@ -90,6 +90,10 @@ MAX_DIFF_LINES = 160
 MAX_FAILURE_REPORT_CHARS = 65_536
 
 
+# A notebook has no Quarto to resolve cross-references; the exporter writes them out.
+RAW_XREF_RE = re.compile(r"@(?:sec|fig|tbl|eq|lst)-[\w-]")
+
+
 def cell_source(cell: dict[str, Any]) -> str:
     """Return a notebook cell's source with nbformat list/string parity."""
     source = cell.get("source", "")
@@ -408,6 +412,13 @@ def audit_source_notebook(
     for index, cell in enumerate(cells):
         if not isinstance(cell.get("id"), str) or not cell["id"]:
             errors.append(f"{label}: cell {index} lacks a stable nbformat id")
+        if cell.get("cell_type") == "markdown":
+            raw = RAW_XREF_RE.search(cell_source(cell))
+            if raw:
+                errors.append(
+                    f"{label}: markdown cell {index} prints a raw cross-reference "
+                    f"{raw.group(0)!r}"
+                )
         if cell.get("cell_type") == "code":
             if cell.get("execution_count") is not None:
                 errors.append(
