@@ -12,7 +12,14 @@
                         (static-to-contextual framing only; no implementation ported)
      harvested bridge: @sec-interlude-autoencoders restores Module 6's intended
                        PCA -> learnable/nonlinear autoencoder -> fixed-code limit
-                       -> recurrence sequence. -->
+                       -> recurrence sequence.
+     2026 classroom transcripts (author-supplied, auto-generated captions):
+            DL7.1 RNN (AE limits -> per-step f_t -> shared f, BPTT, clipping,
+            random versus fixed truncation), DL7.2 LSTM (conveyor belt and
+            valves, GRU), DL7.3 Coding RNN and LSTM from scratch (masked update,
+            orthogonal W_hh, fused LSTM affine, forget bias, clip-rate contrast,
+            IMDb many-to-one); requirements list, GRU keep-bias ladder, and
+            Exercises 6-8 follow the author's 2026-09-27 revision brief. -->
 
 The autoencoder interlude promised you **a one-shot encoder is not a variable-length
 process**. We began with PCA's closed-form projection, made its encoder and decoder
@@ -28,18 +35,29 @@ to accept an unknown number of pieces.
 
 This part is about data that refuses the fixed-size contract. Text, audio, sensor
 streams, stock prices: they come one piece at a time, stop whenever they please, and
-carry meaning in the *order* of the pieces. We need a computation that can update as
-the evidence arrives. Recurrence asks us to make the carried summary learnable:
-rather than compressing once, the model learns how to revise its memory after each
-new piece.
+carry meaning in the *order* of the pieces. Before building anything, we write down
+what a sequence model must do at a minimum. Every design in this chapter is judged
+against the same six requirements:
 
-Order deserves a moment, because the book has been here before with the opposite
-verdict. @sec-06-generalization-inductive-bias shuffled every pixel with one fixed permutation and retrained the
-MLP to the same accuracy: because that coordinate map was invertible, the first-layer
-weights could absorb it. The trained MLP was still position-specific; it was not a bag
-model. Now shuffle the words of *this sentence* and read it back. For sequences, no
-single compensating remap preserves arbitrary order; order is most of the signal. We
-need models whose computation represents it explicitly.
+1. **Any length.** Accept a sequence of unknown length, without truncating it to a
+   maximum or padding it up to one.
+2. **Order.** Tell the same pieces apart when they arrive in a different order. @sec-06-generalization-inductive-bias
+   shuffled every pixel with one fixed permutation and the retrained MLP
+   absorbed it, because one invertible remap can be learned away. Shuffle the words
+   of *this sentence* and no single remap restores it: for sequences, order is most
+   of the signal.
+3. **Streaming.** Update as each piece arrives, so an answer so far is always
+   available.
+4. **Parameters independent of length.** The rule that reads position 17 should be
+   the rule that reads position 18, so a longer sequence costs no new parameters.
+5. **Reach.** Let evidence from arbitrarily far back influence the present.
+6. **Trainable reach.** Carry a usable learning signal across that reach, or the
+   reach exists only on paper.
+
+The interlude's one-shot autoencoder fails the first and third outright: it needs a
+maximum length, and it cannot finish before the last piece arrives.
+Recurrence asks us to make the carried summary learnable: rather than compressing
+once, the model learns how to revise its memory after each new piece.
 
 ## Stretching the old toolkit
 
@@ -53,7 +71,8 @@ useful (they power real forecasting systems), but they inherit locality's blind
 spot: anything older than $k$ steps ago does not exist. Widen $k$ and the parameter
 count grows with it, yet no finite window survives the sentence "The company whose
 first-day price we recorded back in January finally ...". Context has no fixed
-radius.
+radius. In the list's terms, the window meets the first four requirements and fails
+the fifth, and buying more reach costs parameters.
 
 **A function per timestep.** Then let the model change over time: learn $f_1$ for
 step one, $f_2$ for step two, each passing a summary forward. We first build
@@ -61,7 +80,7 @@ this strawman carefully, because its failure names the cure. The parameter count
 grows with sequence *length*; a length-500 essay needs 500 learned functions; and
 the model is **non-stationary**: it insists the rules of language at position 17
 differ from the rules at position 18, when the whole point of language is that they
-do not.
+do not. It fails the first and fourth requirements at once.
 
 You have watched this book face that exact configuration twice. A template for
 every image position was wasteful and brittle $\rightarrow$ share the kernel across
@@ -78,7 +97,8 @@ $\vect{h}_t$, the **hidden state**, from each step to the next. This is the
 book's third weight sharing: across examples (every chapter since the first),
 across space (Part II), and now across *time*. Stationarity is to sequences what
 translation equivariance was to images: the same pattern means the same thing
-whenever it occurs.
+whenever it occurs. On paper, one shared $f$ meets the first five requirements. The
+sixth is a question about gradients, and most of this chapter is spent answering it.
 
 ::: {.callout-note}
 ## The hidden state is a running memory, and a Markov claim
@@ -153,42 +173,60 @@ print(f"manual loop vs. nn.RNN: max |diff| = {(manual - out_ref).abs().max():.1e
 ::::
 Notice what the shapes say. `nn.RNN` eats `(batch, time, features)`: a third
 axis has joined @sec-08-cnn's NCHW discipline, and the loop runs over that middle
-axis carrying `h` along. Unroll the loop on paper and the RNN is an ordinary
+axis carrying `h` along.
+
+That rectangle hides a practical wrinkle. Sentences in one minibatch rarely share a
+length, so shorter ones are padded at the end to the longest one's length, and the
+loop must not let padding rewrite the memory. A mask $m_t\in\{0,1\}$ per sequence
+(1 for a real element, 0 for padding) keeps the old state on padded steps:
+
+$$
+\vect{h}_t = m_t\, f(\vect{h}_{t-1},\vect{x}_t) + (1-m_t)\,\vect{h}_{t-1}.
+$$ {#eq-masked-update}
+
+Each sequence then ends holding the state of its own last real element, exactly as if
+it had run alone. @sec-11-encoder-decoder measures what skipping this bookkeeping costs
+and meets the framework's packed form of the same idea.
+
+Unroll the loop on paper and the RNN is an ordinary
 feedforward network that happens to be $T$ layers deep with every layer's weights
 tied. Hold that thought; it is about to matter enormously.
 
 ```{python}
 #| label: fig-unrolled-rnn
 #| echo: false
-#| fig-alt: "Two diagrams show one recurrent cell as a loop and as four copies unrolled across time. Input arrows enter each copy, output arrows leave it, and orange hidden-state arrows connect the copies to show that the same cell and weights are reused."
+#| fig-alt: "Two diagrams show one recurrent cell as a loop and as four copies unrolled across time. On the left, an orange state arrow labeled h leaves the cell and loops back into it. On the right, input arrows enter each copy, output arrows leave it, and orange arrows labeled h0 through h4 carry the hidden state from copy to copy, showing that the same cell and weights are reused."
 #| fig-cap: "Two drawings of the same machine. Left: one cell whose hidden state loops back into itself. Right: the loop unrolled: a chain of copies of the *same* cell, each consuming one input and passing the state along. Read vertically it is @sec-03-nonlinearity-mlp's network; read horizontally it is a network as deep as the sequence is long, with every layer's weights tied. Both halves of that sentence are about to matter."
 #| code-summary: "Code: loop view vs. unrolled view (schematic)"
 from matplotlib.patches import FancyBboxPatch, FancyArrowPatch
+from matplotlib.path import Path
 
 fig, (axl, axr) = plt.subplots(1, 2, figsize=(9.5, 3.0),
                                gridspec_kw={"width_ratios": [1, 2.6]})
 for ax in (axl, axr):
-    ax.axis("off"); ax.set_xlim(0, 10); ax.set_ylim(0, 10)
+    ax.axis("off"); ax.set_ylim(0, 10)
+axl.set_xlim(0, 10); axr.set_xlim(0, 11.2)
 navy, orange = "#232D4B", "#E57200"
-axl.add_patch(FancyBboxPatch((3, 4), 3.4, 2.4, boxstyle="round,pad=0.15",
+axl.add_patch(FancyBboxPatch((2.3, 4), 3.4, 2.4, boxstyle="round,pad=0.15",
                              facecolor="#EEF1F7", edgecolor=navy, lw=1.6))
-axl.text(4.7, 5.2, "$f$", ha="center", va="center", fontsize=15, color=navy)
-axl.annotate("", xy=(4.7, 3.85), xytext=(4.7, 1.4),
+axl.text(4.0, 5.2, "$f$", ha="center", va="center", fontsize=15, color=navy)
+axl.annotate("", xy=(4.0, 3.85), xytext=(4.0, 1.4),
              arrowprops=dict(arrowstyle="->", lw=1.5, color=navy))
-axl.text(4.7, 0.7, "$\\mathbf{x}_t$", ha="center", fontsize=11)
-axl.annotate("", xy=(4.7, 9.2), xytext=(4.7, 6.7),
+axl.text(4.0, 0.7, "$\\mathbf{x}_t$", ha="center", fontsize=11)
+axl.annotate("", xy=(4.0, 9.2), xytext=(4.0, 6.7),
              arrowprops=dict(arrowstyle="->", lw=1.5, color=navy))
-axl.text(4.7, 9.6, "$\\mathbf{o}_t$", ha="center", fontsize=11)
-axl.add_patch(FancyArrowPatch((6.55, 4.6), (6.55, 5.8),
-                              connectionstyle="arc3,rad=-1.9",
-                              arrowstyle="->", mutation_scale=13, lw=1.6,
-                              color=orange))
-axl.text(9.0, 5.2, "$\\mathbf{h}$", ha="center", fontsize=11, color=orange)
+axl.text(4.0, 9.6, "$\\mathbf{o}_t$", ha="center", fontsize=11)
+loop = Path([(5.85, 4.55), (8.3, 3.7), (8.3, 6.7), (5.9, 5.85)],   # out, around, in
+            [Path.MOVETO, Path.CURVE4, Path.CURVE4, Path.CURVE4])
+axl.add_patch(FancyArrowPatch(path=loop, arrowstyle="->", mutation_scale=13,
+                              lw=1.6, color=orange))
+axl.text(7.95, 5.2, "$\\mathbf{h}$", ha="left", va="center", fontsize=11,
+         color=orange)
 axl.set_title("one cell, with a loop", fontsize=10)
 
-xs = [1.2, 3.6, 6.0, 8.4]
+xs = [2.15, 4.45, 6.75, 9.05]
 for i, x in enumerate(xs):
-    axr.add_patch(FancyBboxPatch((x - 0.8, 4), 1.6, 2.2, boxstyle="round,pad=0.1",
+    axr.add_patch(FancyBboxPatch((x - 0.75, 4), 1.5, 2.2, boxstyle="round,pad=0.1",
                                  facecolor="#EEF1F7", edgecolor=navy, lw=1.4))
     axr.text(x, 5.1, "$f$", ha="center", va="center", fontsize=12, color=navy)
     axr.annotate("", xy=(x, 3.85), xytext=(x, 1.8),
@@ -197,11 +235,14 @@ for i, x in enumerate(xs):
     axr.annotate("", xy=(x, 8.6), xytext=(x, 6.35),
                  arrowprops=dict(arrowstyle="->", lw=1.3, color=navy))
     axr.text(x, 9.2, f"$\\mathbf{{o}}_{i+1}$", ha="center", fontsize=10)
-axr.text(0.0, 5.1, "$\\mathbf{h}_0$", ha="center", fontsize=10, color=orange)
-for a, b in zip([0.35] + [x + 0.8 for x in xs[:-1]], [x - 0.8 for x in xs]):
+starts = [0.35] + [x + 0.75 for x in xs]             # h_0 enters, h_4 leaves
+ends = [x - 0.75 for x in xs] + [10.55]
+for t, (a, b) in enumerate(zip(starts, ends)):
     axr.annotate("", xy=(b, 5.1), xytext=(a, 5.1),
                  arrowprops=dict(arrowstyle="->", lw=1.5, color=orange))
-axr.text(9.75, 5.1, "$\\cdots$", fontsize=12, color=orange)
+    axr.text((a + b) / 2, 5.45, f"$\\mathbf{{h}}_{t}$", ha="center",
+             va="bottom", fontsize=10, color=orange)
+axr.text(10.62, 5.1, "$\\cdots$", va="center", fontsize=12, color=orange)
 axr.set_title("the same cell, unrolled: a deep network with tied weights",
               fontsize=10)
 plt.tight_layout(); plt.show()
@@ -231,7 +272,11 @@ $\matr{W}_{hh}^{\top}$ carries it to the previous state. @sec-05-backpropagation
 this shape. If the factors shrink the signal, the product dies exponentially; if they
 grow it, it explodes exponentially. Since $\tanh' \le 1$ and
 $\matr{W}_{hh}$ repeats at every step, keeping every relevant direction near unit
-gain over a long sequence is a fragile special case.
+gain over a long sequence is a fragile special case. Initialization can at least start
+there: an orthogonal $\matr{W}_{hh}$ has every singular value equal to one, so wherever
+the pre-activations sit near zero, where $\tanh'\approx 1$, each hop preserves the
+gradient's norm. Training moves $\matr{W}_{hh}$, and $\tanh'$ drops below one as
+pre-activations grow, so orthogonality governs only the start of training (Exercise 2).
 Depth was measured in layers there; here it is measured in *time*, and a paragraph
 of text is a hundred layers deep. Watch the collapse, in the spirit of @sec-05-backpropagation's
 depth experiment:
@@ -303,6 +348,13 @@ from the callout above. In **truncated BPTT**, contiguous chunks carry the recur
 state forward but detach it at each boundary. The values cross the boundary; the
 gradient graph does not. This bounds memory while preserving running context.
 
+Where to cut is itself a choice. A fixed horizon ignores every dependency longer than
+the chunk: a bias toward short-range structure that practice usually tolerates and
+that can even act as a mild regularizer. Cutting at random points instead, and
+reweighting each retained term by the probability that the cut spared it, gives an
+unbiased estimate of the full gradient (Tallec and Ollivier), paid for with extra
+variance. Most training keeps the fixed horizon.
+
 The final experiment below uses a simpler finite-horizon recipe: it samples random
 100-character windows and starts each from zero state. That is **fixed-window
 training**, not truncated BPTT, because no state is carried between windows. It is
@@ -357,60 +409,74 @@ $$ {#eq-lstm}
 ```{python}
 #| label: fig-lstm-conveyor
 #| echo: false
-#| fig-cap: "The LSTM cell as a conveyor belt with valves. The forget gate $f_t$ controls how much old cell state continues; the input gate $i_t$ controls how much candidate content is added; the output gate $o_t$ controls what becomes visible as $h_t$. The upper additive route is the long-memory highway."
-#| fig-alt: "LSTM flow diagram. The previous cell state passes across a horizontal orange highway through multiplication by the forget gate, then receives the input-gated candidate at an addition node to form the new cell state. A tanh branch from that state is multiplied by the output gate to form the hidden state."
+#| fig-cap: "The LSTM cell as a conveyor belt with valves. All four learned layers read the same input $[h_{t-1}, x_t]$, drawn along the bottom. The forget gate $f_t$ controls how much old cell state continues; the input gate $i_t$ controls how much candidate content $\\tilde{c}_t$ is added; the output gate $o_t$ controls what becomes visible as $h_t$. The upper additive route is the long-memory highway."
+#| fig-alt: "LSTM flow diagram. A shared input, the previous hidden state concatenated with the current input, runs along the bottom and feeds four boxes: the forget gate, the input gate, the candidate, and the output gate. Across the top, the previous cell state travels along a horizontal orange highway, is multiplied by the forget gate, then receives the input-gated candidate at an addition node to form the new cell state. A tanh branch from that state is multiplied by the output gate to form the hidden state."
 #| code-summary: "Code: draw the LSTM conveyor belt and its three gates"
 from matplotlib.patches import FancyBboxPatch, Circle
 
-fig, ax = plt.subplots(figsize=(7.4, 3.3))
-ax.set_xlim(0, 11); ax.set_ylim(0, 5); ax.axis("off")
+fig, ax = plt.subplots(figsize=(7.4, 3.4))
+ax.set_xlim(0, 11); ax.set_ylim(0.55, 4.75); ax.set_aspect("equal"); ax.axis("off")
+navy, orange = "#232D4B", "#E57200"
 
 def gate_box(x: float, y: float, label: str,
              color: str = "#F9DCBF") -> None:
     patch = FancyBboxPatch((x - 0.42, y - 0.32), 0.84, 0.64,
                            boxstyle="round,pad=0.06", facecolor=color,
-                           edgecolor="#232D4B", linewidth=1.2)
+                           edgecolor=navy, linewidth=1.2)
     ax.add_patch(patch)
     ax.text(x, y, label, ha="center", va="center", fontsize=10)
 
 def operation(x: float, y: float, symbol: str) -> None:
     patch = Circle((x, y), 0.25, facecolor="white",
-                   edgecolor="#E57200", linewidth=1.5)
+                   edgecolor=orange, linewidth=1.5)
     ax.add_patch(patch)
     ax.text(x, y, symbol, ha="center", va="center", fontsize=12)
 
-ax.text(0.45, 3.6, "$c_{t-1}$", ha="center", fontsize=11)
-gate_box(2.1, 3.6, "$f_t$")
-operation(3.2, 3.6, r"$\times$")
-operation(6.8, 3.6, "+")
-ax.text(10.45, 3.6, "$c_t$", ha="center", fontsize=11)
-ax.annotate("", (1.62, 3.6), (0.85, 3.6), arrowprops=dict(arrowstyle="->", lw=2, color="#E57200"))
-ax.annotate("", (2.95, 3.6), (2.52, 3.6), arrowprops=dict(arrowstyle="->", lw=2, color="#E57200"))
-ax.annotate("", (6.55, 3.6), (3.45, 3.6), arrowprops=dict(arrowstyle="->", lw=2, color="#E57200"))
-ax.annotate("", (10.05, 3.6), (7.05, 3.6), arrowprops=dict(arrowstyle="->", lw=2, color="#E57200"))
+def arrow(start, end, color: str = navy, lw: float = 1.3) -> None:
+    ax.annotate("", end, start,
+                arrowprops=dict(arrowstyle="->", lw=lw, color=color))
 
-ax.text(0.9, 1.0, "$[h_{t-1},x_t]$", ha="center", fontsize=10)
-gate_box(3.0, 1.55, "$i_t$")
-gate_box(3.0, 0.55, r"$\tilde{c}_t$", "#E8F0F8")
-operation(4.35, 1.05, r"$\times$")
-ax.annotate("", (2.55, 1.55), (1.45, 1.12), arrowprops=dict(arrowstyle="->", lw=1.3, color="#232D4B"))
-ax.annotate("", (2.55, 0.55), (1.45, 0.92), arrowprops=dict(arrowstyle="->", lw=1.3, color="#232D4B"))
-ax.annotate("", (4.1, 1.15), (3.45, 1.55), arrowprops=dict(arrowstyle="->", lw=1.3, color="#232D4B"))
-ax.annotate("", (4.1, 0.95), (3.45, 0.55), arrowprops=dict(arrowstyle="->", lw=1.3, color="#232D4B"))
-ax.plot([4.6, 6.8, 6.8], [1.05, 1.05, 3.35], color="#232D4B", lw=1.5)
-ax.annotate("", (6.8, 3.35), (6.8, 2.65), arrowprops=dict(arrowstyle="->", lw=1.5, color="#232D4B"))
+# the highway: c_{t-1}, times f_t, plus i_t * candidate, gives c_t
+Y, G = 4.0, 2.1                                  # highway and gate-row heights
+ax.text(0.45, Y, "$c_{t-1}$", ha="center", va="center", fontsize=11)
+operation(2.6, Y, r"$\times$")
+operation(5.4, Y, "+")
+ax.text(10.45, Y, "$c_t$", ha="center", va="center", fontsize=11)
+for a, b in [(0.85, 2.35), (2.85, 5.15), (5.65, 10.05)]:
+    arrow((a, Y), (b, Y), orange, 2)
+ax.text(7.2, Y + 0.3, "additive cell-state highway", color="#B45309",
+        ha="center", va="bottom", fontsize=10)
 
-gate_box(8.55, 1.45, "$o_t$")
-gate_box(8.55, 2.45, r"$\tanh$", "#E8F0F8")
-operation(9.65, 1.95, r"$\times$")
-ax.plot([8.15, 7.8, 7.8, 8.1], [2.45, 2.45, 3.6, 3.6], color="#232D4B", lw=1.3)
-ax.annotate("", (8.1, 2.45), (7.8, 2.45), arrowprops=dict(arrowstyle="->", lw=1.3, color="#232D4B"))
-ax.annotate("", (9.4, 2.05), (9.0, 2.45), arrowprops=dict(arrowstyle="->", lw=1.3, color="#232D4B"))
-ax.annotate("", (9.4, 1.85), (9.0, 1.45), arrowprops=dict(arrowstyle="->", lw=1.3, color="#232D4B"))
-ax.annotate("", (10.45, 1.95), (9.9, 1.95), arrowprops=dict(arrowstyle="->", lw=1.5, color="#232D4B"))
-ax.text(10.65, 1.95, "$h_t$", ha="left", va="center", fontsize=11)
-ax.text(5.2, 4.25, "additive cell-state highway", color="#B45309",
-        ha="center", fontsize=10)
+# four learned layers, all reading the same [h_{t-1}, x_t]
+gates = {"f": 2.6, "i": 4.6, "c": 6.2, "o": 7.6}
+gate_box(gates["f"], G, "$f_t$")
+gate_box(gates["i"], G, "$i_t$")
+gate_box(gates["c"], G, r"$\tilde{c}_t$", "#E8F0F8")
+gate_box(gates["o"], G, "$o_t$")
+bus = 0.85
+ax.text(0.8, bus, "$[h_{t-1},x_t]$", ha="center", va="center", fontsize=10)
+ax.plot([1.5, gates["o"]], [bus, bus], color=navy, lw=1.3)
+for x in gates.values():
+    arrow((x, bus), (x, G - 0.4))
+    if x != gates["o"]:
+        ax.plot([x], [bus], "o", ms=3.5, color=navy)
+
+# the forget valve multiplies the old state; the write valve scales the candidate
+arrow((gates["f"], G + 0.4), (gates["f"], Y - 0.25))
+operation(5.4, 3.05, r"$\times$")
+arrow((gates["i"] + 0.2, G + 0.4), (5.22, 2.87))
+arrow((gates["c"] - 0.2, G + 0.4), (5.58, 2.87))
+arrow((5.4, 3.3), (5.4, Y - 0.25))
+
+# the read valve: h_t = o_t * tanh(c_t)
+gate_box(8.9, 3.05, r"$\tanh$", "#E8F0F8")
+operation(8.9, G, r"$\times$")
+ax.plot([8.9], [Y], "o", ms=3.5, color=navy)
+arrow((8.9, Y), (8.9, 3.43))
+arrow((8.9, 2.67), (8.9, G + 0.25))
+arrow((gates["o"] + 0.48, G), (8.65, G))
+arrow((9.15, G), (10.05, G), navy, 1.5)
+ax.text(10.3, G, "$h_t$", ha="left", va="center", fontsize=11)
 plt.tight_layout(); plt.show()
 ```
 
@@ -471,7 +537,90 @@ plt.xlabel("lag $T$ between output and first input")
 plt.ylabel(r"$\|\partial L / \partial \mathbf{x}_1\|$")
 plt.legend(); plt.tight_layout(); plt.show()
 ```
-### The memory test
+## GRU: the streamlined cousin
+
+The **Gated Recurrent Unit** (Cho et al., 2014) folds the same ideas into a
+smaller box: cell and hidden state merged into one $\vect{h}_t$, forget and input
+valves merged into a single **update gate** $\vect{z}_t$ (what you keep you do not
+overwrite, and vice versa), plus a **reset gate** $\vect{r}_t$ that can blank the
+past when a fresh start is called for:
+
+$$
+\begin{aligned}
+\vect{z}_t &= \sigma\!\left(\matr{W}_z [\vect{h}_{t-1}, \vect{x}_t]\right), \qquad
+\vect{r}_t = \sigma\!\left(\matr{W}_r [\vect{h}_{t-1}, \vect{x}_t]\right),\\
+\tilde{\vect{h}}_t &= \tanh\!\left(\matr{W}_h [\vect{r}_t \odot \vect{h}_{t-1},\, \vect{x}_t]\right), \qquad
+\vect{h}_t = \vect{z}_t \odot \vect{h}_{t-1} + (1 - \vect{z}_t) \odot \tilde{\vect{h}}_t .
+\end{aligned}
+$$ {#eq-gru}
+
+This follows Cho et al.'s original convention: $\vect{z}_t$ weights the old
+state, so it reads as **keep**. Some later references reverse the symbol and let
+$\vect{z}_t$ weight the candidate instead; compare the interpolation equation,
+not the gate's name alone.
+
+Two gates instead of three, one state instead of two, comparable performance in
+most settings. The memory test below enters PyTorch's version beside the LSTM, and
+Exercise 3 builds one by hand. @fig-gru-cell draws the cell on the conveyor's layout.
+
+```{python}
+#| label: fig-gru-cell
+#| echo: false
+#| fig-cap: "The GRU cell on the conveyor's layout. One state travels: the update gate $z_t$ keeps a fraction of $h_{t-1}$, and the same dial's complement $1 - z_t$ writes in the candidate $\\tilde{h}_t$. The reset gate $r_t$ scales $h_{t-1}$ before the candidate reads it, as in @eq-gru."
+#| fig-alt: "GRU flow diagram. Across the top, the previous hidden state travels along an orange line, is multiplied by the update gate, and then receives the candidate, scaled by one minus the update gate, at an addition node to form the new hidden state. Along the bottom, a shared input of the previous hidden state and the current input feeds the update gate and the reset gate; the reset gate multiplies the previous hidden state, and that product and the current input feed the candidate."
+#| code-summary: "Code: draw the GRU cell on the conveyor's layout"
+# gate_box, operation, and arrow come from the conveyor figure's cell
+fig, ax = plt.subplots(figsize=(7.4, 3.4))
+ax.set_xlim(0, 11); ax.set_ylim(0.55, 4.75); ax.set_aspect("equal"); ax.axis("off")
+Y, G, bus = 4.0, 2.1, 0.85                       # state line, gate row, input bus
+
+# one state: h_{t-1}, times z_t, plus (1 - z_t) * candidate, gives h_t
+ax.text(0.45, Y, "$h_{t-1}$", ha="center", va="center", fontsize=11)
+operation(2.6, Y, r"$\times$")
+operation(8.4, Y, "+")
+ax.text(10.45, Y, "$h_t$", ha="center", va="center", fontsize=11)
+for a, b in [(0.85, 2.35), (2.85, 8.15), (8.65, 10.05)]:
+    arrow((a, Y), (b, Y), orange, 2)
+ax.text(5.5, Y + 0.3, "one state, one dial: keep $z_t$, write $1-z_t$",
+        color="#B45309", ha="center", va="bottom", fontsize=10)
+
+gate_box(2.6, G, "$z_t$")
+gate_box(4.4, G, "$r_t$")
+gate_box(8.4, G, r"$\tilde{h}_t$", "#E8F0F8")
+arrow((2.6, G + 0.4), (2.6, Y - 0.25))            # keep: z_t times h_{t-1}
+ax.plot([2.6, 6.95], [3.2, 3.2], color=navy, lw=1.3)
+ax.plot([2.6], [3.2], "o", ms=3.5, color=navy)
+operation(7.2, 3.2, "")
+ax.text(7.2, 3.2, "1−", ha="center", va="center", fontsize=10)
+arrow((7.45, 3.2), (8.15, 3.2))
+operation(8.4, 3.2, r"$\times$")                  # write: (1 - z_t) times candidate
+arrow((8.4, G + 0.4), (8.4, 2.95))
+arrow((8.4, 3.45), (8.4, Y - 0.25))
+operation(5.8, G, r"$\times$")                    # reset: r_t times h_{t-1}
+arrow((4.88, G), (5.55, G))
+arrow((6.05, G), (7.92, G))
+
+# both gates read [h_{t-1}, x_t]; the candidate reads r_t * h_{t-1} and x_t
+ax.text(0.8, bus, "$[h_{t-1},x_t]$", ha="center", va="center", fontsize=10)
+ax.plot([1.5, 8.4], [bus, bus], color=navy, lw=1.3)
+for x in [2.6, 4.4, 5.8]:
+    ax.plot([x], [bus], "o", ms=3.5, color=navy)
+for x, top in [(2.6, G - 0.4), (4.4, G - 0.4), (5.8, G - 0.25), (8.4, G - 0.4)]:
+    arrow((x, bus), (x, top))
+ax.text(5.9, 1.3, "$h_{t-1}$", ha="left", va="center", fontsize=9)
+ax.text(8.5, 1.3, "$x_t$", ha="left", va="center", fontsize=9)
+plt.tight_layout(); plt.show()
+```
+
+One convention matters before you compare code. @eq-gru applies the reset gate to
+$\vect{h}_{t-1}$ **before** the candidate's hidden-state linear map. PyTorch's
+`nn.GRU` uses a reset-after form,
+$\tanh(W_{in}x+b_{in}+r\odot(W_{hn}h+b_{hn}))$, for implementation efficiency.
+The gates serve the same purpose, but the two cells are not algebraically identical
+for the same weights. An exact manual-loop verification must implement PyTorch's
+ordering rather than @eq-gru's.
+
+## The memory test
 
 Gradients at initialization are promissory notes; training is where they get
 cashed. The decisive task is a two-company story: Company A's
@@ -479,22 +628,27 @@ prices open at 0, Company B's at 1, then both trade identically for days, and th
 correct day-5 prediction is whatever day 1 said. Everything hinges on carrying one
 early bit across a long stretch of identical noise. Here is that story as an
 executable task: sequences of 80 random tokens, where the label to predict at the
-end is simply *the first token*. Chance is 25%. Three contenders, three seeds
-each: the vanilla RNN, the LSTM as PyTorch hands it to you, and the LSTM with the
-remember-by-default initialization. Predict the three rows before
-running: in particular, does the *architecture* alone earn its keep?
+end is simply *the first token*. Chance is 25%. Six contenders, three seeds
+each: the vanilla RNN; the LSTM and the GRU as PyTorch hands them to you; the LSTM
+with the remember-by-default initialization; and the GRU with its keep gate biased
+the same way, at $+1$ and at $+2$. In both modules that gate is the second slice of
+the stacked gate bias, so the same code sets it. Each row also reports its **signal at
+birth**: the gradient reaching the first input at lag 80, measured as in
+@fig-vanishing-time on the seed-6050 initialization, before any training. Predict
+the rows before running: does the *architecture* alone earn its keep, and does the
+LSTM's $+1$ carry over to the GRU?
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
 1. Define the reusable helpers: `make_recall`, `SeqClassifier`, and `train_recall`.
-2. Set `T = 80`, list the vanilla RNN and two LSTM setups, make an empty `probe_nets`,
-   and print a header.
-3. Recall-the-first-token at lag 80, three configurations.
+2. Set `T = 80`, list the vanilla RNN, two LSTM setups, and three GRU setups, make an
+   empty `probe_nets`, and print a header.
+3. Train every setup on three seeds; print its signal at birth and its accuracies.
 :::
 
 ```{python}
 #| label: recall-task
-#| code-summary: "Code: recall-the-first-token at lag 80, three configurations"
+#| code-summary: "Code: recall-the-first-token at lag 80, six configurations"
 #| code-fold: false
 # [1]
 def make_recall(n: int, T: int, vocab: int = 4,
@@ -503,25 +657,28 @@ def make_recall(n: int, T: int, vocab: int = 4,
     X = torch.randint(0, vocab, (n, T), generator=g)
     return F.one_hot(X, vocab).float(), X[:, 0]     # label = first token
 
+GATES = {"gru": 3, "lstm": 4}                        # gate slices stacked in a bias
+
 class SeqClassifier(nn.Module):
-    def __init__(self, cell: str, vocab=4, hidden=32, forget_bias=None):
+    def __init__(self, cell: str, vocab=4, hidden=32, keep_bias=None):
         super().__init__()
-        self.rec = {"rnn": nn.RNN, "lstm": nn.LSTM}[cell](vocab, hidden,
-                                                          batch_first=True)
-        if forget_bias is not None:
+        self.rec = {"rnn": nn.RNN, "gru": nn.GRU, "lstm": nn.LSTM}[cell](
+            vocab, hidden, batch_first=True)
+        if keep_bias is not None:          # LSTM forget gate, GRU update gate
             with torch.no_grad():
-                n = self.rec.bias_ih_l0.shape[0] // 4
-                self.rec.bias_ih_l0[n:2 * n].fill_(forget_bias)
+                n = self.rec.bias_ih_l0.shape[0] // GATES[cell]
+                self.rec.bias_ih_l0[n:2 * n].fill_(keep_bias)
                 self.rec.bias_hh_l0[n:2 * n].zero_()
         self.out = nn.Linear(hidden, vocab)
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         o, _ = self.rec(x)
         return self.out(o[:, -1])                    # read out at the END only
 
-def train_recall(cell: str, T: int, seed: int, forget_bias: float | None = None,
-                 epochs: int = 80) -> float:
+def train_recall(cell: str, T: int, seed: int, keep_bias: float | None = None,
+                 epochs: int = 80) -> tuple[float, nn.Module, float]:
     torch.manual_seed(seed)
-    net = SeqClassifier(cell, forget_bias=forget_bias)
+    net = SeqClassifier(cell, keep_bias=keep_bias)
+    birth = grad_at_first_input(net.rec, [T])[0]     # own generator: no RNG drawn
     X_tr, y_tr = make_recall(2000, T, seed=1)
     X_te, y_te = make_recall(500, T, seed=2)
     opt = torch.optim.Adam(net.parameters(), lr=3e-3)
@@ -534,40 +691,58 @@ def train_recall(cell: str, T: int, seed: int, forget_bias: float | None = None,
             nn.utils.clip_grad_norm_(net.parameters(), 1.0)
             opt.step()
     with torch.no_grad():
-        return (net(X_te).argmax(1) == y_te).float().mean().item(), net
+        acc = (net(X_te).argmax(1) == y_te).float().mean().item()
+    return acc, net, birth
 
 # [2]
 T = 80
 configs = [("vanilla RNN", "rnn", None),
            ("LSTM, default init", "lstm", None),
-           ("LSTM, forget bias +1", "lstm", 1.0)]
+           ("LSTM, forget bias +1", "lstm", 1.0),
+           ("GRU, default init", "gru", None),
+           ("GRU, keep bias +1", "gru", 1.0),
+           ("GRU, keep bias +2", "gru", 2.0)]
 probe_nets: dict[str, nn.Module] = {}                # kept for the diagnostic below
-print(f"recall accuracy at lag {T} (chance 25%), seeds 0 / 1 / 6050:")
+print(f"recall at lag {T} (chance 25%): signal at birth (seed 6050), "
+      "then accuracy for seeds 0 / 1 / 6050")
 # [3]
-for label, cell, fb in configs:
-    results = [train_recall(cell, T, s, fb) for s in [0, 1, 6050]]
-    accs = [a for a, _ in results]
+for label, cell, kb in configs:
+    results = [train_recall(cell, T, s, kb) for s in [0, 1, 6050]]
+    accs = [a for a, _, _ in results]
     probe_nets[label] = results[-1][1]                # seed 6050's model
-    print(f"  {label:22s} " + "   ".join(f"{a:.0%}" for a in accs))
+    print(f"  {label:22s} {results[-1][2]:8.1e}   "
+          + "   ".join(f"{a:4.0%}" for a in accs))
 ```
 ::::
-Three rows, one lesson each. The vanilla RNN is a *lottery*: two seeds sit at
-chance, one cracks the task. @fig-vanishing-time says the teaching gradient is
+Read the first three rows before the GRU's. The vanilla RNN is a *lottery*: two seeds
+sit at chance, one cracks the task. @fig-vanishing-time says the teaching gradient is
 astronomically attenuated, not exactly zero, so once in a while optimization
 stumbles onto a solution anyway, and you cannot build a system on once-in-a-while.
 The default-initialized LSTM loses on *every* seed: worth a long pause, because it
 says the architecture alone is not the cure. A fresh LSTM's forget gates hover
 near $\sigma(0) = \tfrac12$, and $0.5^{80} \approx 10^{-24}$: a half-closed valve,
 compounded eighty times, is as fatal as no valve. The third row flips the single
-bias that opens the valve, and the task is solved outright, every seed. The
+bias that opens the valve: its signal at birth rises by about nine orders of
+magnitude, and the task is solved outright, every seed. The
 highway was built by the architecture; *initialization opened it*: the same
 lesson @sec-05-backpropagation taught about signal scales at birth, now with a memory attached.
+
+The GRU rows repeat the lesson with a twist: the LSTM's $+1$ does not carry over. At
+$+1$ the GRU's signal at birth is still more than two orders of magnitude below the
+LSTM's, and every seed stays at chance; at $+2$ it passes the LSTM's, and every seed
+solves. The GRU's one dial does two jobs in @eq-gru, keeping the old state and
+admitting the candidate, and the measurement shows that the same bias need not open
+the same highway in a different cell (Exercise 3 asks why). Across the six rows the
+birth signal sorts the outcomes: the two setups that solve every seed start near
+$10^{-6}$ or above, and every setup below $10^{-8}$ fails, the vanilla RNN's lucky
+seed aside. That sorting holds for these six rows on this task.
 @sec-a3-precision-performance separates this mathematical attenuation from the later
 question of whether a chosen dtype can still represent the resulting value or update.
-And the deliverable is not raw capability but **reliability**: what the gates buy
-is that memory stops being a lottery. (For shorter stretches the drama disappears:
-at lag 20 all three rows solve the task under this budget. The gates earn their
-keep precisely where @eq-bptt says the vanilla cell should fail.)
+And the deliverable is not raw capability but **reliability**: what the gates buy,
+once initialized to remember, is that memory stops being a lottery. (For shorter
+stretches the drama disappears: at lag 20 the vanilla RNN and both LSTM setups solve
+the task under this budget. The gates earn their keep precisely where @eq-bptt says
+the vanilla cell should fail.)
 
 
 ### Watching the valves
@@ -590,7 +765,7 @@ failed twin's should sag near $\sigma(0) = \tfrac12$.
 ```{python}
 #| label: fig-forget-gate-diagnostic
 #| fig-cap: "The valve, observed. Mean forget-gate activation per timestep on 64 fresh probe sequences, replayed through the two trained seed-6050 LSTMs from the table above. The task-solving model (navy) holds its gates flat around 0.76 for all eighty steps: the conveyor belt stays open, and the first token survives to the readout. The default-initialized model (orange), same architecture and data, hovers near $\\sigma(0)\\approx\\tfrac12$ at about 0.56: a half-closed valve compounded eighty times, and chance accuracy. One task, one seed each, means over units and probes: a diagnostic of this experiment, not a general theory of trained LSTMs."
-#| fig-alt: "Two lines over timesteps one to eighty. The navy line for the forget-bias model stays flat near 0.76. The orange line for the default model stays flat near 0.56, just above a dotted half line."
+#| fig-alt: "Two lines over timesteps one to eighty. The navy line for the forget-bias model stays flat near 0.76. The orange line for the default model stays flat near 0.56, just above a dotted line at one half that the legend labels sigma of zero."
 #| code-summary: "Code: replay the trained LSTMs and read their forget gates"
 #| code-fold: false
 # [1]
@@ -622,11 +797,11 @@ for label, color in [("LSTM, forget bias +1", "#232D4B"),
                      ("LSTM, default init", "#E57200")]:
     plt.plot(range(1, T + 1), forget_gate_trace(probe_nets[label]),
              color=color, lw=2, label=label)
-plt.axhline(0.5, ls=":", color="#B8B8A8")
+plt.axhline(0.5, ls=":", color="#B8B8A8", label=r"$\sigma(0) = \frac{1}{2}$")
 plt.ylim(0, 1.02)
 plt.xlabel("timestep $t$")
 plt.ylabel("mean forget gate")
-plt.legend()
+plt.legend(loc="lower right")
 plt.tight_layout(); plt.show()
 ```
 ::::
@@ -634,40 +809,6 @@ The replay is @eq-lstm executed by hand with the trained weights (the assert
 guarantees it reproduces the module's own output), so the curves are the model's
 actual gates, not a cartoon. Architecture proposed the highway; initialization
 opened it; here is the valve position, measured.
-
-## GRU: the streamlined cousin
-
-The **Gated Recurrent Unit** (Cho et al., 2014) folds the same ideas into a
-smaller box: cell and hidden state merged into one $\vect{h}_t$, forget and input
-valves merged into a single **update gate** $\vect{z}_t$ (what you keep you do not
-overwrite, and vice versa), plus a **reset gate** $\vect{r}_t$ that can blank the
-past when a fresh start is called for:
-
-$$
-\begin{aligned}
-\vect{z}_t &= \sigma\!\left(\matr{W}_z [\vect{h}_{t-1}, \vect{x}_t]\right), \qquad
-\vect{r}_t = \sigma\!\left(\matr{W}_r [\vect{h}_{t-1}, \vect{x}_t]\right),\\
-\tilde{\vect{h}}_t &= \tanh\!\left(\matr{W}_h [\vect{r}_t \odot \vect{h}_{t-1},\, \vect{x}_t]\right), \qquad
-\vect{h}_t = \vect{z}_t \odot \vect{h}_{t-1} + (1 - \vect{z}_t) \odot \tilde{\vect{h}}_t .
-\end{aligned}
-$$ {#eq-gru}
-
-This follows Cho et al.'s original convention: $\vect{z}_t$ weights the old
-state, so it reads as **keep**. Some later references reverse the symbol and let
-$\vect{z}_t$ weight the candidate instead; compare the interpolation equation,
-not the gate's name alone.
-
-Two gates instead of three, one state instead of two, comparable performance in
-most settings. We skip the derivation; with the equations on record and Exercise 3
-waiting, you can build one yourself and let it compete on the memory test.
-
-One convention matters before you compare code. @eq-gru applies the reset gate to
-$\vect{h}_{t-1}$ **before** the candidate's hidden-state linear map. PyTorch's
-`nn.GRU` uses a reset-after form,
-$\tanh(W_{in}x+b_{in}+r\odot(W_{hn}h+b_{hn}))$, for implementation efficiency.
-The gates serve the same purpose, but the two cells are not algebraically identical
-for the same weights. An exact manual-loop verification must implement PyTorch's
-ordering rather than @eq-gru's.
 
 <!-- NOVEL: needs sign-off - concise historical bridge requested in the course review. -->
 ::: {.callout-note}
@@ -921,6 +1062,7 @@ for size, color in zip(wikitext_order, colors):
     ax.annotate(size, (result["parameters"], result["mean"]),
                 textcoords="offset points", xytext=(7, 4), fontsize=9)
 ax.set_xscale("log")
+ax.margins(x=0.12)                               # room for the right-hand label
 ax.set_xlabel("parameters (log scale)"); ax.set_ylabel("test perplexity (lower is better)")
 ax.set_ylim(125, 165)
 plt.tight_layout(); plt.show()
@@ -936,7 +1078,13 @@ makes it one.
 
 ## What a fixed-size state cannot hold
 
-This chapter closes with the bridge this part of the book now crosses. If a
+Score the chapter against its opening list. The window met the first four requirements
+and failed reach; a function per timestep failed any length and length-free parameters
+at once. One shared recurrence met the first five on paper. The vanilla cell failed the
+sixth, and the gated cells, initialized to remember, met it at lag 80 on our task. Two
+needs the list never asked for have surfaced along the way.
+
+The first is **revisiting** earlier evidence. If a
 recurrent cell can read a sequence into a state, then two of them can translate:
 an **encoder** reads the source sentence into its final state, a **decoder** spins
 that state back out as words in another language. That architecture, plus its
@@ -950,10 +1098,13 @@ computation you have been prepared for since @sec-01-linear-regression's dot pro
 chapter will first make the fixed-code failure visible in translation. Part IV will
 then build an alternative from that need.
 
-The fixed-size state is about to face that rematch: the alternative will keep the
-evidence available instead of squeezing all of it through one vector. Much later the
-state will return, not as a defeated design, but as a deliberate point on a memory
-tradeoff whose price we can finally name.
+The second is **time in parallel**. Every loop in this chapter waits for its previous
+step: $\vect{h}_t$ cannot be computed before $\vect{h}_{t-1}$, so a sequence's length is
+also its training's critical path. Research has attacked this from two sides: replace
+the recurrence with a mechanism that lets every position consult every other at once,
+or keep a recurrence simple enough to compute in parallel (Exercise 8 builds the second
+in miniature). Much later the fixed-size state returns, not as a defeated design, but
+as a deliberate point on a memory tradeoff whose price we can finally name.
 
 ::: {.callout-note}
 ## Check yourself
@@ -962,15 +1113,16 @@ Close the book for one minute and unroll the recurrence.
 
 - What is shared across timesteps, and what changes at each step?
 - How does an LSTM cell create a less obstructed path for information and gradients?
-- Why does a fixed-width recurrent state become a bottleneck as evidence grows?
+- Which of the six requirements does each design in this chapter fail, and why does a
+  fixed-width state become a bottleneck as evidence grows?
 :::
 
 ## Okay, so: weight sharing moved into time
 
-1. **Order is the signal.** @sec-06-generalization-inductive-bias's MLP could absorb one fixed pixel permutation
-   when retrained; shuffle a sentence into arbitrary orders and its meaning changes.
-   Sequences add variable length and streaming, and the fixed-size toolkit of Parts
-   I–II has no honest answer.
+1. **Six requirements**: any length, order, streaming, parameters independent of
+   length, reach, and trainable reach. @sec-06-generalization-inductive-bias's MLP could absorb one fixed pixel
+   permutation; a sentence's reorderings cannot be absorbed, so order is most of the
+   signal. The fixed-size toolkit of Parts I–II has no honest answer.
 2. **The third weight sharing**: one function $f$, applied at every timestep,
    carrying a hidden state (@eq-recurrence, @eq-rnn-cell). This is stationarity as
    inductive bias, exactly as sharing across space was in Part II. The unrolled
@@ -986,12 +1138,14 @@ Close the book for one minute and unroll the recurrence.
    weights (@eq-lstm-highway).
 5. **Architecture proposes, initialization disposes**: at lag 80 the default LSTM
    scores chance ($\sigma(0)^{80} \approx 10^{-24}$); set the forget bias to $+1$
-   and the task is solved on every seed. GRU packs the same ideas into two gates
-   and one state (@eq-gru).
+   and the task is solved on every seed. The GRU packs the same ideas into two gates
+   and one state (@eq-gru), but the LSTM's $+1$ does not carry over: here it needs
+   $+2$. The signal at birth sorted the six rows' outcomes.
 6. **A one-layer character LSTM learns this book's accent** (words, rhythm,
    LaTeX tics) but not its meaning: part scale, part the finite-state
    bottleneck. Cramming a whole sequence into 256 recurrent-state scalars is the debt Part III
-   carries forward. The next chapters will earn the mechanism that repays it.
+   carries forward, together with a loop that cannot run ahead of itself. The next
+   chapters will earn the mechanisms that repay both.
 
 ## Sources and further reading {.unnumbered}
 
@@ -1003,8 +1157,18 @@ Close the book for one minute and unroll the recurrence.
 - [Gers, Schmidhuber, & Cummins, *Learning to Forget: Continual Prediction with LSTM*](https://doi.org/10.1162/089976600300015015): adds the adaptive forget gate to the 1997 cell, giving the form used in this chapter.
 - [Cho et al., *Learning Phrase Representations using RNN Encoder–Decoder for Statistical Machine Translation*](https://aclanthology.org/D14-1179/): introduces the gated recurrent unit in its encoder–decoder setting.
 - [Pascanu, Mikolov, & Bengio, *On the Difficulty of Training Recurrent Neural Networks*](https://proceedings.mlr.press/v28/pascanu13.html): geometric analysis of vanishing/exploding gradients and gradient clipping.
+- [Saxe, McClelland, & Ganguli, *Exact Solutions to the Nonlinear Dynamics of Learning in Deep Linear Neural Networks*](https://arxiv.org/abs/1312.6120): orthogonal initialization and norm preservation across depth, the idea behind an orthogonal $\matr{W}_{hh}$.
+- [Tallec & Ollivier, *Unbiasing Truncated Backpropagation Through Time*](https://arxiv.org/abs/1705.08209): random truncation points with compensating weights give an unbiased gradient estimate.
+- [Maas et al., *Learning Word Vectors for Sentiment Analysis*](https://aclanthology.org/P11-1015/): introduces the IMDb movie-review corpus used in Exercise 6.
 - [Mikolov et al., *Efficient Estimation of Word Representations in Vector Space*](https://arxiv.org/abs/1301.3781): the CBOW and skip-gram predictive objectives.
 - [Pennington, Socher, & Manning, *GloVe: Global Vectors for Word Representation*](https://aclanthology.org/D14-1162/): static embeddings learned from global word co-occurrence statistics.
+
+For Exercise 8's research bridge, recurrences that compute in parallel:
+
+- [Bradbury, Merity, Xiong, & Socher, *Quasi-Recurrent Neural Networks*](https://arxiv.org/abs/1611.01576) and [Lei et al., *Simple Recurrent Units for Highly Parallelizable Recurrence*](https://arxiv.org/abs/1709.02755): gates computed from the inputs alone, so only a cheap elementwise recurrence stays serial.
+- [Martin & Cundy, *Parallelizing Linear Recurrent Neural Nets Over Sequence Length*](https://arxiv.org/abs/1709.04057): computes linear recurrences with a parallel scan.
+- [Gu, Goel, & Ré, *Efficiently Modeling Long Sequences with Structured State Spaces*](https://arxiv.org/abs/2111.00396) and [Orvieto et al., *Resurrecting Recurrent Neural Networks for Long Sequences*](https://arxiv.org/abs/2303.06349): long-memory linear recurrences as state-space layers, and what a plain linear RNN needs to match them.
+- [Feng et al., *Were RNNs All We Needed?*](https://arxiv.org/abs/2410.01201): strips the LSTM and GRU down to input-only gates so the whole sequence trains in parallel.
 
 ## Exercises {.unnumbered}
 
@@ -1017,10 +1181,20 @@ Close the book for one minute and unroll the recurrence.
    ($\tanh' \approx 1$), the gradient norm grows or decays like the spectral
    radius of $\matr{W}_{hh}$ raised to $T$. What does $\tanh'(0) = 1$ say about
    the moment right after initialization, when $\vect{h} \approx \vect{0}$?
-3. **(Code.)** Implement the reset-before GRU in @eq-gru as a manual loop and enter
-   it in the lag-80 memory test. Then change only the candidate update to PyTorch's
-   reset-after convention and verify that version against `nn.GRU`. Does either
-   need an initialization trick, and which bias would you set?
+   **(Code.)** Initialize $\matr{W}_{hh}$ with `nn.init.orthogonal_` and repeat
+   @fig-vanishing-time's measurement. Then record the gradient norm that
+   `clip_grad_norm_` returns in the memory test: what fraction of updates does it
+   rescale for the vanilla RNN and for the forget-bias LSTM, and which cell trains
+   at the clip?
+3. **(Code.)** Implement the reset-before GRU in @eq-gru as a manual loop. Then
+   change only the candidate update to PyTorch's reset-after convention and verify
+   that version against `nn.GRU`. **(Audit.)** The memory test left the GRU at chance
+   with the LSTM's $+1$ and solved it at $+2$. *Named wrong answer:*
+   “$\sigma(1)\approx 0.73$ is too leaky”: the LSTM runs at the same gate
+   value and solves the task. Measure the norm of each one-step Jacobian
+   $\partial\vect{h}_t/\partial\vect{h}_{t-1}$ along one trajectory at birth for
+   both cells at $+1$, and state what the signal at birth does and does not
+   establish about the difference.
 4. **(Code.)** The chapter starts every sequence with $\vect{h}_0 = \vect{0}$.
    Make $\vect{h}_0$ a learned `nn.Parameter` in the recall task and retrain.
    Where does its gradient come from, and when could a learned start plausibly
@@ -1029,3 +1203,39 @@ Close the book for one minute and unroll the recurrence.
    with the temperature near zero compare against picking the argmax at every
    step. Connect what you see to @sec-02-logistic-softmax's hard-max-versus-softmax discussion:
    which failure mode of the hard max does greedy decoding reproduce?
+6. **(Code.)** **Both cells from scratch, on real reviews.** Write a vanilla RNN cell
+   with separate input and recurrent maps: a Xavier-initialized $\matr{W}_{xh}$ and
+   an orthogonal $\matr{W}_{hh}$ without a bias. Write an LSTM cell with one fused
+   linear map from $[\vect{h}_{t-1},\vect{x}_t]$ to all four gate pre-activations and
+   its forget-gate bias set to $+1$. Unroll each over padded minibatches with
+   @eq-masked-update, read the final state into a two-class head, and train both on
+   the IMDb movie reviews of Maas et al. (2011), using a capped vocabulary, an
+   unknown-word token, and an embedding whose padding row stays at zero. Log the
+   gradient norm before clipping, report validation accuracy and a confusion matrix
+   for each cell, then plot the LSTM's three gates across one short, strongly
+   positive review. **(Audit.)** Name one claim the gate plot supports and one it
+   cannot.
+7. **(Code.)** **Running translator, v1.** Keep the corpus, split, and evaluation you
+   fixed for version 0 in the autoencoder interlude's Exercise 6. Replace its one-shot
+   encoder with a recurrent one: embed the source tokens, run a masked recurrent
+   encoder (@eq-masked-update), and hand its final state to version 0's slot decoder
+   unchanged. Train it once with a vanilla RNN cell and once with an LSTM or GRU whose
+   keep gate starts biased to remember, and add both rows to your ledger with token
+   accuracy overall and by source-length bucket. **(Audit.)** Reverse the word order of
+   a few source sentences: which versions' outputs change, and what does the
+   length-bucket curve say about asking one final state to carry a whole sentence?
+8. **(Pencil.)** **Research bridge (optional).** Keep a recurrence, but make it
+   simple enough to compute in parallel. Let the LSTM's three gates and its candidate
+   read only $\vect{x}_t$. Show that the cell update becomes
+   $\vect{c}_t=\vect{a}_t\odot\vect{c}_{t-1}+\vect{b}_t$ with every $\vect{a}_t$ and
+   $\vect{b}_t$ known before the loop starts, and that pairs compose associatively:
+   applying $(\vect{a}_1,\vect{b}_1)$ and then $(\vect{a}_2,\vect{b}_2)$ is the single
+   pair $(\vect{a}_1\odot\vect{a}_2,\;\vect{a}_2\odot\vect{b}_1+\vect{b}_2)$.
+   **(Code.)** Implement a doubling scan that produces every $\vect{c}_t$ in
+   $\lceil\log_2 T\rceil$ rounds and assert that it matches the loop for $T=1000$.
+   Then enter this input-gated cell in the lag-80 memory test. What did removing
+   $\vect{h}_{t-1}$ from the gates cost, and what did it buy? The papers listed for
+   this exercise under Sources follow the idea from input-only gates to today's
+   linear-recurrent and state-space layers; the test-time-regression interlude
+   (@sec-interlude-test-time-regression) returns to fixed-state recurrences from
+   another direction.

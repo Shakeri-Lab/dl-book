@@ -175,7 +175,7 @@ NUMERIC_RULES: Mapping[BlockKey, NumericRule] = {
         mutable_fields=(1, 2),
         field_tolerances=((2, 3.0, 0.0),),
     ),
-    ("11-encoder-decoder", 3): NumericRule(
+    ("11-encoder-decoder", 4): NumericRule(
         0.6,
         mutable_fields=(1, 2, 3),
         field_tolerances=((2, 1.0, 0.0),),
@@ -282,7 +282,7 @@ NUMERIC_JUSTIFICATIONS: Mapping[BlockKey, str] = {
     ),
     ("10-sequences-rnn", 1): "manual/unrolled recurrence roundoff",
     ("11-encoder-decoder", 2): "padding-control validation accuracy portability",
-    ("11-encoder-decoder", 3): "sealed sequence audit accuracy portability",
+    ("11-encoder-decoder", 4): "sealed sequence audit accuracy portability",
     ("12-kernel-regression", 5): "normalization equivalence roundoff",
     ("13-attention", 6): "attention-mass metrics and stochastic row-sum roundoff",
     **{
@@ -311,11 +311,11 @@ NUMERIC_JUSTIFICATIONS: Mapping[BlockKey, str] = {
 
 
 STRUCTURAL_RULES: Mapping[BlockKey, str] = {
-    ("10-sequences-rnn", 3): "lag-80 recall relation",
+    ("10-sequences-rnn", 3): "lag-80 recall and birth-signal relations",
     ("10-sequences-rnn", 6): "300-character corpus sample",
-    ("11-encoder-decoder", 4): "date-error gallery",
-    ("11-encoder-decoder", 5): "beam-search date sample",
-    ("11-encoder-decoder", 6): "beam-versus-greedy count",
+    ("11-encoder-decoder", 5): "date-error gallery",
+    ("11-encoder-decoder", 6): "beam-search date sample",
+    ("11-encoder-decoder", 7): "beam-versus-greedy count",
     ("13-attention", 1): (
         "fixed float32 scaled-dot arithmetic under NumPy array-format variation"
     ),
@@ -488,31 +488,54 @@ def _generated_text_errors(text: str, label: str) -> list[str]:
 def _ch10_recall(actual: str, label: str) -> list[str]:
     lines = actual.rstrip("\n").splitlines()
     if lines[:1] != [
-        "recall accuracy at lag 80 (chance 25%), seeds 0 / 1 / 6050:"
-    ] or len(lines) != 4:
+        "recall at lag 80 (chance 25%): signal at birth (seed 6050), "
+        "then accuracy for seeds 0 / 1 / 6050"
+    ] or len(lines) != 7:
         return [f"{label}: recall table scaffold changed"]
     rows: dict[str, list[int]] = {}
-    row_re = re.compile(r"^  (vanilla RNN|LSTM, default init|LSTM, forget bias \+1)\s+"
-                        r"(\d+)%\s+(\d+)%\s+(\d+)%$")
+    births: dict[str, float] = {}
+    row_re = re.compile(
+        r"^  (vanilla RNN|LSTM, default init|LSTM, forget bias \+1|GRU, default init|"
+        r"GRU, keep bias \+1|GRU, keep bias \+2)\s+(\d\.\de[-+]\d+)\s+"
+        r"(\d+)%\s+(\d+)%\s+(\d+)%$"
+    )
     for line in lines[1:]:
         match = row_re.fullmatch(line)
         if not match:
             return [f"{label}: malformed recall row: {line!r}"]
-        rows[match.group(1)] = [int(match.group(i)) for i in range(2, 5)]
+        births[match.group(1)] = float(match.group(2))
+        rows[match.group(1)] = [int(match.group(i)) for i in range(3, 6)]
     errors: list[str] = []
-    vanilla = rows.get("vanilla RNN", [])
-    default = rows.get("LSTM, default init", [])
-    biased = rows.get("LSTM, forget bias +1", [])
-    if len(rows) != 3:
+    if len(rows) != 6:
         errors.append(f"{label}: missing or duplicate recall condition")
+        return errors
+    chance = lambda values: all(15 <= value <= 35 for value in values)
+    solved = lambda values: all(value >= 95 for value in values)
+    vanilla = rows["vanilla RNN"]
     if sum(value >= 95 for value in vanilla) < 1 or sum(
         15 <= value <= 35 for value in vanilla
     ) < 2:
         errors.append(f"{label}: vanilla RNN no longer shows seed-sensitive recall")
-    if len(default) != 3 or not all(15 <= value <= 35 for value in default):
-        errors.append(f"{label}: default LSTM no longer remains near chance")
-    if len(biased) != 3 or not all(value >= 95 for value in biased):
-        errors.append(f"{label}: forget-bias LSTM no longer solves all three seeds")
+    for name in ("LSTM, default init", "GRU, default init", "GRU, keep bias +1"):
+        if not chance(rows[name]):
+            errors.append(f"{label}: {name} no longer remains near chance")
+    for name in ("LSTM, forget bias +1", "GRU, keep bias +2"):
+        if not solved(rows[name]):
+            errors.append(f"{label}: {name} no longer solves all three seeds")
+    # The prose reads these relations off the birth-signal column.
+    lstm_one, gru_one = births["LSTM, forget bias +1"], births["GRU, keep bias +1"]
+    gru_two = births["GRU, keep bias +2"]
+    if not 1e8 <= lstm_one / births["LSTM, default init"] <= 1e10:
+        errors.append(f"{label}: the forget bias no longer adds about nine orders")
+    if lstm_one / gru_one < 100:
+        errors.append(f"{label}: GRU +1 is no longer two orders below LSTM +1")
+    if gru_two <= lstm_one:
+        errors.append(f"{label}: GRU +2 no longer passes LSTM +1")
+    if min(lstm_one, gru_two) < 5e-7:
+        errors.append(f"{label}: a solving setup starts below the stated signal")
+    failing = ("vanilla RNN", "LSTM, default init", "GRU, default init", "GRU, keep bias +1")
+    if max(births[name] for name in failing) >= 1e-8:
+        errors.append(f"{label}: a failing setup starts above the stated signal")
     return errors
 
 
@@ -569,17 +592,17 @@ def _ch11_error_gallery(
 
 
 def _ch11_relations(actual: Sequence[str], label: str) -> list[str]:
-    if len(actual) < 4:
-        return [f"{label}: expected at least four stdout blocks"]
+    if len(actual) < 5:
+        return [f"{label}: expected at least five stdout blocks"]
     accuracy_match = re.search(
         r"packed / teacher forced\s+(\d+\.\d+)%",
-        actual[2],
+        actual[3],
     )
     teacher_forced_accuracy = (
         float(accuracy_match.group(1)) if accuracy_match else None
     )
     return _ch11_error_gallery(
-        actual[3],
+        actual[4],
         f"{label} error gallery",
         teacher_forced_accuracy,
     )
@@ -1235,12 +1258,12 @@ def _structural_errors(
             if body is None
             else _generated_text_errors(body, label)
         )
-    if (slug, block) == ("11-encoder-decoder", 4):
+    if (slug, block) == ("11-encoder-decoder", 5):
         # The gallery is checked unconditionally in the cross-block validator.
         return []
-    if (slug, block) == ("11-encoder-decoder", 5):
-        return _ch11_beam(expected, actual, label)
     if (slug, block) == ("11-encoder-decoder", 6):
+        return _ch11_beam(expected, actual, label)
+    if (slug, block) == ("11-encoder-decoder", 7):
         return _ch11_beam_count(actual, label)
     if (slug, block) == ("13-attention", 1):
         return _ch13_scaled_dot_walk(actual, label)

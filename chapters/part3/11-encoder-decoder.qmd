@@ -10,7 +10,12 @@
             NOT used — the book's task is synthetic and self-contained)
      note: m06's PCA/autoencoder spine (#4-8) is restored before recurrence in
            @sec-interlude-autoencoders; this chapter harvests its static contract
-           with recurrent maps on both sides. -->
+           with recurrent maps on both sides.
+     2026-09-27 revision (docs/part3-sequence-plan.md): three writing requirements
+           in the opening, the masked-update harvest in the padding trap, the handoff
+           figure redrawn with the discarded encoder states, and Exercises 7-8
+           (running translator v2, the counterpart of Assignment 3's GRU seq2seq;
+           a research bridge to sequence-level training). -->
 
 @sec-10-sequences-rnn ended with a promise: if one recurrent cell can read a sequence *into* a
 state, two cells can translate: one reads, one writes. This chapter builds that
@@ -29,8 +34,18 @@ Before recurrence, every model lived on a
 **fixed-size contract**: 784 pixels in, 10 logits out; $28 \times 28$ garments in, one
 verdict out. The interesting world breaks that contract on both ends at once:
 translation maps a sentence of *any* length to a sentence of *some other* length, in a
-different vocabulary. @sec-10-sequences-rnn's recurrent cell broke the contract on the input
-side; today we break it on both.
+different vocabulary. @sec-10-sequences-rnn's six requirements were all about reading. Writing
+adds three more:
+
+1. **Output of any length.** The model decides where the output ends.
+2. **Reordering.** An output token may depend on input that arrives after it: the year
+   comes last in `march 5, 2021` and first in `2021-03-05`.
+3. **Conditioning on both sides.** Each output token depends on the whole input and on
+   every token already written.
+
+The smallest design that meets all three reuses both recurrent machines we already
+own: one that reads a sequence into a state, and the character model that writes
+one token at a time from a state.
 
 ## Two RNNs and a handoff
 
@@ -196,48 +211,74 @@ decoder will ever know about the source crosses it.
 ```{python}
 #| label: fig-encoder-decoder-handoff
 #| echo: false
-#| fig-alt: "Source tokens flow through an encoder until the last real token, while faded padding boxes are bypassed. One fixed h-and-c state crosses to initialize a decoder that emits the target sequence one token at a time."
-#| fig-cap: "The encoder–decoder handoff. Packing stops each encoder at its last real source token, rather than marching through right-padding. Only the final $(h,c)$ pair crosses the bridge to initialize the decoder; the earlier encoder states are discarded. Part IV will keep those states and let the decoder look back."
+#| fig-alt: "An encoder reads source characters with one state per character. The earlier states are drawn in gray and labeled discarded, and two faded padding steps are skipped by an arc. The final state becomes an (h, c) box labeled 256 scalars that initializes a decoder chain. The decoder reads <bos>, 2, 0, 2 and writes 2, 0, 2, 1, with dashed arrows feeding each output back as the next input."
+#| fig-cap: "The encoder–decoder handoff. The encoder computes a state at every source position, but only the final $(h,c)$ pair crosses to initialize the decoder; the earlier states are discarded, and packing stops each encoder at its last real token instead of walking through right-padding. The decoder feeds each output back as its next input. Part IV keeps the discarded states and lets the decoder look back."
 #| code-summary: "Code: draw the packed encoder, fixed-state bridge, and decoder"
-from matplotlib.patches import FancyBboxPatch
+from matplotlib.patches import Circle, FancyBboxPatch
 
-fig, ax = plt.subplots(figsize=(7.6, 3.1))
-ax.set_xlim(0, 12); ax.set_ylim(0, 5); ax.axis("off")
+fig, ax = plt.subplots(figsize=(7.6, 3.3))
+ax.set_xlim(0, 12.4); ax.set_ylim(0.1, 5.35); ax.set_aspect("equal"); ax.axis("off")
+navy, orange, green, gray = "#232D4B", "#E57200", "#2E7D32", "#9A9A9A"
 
 def token_box(x: float, y: float, label: str, color: str,
-              alpha: float = 1.0) -> None:
-    patch = FancyBboxPatch((x - 0.42, y - 0.35), 0.84, 0.7,
-                           boxstyle="round,pad=0.04", facecolor=color,
-                           edgecolor="#232D4B", linewidth=1.2, alpha=alpha)
-    ax.add_patch(patch)
-    ax.text(x, y, label, ha="center", va="center", fontsize=9, alpha=alpha)
+              alpha: float = 1.0, text: str = "black") -> None:
+    ax.add_patch(FancyBboxPatch((x - 0.4, y - 0.28), 0.8, 0.56,
+                                boxstyle="round,pad=0.04", facecolor=color,
+                                edgecolor=navy, linewidth=1.1, alpha=alpha))
+    ax.text(x, y, label, ha="center", va="center", fontsize=8.5, alpha=alpha,
+            color=text)
 
-source_labels = ["m", "a", "r", "5", "<pad>", "<pad>"]
-for j, label in enumerate(source_labels):
-    faded = label == "<pad>"
-    token_box(0.75 + 1.05 * j, 3.15, label,
-              "#F4F4EF" if faded else "#E8F0F8", 0.4 if faded else 1.0)
+def state_node(x: float, y: float, color: str, alpha: float = 1.0) -> None:
+    ax.add_patch(Circle((x, y), 0.22, facecolor="white", edgecolor=color,
+                        linewidth=1.6, alpha=alpha))
+
+def link(start, end, color: str = navy, lw: float = 1.2, ls="-",
+         rad: float = 0.0, alpha: float = 1.0) -> None:
+    ax.annotate("", end, start, arrowprops=dict(
+        arrowstyle="->", color=color, lw=lw, linestyle=ls, alpha=alpha,
+        connectionstyle=f"arc3,rad={rad}", shrinkA=0, shrinkB=0))
+
+# encoder: one state per source position; only the last real one survives
+Ys, Yt = 2.9, 1.35                               # state row, token row
+xs = [0.6, 1.5, 2.4, 3.3, 4.2, 5.1]
+for j, (x, label) in enumerate(zip(xs, ["m", "a", "\u2026", "1", "<pad>", "<pad>"])):
+    pad = label == "<pad>"
+    token_box(x, Yt, label, "#F4F4EF" if pad else "#E8F0F8", 0.4 if pad else 1.0)
+    state_node(x, Ys, gray if (pad or j < 3) else orange, 0.35 if pad else 1.0)
+    link((x, Yt + 0.32), (x, Ys - 0.22), gray if pad else navy,
+         alpha=0.4 if pad else 1.0)
     if j < 3:
-        ax.annotate("", (1.25 + 1.05 * j, 3.15), (1.05 + 1.05 * j, 3.15),
-                    arrowprops=dict(arrowstyle="->", color="#5379AA", lw=1.2))
-ax.annotate("", (6.55, 3.15), (4.32, 3.15),
-            arrowprops=dict(arrowstyle="->", color="#E57200", lw=2,
-                            connectionstyle="arc3,rad=-0.45"))
-ax.text(5.4, 4.25, "packing bypasses padding", color="#B45309",
-        ha="center", fontsize=9)
+        link((x + 0.22, Ys), (xs[j + 1] - 0.22, Ys), gray)
+ax.text(1.5, Ys + 0.45, "earlier states: discarded", color="#666666",
+        ha="center", fontsize=8)
+ax.text(2.4, 0.6, "encoder reads march 5, 2021, one character per step",
+        ha="center", color=navy, fontsize=9)
+link((3.52, Ys + 0.1), (6.2, Ys + 0.35), orange, 1.8, rad=-0.4)
+ax.text(4.3, 4.15, "packing skips the padding", color="#B45309",
+        ha="center", fontsize=8.5)
 
-token_box(7.0, 3.15, "$(h,c)$", "#F9DCBF")
-ax.text(7.0, 3.9, "256 scalars", color="#B45309", ha="center", fontsize=9)
+# the bridge: one fixed-size pair initializes the decoder
+token_box(6.6, Ys + 0.35, "$(h,c)$", "#F9DCBF")
+ax.text(6.6, Ys - 0.25, "256 scalars", color="#B45309", ha="center", va="top",
+        fontsize=8.5)
+link((7.0, Ys + 0.35), (7.28, Ys + 0.05), orange, 1.8)
 
-for j, label in enumerate(["<bos>", "2", "0", "2", "1", "…"]):
-    token_box(7.9 + 0.72 * j, 1.35, label, "#F4F4EF")
-    if j < 5:
-        ax.annotate("", (8.25 + 0.72 * j, 1.35), (8.15 + 0.72 * j, 1.35),
-                    arrowprops=dict(arrowstyle="->", color="#232D4B", lw=1.0))
-ax.annotate("", (7.9, 1.72), (7.15, 2.8),
-            arrowprops=dict(arrowstyle="->", color="#E57200", lw=1.8))
-ax.text(2.7, 2.25, "encoder", ha="center", color="#232D4B", fontsize=10)
-ax.text(9.7, 0.55, "decoder", ha="center", color="#232D4B", fontsize=10)
+# decoder: each output is fed back as the next input
+xd = [7.5, 8.55, 9.6, 10.65]
+for j, x in enumerate(xd):
+    state_node(x, Ys, orange)
+    token_box(x, Yt, ["<bos>", "2", "0", "2"][j], "#F4F4EF")
+    link((x, Yt + 0.32), (x, Ys - 0.22))
+    token_box(x, 4.35, ["2", "0", "2", "1"][j], "#E6F2E8", text=green)
+    link((x, Ys + 0.22), (x, 4.35 - 0.32))
+    if j < 3:
+        link((x + 0.22, Ys), (xd[j + 1] - 0.22, Ys), orange, 1.4)
+        link((x + 0.36, 4.2), (xd[j + 1] - 0.3, Yt + 0.3), green, 0.9,
+             ls=(0, (3, 2)), alpha=0.7)
+link((xd[-1] + 0.22, Ys), (11.55, Ys), orange, 1.4)
+ax.text(11.8, Ys, "$\\cdots$", va="center", color=orange, fontsize=11)
+ax.text(9.1, 0.6, "decoder (outputs fed back as inputs)", ha="center",
+        color=navy, fontsize=9)
 plt.tight_layout(); plt.show()
 ```
 
@@ -418,6 +459,65 @@ plt.ylabel(r"$\|\mathbf{h}_t - \mathbf{h}_T\|$")
 plt.tight_layout(); plt.show()
 ```
 
+@sec-10-sequences-rnn already wrote down the repair. @eq-masked-update keeps the old state on
+every padded step, so each sequence ends holding the state of its own last real token.
+`pack_padded_sequence` is the framework's version of that bookkeeping: rather than
+computing the padded steps and throwing them away, it never runs them. If that reading
+is right, a hand-written masked loop must reproduce the packed encoder's final states,
+and the naive encoder must disagree with them for exactly the sources that carried
+padding.
+
+:::: {.plan-code .plan-code-wide}
+::: {.plan}
+1. Write the masked update as a loop over an `nn.LSTMCell` that shares the encoder's
+   weights.
+2. Encode 128 validation sources of mixed length three ways with the naive model's
+   encoder: packed, naive, and masked.
+3. Check that masking reproduces packing and that naive padding moved exactly the
+   padded sources; print the counts.
+:::
+
+```{python}
+#| label: masked-update-check
+#| code-summary: "Code: packing is the masked update"
+#| code-fold: false
+# [1]
+@torch.no_grad()
+def masked_encode(encoder: nn.LSTM, e: torch.Tensor,
+                  lengths: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    cell = nn.LSTMCell(e.shape[-1], encoder.hidden_size)
+    cell.load_state_dict({k.removesuffix("_l0"): v   # same weights, one step
+                          for k, v in encoder.state_dict().items()})
+    h = c = torch.zeros(e.shape[0], encoder.hidden_size)
+    for t in range(e.shape[1]):
+        m = (t < lengths).float()[:, None]            # 1 real token, 0 padding
+        h_new, c_new = cell(e[:, t], (h, c))
+        h, c = m * h_new + (1 - m) * h, m * c_new + (1 - m) * c
+    return h, c
+
+# [2]
+S_mix, L_mix, _ = batchify(valid_pairs, list(range(128)))
+with torch.no_grad():
+    e = naive.src_emb(S_mix)
+    _, (h_packed, c_packed) = naive.encoder(nn.utils.rnn.pack_padded_sequence(
+        e, L_mix, batch_first=True, enforce_sorted=False))
+    _, (h_naive, _) = naive.encoder(e)
+h_masked, c_masked = masked_encode(naive.encoder, e, L_mix)
+# [3]
+gap = torch.cat([h_masked - h_packed[0], c_masked - c_packed[0]]).abs().max()
+assert gap < 1e-5
+moved = (h_naive[0] - h_packed[0]).norm(dim=1) > 1e-3
+padded = L_mix < L_mix.max()
+assert torch.equal(moved, padded)
+print(f"{len(L_mix)} validation sources, lengths {int(L_mix.min())} to "
+      f"{int(L_mix.max())}")
+print("masked update vs packing: same final states (max difference below 1e-5)")
+print(f"naive padding moved {int(moved.sum())} final states: exactly the sources "
+      f"shorter than {int(L_mix.max())} characters")
+```
+::::
+Packing is the masked update, minus the padded steps it never computes.
+
 ::: {.callout-warning}
 ## Trap: the model will happily read your padding
 
@@ -447,7 +547,9 @@ token instead, the gold rail. Every conditioning input is then known in advance
 $\rightarrow$ the whole target can be submitted in **one fused decoder call** (the
 `model(S, L, T[:, :-1])` line), rather than a Python feedback loop. The LSTM still
 processes time recurrently inside that call; teacher forcing does not make its
-timesteps mathematically parallel. Every step nevertheless learns from a sensible
+timesteps mathematically parallel. What still fixes their order is the state each
+step hands to the next: the decoder has inherited @sec-10-sequences-rnn's second unmet need,
+time in parallel. Every step nevertheless learns from a sensible
 context from epoch one. Watch both effects:
 
 :::: {.plan-code}
@@ -735,22 +837,26 @@ Close the book for one minute and reconstruct the sequence pipeline from memory.
 - Which two places must exclude padding, and what tool handles each one?
 - What mismatch does teacher forcing create between training and inference?
 - What does beam search change, and what part of the learned model does it leave unchanged?
+- Why does packing leave every final state exactly where the masked update would?
 :::
 
 ## Okay, so: the fixed-size handoff is the bottleneck
 
-1. **Encoder–decoder = two RNNs and a handoff**: read the source into a final
-   state, hand it over, generate from it. `<bos>` starts the decoder, `<eos>`
+1. **Encoder–decoder = two RNNs and a handoff**, the smallest design that writes
+   output of any length, reorders, and conditions on both sides: read the source into a
+   final state, hand it over, generate from it. `<bos>` starts the decoder, `<eos>`
    lets it choose its length, embeddings replace one-hots (hard address, learned
    content).
 2. **Padding poisons twice**: the loss (`ignore_index`) and the encoder
-   (`pack_padded_sequence`). On never-seen source strings, the same model and budget
+   (`pack_padded_sequence`, the framework's form of @sec-10-sequences-rnn's masked update). On
+   never-seen source strings, the same model and budget
    score 34.3% naive versus 93.1% packed. Target padding is included for reuse but
    not exercised by these fixed-length ISO targets. Audit bookkeeping before architecture.
 3. **Teacher forcing** trains the decoder on the gold rail: one fused call with no
    Python feedback loop and stable early learning, at the cost of **exposure bias**, the train/inference
    mismatch that free-running avoids by paying with speed and early instability.
-   Scheduled sampling anneals between them, flipping per token.
+   Scheduled sampling anneals between them, flipping per token. The decoder's inputs
+   are known in advance; its recurrent state still orders its steps.
 4. **Decoding is search.** Greedy maximizes steps, not sequences; beam search
    carries $k$ rails for $O(k V T)$ and surfaces high-scoring alternatives. Its
    raw joint log scores are rankings, not a normalized posterior, and a beam can
@@ -768,6 +874,11 @@ Close the book for one minute and reconstruct the sequence pipeline from memory.
 - [Papineni et al., *BLEU: a Method for Automatic Evaluation of Machine
   Translation*](https://aclanthology.org/P02-1040/) (2002): modified $n$-gram
   precision, clipping, and the corpus-level brevity penalty used in Exercise 6.
+
+For Exercise 8's research bridge, training on a sequence-level score:
+
+- [Williams, *Simple Statistical Gradient-Following Algorithms for Connectionist Reinforcement Learning*](https://doi.org/10.1007/BF00992696) (1992): the score-function (REINFORCE) gradient and its baseline.
+- [Ranzato, Chopra, Auli, & Zaremba, *Sequence Level Training with Recurrent Neural Networks*](https://arxiv.org/abs/1511.06732) and [Shen et al., *Minimum Risk Training for Neural Machine Translation*](https://aclanthology.org/P16-1159/): train a decoder on its own outputs against the metric it is judged by, addressing exposure bias and the loss-metric mismatch together.
 
 ## Exercises {.unnumbered}
 
@@ -800,3 +911,27 @@ Close the book for one minute and reconstruct the sequence pipeline from memory.
    counts on two hand-worked examples, and state which aggregation the evaluation
    contract names. *Named wrong answer:* “average the sentence BLEUs”: corpus
    clipping and the brevity penalty do not commute with that mean.
+7. **(Code.)** **Running translator, v2.** Keep the corpus, split, and evaluation of
+   your ledger, and replace version 1's slot decoder with a recurrent decoder that
+   starts from the encoder's final state. Add `<bos>` and `<eos>` to the target
+   vocabulary, pad targets per batch and exclude that padding from the loss with
+   `ignore_index`, pack or mask the encoder, and train with teacher forcing. Decode
+   the validation split greedily and with a beam of width 5, score both with your
+   BLEU from Exercise 6, and add the rows to your ledger. **(Audit.)** Break
+   validation BLEU down by source-length bucket for versions 1 and 2. Which version
+   loses more on the longest bucket, and what does the curve say about asking one
+   fixed-size handoff to carry a whole sentence?
+8. **(Pencil.)** **Research bridge (optional).** Teacher forcing minimizes
+   per-token cross-entropy on gold prefixes, but the model is judged by a
+   sequence-level score of its own outputs. For a score $R(\vect{y})$ of an output
+   sampled from $p_\theta(\cdot\mid\vect{x})$, show that the gradient of
+   $\E_{\vect{y}}[R(\vect{y})]$ equals
+   $\E_{\vect{y}}[R(\vect{y})\,\nabla_\theta\log p_\theta(\vect{y}\mid\vect{x})]$,
+   and that subtracting a baseline $b(\vect{x})$ from $R$ leaves it unchanged.
+   **(Code.)** Starting from the teacher-forced date model, fine-tune on sampled
+   outputs with exact match as $R$ and a running-average baseline, then compare test
+   exact match and the residual errors with the teacher-forced model's. What did
+   training on its own outputs fix, and what did it cost? The papers listed for this
+   exercise under Sources develop sequence-level training for translation; in
+   the alignment chapter (@sec-18-alignment) the same gradient returns with a learned
+   reward in place of exact match.
