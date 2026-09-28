@@ -246,7 +246,9 @@ code.
 7. **IMDb: yes, as an exercise** (Chapter 10 Exercise 6, from-scratch cells with the
    masked update, orthogonal $W_{hh}$, fused LSTM affine, forget bias, clip logging).
 
-**Next chapter pass (Chapter 11)**: harvest @eq-masked-update in the padding trap; add
+**Chapter 11 pass: done (2026-09-27)**: writing requirements in the opening, the
+masked-update check, the handoff figure redrawn, Exercises 7 (v2) and 8 (research
+bridge to sequence-level training). The original plan for it read: harvest @eq-masked-update in the padding trap; add
 Running translator v2 (seq2seq, teacher forcing, packing, beam, BLEU; the Assignment 3
 counterpart). Then Chapter 13 (v3), Chapter 14 (v4, Assignment 5's RMSNorm/RoPE/MLA as
 optional swaps), the TTR interlude (v4b; MLA on the price list; harvest Exercise 8's

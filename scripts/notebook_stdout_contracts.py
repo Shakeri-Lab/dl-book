@@ -175,7 +175,7 @@ NUMERIC_RULES: Mapping[BlockKey, NumericRule] = {
         mutable_fields=(1, 2),
         field_tolerances=((2, 3.0, 0.0),),
     ),
-    ("11-encoder-decoder", 3): NumericRule(
+    ("11-encoder-decoder", 4): NumericRule(
         0.6,
         mutable_fields=(1, 2, 3),
         field_tolerances=((2, 1.0, 0.0),),
@@ -282,7 +282,7 @@ NUMERIC_JUSTIFICATIONS: Mapping[BlockKey, str] = {
     ),
     ("10-sequences-rnn", 1): "manual/unrolled recurrence roundoff",
     ("11-encoder-decoder", 2): "padding-control validation accuracy portability",
-    ("11-encoder-decoder", 3): "sealed sequence audit accuracy portability",
+    ("11-encoder-decoder", 4): "sealed sequence audit accuracy portability",
     ("12-kernel-regression", 5): "normalization equivalence roundoff",
     ("13-attention", 6): "attention-mass metrics and stochastic row-sum roundoff",
     **{
@@ -313,9 +313,9 @@ NUMERIC_JUSTIFICATIONS: Mapping[BlockKey, str] = {
 STRUCTURAL_RULES: Mapping[BlockKey, str] = {
     ("10-sequences-rnn", 3): "lag-80 recall and birth-signal relations",
     ("10-sequences-rnn", 6): "300-character corpus sample",
-    ("11-encoder-decoder", 4): "date-error gallery",
-    ("11-encoder-decoder", 5): "beam-search date sample",
-    ("11-encoder-decoder", 6): "beam-versus-greedy count",
+    ("11-encoder-decoder", 5): "date-error gallery",
+    ("11-encoder-decoder", 6): "beam-search date sample",
+    ("11-encoder-decoder", 7): "beam-versus-greedy count",
     ("13-attention", 1): (
         "fixed float32 scaled-dot arithmetic under NumPy array-format variation"
     ),
@@ -592,17 +592,17 @@ def _ch11_error_gallery(
 
 
 def _ch11_relations(actual: Sequence[str], label: str) -> list[str]:
-    if len(actual) < 4:
-        return [f"{label}: expected at least four stdout blocks"]
+    if len(actual) < 5:
+        return [f"{label}: expected at least five stdout blocks"]
     accuracy_match = re.search(
         r"packed / teacher forced\s+(\d+\.\d+)%",
-        actual[2],
+        actual[3],
     )
     teacher_forced_accuracy = (
         float(accuracy_match.group(1)) if accuracy_match else None
     )
     return _ch11_error_gallery(
-        actual[3],
+        actual[4],
         f"{label} error gallery",
         teacher_forced_accuracy,
     )
@@ -1258,12 +1258,12 @@ def _structural_errors(
             if body is None
             else _generated_text_errors(body, label)
         )
-    if (slug, block) == ("11-encoder-decoder", 4):
+    if (slug, block) == ("11-encoder-decoder", 5):
         # The gallery is checked unconditionally in the cross-block validator.
         return []
-    if (slug, block) == ("11-encoder-decoder", 5):
-        return _ch11_beam(expected, actual, label)
     if (slug, block) == ("11-encoder-decoder", 6):
+        return _ch11_beam(expected, actual, label)
+    if (slug, block) == ("11-encoder-decoder", 7):
         return _ch11_beam_count(actual, label)
     if (slug, block) == ("13-attention", 1):
         return _ch13_scaled_dot_walk(actual, label)

@@ -1,3 +1,22 @@
+# Rolling post-v1.3: Chapter 11 revised with writing requirements, the masked-update check, and running translator v2 (September 27, 2026)
+
+- **Writing adds three requirements** to Chapter 10's six: output of any length chosen
+  by the model, reordering, and conditioning on both sides. The encoder–decoder is
+  introduced as the smallest design that meets them.
+- **Packing is the masked update.** The padding trap now harvests Chapter 10's masked
+  update: a hand-written `nn.LSTMCell` loop that freezes the state on padded steps
+  reproduces the packed encoder's final states, and naive padding moves exactly the
+  final states of the padded sources. No experiment numbers changed: the trained-model
+  outputs keep their committed execution while the numerical-runtime migration is paused.
+- **The handoff figure is redrawn.** The old drawing overlapped its decoder boxes; the
+  new one shows one encoder state per source position, the discarded earlier states,
+  packing skipping the padding, the 256-scalar bridge, and outputs fed back as inputs.
+- **Teacher forcing** now names what still orders the decoder's steps: its recurrent
+  state, Chapter 10's second unmet need on the decoder side.
+- **New exercises:** Running translator v2 (7), with BLEU by source-length bucket against
+  v1, and a marked research bridge to sequence-level training (8), whose score-function
+  gradient returns with a learned reward in the alignment chapter; sources verified.
+
 # Rolling post-v1.3: Chapter 10 revised with six requirements, the GRU in the memory test, a running translator (September 27, 2026)
 
 - **Six requirements open Chapter 10**: any length, order, streaming, parameters
