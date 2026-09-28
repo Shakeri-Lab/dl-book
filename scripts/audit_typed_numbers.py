@@ -40,6 +40,9 @@ LISTING_DEFINITION = re.compile(r"\*\*Listing\s+(\d+)\.(\d+)\*\*")
 LINK = re.compile(r"\[([^\]]*)\]\(([^)\s]+)\)")
 SECOND_VOLUME = re.compile(r"Shakeri \(2026\)|Making It Trainable")
 REVISION_NOTES = re.compile(r"^## Revision notes\b")
+# Pandoc reads a line that starts with "@label." or "@label)" (or "(@label)") as an
+# example-list marker, and the reference vanishes (CLAUDE.md, known failure modes).
+EXAMPLE_MARKER = re.compile(r"^\s*(?:\(@[\w-]+\)|@[\w-]*\w[.)])(?:\s|$)")
 
 
 def reading_order() -> list[str]:
@@ -113,6 +116,13 @@ def main() -> int:
                 citations.append((f"{relative}:{number}", f"{match.group(1)}.{match.group(2)}"))
             for match in list(TYPED.finditer(line)) + list(TYPED_FLOAT.finditer(line)):
                 by_hand.append(f"{relative}:{number}: {match.group(0)!r} :: {line.strip()[:110]}")
+        for number, line in enumerate(view, 1):
+            # Inside a list item (an indented line) or at a paragraph's start the marker opens
+            # a list; in the middle of an unindented paragraph it cannot.
+            opens = line[:1].isspace() or number == 1 or not view[number - 2].strip()
+            if opens and EXAMPLE_MARKER.match(line):
+                errors.append(f"{relative}:{number}: a line that begins with {line.strip()[:40]!r} is read "
+                              f"as an example-list marker; move the reference off the line start")
         for first, block in paragraphs(view):
             where = lambda offset: f"{relative}:{first + block[:offset].count(chr(10))}"
             links = [(m.start(), m.end(), m.group(1), m.group(2)) for m in LINK.finditer(block)]
