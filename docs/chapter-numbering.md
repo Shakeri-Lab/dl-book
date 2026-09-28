@@ -18,7 +18,9 @@ and page) from the reading order. `filters/pdf-chapter-xrefs.lua` uses it to pri
 references in the PDF, and on the unnumbered HTML pages (the Preface and the Epilogue),
 where Quarto would print the target's number and full title instead. A section reference
 from an unnumbered page has the same problem, so the Preface's one link to a section stays
-a Markdown link. `scripts/audit_book_contract.py` fails when the map is stale.
+a Markdown link. `scripts/audit_book_contract.py` fails when the map is stale. `scripts/audit_typed_numbers.py` fails on a
+typed "Chapter N" in reader-visible text, and the notebook exporter writes a Plan's
+references out as "Chapter N", since a notebook has no Quarto to resolve them.
 
 One Pandoc trap: at the start of bold text, an ASCII apostrophe right after a reference
 (`**@sec-01-linear-regression's ...**`) is read as an opening quote and the bold markup

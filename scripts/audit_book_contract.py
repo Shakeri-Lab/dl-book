@@ -970,6 +970,8 @@ def main() -> None:
     for name, text in (("publish workflow", workflow_text), ("execution audit", execution_workflow_text)):
         if "python scripts/audit_independence.py" not in text:
             fail(errors, f"{name} must run the press independence audit")
+        if "python scripts/audit_typed_numbers.py" not in text:
+            fail(errors, f"{name} must run the typed-number guard")
     if workflow_text.count("render: false") != 1:
         fail(errors, "publish workflow must deploy the audited bundle without re-rendering")
     if "chapters/ index.qmd README.md" not in workflow_text:
