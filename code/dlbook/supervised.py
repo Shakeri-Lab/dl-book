@@ -1,6 +1,6 @@
 """Listing 4.1 — the supervised training loop, importable.
 
-Chapter 4 derives this loop and prints it; Chapters 6, 8, and 9 import it and
+Chapter 4 derives this loop and prints it; Chapters 6 and 9 import it and
 print only their deltas (the model builder and the budget). The loop is the
 book's canonical minibatch recipe: seed, build, then repeat
 predict -> measure -> step over reshuffled minibatches.
