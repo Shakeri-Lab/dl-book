@@ -73,6 +73,29 @@ reader pass on every page whose prose changes, and no em dashes (U+2014) anywher
   author, never published (yes).
 - D-P5 The publisher is not named in committed files; the profile is `press` (yes).
 
+## The author's rulings at the W2 phase 1 gate (September 28, 2026)
+
+All eighteen defaults of `audits/press/w2_phase1_report.md`, except:
+
+- Ruling 2, amending D-P4: the independence audit warns in the publish run and fails in the
+  execution audit and in the press build (a pre-render step of `_quarto-press.yml`); a
+  read-only pull-request job runs the source audits; the rule is in `CLAUDE.md`.
+- Ruling 3: the 224-pixel case is introduced as a hypothetical ("Picture a landmark task:
+  224-pixel photographs, 18 classes, a few hundred labels each").
+- Ruling 5: the feature-space credit reads "Composition and reveal order follow the
+  author's original animation."
+- Ruling 13: Chapter 15's pointer becomes Chapter 9's sliding filter now.
+- Ruling 15: the voice batches wait until the press program merges (D-P1 stands). Two
+  writers only: the author on `main`, `press` on W2 and W3, under `docs/locks.md`;
+  `main` is merged into `press` after each author chapter, conflicted freezes re-rendered.
+- Ruling 16: v1.4 is tagged on the merge commit after the live site verifies; the
+  suggested citation names v1.4 and the revision note maps old numbers to new.
+- Ruling 18: the PDF title-page tagline no longer names a course, and the independence
+  audit reads the press title matter.
+- F3 (phase 3, diagrams): Chapter 12's new GRU cell and unrolled-loop diagrams stay as the
+  author drew them; phase 3 applies to the Transformer block and the older matplotlib
+  diagrams only.
+
 ## Validation per workstream
 
 - W1: a rendered-text comparison with the chapter-number map applied (old to new); zero

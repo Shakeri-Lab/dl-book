@@ -205,8 +205,10 @@ rest of my 6050 material; the virtualenv is deliberately outside it). Remote `ht
 `https://shakeri-lab.github.io/dl-book/Deep-Learning--Making-It-Learnable.pdf`, and
 continuous-screen PDF at
 `https://shakeri-lab.github.io/dl-book/Deep-Learning--Making-It-Learnable--Continuous.pdf`.
-Current stable release **v1.3** is the course-arc and publication-contract release
-and the fixed edition to cite and pitch. The live canonical HTML is a rolling
+Current stable release **v1.4** (September 28, 2026) numbers the interludes as chapters
+and makes the book read on its own; the website serves the HTML edition only, and the
+chapter numbers from 7 on differ from v1.3's (`docs/chapter-numbering.md`). The previous
+release, **v1.3**, is the course-arc and publication-contract release. The live canonical HTML is a rolling
 post-v1.3 build; the released v1.3 PDFs remain fixed. It follows the universal Plan → Code pass,
 two Chapter 1 revisions,
 the pacing/visual/full-scale experiment pass, the July 28 comprehensive book audit,

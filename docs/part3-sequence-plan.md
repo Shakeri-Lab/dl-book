@@ -239,7 +239,9 @@ code.
    items are therefore withdrawn.
 3. **Research bridge: an exercise, not a section.** Chapter 10's Exercise 8 is marked
    "Research bridge (non-examinable)" and points to the papers listed under Sources;
-   the closing mentions it in one sentence.
+   the closing mentions it in one sentence. The label is superseded by the press ruling 1
+   (September 28, 2026): research bridges read "Research bridge (optional)" in both
+   editions, in new chapters too.
 4. **Translator data: general.** Exercises name example corpora (Tatoeba English–French,
    Multi30K) without pinning one.
 5. **Reference results: none.** The translator exercises stay open.

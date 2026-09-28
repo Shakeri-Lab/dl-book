@@ -1,3 +1,32 @@
+# v1.4: interludes numbered as chapters, and the independence pass (September 28, 2026)
+
+Version 1.4 publishes the press program's first two gates to the website. The three
+interludes are numbered Chapters 7, 11, and 17, so every chapter from 7 on prints one to
+three higher than in v1.3; the Preface's revision note maps the old numbers to the new.
+File names, labels, anchors, and URLs are unchanged.
+
+- **Independence (W2 phase 1).** Course vocabulary leaves the text both editions share
+  (38 receipts in `audits/press/edits/`), "non-examinable" labels read "optional", and
+  *Deep Learning: Making It Trainable* is cited as a separate work. Course-facing
+  blocks of the Preface stay in the web edition and leave the press build (8 receipts).
+- **The author's rulings at the gate.** Chapter 10's transfer rule introduces its 224-pixel
+  case as a hypothetical landmark task; the colophon's pointer to the second volume
+  returns in the web edition; the feature-space replay credits "the author's original
+  animation"; Chapter 15 points to Chapter 9's learned sliding filter; the appendices drop
+  seven parenthetical references to a chapter their sentence already names; Chapter 22 drops "of course"; the
+  PDF title page no longer names a course. Receipts: stage `W2-R` in
+  `audits/press/edits/` (title matter in `title-matter.json`).
+- **Audits.** `scripts/audit_independence.py` also reads the press title matter; it warns
+  in the publish run and fails in the weekly execution audit and in the press build. A
+  read-only pull-request job runs the source audits, and only a push to `main` publishes.
+  `docs/locks.md` locks a chapter the author is revising against press edits.
+- **Also in v1.4.** Everything on the rolling builds since v1.3: the voice-coherence pass,
+  the Part III revision of Chapters 12 and 13 (six requirements, the GRU cell, the masked
+  update, the running translator), and the HTML-only website.
+- **Unchanged from the September 27 rolling build.** Printed output (137 stdout blocks,
+  27 HTML/TeX pairs match), figures other than the two relabelled in D-W1.3, and every
+  public anchor.
+
 # Rolling post-v1.3: numbers in code, figures, and notebooks follow the renumbering (September 28, 2026)
 
 - **Figures and code (D-W1.3).** The Epilogue's adaptation map labels in-context

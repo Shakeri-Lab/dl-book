@@ -17,6 +17,9 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > fails CI on a typed number, and `docs/chapter-numbering.md` has the table. This document
 > and the plans use file-prefix numbers; CHANGELOG entries and revision notes keep the
 > numbers printed at their time (file prefixes before this date, reading order after).
+> Version 1.4 (September 28, 2026) publishes the renumbering and the W2 phase 1
+> independence pass; `docs/locks.md` lists the chapters the author is revising, which
+> `press` does not touch until the author's commit lands.
 >
 > **Current work: voice-coherence pass, Stage B2 (branch `voice-coherence`, pushed at each
 > gate, never merged by this pass), September 27, 2026.** The author's brief asks for one
