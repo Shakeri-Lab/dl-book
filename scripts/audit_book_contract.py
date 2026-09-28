@@ -10,6 +10,8 @@ import sys
 from pathlib import Path
 from urllib.parse import urlsplit
 
+import yaml
+
 
 ROOT = Path(__file__).resolve().parents[1]
 CHAPTERS = sorted((ROOT / "chapters").glob("part[1-5]/*.qmd"))
@@ -972,6 +974,32 @@ def main() -> None:
             fail(errors, f"{name} must run the press independence audit")
         if "python scripts/audit_typed_numbers.py" not in text:
             fail(errors, f"{name} must run the typed-number guard")
+    quarto_config = yaml.safe_load((ROOT / "_quarto.yml").read_text())
+    if quarto_config.get("execute", {}).get("freeze") is not True:
+        fail(errors, "_quarto.yml: execute.freeze must be true (CI never executes; render locally)")
+    # The author's ruling 2 (September 28, 2026): independence warns in the publish run and
+    # fails in the execution audit and the press build; pull requests run the source audits.
+    if "python scripts/audit_independence.py --warn" not in workflow_job(workflow_text, "build-deploy"):
+        fail(errors, "publish workflow must run the independence audit in warning mode")
+    if re.search(r"audit_independence\.py --warn", execution_workflow_text) or not re.search(
+        r"python scripts/audit_independence\.py\s*$", execution_workflow_text, re.MULTILINE
+    ):
+        fail(errors, "execution audit must run the independence audit so that a hit fails it")
+    press_profile = (ROOT / "_quarto-press.yml").read_text()
+    if "scripts/audit_independence.py" not in press_profile.split("pre-render:", 1)[-1] or "pre-render:" not in press_profile:
+        fail(errors, "_quarto-press.yml must run the independence audit before the press build")
+    source_job = workflow_job(workflow_text, "manuscript_audits")
+    if (
+        "if: github.event_name == 'pull_request'" not in source_job
+        or "contents: read" not in source_job
+        or "python scripts/audit_typed_numbers.py" not in source_job
+        or "python scripts/audit_book_contract.py" not in source_job
+    ):
+        fail(errors, "publish workflow must run the read-only source audits on pull requests")
+    if "if: github.ref == 'refs/heads/main' && github.event_name == 'push'" not in workflow_job(
+        workflow_text, "build-deploy"
+    ):
+        fail(errors, "publish workflow must publish only on a push to main")
     if workflow_text.count("render: false") != 1:
         fail(errors, "publish workflow must deploy the audited bundle without re-rendering")
     if "chapters/ index.qmd README.md" not in workflow_text:

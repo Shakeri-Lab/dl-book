@@ -5,14 +5,20 @@ The press manuscript must read without the course it grew from and without the s
 volume: no course vocabulary anywhere its reader sees, and the second volume only as a
 cited outside work. This audit builds the press view of every chapter in the reading
 order (prose, captions, alt text, and the comments of printed code, minus everything
-the sources hide from the `press` profile or show only in HTML) and fails on any term
-that is not an allowed use.
+the sources hide from the `press` profile or show only in HTML), and the press title
+matter (the title-page macros in tex/macros.tex and the book metadata of _quarto.yml and
+_quarto-press.yml), and fails on any term that is not an allowed use.
 
-Usage: audit_independence.py            scan the press view of the sources
+The author's ruling 2 (September 28, 2026): the publish run warns (--warn), while the
+weekly execution audit and the press build (a pre-render step of _quarto-press.yml) fail.
+
+Usage: audit_independence.py            scan; exit 1 on a hit
+       audit_independence.py --warn     scan; report hits as warnings and exit 0
        audit_independence.py --list     print every hit, allowed ones included
 """
 from __future__ import annotations
 
+import os
 import re
 import sys
 from pathlib import Path
@@ -36,7 +42,6 @@ COURSE_SENSE = re.compile(
 )
 # Allowed uses, matched against the text around a hit.
 ALLOWED = [
-    (r"\bof course\b", "the idiom"),
     (r"\bcourse of\b", "in the course of (a process)"),
     (r"Lecture 6\.5", "Tieleman and Hinton's cited RMSProp lecture"),
 ]
@@ -54,6 +59,42 @@ def reading_order() -> list[str]:
                 files.append(entry["part"])
             files.extend(entry.get("chapters", []))
     return files
+
+
+TITLE_MACROS = ("title", "subtitle", "publishers", "date", "dedication", "subject", "titlehead",
+                "uppertitleback", "lowertitleback", "extratitle")
+
+
+def braced(text: str, start: int) -> str:
+    """The balanced-brace argument that opens at text[start] == '{'."""
+    depth = 0
+    for index in range(start, len(text)):
+        if text[index] == "{":
+            depth += 1
+        elif text[index] == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start + 1:index]
+    return text[start + 1:]
+
+
+def title_matter() -> list[tuple[str, str]]:
+    """(place, text) of what the press PDF prints as title matter."""
+    out = []
+    macros = ROOT / "tex" / "macros.tex"
+    lines = [re.sub(r"(?<!\\)%.*$", "", line) for line in macros.read_text().split("\n")]
+    text = "\n".join(lines)
+    for name in TITLE_MACROS:
+        for match in re.finditer(r"\\" + name + r"\s*\{", text):
+            line = text[:match.start()].count("\n") + 1
+            argument = re.sub(r"\\[A-Za-z]+(\{\})?|[{}]", " ", braced(text, match.end() - 1))
+            out.append((f"tex/macros.tex:{line} (\\{name})", re.sub(r"\s+", " ", argument)))
+    for config in ("_quarto.yml", "_quarto-press.yml"):
+        book = (yaml.safe_load((ROOT / config).read_text()) or {}).get("book", {})
+        for key in ("title", "subtitle", "author", "description"):
+            if isinstance(book.get(key), str):
+                out.append((f"{config} (book.{key})", book[key]))
+    return out
 
 
 def strip_divs(lines: list[str]) -> list[str]:
@@ -108,27 +149,38 @@ def press_view(text: str) -> list[str]:
 
 def main() -> int:
     show_all = "--list" in sys.argv
+    warn = "--warn" in sys.argv
     hits, allowed = [], 0
-    for relative in reading_order():
-        lines = press_view((ROOT / relative).read_text())
-        for number, line in enumerate(lines, 1):
-            scan = URL.sub(lambda m: " " * len(m.group(0)), line)
-            for match in list(TERMS.finditer(scan)) + list(COURSE_SENSE.finditer(scan)):
-                reason = next((why for pattern, why in ALLOWED
-                               if any(m.start() <= match.start() < m.end() for m in re.finditer(pattern, scan, flags=re.IGNORECASE))), None)
-                if reason:
-                    allowed += 1
-                    if show_all:
-                        print(f"allowed  {relative}:{number}: {match.group(0)!r} ({reason})")
-                    continue
-                hits.append(f"{relative}:{number}: {match.group(0)!r} in: {line.strip()[:140]}")
+    places = [(f"{relative}:{number}", line)
+              for relative in reading_order()
+              for number, line in enumerate(press_view((ROOT / relative).read_text()), 1)]
+    places += title_matter()
+    for place, line in places:
+        scan = URL.sub(lambda m: " " * len(m.group(0)), line)
+        for match in list(TERMS.finditer(scan)) + list(COURSE_SENSE.finditer(scan)):
+            reason = next((why for pattern, why in ALLOWED
+                           if any(m.start() <= match.start() < m.end() for m in re.finditer(pattern, scan, flags=re.IGNORECASE))), None)
+            if reason:
+                allowed += 1
+                if show_all:
+                    print(f"allowed  {place}: {match.group(0)!r} ({reason})")
+                continue
+            hits.append(f"{place}: {match.group(0)!r} in: {line.strip()[:140]}")
+    label = "WARN" if warn else "FAIL"
+    annotate = warn and os.environ.get("GITHUB_ACTIONS") == "true"
     for hit in hits:
-        print(f"FAIL {hit}")
+        print(f"{label} {hit}")
+        if annotate:
+            # A GitHub Actions annotation, so a warning shows on the run and the pull request.
+            where = re.match(r"([^:\s]+):(\d+)", hit)
+            location = f" file={where.group(1)},line={where.group(2)}" if where else ""
+            print(f"::warning{location}::independence: {hit}")
     if hits:
-        print(f"FAILED: {len(hits)} independence hit(s) in the press view ({allowed} allowed uses)")
-        return 1
-    print(f"PASS: the press view names no course and cites the second volume only as an outside "
-          f"work ({allowed} allowed uses)")
+        print(f"{'WARNED' if warn else 'FAILED'}: {len(hits)} independence hit(s) in the press view "
+              f"({allowed} allowed uses)")
+        return 0 if warn else 1
+    print(f"PASS: the press view and title matter name no course and cite the second volume only "
+          f"as an outside work ({allowed} allowed uses)")
     return 0
 
 

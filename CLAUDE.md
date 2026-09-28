@@ -2,7 +2,7 @@
 
 > **Fresh session?** Paste `docs/NEW-CHAT-PROMPT.md` to bootstrap, then read
 > `docs/CONTINUING.md` — its top state block and §9 carry the current picture
-> (release v1.3; Plan v2 complete; Plan → Code panels shipped; open decisions
+> (release v1.4, September 28, 2026: interludes numbered as chapters; Plan v2 complete; Plan → Code panels shipped; open decisions
 > listed). Version-fragile engineering lives in `docs/compatibility.md`, not in
 > the chapters.
 
@@ -43,6 +43,14 @@ chapter must respect. Those two files replace any account-local memory.
   file-prefix numbers; CHANGELOG entries and revision notes keep the numbers printed
   at their time. The guard cannot check numbers inside code, cell labels, alt text, or
   docstrings: after any reordering, read its `--list` inventory.
+
+- **Independence**: the book reads without its course. Course-facing text (the course
+  route, enrolled-student notes, module or assignment pointers) goes only inside
+  `::: {.content-hidden when-profile="press"}` blocks or `[...]{.content-hidden
+  when-profile="press"}` spans; optional material is labelled "(optional)"; the second
+  volume is cited by title as a separate work. `scripts/audit_independence.py` warns in
+  the publish run and fails the weekly execution audit and the press build. Chapters the
+  author is revising are locked for `press` (`docs/locks.md`).
 
 ## Environment (this machine)
 
