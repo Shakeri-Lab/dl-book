@@ -80,13 +80,14 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > depends on the naive model alone and is byte-exact across platforms. Resuming the
 > migration is the author's call; it would re-baseline Chapters 11 and 13 together.
 >
-> Re-executing the interlude (only its exercises and Sources changed) under torch 2.12.1
-> moved two stdout blocks within their reviewed numeric portability contracts; two runs in
-> that environment gave identical stdout. The convolutional-autoencoder endpoint MSEs quoted
-> below for the interlude's first pass are now 0.020652/0.033025 (plain, clean/noisy) and
-> 0.026290/0.023770 (denoising), from block 3 of
-> `_freeze/chapters/interludes/making-pca-learnable/execute-results/html.json`. The prose
-> quotes none of these values, and every ordering it relies on holds.
+> The interlude's freeze has one provenance since September 28, 2026: it was re-executed on
+> the reference machine (M1 MacBook Air, 4 threads; `docs/compatibility.md`) after its thread
+> pin moved from 6 to 4. Two stdout blocks moved within their reviewed portability contracts,
+> every ordering the prose relies on holds, and the prose quotes none of the values. The
+> convolutional-autoencoder endpoint MSEs are 0.020701/0.033263 (plain, clean/noisy input)
+> and 0.026294/0.023810 (denoising), from the third stdout block of
+> `_freeze/chapters/interludes/making-pca-learnable/execute-results/html.json`. The earlier
+> values 0.020652/0.033025 and 0.026290/0.023770 came from a MacBook Pro run.
 >
 > **Previous — Chapters 5 and 6 revised; published-source hygiene, September 25, 2026.**
 > Provenance comments no longer reach published HTML: `filters/strip-html-comments.lua`

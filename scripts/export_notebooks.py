@@ -106,10 +106,20 @@ def _cell_options(body: str) -> dict[str, str]:
     return dict(OPTION_RE.findall(body))
 
 
-def learner_code(body: str) -> str:
-    """Remove Quarto execution directives, which are not printed as code."""
+# The manuscript's setup cells pin the reference machine's thread count (docs/compatibility.md).
+# A notebook runs elsewhere, in CI and on a reader's machine, at that platform's default,
+# which the portable stdout contracts assume, so the pin stays out of the notebooks.
+REFERENCE_MACHINE_PIN = "torch.set_num_threads(4)  # pinned: results depend on the CPU thread count"
 
-    lines = [line for line in body.splitlines() if not line.startswith("#|")]
+
+def learner_code(body: str) -> str:
+    """Remove Quarto execution directives, which are not printed as code, and the
+    reference machine's thread pin, which belongs to the manuscript's evidence."""
+
+    lines = [
+        line for line in body.splitlines()
+        if not line.startswith("#|") and line.strip() != REFERENCE_MACHINE_PIN
+    ]
     while lines and not lines[0].strip():
         lines.pop(0)
     while lines and not lines[-1].strip():
@@ -523,6 +533,14 @@ def _quarto_conversion(document: ParsedDocument) -> Any:
             text=True,
         )
         raw = nbformat.read(output, as_version=4)
+    for cell in raw.cells:
+        # The canonical reference runs beside the public notebook in CI, so it drops the
+        # reference machine's thread pin too (see REFERENCE_MACHINE_PIN).
+        if cell.cell_type == "code":
+            cell.source = "\n".join(
+                line for line in cell.source.split("\n")
+                if line.strip() != REFERENCE_MACHINE_PIN
+            )
     raw_code = [cell for cell in raw.cells if cell.cell_type == "code"]
     if len(raw_code) != len(document.native_cells):
         raise ValueError(
