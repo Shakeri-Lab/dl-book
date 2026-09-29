@@ -949,6 +949,189 @@ Figure&nbsp;18.2: Five Boolean ledgers keep BERT’s controls separate. Eligibil
   </div>
 </details>
 
+<p>Original BERT pre-generated several masked versions of its training examples; RoBERTa later redrew masks as examples were presented. Our controlled lab uses the latter <em>dynamic corruption</em> choice: the same sentence can ask different questions on later passes. Reproducibility therefore requires a separate random generator. Seeding model initialization while leaving the corruption stream implicit is not an exact experiment.</p>
+<div class="callout callout-style-default callout-tip callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Tip</span>Audit the selector before the loss
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>Print the number of eligible and selected positions, verify that special and padding tokens are excluded, and inspect the realized 80/10/10 proportions over many batches. Then assert that the selected logit and target shapes agree. A loss can decrease while a selector silently trains on padding or on the wrong tokens.</p>
+</div>
+</div>
+</section>
+</section>
+<section id="from-a-transformer-encoder-to-bert" class="level2" data-number="18.4">
+<h2 data-number="18.4" class="anchored" data-anchor-id="from-a-transformer-encoder-to-bert"><span class="header-section-number">18.4</span> From a Transformer encoder to BERT</h2>
+<p>The original BERT input at position <span class="math inline">\(i\)</span> adds three learned vectors:</p>
+<p><span class="math display">\[
+z_i=e_{\text{token}(i)}+e_{\text{position}(i)}+e_{\text{segment}(i)}.
+\]</span></p>
+<p>The token comes from a <strong>WordPiece</strong> vocabulary: frequent character sequences are stored whole, while rarer words can be assembled from reusable subword pieces.</p>
+<div class="callout callout-style-default callout-tip callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Tip</span>Practice bridge (optional): make the vocabulary learnable
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p><a href="../part3/10-sequences-rnn.html" class="quarto-xref"><span>Chapter 12</span></a> fixed its vocabulary at individual characters. A full-word vocabulary shortens sequences but gives every rare spelling its own entry. Subword tokenization chooses a middle contract. <strong>Byte Pair Encoding (BPE)</strong> begins with small symbols, counts adjacent pairs in the training corpus, merges the most frequent pair, and repeats until it reaches a chosen vocabulary budget.</p>
+<p>This original toy implementation starts from characters plus an end-of-word marker. Corpus frequencies weight the pair counts; lexicographic order breaks exact ties so the result is reproducible.</p>
+</div>
+</div>
+<style>
+/* Pair recount: one picture, one formula line, one caption (docs/animation-authoring.md,
+   "Visual grammar"). Tiles are bert-ledger's token mark redrawn in SVG: white, a 1 px
+   #d5dde5 border, a .25rem radius and a blue glyph; the glyph is monospace here, matching
+   the code's spelling of the pieces. The count the loop makes for the tracked pair, the
+   maximum level, the fusion seams, the stub and the ghost are the book's emphasis ink; the
+   rival pair is slate and thinner; row names and the axis are grey scenery. No orange
+   (nothing learnable is drawn), no green, purple or wine (no prediction, target or loss). */
+#pair-recount-excerpt {
+  --pr-feature: #2b6cb0;    /* \featurepart blue: tiles and frequencies          */
+  --pr-ink: #232d4b;        /* emphasis ink: the tracked count, level, seams     */
+  --pr-slate: #596778;      /* the rival pair, as bert-ledger's grey             */
+  --pr-scenery: #667483;    /* row names, segment labels, the axis word          */
+  --pr-tile-edge: #d5dde5;
+  --pr-axis: #b8c0ca;
+}
+.pair-recount-figure { container-type: inline-size; }
+.pair-recount-figure svg { display: block; width: 100%; height: auto; font-family: inherit; }
+.pair-recount-figure text { font-variant-numeric: tabular-nums; }
+.pair-recount-figure .pr-name { fill: var(--pr-scenery); }
+.pair-recount-figure .pr-freq { fill: var(--pr-feature); font-weight: 700; }
+.pair-recount-figure .pr-tile { fill: #ffffff; stroke: var(--pr-tile-edge); stroke-width: 1; }
+.pair-recount-figure .pr-glyph {
+  fill: var(--pr-feature);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+.pair-recount-figure .pr-seam { fill: none; stroke: var(--pr-ink); stroke-width: 2; stroke-linecap: round; }
+.pair-recount-figure .pr-arc { fill: none; stroke-linecap: round; }
+.pair-recount-figure .pr-tracked-arc { stroke: var(--pr-ink); stroke-width: 1.8; }
+.pair-recount-figure .pr-rival-arc { stroke: var(--pr-slate); stroke-width: 1.2; }
+.pair-recount-figure .pr-stub { fill: none; stroke: var(--pr-ink); stroke-width: 1.6; stroke-dasharray: 3 2.5; stroke-linecap: round; }
+.pair-recount-figure .pr-tracked-bar { fill: var(--pr-ink); }
+.pair-recount-figure .pr-rival-bar { fill: var(--pr-slate); }
+.pair-recount-figure .pr-split { stroke: #ffffff; stroke-width: 1.5; }
+.pair-recount-figure .pr-seg-label { fill: var(--pr-scenery); }
+.pair-recount-figure .pr-tracked-text { fill: var(--pr-ink); }
+.pair-recount-figure .pr-rival-text { fill: var(--pr-slate); }
+.pair-recount-figure .pr-total { font-weight: 700; }
+.pair-recount-figure .pr-ghost { fill: none; stroke: var(--pr-ink); stroke-width: 1.4; stroke-dasharray: 5 3; }
+.pair-recount-figure .pr-level { stroke: var(--pr-ink); stroke-width: 1.6; }
+.pair-recount-figure .pr-level-label { fill: var(--pr-ink); font-weight: 600; }
+.pair-recount-figure .pr-axis { fill: none; stroke: var(--pr-axis); stroke-width: 1; }
+.pair-recount-figure .pr-axis-word { fill: var(--pr-scenery); }
+
+/* The formula line. The recount wash is the one toggle, a pale ink tint on the clause the
+   loop's fresh Counter() carries; it is scoped to [data-ready], so the script-free
+   fallback shows the whole line unwashed and fully lit. MathJax breaks the line at narrow
+   widths, and a wrapped line's box stands a few pixels taller than the paragraph: the
+   horizontal guard stays, overflow-y is hidden so it never becomes a small vertical
+   scroller, and the bottom padding gives the wrapped box that room. The one unbreakable
+   piece is the \text clause, so the narrow steps below shrink the type until it fits. */
+.pair-recount-formula { margin: .6rem 0 .2rem; min-height: 2.4em; max-width: 100%; overflow-x: auto; overflow-y: hidden; padding-bottom: .5em; text-align: left; }
+#pair-recount-excerpt[data-ready] .pair-recount-formula.pr-recount-lit .pr-recount { background: rgba(35, 45, 75, .12); border-radius: 3px; }
+
+/* The static fallback: the wide print, or below 600 px the narrow one, chosen without script. */
+#pair-recount-excerpt:not([data-ready]) .pair-recount-figure svg { aspect-ratio: 713 / 250; }
+#pair-recount-excerpt:not([data-ready]) [data-static-frame="narrow"] { display: none; }
+@container (max-width: 599px) {
+  #pair-recount-excerpt:not([data-ready]) .pair-recount-figure svg { aspect-ratio: 296 / 372; }
+  #pair-recount-excerpt:not([data-ready]) [data-drawing] { display: none; }
+  #pair-recount-excerpt:not([data-ready]) [data-static-frame="narrow"] { display: block; }
+}
+/* The \quad and the \text clause make one unbreakable run about 20.5 em wide. At 480 px
+   and below the book's column and the panel's padding leave a formula box of about
+   (viewport − 94) px, so each step keeps 20.5 em inside that box: .82rem from 391 px,
+   .7rem from 345 px, .64rem down to 320 px. Measured with MathJax 4.1.3 on the published
+   chapter's own stylesheet at 320, 340, 360, 375, 390, 414, 480 and 1280 px. */
+@media (max-width: 480px) {
+  .pair-recount-formula { font-size: .82rem; }
+}
+@media (max-width: 390px) {
+  .pair-recount-formula { font-size: .7rem; }
+}
+@media (max-width: 344px) {
+  .pair-recount-formula { font-size: .64rem; }
+}
+
+</style>
+
+<details id="pair-recount-excerpt" class="mechanism-excerpt" data-player="../../interactives/pair-recount/player.js" data-playback="../../interactives/shared/playback.js" data-evidence-class="computed" data-words="low lower newest widest" data-frequencies="5 2 6 3" data-end-marker="</w>" data-merges="5" data-tie-break="lexicographic" data-tracked="w e" data-rival="l o" data-count-axis="0 10">
+  
+  <summary>Watch the mechanism: every round counts the pairs again</summary>
+  <div class="mechanism-body">
+    <p class="mechanism-question">Byte pair encoding merges the most frequent adjacent pair, then repeats. At its first count, w+e has 8, across newest and lower, and l+o has 7, across low and lower. Its first three merges each use 9 weighted occurrences. Which pair is merged fourth?</p>
+    <p class="mechanism-intro"><a href="#bpe-mechanism">The loop below</a> starts every round with <code>counts: Counter[tuple[str, str]] = Counter()</code>, a fresh count of the current pieces. Here are its four counted words as tiles.</p>
+    <div data-pane="" data-duration="40" data-beats="0 5 10 15 22 30" tabindex="0" role="group" aria-label="Adjacent pairs recounted after every merge" aria-describedby="pair-recount-playback-help">
+      <div class="pair-recount-figure" data-figure="">
+        <svg viewbox="0 0 713 250" preserveaspectratio="xMinYMin meet" role="img" aria-label="low ×5: low, end marker; lower ×2: low, e, r, end marker; newest ×6: n, e, w, est plus end marker; widest ×3: w, i, d, est plus end marker. newest keeps a dashed stub of its w+e link; a dashed outline keeps w+e's first count, 8."><title>Every round counts the adjacent pairs again</title>
+          
+          <g data-drawing=""><text x="62" y="56.2" class="pr-name" font-size="12" text-anchor="end">low</text><text x="70" y="56.9" class="pr-freq" font-size="14" text-anchor="start" data-value="frequency-low">×5</text><g data-row="low"><g data-tile="" data-slots="0 3"><rect class="pr-tile" x="96" y="38" width="90" height="28" rx="4"></rect><text x="141" y="57.25" class="pr-glyph" font-size="15" text-anchor="middle">low</text></g><g data-tile="" data-slots="3 4"><rect class="pr-tile" x="192" y="38" width="44" height="28" rx="4"></rect><text x="214" y="57.25" class="pr-glyph" font-size="15" text-anchor="middle">&lt;/w&gt;</text></g></g><text x="62" y="112.2" class="pr-name" font-size="12" text-anchor="end">lower</text><text x="70" y="112.9" class="pr-freq" font-size="14" text-anchor="start" data-value="frequency-lower">×2</text><g data-row="lower"><g data-tile="" data-slots="0 3"><rect class="pr-tile" x="96" y="94" width="90" height="28" rx="4"></rect><text x="141" y="113.25" class="pr-glyph" font-size="15" text-anchor="middle">low</text></g><g data-tile="" data-slots="3 4"><rect class="pr-tile" x="192" y="94" width="26" height="28" rx="4"></rect><text x="205" y="113.25" class="pr-glyph" font-size="15" text-anchor="middle">e</text></g><g data-tile="" data-slots="4 5"><rect class="pr-tile" x="224" y="94" width="26" height="28" rx="4"></rect><text x="237" y="113.25" class="pr-glyph" font-size="15" text-anchor="middle">r</text></g><g data-tile="" data-slots="5 6"><rect class="pr-tile" x="256" y="94" width="44" height="28" rx="4"></rect><text x="278" y="113.25" class="pr-glyph" font-size="15" text-anchor="middle">&lt;/w&gt;</text></g></g><text x="62" y="168.2" class="pr-name" font-size="12" text-anchor="end">newest</text><text x="70" y="168.9" class="pr-freq" font-size="14" text-anchor="start" data-value="frequency-newest">×6</text><g data-row="newest"><g data-tile="" data-slots="0 1"><rect class="pr-tile" x="96" y="150" width="26" height="28" rx="4"></rect><text x="109" y="169.25" class="pr-glyph" font-size="15" text-anchor="middle">n</text></g><g data-tile="" data-slots="1 2"><rect class="pr-tile" x="128" y="150" width="26" height="28" rx="4"></rect><text x="141" y="169.25" class="pr-glyph" font-size="15" text-anchor="middle">e</text></g><g data-tile="" data-slots="2 3"><rect class="pr-tile" x="160" y="150" width="26" height="28" rx="4"></rect><text x="173" y="169.25" class="pr-glyph" font-size="15" text-anchor="middle">w</text></g><g data-tile="" data-slots="3 7"><rect class="pr-tile" x="192" y="150" width="140" height="28" rx="4"></rect><text x="262" y="169.25" class="pr-glyph" font-size="15" text-anchor="middle">est&lt;/w&gt;</text></g></g><text x="62" y="224.2" class="pr-name" font-size="12" text-anchor="end">widest</text><text x="70" y="224.9" class="pr-freq" font-size="14" text-anchor="start" data-value="frequency-widest">×3</text><g data-row="widest"><g data-tile="" data-slots="0 1"><rect class="pr-tile" x="96" y="206" width="26" height="28" rx="4"></rect><text x="109" y="225.25" class="pr-glyph" font-size="15" text-anchor="middle">w</text></g><g data-tile="" data-slots="1 2"><rect class="pr-tile" x="128" y="206" width="26" height="28" rx="4"></rect><text x="141" y="225.25" class="pr-glyph" font-size="15" text-anchor="middle">i</text></g><g data-tile="" data-slots="2 3"><rect class="pr-tile" x="160" y="206" width="26" height="28" rx="4"></rect><text x="173" y="225.25" class="pr-glyph" font-size="15" text-anchor="middle">d</text></g><g data-tile="" data-slots="3 7"><rect class="pr-tile" x="192" y="206" width="140" height="28" rx="4"></rect><text x="262" y="225.25" class="pr-glyph" font-size="15" text-anchor="middle">est&lt;/w&gt;</text></g></g><path class="pr-stub" data-arc="tracked" data-row="newest" data-slots="2 3" data-stub="" d="M173 150Q181 135 189 135"></path><g data-scenery=""><path class="pr-axis" d="M440 200H680M440 200v4M464 200v4M488 200v4M512 200v4M536 200v4M560 200v4M584 200v4M608 200v4M632 200v4M656 200v4M680 200v4"></path><text x="680" y="216" class="pr-axis-word" font-size="10.5" text-anchor="end">count</text></g><g data-mark="ghost" data-count="8"><rect class="pr-ghost" x="440" y="104" width="192" height="20"></rect><text x="632" y="98" class="pr-ghost-label pr-tracked-text" font-size="13" text-anchor="middle" data-value="ghost">w+e 8</text></g></g>
+          
+          
+          <g data-static-frame="narrow" data-width="296" data-height="372" transform="scale(2.4088)"><text x="46" y="46.85" class="pr-name" font-size="11" text-anchor="end">low</text><text x="50" y="47.55" class="pr-freq" font-size="13" text-anchor="start" data-value="frequency-low">×5</text><g data-row="low"><g data-tile="" data-slots="0 3"><rect class="pr-tile" x="72" y="30" width="68" height="26" rx="4"></rect><text x="106" y="47.55" class="pr-glyph" font-size="13" text-anchor="middle">low</text></g><g data-tile="" data-slots="3 4"><rect class="pr-tile" x="144" y="30" width="38" height="26" rx="4"></rect><text x="163" y="47.55" class="pr-glyph" font-size="13" text-anchor="middle">&lt;/w&gt;</text></g></g><text x="46" y="96.85" class="pr-name" font-size="11" text-anchor="end">lower</text><text x="50" y="97.55" class="pr-freq" font-size="13" text-anchor="start" data-value="frequency-lower">×2</text><g data-row="lower"><g data-tile="" data-slots="0 3"><rect class="pr-tile" x="72" y="80" width="68" height="26" rx="4"></rect><text x="106" y="97.55" class="pr-glyph" font-size="13" text-anchor="middle">low</text></g><g data-tile="" data-slots="3 4"><rect class="pr-tile" x="144" y="80" width="20" height="26" rx="4"></rect><text x="154" y="97.55" class="pr-glyph" font-size="13" text-anchor="middle">e</text></g><g data-tile="" data-slots="4 5"><rect class="pr-tile" x="168" y="80" width="20" height="26" rx="4"></rect><text x="178" y="97.55" class="pr-glyph" font-size="13" text-anchor="middle">r</text></g><g data-tile="" data-slots="5 6"><rect class="pr-tile" x="192" y="80" width="38" height="26" rx="4"></rect><text x="211" y="97.55" class="pr-glyph" font-size="13" text-anchor="middle">&lt;/w&gt;</text></g></g><text x="46" y="146.85" class="pr-name" font-size="11" text-anchor="end">newest</text><text x="50" y="147.55" class="pr-freq" font-size="13" text-anchor="start" data-value="frequency-newest">×6</text><g data-row="newest"><g data-tile="" data-slots="0 1"><rect class="pr-tile" x="72" y="130" width="20" height="26" rx="4"></rect><text x="82" y="147.55" class="pr-glyph" font-size="13" text-anchor="middle">n</text></g><g data-tile="" data-slots="1 2"><rect class="pr-tile" x="96" y="130" width="20" height="26" rx="4"></rect><text x="106" y="147.55" class="pr-glyph" font-size="13" text-anchor="middle">e</text></g><g data-tile="" data-slots="2 3"><rect class="pr-tile" x="120" y="130" width="20" height="26" rx="4"></rect><text x="130" y="147.55" class="pr-glyph" font-size="13" text-anchor="middle">w</text></g><g data-tile="" data-slots="3 7"><rect class="pr-tile" x="144" y="130" width="110" height="26" rx="4"></rect><text x="199" y="147.55" class="pr-glyph" font-size="13" text-anchor="middle">est&lt;/w&gt;</text></g></g><text x="46" y="196.85" class="pr-name" font-size="11" text-anchor="end">widest</text><text x="50" y="197.55" class="pr-freq" font-size="13" text-anchor="start" data-value="frequency-widest">×3</text><g data-row="widest"><g data-tile="" data-slots="0 1"><rect class="pr-tile" x="72" y="180" width="20" height="26" rx="4"></rect><text x="82" y="197.55" class="pr-glyph" font-size="13" text-anchor="middle">w</text></g><g data-tile="" data-slots="1 2"><rect class="pr-tile" x="96" y="180" width="20" height="26" rx="4"></rect><text x="106" y="197.55" class="pr-glyph" font-size="13" text-anchor="middle">i</text></g><g data-tile="" data-slots="2 3"><rect class="pr-tile" x="120" y="180" width="20" height="26" rx="4"></rect><text x="130" y="197.55" class="pr-glyph" font-size="13" text-anchor="middle">d</text></g><g data-tile="" data-slots="3 7"><rect class="pr-tile" x="144" y="180" width="110" height="26" rx="4"></rect><text x="199" y="197.55" class="pr-glyph" font-size="13" text-anchor="middle">est&lt;/w&gt;</text></g></g><path class="pr-stub" data-arc="tracked" data-row="newest" data-slots="2 3" data-stub="" d="M130 130Q136 117 142 117"></path><g data-scenery=""><path class="pr-axis" d="M46 346H246M46 346v4M66 346v4M86 346v4M106 346v4M126 346v4M146 346v4M166 346v4M186 346v4M206 346v4M226 346v4M246 346v4"></path><text x="246" y="362" class="pr-axis-word" font-size="10" text-anchor="end">count</text></g><g data-mark="ghost" data-count="8"><rect class="pr-ghost" x="46" y="262" width="160" height="18"></rect><text x="206" y="257" class="pr-ghost-label pr-tracked-text" font-size="12" text-anchor="middle" data-value="ghost">w+e 8</text></g></g>
+          
+        </svg>
+      </div>
+      <p class="pair-recount-formula" data-formula=""><span id="eq-pair-recount-1">\( \text{count}(a{+}b)=\sum_{\text{words}}\text{frequency}\times\#\bigl(a\ b\ \text{adjacent}\bigr),\quad \class{pr-recount}{\text{taken on the current pieces every round}} \)</span></p>
+      <p class="mechanism-caption" data-caption="" aria-live="polite" aria-atomic="true">Counts are redone each round: e+s took newest's e, so w+e fell to 2 and l+o won.</p>
+      <div class="mechanism-controls" data-controls="" role="group" aria-label="Playback controls" hidden="">
+  <button type="button" data-action="play" data-state="play" aria-label="Play" title="Play">
+    <svg data-icon="play" viewbox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"></path></svg>
+    <svg data-icon="pause" viewbox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7zM14 5h4v14h-4z" fill="currentColor"></path></svg>
+    <svg data-icon="replay" viewbox="0 0 24 24" aria-hidden="true"><path d="M5 8a8 8 0 1 1-1 8M5 3v6h6" fill="none" stroke="currentColor" stroke-width="2"></path></svg>
+    <span class="mechanism-sr" data-button-label="">Play</span>
+  </button>
+  <label class="mechanism-scrubber"><span class="mechanism-sr">Playback position</span><input type="range" min="0" max="40" value="0" step="0.01"></label>
+  <span class="mechanism-clock" aria-hidden="true"><span data-elapsed="">0:00</span><span data-duration=""> / 0:40</span></span>
+  <select data-speed="" aria-label="Playback speed" title="Playback speed"><option value="0.5">0.5×</option><option value="1">1×</option><option value="1.5" selected="">1.5×</option><option value="2">2×</option></select>
+  <button type="button" data-action="fullscreen" data-state="expand" aria-label="Fullscreen" title="Fullscreen">
+    <svg data-icon="expand" viewbox="0 0 24 24" aria-hidden="true"><path d="M9 4H4v5M15 4h5v5M20 15v5h-5M9 20H4v-5" fill="none" stroke="currentColor" stroke-width="2"></path></svg>
+    <svg data-icon="contract" viewbox="0 0 24 24" aria-hidden="true"><path d="M4 9h5V4M20 9h-5V4M15 20v-5h5M4 15h5v5" fill="none" stroke="currentColor" stroke-width="2"></path></svg>
+    <span class="mechanism-sr" data-button-label="">Fullscreen</span>
+  </button>
+</div>
+<p data-notice="" role="status"></p>
+
+    </div>
+    <dialog aria-label="Expanded adjacent-pair recount animation"></dialog>
+    <p data-load-status="" role="status">The final pieces are readable without playback. Opening this panel loads the optional controls.</p>
+    <div class="mechanism-boundary">
+      <p>Byte pair encoding on the chapter's four-word toy corpus, recounted after every merge; not BERT's WordPiece, which scores merges differently, and no real tokenizer is trained.</p>
+      <details class="mechanism-scope"><summary>Scope and caveats</summary>
+        <p>Every count is computed from the corpus line by the loop below. The chapter's text names only the nine and the seven; the 8, 6 and 2 of w+e are this panel's recount of the same loop. The loop counts fourteen distinct adjacent pairs in round 1. The picture draws two of them and the maximum, and it folds the counts of rounds 3 and 5 into their merges.</p>
+        <p>The lesson does not rest on the tie-break. With the reverse tie order, w+e keeps 8 through the three nines and drops to 2 after the third merge, and the final pieces are the same. The merge names do change (t+&lt;/w&gt;, s+t&lt;/w&gt;, e+st&lt;/w&gt;, o+w, l+ow): the fourth merge is then o+w, the other 7, not l+o, and w+e still never merges. &lt;/w&gt; sorts before letters in lexicographic order. It decides no tie here: every tie in these five rounds is settled by the first piece. With lower counted 3, w+e would tie the three nines and lose to e+s in lexicographic order. The check below takes 4.</p>
+        <p>An arc marks one adjacent occurrence of a drawn pair, and a bar adds up those occurrences, each weighted by its word's frequency. The dashed outline keeps w+e's first count for comparison; the loop keeps no such record. Where lower's w+e stood, the pair after merge 5 is low+e, counted 2. The loop stops after five merges, a chosen budget, not at any convergence, so no count follows the last merge; the live w+e bar is retired once its last arc is gone.</p>
+        <p>The panel previews the corpus and the merges that the next cell declares and prints. The printed output remains the authority. BERT's own tokenizer scores merges differently, and practical byte-level tokenizers begin from bytes. A finished merge list is applied in its own order when new text is split. The recount shown here is how that order is found.</p>
+        <p>Tiles and frequencies are blue, as tokens are in this chapter's other panel. The count the loop makes for w+e is neutral ink, like the level and the stub; the rival l+o is slate and thinner, and every tally also carries its label.</p>
+      </details>
+    </div>
+    <details class="mechanism-check"><summary><strong>Check yourself.</strong> Suppose lower were counted 4 times instead of 2, all else unchanged. Which pair merges first, and what does e+s count in the round after?</summary>
+      <p>w+e: 6 + 4 = 10 beats every 9, and five pairs now tie at 9, since l+o and o+w rise to 5 + 4. The merge fuses w and e in newest and lower, so the next round counts e+s at only the 3 from widest. A merge removes another pair only where the two share a symbol occurrence.</p>
+    </details>
+    <details class="mechanism-transcript" id="pair-recount-transcript"><summary>Transcript and keyboard help</summary>
+      <ol>
+        <li>Four words from the corpus line, in character tiles, each ending in the end-of-word marker &lt;/w&gt;: low ×5, lower ×2, newest ×6, widest ×3. At the first count w+e has 8, 6 from newest and 2 from lower, and l+o has 7, 5 from low and 2 from lower. The most frequent adjacent pairs tie at 9: e+s, s+t and t+&lt;/w&gt;. Predict which pair is merged fourth.</li>
+        <li>Merge 1 fuses e and s into es, in newest and widest at once. newest's e now sits inside es, so the arc over its w and e snaps, leaving a dashed stub. The loop then counts again on the current pieces: w+e keeps only lower's 2, and a dashed outline marks where its first count stood. The most frequent pairs now tie at 9: es+t and t+&lt;/w&gt;.</li>
+        <li>Merge 2 fuses es and t into est, and merge 3 fuses est and &lt;/w&gt; into est&lt;/w&gt;, in newest and widest at once. lower is untouched: w+e still counts 2, and l+o 7.</li>
+        <li>Round 4 counts again. l+o and o+w tie at 7; w+e has 2. Lexicographic order picks l+o.</li>
+        <li>Merge 4 fuses l and o into lo in low and lower, and merge 5 fuses lo and w into low. lower's w is now inside low, so its w+e arc dissolves and the last 2 of w+e is gone. The loop stops after five merges.</li>
+        <li>The final pieces: low | &lt;/w&gt;; low | e | r | &lt;/w&gt;; n | e | w | est&lt;/w&gt;; w | i | d | est&lt;/w&gt;. Counts are redone each round: merging e+s took newest's e, so w+e fell from 8 to 2 before its turn could come, l+o won the fourth merge, and w+e never merges.</li>
+      </ol>
+      <p id="pair-recount-playback-help">Silent; paused initially; 1.5× playback. Focus the animation pane: Space or K plays/pauses, arrows seek between beats, Home/End jump, Escape pauses. The scrubber and speed menu also work by keyboard. Reduced-motion mode holds each beat's settled state instead of moving between them.</p>
+    </details>
+  </div>
+</details>
+
 <script>
 (() => {
   document.querySelectorAll('.mechanism-excerpt[data-player]').forEach(root => {
@@ -1002,43 +1185,6 @@ Figure&nbsp;18.2: Five Boolean ledgers keep BERT’s controls separate. Eligibil
 })();
 
 </script>
-<p>Original BERT pre-generated several masked versions of its training examples; RoBERTa later redrew masks as examples were presented. Our controlled lab uses the latter <em>dynamic corruption</em> choice: the same sentence can ask different questions on later passes. Reproducibility therefore requires a separate random generator. Seeding model initialization while leaving the corruption stream implicit is not an exact experiment.</p>
-<div class="callout callout-style-default callout-tip callout-titled">
-<div class="callout-header d-flex align-content-center">
-<div class="callout-icon-container">
-<i class="callout-icon"></i>
-</div>
-<div class="callout-title-container flex-fill">
-<span class="screen-reader-only">Tip</span>Audit the selector before the loss
-</div>
-</div>
-<div class="callout-body-container callout-body">
-<p>Print the number of eligible and selected positions, verify that special and padding tokens are excluded, and inspect the realized 80/10/10 proportions over many batches. Then assert that the selected logit and target shapes agree. A loss can decrease while a selector silently trains on padding or on the wrong tokens.</p>
-</div>
-</div>
-</section>
-</section>
-<section id="from-a-transformer-encoder-to-bert" class="level2" data-number="18.4">
-<h2 data-number="18.4" class="anchored" data-anchor-id="from-a-transformer-encoder-to-bert"><span class="header-section-number">18.4</span> From a Transformer encoder to BERT</h2>
-<p>The original BERT input at position <span class="math inline">\(i\)</span> adds three learned vectors:</p>
-<p><span class="math display">\[
-z_i=e_{\text{token}(i)}+e_{\text{position}(i)}+e_{\text{segment}(i)}.
-\]</span></p>
-<p>The token comes from a <strong>WordPiece</strong> vocabulary: frequent character sequences are stored whole, while rarer words can be assembled from reusable subword pieces.</p>
-<div class="callout callout-style-default callout-tip callout-titled">
-<div class="callout-header d-flex align-content-center">
-<div class="callout-icon-container">
-<i class="callout-icon"></i>
-</div>
-<div class="callout-title-container flex-fill">
-<span class="screen-reader-only">Tip</span>Practice bridge (optional): make the vocabulary learnable
-</div>
-</div>
-<div class="callout-body-container callout-body">
-<p><a href="../part3/10-sequences-rnn.html" class="quarto-xref"><span>Chapter 12</span></a> fixed its vocabulary at individual characters. A full-word vocabulary shortens sequences but gives every rare spelling its own entry. Subword tokenization chooses a middle contract. <strong>Byte Pair Encoding (BPE)</strong> begins with small symbols, counts adjacent pairs in the training corpus, merges the most frequent pair, and repeats until it reaches a chosen vocabulary budget.</p>
-<p>This original toy implementation starts from characters plus an end-of-word marker. Corpus frequencies weight the pair counts; lexicographic order breaks exact ties so the result is reproducible.</p>
-</div>
-</div>
 <div class="plan-code plan-code-wide">
 <div class="plan">
 <ol type="1">
