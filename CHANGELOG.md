@@ -1,3 +1,16 @@
+# Rolling post-v1.4: two mechanism replays, for Chapter 10 (September 29, 2026)
+
+- **Chapter 10, training-mode BatchNorm measures with the batch's ruler**
+  (`batch-ruler-excerpt`, after the γ and β paragraph in Section 10.2). One channel, one
+  number per garment, a declared toy: your garment holds 2 while its batch-mates move from
+  0, 0 and 2 to 2, 4 and 4. In training mode it reads 1, then −1, because the ruler follows
+  the batch's mean and spread; in evaluation mode the running ruler, mean 2 and variance 1,
+  reads 0 in either batch. No control.
+- **Chapter 10, the shortcut adds a lane, not a guarantee** (`identity-lane-excerpt`, under
+  the residual-block figure in Section 10.5). A gradient of 1 splits at the sum: the lane's
+  copy stays 1 and the copy through F scales by the learned slope, so x receives 1.5, 1 and
+  0.1 at slopes 0.5, 0 and −0.9, and nothing at −1. One control, the learned branch's slope.
+
 # Rolling post-v1.4: four mechanism replays, for Chapters 11 and 12 (September 29, 2026)
 
 - **Chapter 12, detach is not reset** (`detach-cut-excerpt`, at the end of "Training with a

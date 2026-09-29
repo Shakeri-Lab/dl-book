@@ -483,6 +483,29 @@ const expected = {
     return ['The vertical line', `L = ${fixed(sxx / 2, 3)}`, fixed(syy(height), 3), fixed(syy(2 * height), 3),
       fixed(sxx, 3), fixed(syy(2 * height) / 2, 3)];
   },
+  // The check doubles the first batch, the garment included: the mean and the spread double
+  // with it, so training-mode BatchNorm reads the garment exactly as before.
+  'batch-ruler': root => {
+    const garment = Number(root.dataset.garment), mates = nums(root.dataset.first);
+    const read = values => {
+      const m = values.reduce((a, b) => a + b) / values.length;
+      const s = Math.sqrt(values.reduce((a, v) => a + (v - m) ** 2, 0) / values.length);
+      return (values[0] - m) / s;
+    };
+    assert.equal(read([garment, ...mates]), 1, 'the scene\'s first reading');
+    const doubled = [2 * garment, ...mates.map(v => 2 * v)];
+    assert.equal(read(doubled), 1);
+    const m2 = doubled.reduce((a, b) => a + b) / doubled.length;
+    return ['Still 1', `(${2 * garment} − ${m2})/${2} = 1`];
+  },
+  // The check chains two blocks: each multiplies what arrives by 1 plus its own slope, while
+  // a plain stack multiplies by the slopes alone.
+  'identity-lane': root => {
+    const [first] = nums(root.dataset.slopes), second = -first, incoming = Number(root.dataset.incoming);
+    const through = incoming * (1 + first) * (1 + second), plain = incoming * first * second;
+    assert.equal(through, 0.75); assert.equal(plain, -0.25);
+    return ['0.75', `${1 + first} × ${1 + second} = ${through}`, `${first} × (${minus(String(second))}) = ${minus(String(plain))}`];
+  },
 };
 
 for (const entry of manifest.scenes) {

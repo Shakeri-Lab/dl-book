@@ -25,7 +25,15 @@ fixes in all of them and to four contract changes below (prose budget, plain-tex
 format, never spoil a prediction, four-decimal geometry). See
 [the review-pass receipt](excerpt-review-pass.md). No new scene is authorized by it.
 
-**Source state (September 29, 2026, later):** fifty-one scenes are registered in
+**Source state (September 29, 2026, afternoon):** fifty-three scenes are registered in
+`interactives/manifest.json`. The two newest are the author's picks for Chapter 10
+(`09-modern-cnns-transfer.qmd`). [In training mode, BatchNorm measures each value with its
+own batch's ruler](batch-ruler-excerpt.md) sits after the γ and β paragraph, before the
+warning that BatchNorm is two machines; [the shortcut adds a lane; it does not guarantee a
+gradient](identity-lane-excerpt.md) sits under the residual-block figure. Each receipt
+records the one choice the author was asked and kept.
+
+**Prior source state (September 29, 2026, later):** fifty-one scenes are registered in
 `interactives/manifest.json`. The four newest are the author's scoped picks for Chapter 12
 (`10-sequences-rnn.qmd`) and Chapter 11 (`making-pca-learnable.qmd`). [Detach passes the
 value, not the gradient](detach-cut-excerpt.md) closes "Training with a finite horizon";

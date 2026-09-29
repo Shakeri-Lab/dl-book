@@ -322,6 +322,9 @@ re-derives them. The briefs live in the author's Box folder `Teaching/6050/dl-bo
 - **Chapters 11 and 12, scoped September 28, built and shipped September 29.** Four
   replays (`detach-cut`, `decoder-family`, `flat-line`, `gru-blend`), brief
   `dl-book-four-replays-prompt.md`; see the next section.
+- **Chapter 10, scoped September 28, built and shipped September 29.** Fourteen scenes of film
+  `6050-Ch9` were judged; two were built (`batch-ruler`, `identity-lane`); see "Chapter 10
+  (September 29, 2026)" below.
 
 #### Chapters 11 and 12 (September 29, 2026)
 
@@ -346,6 +349,28 @@ kept in one place.
   tints, orange shares, a second control, a sampling prior, a digit panel and a VAE toggle.
 - Candidate for later: noisy codes forcing a smooth decoder, the VAE toggle's idea, as its
   own scene in Chapter 22's "Put probability around the code" (`19-generative.qmd`).
+
+#### Chapter 10 (September 29, 2026)
+
+The author asked for replays from the Advanced CNN chapter (`09-modern-cnns-transfer.qmd`,
+printed Chapter 10), which already had `stacked-sight` and `pixel-skewer`. Two of the film's
+fourteen scenes were built, one build agent per scene.
+
+- [`batch-ruler`](batch-ruler-excerpt.md), Section 10.2, after the γ and β paragraph and
+  before the warning that BatchNorm is two machines: the same garment reads 1, then −1, as
+  its batch-mates change, and 0 in either batch under running statistics. Declared toy; no
+  control. It leaves the pooling axes to `layernorm-axis` and does not touch Exercises 4
+  and 7.
+- [`identity-lane`](identity-lane-excerpt.md), Section 10.5, under the residual-block
+  figure and before "It is not magical": the shortcut's copy stays 1 and the learned copy
+  scales by the slope, so 1.5, 1 and 0.1 reach x at slopes 0.5, 0 and −0.9. Declared toy
+  in one dimension; one control, the slope.
+- Held back: a mechanism version of `GlobalHead` (a flatten head's per-location weights
+  re-paired by a slide, against global average pooling's one shared weight). It half
+  duplicates `shift-shuffle`'s slide and barely passes the first-and-last-frame test.
+- Not ported: `OptimizationWall`, `Scorecard`, `HonestFewShot` and `FullTransfer` are
+  measured results; `VGGBlocks` repeats `lenet-flow`'s shape trace; `ArchitectureGrammar`
+  is the chapter's opening figure; `TransferMechanics` is a ledger of which layers learn.
 
 ### Shared acceptance contract
 
