@@ -134,6 +134,35 @@ real changes.
   profile on a clean checkout. `scripts/render_pdf_profiles.py` does this before each
   local print proof because one profile may prune another profile's transient
   directories. CI builds no PDF.
+- **Figures as data (press W2 phase 2, September 29, 2026):** `code/dlbook/book.mplstyle`
+  is the one figure style, loaded by one exact line per page; the notebook manifest must
+  ship it with that page's unit, or the notebook stops with "is not a valid package
+  style". It names only matplotlib's bundled DejaVu fonts (a findfont fallback is fatal
+  only on the Linux runners), writes SVG text as paths (`svg.fonttype: path`) with a
+  fixed `svg.hashsalt` so element ids repeat, and embeds PDF fonts as TrueType
+  (`pdf.fonttype: 42`). Writing a PDF with a mathtext prime (Cmsy10) makes fontTools log
+  two "timestamp seems very low" lines; they are harmless and Quarto hides them.
+  `_quarto.yml` sets `fig-format: svg` and `fig-dpi: 300` for HTML and states the PDF
+  defaults (`pdf`, 300). Under `freeze: true` these keys reach a page only when it
+  re-executes, and a cell's `fig-width`/`fig-height` does nothing under Jupyter: the
+  code's figsize decides. Render a page with `scripts/render_chapter.sh`. It runs
+  `quarto render <page> --no-execute-daemon` with `SOURCE_DATE_EPOCH=1790553600`, so
+  matplotlib writes the book's content date (2026-09-28), not the clock, into each SVG
+  `dc:date` and PDF `/CreationDate`, and a re-render of unchanged code reproduces the
+  bytes; without the daemon the kernel inherits that environment. The render has no
+  `--to`, so one run refreshes both html.json and tex.json, and then deletes the
+  whole-book PDF it leaves in `_book`. Measured on 08-cnn, the cheaper pair `--to html`
+  then `--to latex` (499 s against 900 s) gives the same html.json, SVGs and PDF bytes
+  but is not equivalent: its tex.json names `figure-latex/` files, which are ignored by
+  git, and `figure-pdf/` keeps the old PDFs. Quarto's freezer copies figure folders
+  without deleting, so the wrapper prunes files no freeze JSON names
+  (`scripts/figure_ledger.py prune`); `scripts/audit_book_contract.py` fails on such an
+  orphan and on a freeze whose hash is not the md5 of its page, and
+  `scripts/audit_html_assets.py` on a `_book/**/figure-html` file no page references.
+  `scripts/postrender_html.py` writes width and height on every figure image (2 CSS px
+  per pt for executed SVGs, natural size for TikZ): Quarto writes none for an SVG, whose
+  lazy box would otherwise collapse to 0 x 0, and the phone pan-strip rule reads that
+  drawn width.
 - **Audited publication bundle:** the Pages publish step uses `render: false`. Rendering
   after the audits can silently replace the artifacts that were checked, so deployment
   must publish the existing `_book` directory unchanged.

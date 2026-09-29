@@ -15,6 +15,32 @@ section of decisions_pending.md from the same data.
     python scripts/voice_apply_edits.py flags audits/voice/edits/*.json --out FILE
     python scripts/voice_apply_edits.py gate audits/voice/edits/*.json --stage B2 B2a \\
         --html RENDERED --out FILE      # Section A of a gate report (VOICE.md, P5)
+
+Figure-code receipts (press W2 phase 2) live in the same lists and apply the same way:
+exactly one match, every replay fixture literal intact. They add three keys:
+
+    "kind": "figure-code",
+    "figures": ["fig-cliff-rematch"],   # the figure labels the change redraws
+    "files_changed": [...]              # the freeze files it changed (the figure ledger)
+
+`apply` also requires a figure-code receipt's match to lie inside one executable Python
+cell, with no fence line in its old or new text, and every named figure label to exist
+in the file; it records that cell's label as "cell". That cell must be one of the
+receipt's figures (its label, or the float div it sits in), or the cell that binds a
+feeder the receipt declares:
+
+    "feeds": ["scorecard_colors"]       # colour variables bound outside the figure cell
+
+Each declared feeder must be listed for one of the receipt's figures in the feeders
+column of audits/press/w2p2/data_figures.txt, and the match must sit in the last cell
+before that figure that binds it (scripts/audit_figure_style.py resolves it the same
+way). A receipt that only inserts the page's loader line may sit in any cell. An F8 (alt
+text) receipt must carry whole alt-text options, so audit_voice_invariants.py can check
+each alt change against it. `gate` lists figure-code and F8 receipts per figure, with
+printed figure numbers read from the render, instead of looking for them inside a
+paragraph: a figure-code receipt as a whole-line diff, with any changed line that is not
+recognisably plotting code listed again for the author's review; an F8 receipt as its
+alt text before and after.
 """
 
 from __future__ import annotations
@@ -28,10 +54,127 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
+import audit_figure_style as figure_style  # noqa: E402
 import audit_voice_ledger as ledger  # noqa: E402
 
 MANIFEST = ROOT / "interactives" / "manifest.json"
 FENCE_RE = re.compile(r"^\s*(`{3,}|~{3,})")
+FIGURE_CODE = "figure-code"
+LABEL_OPTION_RE = re.compile(r"^\s*#\|\s*label:\s*(\S+)\s*$", re.M)
+ANCHOR_ID_RE = re.compile(r"\{#([A-Za-z][A-Za-z0-9_:-]*)")
+
+
+def is_figure_code(edit: dict) -> bool:
+    return edit.get("kind") == FIGURE_CODE
+
+
+def python_cells(text: str) -> list[tuple[int, int, str | None]]:
+    """(body start, body end, label) character spans of each executable Python cell.
+
+    The body runs from the line after the opening fence to the start of the closing
+    fence line, so a replacement inside it can never touch a fence.
+    """
+    lines = text.split("\n")
+    starts = []
+    position = 0
+    for line in lines:
+        starts.append(position)
+        position += len(line) + 1
+    cells = []
+    index = 0
+    while index < len(lines):
+        match = re.match(r"^\s*(`{3,}|~{3,})(.*)$", lines[index])
+        if not match:
+            index += 1
+            continue
+        fence, info = match.group(1), match.group(2).strip()
+        closer = re.compile(rf"^\s*{re.escape(fence[0])}{{{len(fence)},}}\s*$")
+        end = index + 1
+        while end < len(lines) and not closer.match(lines[end]):
+            end += 1
+        if re.match(r"^\{python\b", info):
+            body_start = starts[index + 1] if index + 1 < len(lines) else len(text)
+            body_end = starts[end] if end < len(lines) else len(text)
+            label = LABEL_OPTION_RE.search(text[body_start:body_end])
+            cells.append((body_start, body_end, label.group(1) if label else None))
+        index = end + 1
+    return cells
+
+
+def defined_labels(text: str) -> set[str]:
+    return set(LABEL_OPTION_RE.findall(text)) | set(ANCHOR_ID_RE.findall(text))
+
+
+def check_figure_code(edit: dict, text: str, index: int) -> str | None:
+    """Guard one figure-code receipt before it is applied; return its cell's label."""
+    figures = edit.get("figures")
+    assert isinstance(figures, list) and figures and all(isinstance(f, str) for f in figures), (
+        f"{edit['id']}: a figure-code receipt names its figures as a non-empty list of labels"
+    )
+    missing = sorted(set(figures) - defined_labels(text))
+    assert not missing, f"{edit['id']}: figure label(s) not defined in {edit['file']}: {missing}"
+    changed = edit.get("files_changed", [])
+    assert isinstance(changed, list), f"{edit['id']}: files_changed must be a list"
+    for side in ("old", "new"):
+        assert not any(FENCE_RE.match(line) for line in edit[side].split("\n")), (
+            f"{edit['id']}: figure-code {side} text must not contain a code fence"
+        )
+    end = index + len(edit["old"])
+    span = next(((start, stop, label) for start, stop, label in python_cells(text)
+                 if start <= index and end <= stop), None)
+    if span is None:
+        raise AssertionError(f"{edit['id']}: figure-code match is not inside one Python cell")
+    body_start, _, label = span
+    if loader_only(edit):
+        return label  # the page's loader line, which may open any cell (ruling D6)
+    start_line = text[:body_start].count("\n") + 1
+    cells = figure_style.parse_cells(text)
+    cell = next((c for c in cells if c.start == start_line), None)
+    owners = {label, cell.figure if cell else None} - {None}
+    if owners & set(figures):
+        return label
+    feeds = edit.get("feeds", [])
+    assert isinstance(feeds, list) and all(isinstance(f, str) for f in feeds), (
+        f"{edit['id']}: feeds must be a list of feeder names"
+    )
+    listed = {name for row in figure_style.data_figures()
+              if row.page == edit["file"] and row.label in figures for name in row.feeders}
+    undeclared = sorted(set(feeds) - listed)
+    assert not undeclared, (
+        f"{edit['id']}: feeds {undeclared} are not feeders of {figures} in "
+        "audits/press/w2p2/data_figures.txt"
+    )
+    for name in feeds:
+        for figure in figures:
+            first = next((c.index for c in cells if c.figure == figure), None)
+            resolved = figure_style.resolve_feeder(cells, name, first) if first is not None else None
+            if resolved is not None and resolved[0].start == start_line:
+                return label
+    raise AssertionError(
+        f"{edit['id']}: figure-code match is in cell {label or f'at line {start_line}'}, which is "
+        f"neither a figure the receipt names {figures} nor the cell binding a feeder it declares "
+        f"(feeds: {feeds})"
+    )
+
+
+def loader_only(edit: dict) -> bool:
+    """True when a receipt's new text is its old text plus the page's loader line."""
+    loader = figure_style.loader_line(edit["file"])
+    old, new = edit["old"], edit["new"]
+    return new.count(loader) == old.count(loader) + 1 and any(
+        new.replace(piece, "", 1) == old for piece in (loader + "\n", "\n" + loader)
+    )
+
+
+def check_alt_receipt(edit: dict) -> None:
+    """F8 receipts carry whole alt-text options (one or more), old and new alike."""
+    import audit_voice_invariants as invariants
+
+    old, new = invariants.alt_values(edit["old"]), invariants.alt_values(edit["new"])
+    assert old and len(old) == len(new), (
+        f"{edit['id']}: an F8 receipt must replace whole alt-text options "
+        f"(found {len(old)} old and {len(new)} new)"
+    )
 
 
 def fixture_literals(qmd: str) -> list[str]:
@@ -99,6 +242,9 @@ def apply(path: Path, phase: str) -> int:
         literals = fixture_literals(edit["file"])
         before = {literal: text.count(literal) for literal in literals}
         index = text.index(edit["old"])
+        cell_label = check_figure_code(edit, text, index) if is_figure_code(edit) else None
+        if edit.get("rule") == "F8":
+            check_alt_receipt(edit)
         line = text[:index].count("\n") + 1
         section_index, section_title = section_of(text, line)
         text = text.replace(edit["old"], edit["new"], 1)
@@ -108,6 +254,8 @@ def apply(path: Path, phase: str) -> int:
             )
         by_file[edit["file"]] = text
         edit.update(line=line, section_index=section_index, section=section_title, applied=True)
+        if is_figure_code(edit):
+            edit.update(cell=cell_label)
         applied += 1
     for relative, text in by_file.items():
         (ROOT / relative).write_text(text, encoding="utf-8")
@@ -291,7 +439,11 @@ def gate(paths: list[Path], stages: list[str], html_root: Path, out: Path) -> No
             if head is not None:
                 title = re.sub(r"\s+", " ", head.get_text(" ", strip=True))
         entries = []
+        figure_edits = []
         for edit in edits:
+            if is_figure_code(edit) or edit.get("rule") == "F8":
+                figure_edits.append(edit)  # listed per figure below, not in a paragraph
+                continue
             new_parts = ledger.prose_sentences(ledger.source_prose(edit["new"]))
             old_list = ledger.prose_sentences(ledger.source_prose(edit["old"]))
             old_parts = set(old_list)
@@ -326,8 +478,178 @@ def gate(paths: list[Path], stages: list[str], html_root: Path, out: Path) -> No
             reader = edit.get("reader")
             lines.append(f"Reader pass: {reader}" if reader else "Reader pass: no mark.")
             lines.append("")
+        if figure_edits:
+            lines += figure_code_section(page, figure_edits, html_path)
     out.write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"wrote {out}")
+
+
+def printed_figure_numbers(html_path: Path) -> dict[str, str]:
+    """Label -> printed number ("Figure 9.4"), read from each float's own caption."""
+    if not html_path.is_file():
+        return {}
+    from bs4 import BeautifulSoup
+
+    soup = BeautifulSoup(html_path.read_text(encoding="utf-8"), "html.parser")
+    numbers = {}
+    for caption in soup.find_all("figcaption"):
+        owner = caption.find_parent(id=True)
+        text = re.sub(r"\s+", " ", caption.get_text(" ", strip=True).replace("\xa0", " "))
+        match = re.match(r"(Figure [A-Z]?\d*(?:\.\d+)*)", text)
+        if owner is not None and match:
+            numbers.setdefault(owner["id"], match.group(1))
+    return numbers
+
+
+def full_lines(file: str, old: str, new: str) -> tuple[list[str], list[str], bool]:
+    """The whole source lines a figure-code receipt changed, before and after.
+
+    The receipt holds fragments; the current file supplies the rest of each line. When
+    the new text is no longer in the file (a later receipt superseded it), the
+    fragments are shown as they are.
+    """
+    source = ROOT / file
+    text = source.read_text(encoding="utf-8") if source.is_file() else ""
+    at = text.find(new) if new else -1
+    if at < 0:
+        return old.split("\n"), new.split("\n"), False
+    start = text.rfind("\n", 0, at) + 1
+    end = text.find("\n", at + len(new))
+    end = len(text) if end < 0 else end
+    after = text[start:end]
+    before = after[: at - start] + old + after[at - start + len(new):]
+    return before.split("\n"), after.split("\n"), True
+
+
+# A changed line counts as plotting code when it names a figure object, calls a
+# drawing or styling method, passes a plotting keyword (PEP 8 `key=value`, so an
+# assignment `label = ...` does not count), or holds a hex colour. Anything else is
+# listed again under its receipt for the author's review.
+PLOTTING_LINE_RE = re.compile(
+    r"\b(?:plt|fig|figs|axes|axs|ax|ax\d+|ax_\w+|\w+_ax|cbar|cb|legend|handles|mpl|matplotlib)\b"
+    r"|\.(?:plot|scatter|imshow|matshow|pcolormesh|contour|contourf|bar|barh|hist|errorbar|"
+    r"fill_between|fill_betweenx|axhline|axvline|axhspan|axvspan|hlines|vlines|text|annotate|"
+    r"legend|colorbar|tick_params|grid|margins|invert_xaxis|invert_yaxis|twinx|twiny|add_patch|"
+    r"add_artist|add_collection|tight_layout|subplots_adjust|suptitle|supxlabel|supylabel|"
+    r"savefig|show|clabel|bar_label|semilogx|semilogy|loglog|quiver|subplots|add_subplot)\("
+    r"|\.set_(?!num_threads|default_dtype|seed|grad_enabled|printoptions|flush_denormal)\w+\("
+    r"|\.(?:spines|xaxis|yaxis)\b"
+    r"|\b(?:color|colors|c|lw|linewidth|linewidths|ls|linestyle|linestyles|marker|ms|markersize|"
+    r"mfc|mec|mew|alpha|label|labels|fontsize|fontweight|weight|size|figsize|cmap|vmin|vmax|"
+    r"zorder|ha|va|loc|ncol|facecolor|edgecolor|fc|ec|bbox_to_anchor|frameon|rotation|dashes|"
+    r"hatch|interpolation|aspect|extent|origin|labelpad|fraction|shrink|xytext|textcoords|"
+    r"arrowprops|bbox|clip_on|rasterized|capsize|elinewidth|sharex|sharey|layout|"
+    r"width_ratios|height_ratios|handlelength|borderaxespad|columnspacing|markevery)=(?!=)"
+    r"|[\"']#[0-9A-Fa-f]{3,8}[\"']"
+)
+NEUTRAL_LINE_RE = re.compile(r"^\s*(?:#.*)?$|^[\s()\[\]{},:]*$")
+
+
+def unreviewed_lines(rows: list[str], loader: str) -> list[str]:
+    """Changed diff rows (+/-) that are not recognisably plotting code."""
+    out = []
+    for row in rows:
+        if not row or row[0] not in "+-" or row.startswith(("+++", "---")):
+            continue
+        line = row[1:]
+        if line == loader or NEUTRAL_LINE_RE.match(line) or PLOTTING_LINE_RE.search(line):
+            continue
+        out.append(row)
+    return out
+
+
+def unquoted(value: str) -> str:
+    """An option value without the quotes that surround it in the source."""
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+        return value[1:-1]
+    return value
+
+
+def receipt_figures(edit: dict, text: str) -> list[str]:
+    """The figures a receipt belongs to: its "figures", else the figure whose cell,
+    float div or image attributes hold its new (or old) text."""
+    if edit.get("figures"):
+        return list(edit["figures"])
+    at = text.find(edit["new"]) if edit.get("new") else -1
+    if at < 0:
+        at = text.find(edit["old"]) if edit.get("old") else -1
+    if at < 0:
+        return []
+    line = text[:at].count("\n") + 1
+    for cell in figure_style.parse_cells(text):
+        if cell.start <= line < cell.start + len(cell.lines):
+            return [cell.figure] if cell.figure else []
+    head = text[:at]
+    attributes = head.rfind("{#")
+    if attributes >= 0 and "}" not in head[attributes:]:
+        match = re.match(r"\{#([\w:-]+)", head[attributes:])
+        if match:
+            return [match.group(1)]
+    openers = list(figure_style.DIV_OPEN_RE.finditer(head))
+    return [openers[-1].group(2)] if openers else []
+
+
+def figure_code_section(page: str, edits: list[dict], html_path: Path) -> list[str]:
+    """Figure-code and F8 receipts grouped by the figure they belong to, in source order."""
+    import difflib
+
+    import audit_voice_invariants as invariants
+
+    text = (ROOT / page).read_text(encoding="utf-8") if (ROOT / page).is_file() else ""
+    numbers = printed_figure_numbers(html_path)
+    loader = figure_style.loader_line(page)
+    owners = {edit["id"]: receipt_figures(edit, text) for edit in edits}
+    labels: list[str] = []
+    for edit in edits:
+        labels.extend(label for label in owners[edit["id"]] or [""] if label not in labels)
+
+    def position(label: str) -> int:
+        match = re.search(rf"(#\|\s*label:\s*|\{{#){re.escape(label)}\b", text) if label else None
+        return match.start() if match else len(text)
+
+    alt = any(not is_figure_code(edit) for edit in edits)
+    lines = ["#### Figure code and alt text" if alt else "#### Figure code", ""]
+    for label in sorted(labels, key=position):
+        name = numbers.get(label, "Figure (number not found in the render)")
+        lines += [f"**{name}** (`{label}`)" if label else f"**{name}** (no figure found)", ""]
+        for edit in edits:
+            if label not in (owners[edit["id"]] or [""]):
+                continue
+            intent = edit.get("intent") or edit.get("note", "")
+            where = f"`{edit['file']}:{edit.get('line', '?')}`"
+            if edit.get("cell"):
+                where += f", cell `{edit['cell']}`"
+            if edit.get("feeds"):
+                where += ", feeds " + ", ".join(f"`{name_}`" for name_ in edit["feeds"])
+            lines.append(f"- **{edit['id']}** ({edit['rule']}). {intent} {where}.")
+            if not is_figure_code(edit):
+                old_alts = invariants.alt_values(edit["old"])
+                new_alts = invariants.alt_values(edit["new"])
+                for before_alt, after_alt in zip(old_alts, new_alts):
+                    lines.append(f"  Alt text before: “{unquoted(before_alt)}”")
+                    lines.append(f"  Alt text after: “{unquoted(after_alt)}”")
+                if not old_alts:
+                    lines.append("  (No whole alt-text option found in the receipt.)")
+                reader = edit.get("reader")
+                lines += [f"  Reader pass: {reader}" if reader else "  Reader pass: no mark.", ""]
+                continue
+            changed = edit.get("files_changed") or []
+            lines.append(
+                "  Files changed: " + (", ".join(f"`{path_}`" for path_ in changed) if changed
+                                       else "none recorded yet.")
+            )
+            before, after, found = full_lines(edit["file"], edit["old"], edit["new"])
+            rows = list(difflib.unified_diff(before, after, lineterm="", n=0))[2:]
+            diff = [row for row in rows if not row.startswith("@@")]  # drop hunk headers
+            lines += ["", "  ```diff", *(f"  {row}" for row in diff), "  ```"]
+            if not found:
+                lines.append("  (Fragments only: the new text is no longer in the page.)")
+            review = unreviewed_lines(diff, loader)
+            if review:
+                lines += ["", f"  **Author review:** {len(review)} changed line(s) are not plotting "
+                              "code:", "", "  ```diff", *(f"  {row}" for row in review), "  ```"]
+            lines.append("")
+    return lines
 
 
 def main() -> int:

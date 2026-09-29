@@ -52,6 +52,42 @@
     return [...panel.children].filter((child) => !child.classList.contains("plan"));
   }
 
+  // Ruling D8: a figure the panel's cell draws stays in view while its code is
+  // closed. A figure output is a display output holding an image; a labelled
+  // figure's float and caption travel with it, and so does a float that wraps
+  // several outputs (subfigures), unless that float also holds the source.
+  function isFigureOutput(output) {
+    return output.matches(".cell-output-display") &&
+      Boolean(output.querySelector("img, svg, .quarto-float-fig"));
+  }
+
+  function figureUnit(output, region) {
+    let unit = output;
+    for (
+      let float = output.parentElement?.closest(".quarto-float");
+      float && float !== region && region.contains(float);
+      float = float.parentElement?.closest(".quarto-float")
+    ) {
+      if (float.querySelector("pre.sourceCode")) break;
+      unit = float;
+    }
+    return unit;
+  }
+
+  function figureUnits(regions) {
+    const units = [];
+    regions.forEach((region) => {
+      region.querySelectorAll(".cell-output").forEach((output) => {
+        if (!isFigureOutput(output)) return;
+        const unit = figureUnit(output, region);
+        if (!units.some((known) => known === unit || known.contains(unit))) {
+          units.push(unit);
+        }
+      });
+    });
+    return units;
+  }
+
   function markerSteps(line) {
     const steps = new Set();
 
@@ -193,6 +229,10 @@
     mapping?.resultOutputs?.forEach((output) => {
       mapping.resultsRegion.appendChild(output);
     });
+    // Figures leave the closed code for the visible region below the panel.
+    mapping?.figureOrigins?.forEach((placeholder, unit) => {
+      mapping.figureRegion.appendChild(unit);
+    });
     mapping?.lines.forEach((line) => {
       line.classList.remove("plan-code-line-active");
     });
@@ -220,6 +260,9 @@
   function openCodeRegions(mapping) {
     mapping.resultOrigins?.forEach((placeholder, output) => {
       placeholder.before(output);
+    });
+    mapping.figureOrigins?.forEach((placeholder, unit) => {
+      placeholder.before(unit);
     });
     mapping.codeRegions.forEach((region) => {
       region.removeAttribute("hidden");
@@ -311,12 +354,17 @@
       region.classList.add("plan-code-until-found-container");
     });
 
-    const outputs = regions.flatMap((region) => [
+    const allOutputs = regions.flatMap((region) => [
       ...region.querySelectorAll(".cell-output")
     ]);
-    outputs.forEach((output, outputIndex) => {
+    const figures = figureUnits(regions);
+    // Figure outputs are never hidden, so they are not search regions either.
+    const outputs = allOutputs.filter((output) =>
+      !figures.some((unit) => unit.contains(output))
+    );
+    allOutputs.forEach((output, outputIndex) => {
       if (!output.id) output.id = `plan-code-${panelIndex}-output-${outputIndex}`;
-      output.classList.add("plan-code-until-found-output");
+      if (outputs.includes(output)) output.classList.add("plan-code-until-found-output");
     });
 
     mapping.lines.forEach((line) => {
@@ -326,6 +374,19 @@
     mapping.panel = panel;
     mapping.codeRegions = regions;
     mapping.searchRegions = [...mapping.lines, ...outputs];
+    if (figures.length) {
+      // Move, never clone: each figure keeps its node (and its #fig- anchor), and a
+      // placeholder keeps its source-order position for the full listing.
+      const figureRegion = document.createElement("div");
+      figureRegion.className = "plan-code-figures";
+      panel.after(figureRegion);
+      mapping.figureRegion = figureRegion;
+      mapping.figureOrigins = new Map(figures.map((unit) => {
+        const placeholder = document.createComment("Figure returns here when code opens.");
+        unit.before(placeholder);
+        return [unit, placeholder];
+      }));
+    }
     const focusTargets = regions.flatMap((region) => [
       ...region.querySelectorAll("pre.sourceCode, .code-copy-button")
     ]);
@@ -363,7 +424,8 @@
 
     // Move, never clone, plain printed evidence into its own disclosure while
     // code is closed. Placeholders retain its source-order position for the full
-    // listing; figures and rich displays never move.
+    // listing. Figures already wait below the panel; other rich displays, such
+    // as tables, stay with the code.
     const resultOutputs = outputs.filter((output) =>
       !output.querySelector("img, svg, canvas, figure, table, audio, video, iframe") &&
       (output.matches(".cell-output-stdout, .cell-output-stderr") ||

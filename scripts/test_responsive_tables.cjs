@@ -173,3 +173,64 @@ test("route and wide-figure behavior remains local, without stale wide-screen fo
   }
   context.dom.window.close();
 });
+
+function figureFixture(images) {
+  const markup = images.map(({ id, src, width, height }) => {
+    const size = width ? ` width="${width}" height="${height}"` : "";
+    return `<div class="quarto-figure"><div id="${id}-frame"><img id="${id}" class="figure-img"`
+      + ` src="${src}" alt="Figure ${id}."${size}></div></div>`;
+  }).join("\n");
+  const dom = new JSDOM(`<!doctype html><html><body><main class="content">${markup}</main></body></html>`,
+    { runScripts: "outside-only", pretendToBeVisual: true });
+  const { window } = dom;
+  const media = new window.EventTarget();
+  media.matches = true;
+  window.matchMedia = () => media;
+  window.requestAnimationFrame = callback => callback();
+  window.ResizeObserver = class { observe() {} };
+  const fonts = new window.EventTarget();
+  fonts.ready = Promise.resolve();
+  Object.defineProperty(window.document, "fonts", { value: fonts });
+  for (const { id, natural } of images) {
+    Object.defineProperties(window.document.getElementById(id), {
+      complete: { value: true }, naturalWidth: { value: natural[0] }, naturalHeight: { value: natural[1] },
+    });
+  }
+  window.eval(script);
+  const wide = id => window.document.getElementById(id).classList.contains("responsive-wide-figure");
+  return { dom, wide };
+}
+
+test("executed figures are tested by their drawn width; other figures by their natural width", () => {
+  const context = figureFixture([
+    // A matplotlib SVG shown at 2 CSS px per pt (ruling D4): 330 x 114 pt drawn at
+    // 660 x 228, though its natural SVG size is only 440 x 152.
+    { id: "svg-strip", src: "08-cnn_files/figure-html/fig-learned-kernel-output-1.svg",
+      width: 660, height: 228, natural: [440, 152] },
+    // The same shape drawn under 300 CSS px stays in the column.
+    { id: "svg-small", src: "08-cnn_files/figure-html/fig-small-output-1.svg",
+      width: 280, height: 90, natural: [187, 60] },
+    // A retina PNG: its width attribute is half its pixel width, so the rule is unchanged.
+    { id: "png-strip", src: "08-cnn_files/figure-html/fig-retina-output-1.png",
+      width: 499, height: 170, natural: [997, 340] },
+    { id: "png-small", src: "08-cnn_files/figure-html/fig-small-retina-output-1.png",
+      width: 290, height: 90, natural: [580, 180] },
+    // A TikZ SVG at its natural size keeps the natural-width test: 562 px is no pan strip.
+    { id: "tikz", src: "../../figures/generated/1_1_likelihood_loss.svg",
+      width: 562, height: 163, natural: [562, 163] },
+    // Without a width attribute an executed figure falls back to its natural width.
+    { id: "svg-bare", src: "08-cnn_files/figure-html/fig-bare-output-1.svg",
+      natural: [440, 152] },
+    // Wide but not strip-shaped: the aspect test still applies.
+    { id: "svg-square", src: "08-cnn_files/figure-html/fig-square-output-1.svg",
+      width: 640, height: 640, natural: [427, 427] },
+  ]);
+  assert.equal(context.wide("svg-strip"), true);
+  assert.equal(context.wide("svg-small"), false);
+  assert.equal(context.wide("png-strip"), true);
+  assert.equal(context.wide("png-small"), false);
+  assert.equal(context.wide("tikz"), false);
+  assert.equal(context.wide("svg-bare"), true);
+  assert.equal(context.wide("svg-square"), false);
+  context.dom.window.close();
+});

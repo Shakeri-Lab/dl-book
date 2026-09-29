@@ -723,6 +723,7 @@ def distance(row: dict[str, object], profile: dict[str, float]) -> float:
 # ------------------------------------------------------------------ added sentences (I17)
 EDITS_DIR = ROOT / "audits" / "voice" / "edits"
 MECHANICAL_RULES = {"R5", "R9"}
+FIGURE_CODE = "figure-code"   # press W2 phase 2 receipts: code, never prose (I17, I18 skip them)
 BOOK_QUESTION = ("what", "if", "we", "made", "this", "learnable")
 PARAGRAPH_BREAK = "\u2029"
 CAPTION_OPTION_RE = re.compile(r'^\s*#\|\s*(?:fig-cap|tbl-cap|fig-subcap)\s*:\s*"?(.*?)"?\s*$')
@@ -806,6 +807,8 @@ def added_sentences(include_restored: bool = False) -> dict[str, list[tuple[str,
         for edit in data["edits"]:
             if not edit.get("applied") or re.match(r"^\s*#{1,6}\s", edit["new"]):
                 continue
+            if edit.get("kind") == FIGURE_CODE:
+                continue  # a figure-code receipt changes plotting code, not prose
             if edit.get("rule") in MECHANICAL_RULES:
                 continue  # a contraction expanded or a slip fixed: the sentence is still the author's
             if not include_restored and edit.get("justification", "").startswith("restored"):
@@ -853,6 +856,8 @@ def restored_openings(source: str) -> list[str]:
             continue
         for edit in data["edits"]:
             if not (edit.get("applied") and edit.get("justification", "").startswith("restored")):
+                continue
+            if edit.get("kind") == FIGURE_CODE:
                 continue
             for chunk in source_prose(edit["new"]).split(PARAGRAPH_BREAK):
                 words_ = [w for w in tokens(chunk) if w not in {"ref", "math", "code"}]
@@ -916,7 +921,7 @@ def apparatus_violations(added: dict[str, list[tuple[str, str]]]) -> list[str]:
     allowed = page_level_ids()
     for path in sorted(EDITS_DIR.glob("*.json")):
         for edit in json.loads(path.read_text(encoding="utf-8"))["edits"]:
-            if edit["id"] not in present:
+            if edit["id"] not in present or edit.get("kind") == FIGURE_CODE:
                 continue
             new_refs = set(SEC_REF_RE.findall(edit["new"])) - set(SEC_REF_RE.findall(edit["old"]))
             for ref in sorted(new_refs - allowed):

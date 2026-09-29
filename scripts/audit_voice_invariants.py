@@ -9,7 +9,8 @@ Nothing here edits a file; every result is printed as a checklist row.
         [--files chapters/part1/01-linear-regression.qmd ...] \\
         [--html-before DIR --html-after DIR] \\
         [--notebooks-before DIR --notebooks-after DIR] \\
-        [--exceptions audits/voice/invariant_exceptions.json]
+        [--exceptions audits/voice/invariant_exceptions.json] \\
+        [--receipts audits/press/edits]
 
 Interpretations recorded in audits/voice/invariants.md:
   I1 masks `#| fig-cap`, `#| tbl-cap`, `#| fig-alt`, and `#| fig-subcap` option lines,
@@ -18,6 +19,21 @@ Interpretations recorded in audits/voice/invariants.md:
      receipts instead.
   I4 ignores numerals that belong to a cross-reference ("Chapter 11", "Figure 13.2"):
      S2 is required to rewrite some chapter mentions, and I6 protects the link targets.
+
+Declared figure changes (press W2 phase 2, plan section J6). The edit lists under
+--receipts (default audits/press/edits) declare them; only applied receipts count.
+  I1 replays every applied `"kind": "figure-code"` receipt for a file on the base code
+     cells, in list order (old text to new text, once each), then allows one more
+     difference per page: the exact figure-style loader line for that page's depth,
+     `plt.style.use("../../code/dlbook/book.mplstyle")  # the book's figure style`
+     ("../code/..." for chapters/epilogue.qmd). Anything else that differs fails.
+  I8 lets an alt text change only when an applied F8 receipt for that file replaces
+     that exact alt text with the new one (chains of F8 receipts compose).
+  I11 (notebooks) drops the exporter's revision strings when the two exports name
+     different revisions, drops the notebook asset record for code/dlbook/book.mplstyle
+     and the support digest, and removes the exact loader line; a cell that still
+     differs passes only when replaying the unit's figure-code receipts on the before
+     cell reproduces the after cell. Plan cells are never normalized.
 """
 
 from __future__ import annotations
@@ -53,6 +69,93 @@ CROSS_REF_PHRASE_RE = re.compile(
 )
 TRAINABLE_RE = re.compile(r"https://shakeri-lab\.github\.io/opt-book/[^\s)>\]\"']*|Making It Trainable")
 EM_DASH = "\u2014"
+RECEIPTS_DIR = ROOT / "audits" / "press" / "edits"
+STYLE_ASSET = "code/dlbook/book.mplstyle"
+LOADER_TEMPLATE = 'plt.style.use("{prefix}code/dlbook/book.mplstyle")  # the book\'s figure style'
+LOADER_RE = re.compile(
+    r'^plt\.style\.use\("(?:\.\./)*code/dlbook/book\.mplstyle"\)  # the book\'s figure style$'
+)
+
+
+# ------------------------------------------------------------------------ receipts
+def loader_line(path: str) -> str:
+    """The one exact style-loader line for a page, by its directory depth."""
+    return LOADER_TEMPLATE.format(prefix="../" * len(Path(path).parent.parts))
+
+
+def declared_receipts(receipts_dir: Path | None) -> list[dict]:
+    """Every applied receipt in the edit lists, in list order (file name, then position)."""
+    if receipts_dir is None or not receipts_dir.is_dir():
+        return []
+    found = []
+    for path in sorted(receipts_dir.glob("*.json")):
+        data = json.loads(path.read_text(encoding="utf-8"))
+        found.extend(edit for edit in data.get("edits", []) if edit.get("applied"))
+    return found
+
+
+def figure_code_receipts(receipts: list[dict], path: str) -> list[dict]:
+    return [r for r in receipts if r.get("kind") == "figure-code" and r.get("file") == path]
+
+
+def replay(texts: list[str], receipts: list[dict]) -> tuple[list[str], list[str], list[str]]:
+    """Apply each receipt's old -> new once across a list of code texts, in order.
+
+    Returns (texts, ids replayed, problems). A receipt whose new text is already in
+    place (a base taken after it was applied) is skipped; one whose old text is
+    missing or ambiguous is a problem.
+    """
+    texts = list(texts)
+    replayed, problems = [], []
+    for receipt in receipts:
+        old, new = receipt["old"], receipt["new"]
+        hits = [(index, text.count(old)) for index, text in enumerate(texts) if old in text]
+        total = sum(count for _, count in hits)
+        in_place = any(new in text for text in texts) if new else False
+        if total == 0:
+            if not in_place:
+                problems.append(f"{receipt['id']}: old text not found at base")
+            continue
+        if total > 1:
+            problems.append(f"{receipt['id']}: old text found {total} times at base")
+            continue
+        index = hits[0][0]
+        if old in new and new in texts[index]:
+            continue  # an insertion that the base already carries
+        texts[index] = texts[index].replace(old, new, 1)
+        replayed.append(receipt["id"])
+    return texts, replayed, problems
+
+
+def without_loader(block: str, loader: str) -> tuple[str, int]:
+    lines = block.split("\n")
+    kept = [line for line in lines if line != loader]
+    return "\n".join(kept), len(lines) - len(kept)
+
+
+def alt_values(fragment: str) -> list[str]:
+    """Alt texts in a source fragment, parsed exactly as alt_texts() parses a page."""
+    values = [value for kind, value in caption_options(fragment) if kind == "fig-alt"]
+    return values + re.findall(r'fig-alt="([^"]*)"', fragment)
+
+
+def declared_alt_changes(receipts: list[dict], path: str) -> dict[str, set[str]]:
+    """Old alt text -> every alt text an applied F8 receipt chain turns it into."""
+    steps: dict[str, set[str]] = collections.defaultdict(set)
+    for receipt in receipts:
+        if receipt.get("rule") == "F8" and receipt.get("file") == path:
+            for old, new in zip(alt_values(receipt["old"]), alt_values(receipt["new"])):
+                steps[old].add(new)
+    closure: dict[str, set[str]] = {}
+    for start in steps:
+        seen, frontier = set(), [start]
+        while frontier:
+            for target in steps.get(frontier.pop(), ()):
+                if target not in seen:
+                    seen.add(target)
+                    frontier.append(target)
+        closure[start] = seen
+    return closure
 
 
 # ------------------------------------------------------------------------- sources
@@ -279,7 +382,56 @@ def counter_diff(before: collections.Counter, after: collections.Counter) -> tup
     return removed, added
 
 
-def source_invariants(base: str, files: list[str], exceptions: dict, checklist: Checklist) -> None:
+def code_invariant(
+    path: str, old_blocks: list[str], new_blocks: list[str], receipts: list[dict],
+    fails: dict, notes: dict,
+) -> None:
+    """I1: code cells equal the base cells with the file's applied figure-code receipts
+    replayed, plus at most one exact loader line (caption and alt options masked)."""
+    declared = figure_code_receipts(receipts, path)
+    expected, replayed, problems = replay(old_blocks, declared)
+    fails["I1"].extend(f"{path}: {problem}" for problem in problems)
+    if len(expected) != len(new_blocks):
+        fails["I1"].append(f"{path}: code blocks differ (count {len(expected)} -> {len(new_blocks)})")
+        return
+    loader = loader_line(path)
+    loaders = 0
+    differing = []
+    for index, (want, have) in enumerate(zip(expected, new_blocks)):
+        want, have = mask_caption_options(want), mask_caption_options(have)
+        if want == have:
+            continue
+        stripped, removed = without_loader(have, loader)
+        if removed and stripped == without_loader(want, loader)[0]:
+            loaders += removed - want.split("\n").count(loader)
+            continue
+        differing.append(index + 1)
+    if differing:
+        fails["I1"].append(
+            f"{path}: code blocks differ"
+            + (f" beyond the declared figure-code receipts (blocks {differing[:6]})" if declared else "")
+        )
+    if loaders > 1:
+        fails["I1"].append(f"{path}: {loaders} loader lines added; one per page")
+    if replayed:
+        changed = sum(1 for a, b in zip(old_blocks, expected) if a != b)
+        notes["I1"].append(
+            f"{path}: {changed} cell(s) differ under figure-code receipt(s) {', '.join(replayed)}"
+        )
+    if loaders == 1:
+        notes["I1"].append(f"{path}: the page's style loader line added")
+    changed_options = sum(
+        1 for a, b in zip(expected, new_blocks) if a != b and mask_caption_options(a) == mask_caption_options(b)
+    )
+    if changed_options:
+        notes["I1"].append(f"{path}: {changed_options} cell(s) changed only in caption/alt options")
+
+
+def source_invariants(
+    base: str, files: list[str], exceptions: dict, checklist: Checklist,
+    receipts: list[dict] | None = None,
+) -> None:
+    receipts = receipts or []
     fails = collections.defaultdict(list)
     notes = collections.defaultdict(list)
     exercise_total = {"before": 0, "after": 0}
@@ -296,14 +448,8 @@ def source_invariants(base: str, files: list[str], exceptions: dict, checklist: 
         old_blocks, old_prose = segment(old_body)
         new_blocks, new_prose = segment(new_body)
 
-        # I1 code cells (caption and alt option lines masked)
-        if [mask_caption_options(b) for b in old_blocks] != [mask_caption_options(b) for b in new_blocks]:
-            fails["I1"].append(f"{path}: code blocks differ")
-        changed_options = sum(
-            1 for a, b in zip(old_blocks, new_blocks) if a != b
-        )
-        if changed_options:
-            notes["I1"].append(f"{path}: {changed_options} cell(s) changed only in caption/alt options")
+        # I1 code cells (caption and alt option lines masked; declared figure code replayed)
+        code_invariant(path, old_blocks, new_blocks, receipts, fails, notes)
 
         # I3 math (math that an author-dictated sentence adds is declared, key "I3_added")
         if math_multiset(old_prose) != math_multiset(new_prose):
@@ -369,9 +515,13 @@ def source_invariants(base: str, files: list[str], exceptions: dict, checklist: 
 
         # I8 figures and alt text
         old_alts, new_alts = alt_texts(old, old_blocks), alt_texts(new, new_blocks)
+        alt_changes = declared_alt_changes(receipts, path)
         for a, b in zip(old_alts, new_alts):
             if a != b and EM_DASH not in a:
-                fails["I8"].append(f"{path}: alt text changed: {a[:60]!r}")
+                if b in alt_changes.get(a, ()):
+                    notes["I8"].append(f"{path}: alt text changed under F8: {a[:40]!r}")
+                else:
+                    fails["I8"].append(f"{path}: alt text changed: {a[:60]!r}")
         if len(old_alts) != len(new_alts):
             fails["I8"].append(f"{path}: alt text count {len(old_alts)} -> {len(new_alts)}")
         old_figs = re.findall(r"!\[[^\]]*\]\(([^)]+)\)", old_prose)
@@ -404,13 +554,16 @@ def source_invariants(base: str, files: list[str], exceptions: dict, checklist: 
             fails["I15"].append(f"{path}: Making It Trainable references changed")
 
     for invariant, name in (
-        ("I1", "code cells byte-identical (caption/alt options masked)"),
+        ("I1", "code cells byte-identical (caption/alt options masked"
+               + ("; declared figure-code receipts and loader line allowed)"
+                  if any("figure-code" in n or "loader" in n for n in notes["I1"]) else ")")),
         ("I3", "math multiset identical per file"),
         ("I4", "numeric tokens identical in classes A to E (cross-reference numerals excluded)"),
         ("I5", "anchor ids and labels identical; cross-volume pointer lines byte-identical"),
         ("I6", "link instances identical per target (declared S2 collapses excepted)"),
         ("I7", "heading sequence and levels identical (recap text under R1)"),
-        ("I8", "figure references and alt text identical (alt text only under R6)"),
+        ("I8", "figure references and alt text identical (alt text only under R6"
+               + (" or declared F8 receipts)" if notes["I8"] else ")")),
         ("I9", "exercise text and tags identical"),
         ("I10", "Sources identical"),
         ("I11", "Plan step text byte-identical"),
@@ -485,15 +638,100 @@ def without_source_lines(notebook: dict) -> dict:
     return notebook
 
 
-def notebook_invariant(before: Path, after: Path, checklist: Checklist) -> None:
+NOTEBOOK_PIN = "torch.set_num_threads(4)  # pinned: results depend on the CPU thread count"
+ASSETS_RE = re.compile(r"^_BOOK_ASSETS = (\[\]|\[$.*?^\])$", re.M | re.S)  # json.dumps(indent=4)
+
+
+def cell_source(cell: dict) -> str:
+    source = cell.get("source", "")
+    return "".join(source) if isinstance(source, list) else source
+
+
+def learner_fragment(text: str) -> str:
+    """A receipt fragment as the public notebook prints it (export_notebooks.learner_code
+    drops `#|` directives and the reference machine's thread pin)."""
+    return "\n".join(
+        line for line in text.split("\n")
+        if not line.startswith("#|") and line.strip() != NOTEBOOK_PIN
+    )
+
+
+def replay_cell(source: str, receipts: list[dict]) -> tuple[str, list[str]]:
+    """Replay figure-code receipts on one notebook cell, as printed or as learner code."""
+    used = []
+    for receipt in receipts:
+        for old, new in ((receipt["old"], receipt["new"]),
+                         (learner_fragment(receipt["old"]), learner_fragment(receipt["new"]))):
+            if old.strip() and source.count(old) == 1:
+                if not (old in new and new in source):
+                    source = source.replace(old, new, 1)
+                    used.append(receipt["id"])
+                break
+    return source, used
+
+
+def normalized_code(source: str) -> str:
+    """Drop the style asset record from the bootstrap and every exact loader line."""
+    def drop_style(match: re.Match[str]) -> str:
+        records = [r for r in json.loads(match.group(1)) if r.get("path") != STYLE_ASSET]
+        return "_BOOK_ASSETS = " + json.dumps(records, indent=4)
+
+    source = ASSETS_RE.sub(drop_style, source)
+    return "\n".join(line for line in source.split("\n") if not LOADER_RE.match(line))
+
+
+def normalized_notebook(notebook: dict) -> dict:
+    meta = notebook.get("metadata", {}).get("dlbook", {})
+    if isinstance(meta.get("assets"), list):
+        meta["assets"] = [r for r in meta["assets"] if r.get("path") != STYLE_ASSET]
+    for holder in [meta] + [cell.get("metadata", {}).get("dlbook", {}) for cell in notebook.get("cells", [])]:
+        if isinstance(holder.get("support"), dict):
+            holder["support"].pop("sha256", None)  # the support text itself is compared
+    for cell in notebook.get("cells", []):
+        if cell.get("cell_type") == "code":
+            cell["source"] = normalized_code(cell_source(cell))
+    return notebook
+
+
+def declared_notebook_changes(a: dict, b: dict, receipts: list[dict]) -> tuple[dict, dict, list[str]]:
+    """Normalize one notebook pair for the declared figure changes (I11, plan J6)."""
+    notes = []
+    rev_a = a.get("metadata", {}).get("dlbook", {}).get("revision")
+    rev_b = b.get("metadata", {}).get("dlbook", {}).get("revision")
+    if rev_a and rev_b and rev_a != rev_b:
+        b = json.loads(json.dumps(b).replace(rev_b, rev_a))
+        notes.append("revision")
+    source = a.get("metadata", {}).get("dlbook", {}).get("source", "")
+    declared = figure_code_receipts(receipts, source)
+    cells_a, cells_b = a.get("cells", []), b.get("cells", [])
+    if len(cells_a) == len(cells_b):
+        for cell_a, cell_b in zip(cells_a, cells_b):
+            if cell_a.get("cell_type") != "code" or cell_a.get("id") != cell_b.get("id"):
+                continue  # Plan and narrative cells are never normalized
+            before, after = cell_source(cell_a), cell_source(cell_b)
+            if before == after or not declared:
+                continue
+            replayed, used = replay_cell(before, declared)
+            if used and normalized_code(replayed) == normalized_code(after):
+                cell_a["source"] = after
+                notes.append(f"{cell_a.get('id')} under {', '.join(used)}")
+    return normalized_notebook(a), normalized_notebook(b), notes
+
+
+def notebook_invariant(
+    before: Path, after: Path, checklist: Checklist, receipts: list[dict] | None = None
+) -> None:
     """Byte identity, or a proof by diff that only cell `source_line` metadata moved.
 
     Prose edits shift the .qmd line of later cells, so the exporter's provenance
     metadata changes while every Plan step, code line, and cell stays identical.
+    Declared figure changes (press W2 phase 2) are normalized as the module docstring
+    describes: revision strings, the book.mplstyle asset record, the exact loader
+    line, and cells that the unit's applied figure-code receipts reproduce.
     """
     old = sorted(p.name for p in before.glob("*.ipynb"))
     new = sorted(p.name for p in after.glob("*.ipynb"))
-    identical, line_only, differing = [], [], []
+    identical, line_only, declared, differing = [], [], [], []
     for name in old:
         if not (after / name).is_file():
             differing.append(name)
@@ -503,15 +741,31 @@ def notebook_invariant(before: Path, after: Path, checklist: Checklist) -> None:
             identical.append(name)
             continue
         a, b = (without_source_lines(json.loads(x)) for x in (a_bytes, b_bytes))
-        (line_only if a == b else differing).append(name)
+        if a == b:
+            line_only.append(name)
+            continue
+        a, b, notes = declared_notebook_changes(a, b, receipts or [])
+        if a == b:
+            declared.append(f"{name} ({'; '.join(notes) or 'style asset or loader line only'})")
+        else:
+            differing.append(name)
     ok = old == new and not differing
-    checklist.add(
-        "I11",
-        ok,
+    detail = (
         f"{len(identical)} of {len(new)} regenerated notebooks byte-identical; "
         f"{len(line_only)} differ only in cell source_line metadata ({', '.join(line_only)}), "
         "with every cell source, plan step, and code line identical"
-        if ok else f"notebooks differ beyond source_line metadata: {differing or sorted(set(old) ^ set(new))}",
+    )
+    if declared:
+        detail = (
+            f"{len(identical)} of {len(new)} regenerated notebooks byte-identical; "
+            f"{len(line_only)} differ only in cell source_line metadata ({', '.join(line_only)}); "
+            f"{len(declared)} differ only in declared figure changes ({', '.join(declared)}), "
+            "with every plan step identical"
+        )
+    checklist.add(
+        "I11",
+        ok,
+        detail if ok else f"notebooks differ beyond source_line metadata: {differing or sorted(set(old) ^ set(new))}",
     )
 
 
@@ -578,7 +832,13 @@ def i18(base: str, checklist: Checklist) -> None:
     edits_by_page: dict[str, list[dict]] = {}
     for path in sorted((ROOT / "audits/voice/edits").glob("*.json")):
         data = json.loads(path.read_text())
-        edits_by_page[data["page"]] = [e for e in data["edits"] if e.get("applied")]
+        # Figure-code receipts (press W2 phase 2) change plotting code, not prose: I18
+        # never reads them, whichever edit list holds them, and a list of nothing else
+        # adds no page.
+        applied = [e for e in data["edits"] if e.get("applied")]
+        prose = [e for e in applied if e.get("kind") != "figure-code"]
+        if prose or not applied:
+            edits_by_page[data["page"]] = prose
     added = ledger.added_sentences(include_restored=True)
     failures, checked = [], 0
     for page, edits in edits_by_page.items():
@@ -658,16 +918,22 @@ def main() -> int:
     parser.add_argument("--notebooks-before", type=Path)
     parser.add_argument("--notebooks-after", type=Path)
     parser.add_argument("--exceptions", type=Path)
+    parser.add_argument(
+        "--receipts", type=Path, default=RECEIPTS_DIR,
+        help="edit lists whose applied figure-code and F8 receipts declare code and alt "
+        "changes (default: audits/press/edits)",
+    )
     args = parser.parse_args()
 
     files = args.files or manuscript_files()
     exceptions = json.loads(args.exceptions.read_text()) if args.exceptions else {}
+    receipts = declared_receipts(args.receipts)
     checklist = Checklist()
-    source_invariants(args.base, files, exceptions, checklist)
+    source_invariants(args.base, files, exceptions, checklist, receipts)
     if args.html_before and args.html_after:
         rendered_invariants(args.html_before, args.html_after, files, checklist)
     if args.notebooks_before and args.notebooks_after:
-        notebook_invariant(args.notebooks_before, args.notebooks_after, checklist)
+        notebook_invariant(args.notebooks_before, args.notebooks_after, checklist, receipts)
     i17(checklist)
     i18(args.base, checklist)
     checklist.print()

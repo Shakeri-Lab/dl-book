@@ -90,6 +90,28 @@ MAX_DIFF_LINES = 160
 MAX_FAILURE_REPORT_CHARS = 65_536
 
 
+# The figure style fails quietly in a notebook: matplotlib writes most of these to
+# stderr and carries on with its defaults. A missing style file is the exception: it
+# raises OSError ("... is not a valid package style ..."), which the executed notebook
+# stores as an error output, so error outputs are read too. Any reference cell (hidden
+# cells included) that shows one fails (press W2 phase 2, plan J4). The fontTools lines
+# that Type 42 subsetting of the Cmsy10 prime writes on the PDF path are known and
+# tolerated (ruling D3).
+STYLE_STDERR_PATTERNS = (
+    ("a font lookup fell back (findfont)", re.compile(r"findfont:")),
+    ("a style key was refused", re.compile(r"Bad key")),
+    ("a style value was refused", re.compile(r"Bad value in file")),
+    ("the style file was not found", re.compile(r"is not a valid package style")),
+    (
+        "a glyph is missing from the font",
+        re.compile(r"Glyph \d+\b.*\bmissing from (?:current )?font"),
+    ),
+    ("mathtext found no glyph", re.compile(r"does not have a glyph for")),
+)
+KNOWN_STDERR_RE = re.compile(r"'(?:created|modified)' timestamp seems very low")
+ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+
+
 # A notebook has no Quarto to resolve cross-references; the exporter writes them out.
 RAW_XREF_RE = re.compile(r"@(?:sec|fig|tbl|eq|lst)-[\w-]")
 
@@ -776,6 +798,47 @@ def visible_streams(
     return blocks, native_ordinals, stderr_by_surface
 
 
+def style_stderr_errors(document: dict[str, Any], label: str) -> list[str]:
+    """Fail any code cell, hidden or visible, whose stderr or error output shows the
+    figure style failing."""
+
+    errors: list[str] = []
+    for index, cell in enumerate(document.get("cells", [])):
+        if cell.get("cell_type") != "code":
+            continue
+        texts = []
+        for output in cell.get("outputs", []):
+            kind = output.get("output_type")
+            if kind == "stream" and output.get("name") == "stderr":
+                texts.append(output_text(output))
+            elif kind == "error":
+                traceback = output.get("traceback", [])
+                if isinstance(traceback, list):
+                    traceback = "\n".join(str(line) for line in traceback)
+                texts.append(
+                    f"{output.get('ename', '')}: {output.get('evalue', '')}\n"
+                    + ANSI_RE.sub("", str(traceback))
+                )
+        lines = [
+            line
+            for line in "\n".join(texts).splitlines()
+            if not KNOWN_STDERR_RE.search(line)
+        ]
+        for description, pattern in STYLE_STDERR_PATTERNS:
+            hit = next((line for line in lines if pattern.search(line)), None)
+            if hit is not None:
+                surface = cell.get("metadata", {}).get("dlbook", {})
+                where = (
+                    f"native cell {surface['native_ordinal']}"
+                    if isinstance(surface.get("native_ordinal"), int)
+                    else f"cell {index}"
+                )
+                errors.append(
+                    f"{label}: {where} output shows {description}: {hit.strip()[:200]}"
+                )
+    return errors
+
+
 def visible_stdout(
     document: dict[str, Any],
     label: str,
@@ -1158,6 +1221,12 @@ def main() -> int:
         reference_ordinals: list[int] | None = None
         reference_stderr: dict[str, str] = {}
         if executed_reference is not None:
+            errors.extend(
+                style_stderr_errors(
+                    executed_reference,
+                    (args.executed_reference_dir / f"{unit.slug}.ipynb").as_posix(),
+                )
+            )
             reference_blocks, reference_ordinals, reference_stderr = visible_streams(
                 executed_reference,
                 (

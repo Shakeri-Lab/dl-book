@@ -301,6 +301,80 @@ def workflow_job(text: str, name: str) -> str:
     return match.group(0) if match else ""
 
 
+# The target of each image: match "](" so that brackets inside a caption ([CLS]) never
+# end the caption early.
+FROZEN_FIGURE_RE = re.compile(r"\]\(([^()\s]+)\)")
+FROZEN_FIGURE_KINDS = (("figure-html", "html"), ("figure-pdf", "tex"))
+
+
+def frozen_figure_errors() -> list[str]:
+    """Freeze-current (hash == md5 of the page) and no orphan or missing figure file."""
+    import hashlib
+
+    errors: list[str] = []
+    freeze_root = ROOT / "_freeze"
+    units = sorted(
+        path.parent.parent for path in freeze_root.glob("**/execute-results/*.json")
+    )
+    for unit in dict.fromkeys(units):
+        rel = unit.relative_to(freeze_root)
+        page = ROOT / rel.with_suffix(".qmd")
+        if not page.is_file():
+            errors.append(f"_freeze/{rel.as_posix()}: freeze without a source page")
+            continue
+        digest = hashlib.md5(page.read_bytes()).hexdigest()
+        for kind, fmt in FROZEN_FIGURE_KINDS:
+            freeze_json = unit / "execute-results" / f"{fmt}.json"
+            if not freeze_json.is_file():
+                errors.append(
+                    f"_freeze/{rel.as_posix()}: {fmt}.json is missing; render the page "
+                    "with scripts/render_chapter.sh"
+                )
+                continue
+            frozen = json.loads(freeze_json.read_text())
+            if frozen.get("hash") != digest:
+                errors.append(
+                    f"{freeze_json.relative_to(ROOT)}: stale freeze (hash "
+                    f"{frozen.get('hash')} is not md5 {digest} of {page.relative_to(ROOT)}); "
+                    "re-render the page"
+                )
+            targets = FROZEN_FIGURE_RE.findall(frozen["result"]["markdown"])
+            named = {
+                target.rsplit("/", 1)[-1]
+                for target in targets
+                if f"_files/{kind}/" in target
+            }
+            if any("_files/figure-latex/" in target for target in targets):
+                # A `--to latex` render writes its figures to the git-ignored
+                # figure-latex folder; the PDF freeze must name figure-pdf files.
+                errors.append(
+                    f"{freeze_json.relative_to(ROOT)}: names figure-latex/ files, which git "
+                    "ignores; re-render the page with scripts/render_chapter.sh"
+                )
+            folder = unit / kind
+            present = (
+                {path.name for path in folder.iterdir() if path.is_file()}
+                if folder.is_dir()
+                else set()
+            )
+            for name in sorted(present - named):
+                errors.append(
+                    f"_freeze/{rel.as_posix()}/{kind}/{name}: orphan figure file named by "
+                    f"no {fmt}.json; run scripts/figure_ledger.py prune "
+                    f"{page.relative_to(ROOT)}"
+                )
+            for name in sorted(named - present):
+                errors.append(
+                    f"{freeze_json.relative_to(ROOT)}: names {kind}/{name}, which is missing"
+                )
+    for page in sorted((ROOT / "chapters").rglob("*.qmd")) + [ROOT / "index.qmd"]:
+        if "```{python}" in page.read_text():
+            rel = page.relative_to(ROOT).with_suffix("")
+            if not (freeze_root / rel / "execute-results").is_dir():
+                errors.append(f"{page.relative_to(ROOT)}: executable page without a freeze")
+    return errors
+
+
 def main() -> None:
     errors: list[str] = []
 
@@ -790,6 +864,29 @@ def main() -> None:
                 f"{html_freeze.relative_to(ROOT)}: supporting {stray} would publish "
                 "print figures on the HTML-only website",
             )
+    # Figures as data (press W2 phase 2): a freeze is current when its hash is the md5 of
+    # its page, and its figure folders hold exactly the files its JSON names. Quarto's
+    # freezer copies without deleting, so a re-executed page keeps stale figures (a PNG
+    # beside the SVG that replaced it) until `scripts/figure_ledger.py prune` removes them.
+    freeze_errors = frozen_figure_errors()
+    for message in freeze_errors:
+        fail(errors, message)
+    epfig_prefixes = [
+        kind.get("reference-prefix")
+        for kind in yaml.safe_load((ROOT / "_quarto.yml").read_text())
+        .get("crossref", {})
+        .get("custom", [])
+        if kind.get("key") == "epfig"
+    ]
+    appendix_e = ROOT / "chapters/appendices/a5-statistical-learning.qmd"
+    if "Figure E." in epfig_prefixes and appendix_e.is_file() and re.search(
+        r"(?:^#\|\s*label:\s*fig-|\{#fig-)", appendix_e.read_text(), re.MULTILINE
+    ):
+        fail(
+            errors,
+            "chapters/appendices/a5-statistical-learning.qmd: Appendix E defines a fig- "
+            "label, whose number would collide with the Epilogue's 'Figure E.' prefix",
+        )
     if not NOT_FOUND_PAGE.is_file():
         fail(errors, "404.html: branded not-found page is missing")
     else:
@@ -1085,6 +1182,7 @@ def main() -> None:
         "figure/table namespaces, the epilogue namespace and source contract, the Part III "
         "learnability callback, the complete temperature arc, and canonical-edition "
         "metadata, print cover, HTML-only site (no PDF offered or built in CI), "
+        "current freezes with orphan-free figure folders, "
         "optional-support, and collapsed-disclosure contracts; 30 non-Part HTML tool "
         "manifests (27 specific, 3 playlist-only)"
     )

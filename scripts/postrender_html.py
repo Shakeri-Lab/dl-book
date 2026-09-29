@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Add source-derived canonical and edition metadata to rendered HTML pages."""
+"""Add source-derived canonical and edition metadata and figure image sizes to rendered HTML."""
 
 from __future__ import annotations
 
@@ -49,6 +49,20 @@ SKIP_LINK_RE = re.compile(
     re.IGNORECASE,
 )
 BODY_OPEN_RE = re.compile(r"<body\b[^>]*>", re.IGNORECASE)
+FIGURE_IMAGE_RE = re.compile(
+    r"<img\b(?P<attrs>(?:[^>\"']|\"[^\"]*\"|'[^']*')*)>",
+    re.IGNORECASE,
+)
+ATTRIBUTE_RE = re.compile(
+    r"\s(?P<name>[\w:-]+)(?:\s*=\s*(?P<value>\"[^\"]*\"|'[^']*'|[^\s>]+))?",
+)
+SVG_ROOT_RE = re.compile(r"<svg\b[^>]*>", re.DOTALL)
+SVG_LENGTH_RE = re.compile(r"^\s*([0-9.]+)\s*(pt|px|in|mm|cm)?\s*$")
+SVG_UNIT_PT = {"pt": 1.0, None: 0.75, "px": 0.75, "in": 72.0, "mm": 72 / 25.4, "cm": 72 / 2.54}
+# The author's ruling D4 (September 29, 2026): an executed matplotlib SVG displays at
+# 2 CSS px per pt; any other SVG (the TikZ figures) at its natural 4/3 CSS px per pt.
+EXECUTED_SVG_PX_PER_PT = 2.0
+NATURAL_SVG_PX_PER_PT = 4 / 3
 
 
 def source_metadata() -> tuple[str, str, str, str]:
@@ -191,6 +205,83 @@ def add_missing_source_alts(
     return LABELED_FIGURE_IMAGE_RE.sub(replace, page_text)
 
 
+def svg_size_pt(path: Path) -> tuple[float, float]:
+    """Width and height of an SVG's root element in pt."""
+    head = path.read_text(encoding="utf-8", errors="replace")[:4000]
+    root = SVG_ROOT_RE.search(head)
+    if not root:
+        raise RuntimeError(f"{path}: no <svg> root element")
+    sizes = []
+    for name in ("width", "height"):
+        value = re.search(rf'\b{name}="([^"]+)"', root.group(0))
+        length = SVG_LENGTH_RE.match(value.group(1)) if value else None
+        if not length:
+            raise RuntimeError(f"{path}: <svg> {name} is not an absolute length")
+        sizes.append(float(length.group(1)) * SVG_UNIT_PT[length.group(2)])
+    return sizes[0], sizes[1]
+
+
+def image_size_px(path: Path, source: str) -> tuple[int, int]:
+    """The CSS size a figure image is drawn at (ruling D4 for SVG; pixels otherwise)."""
+    if path.suffix.lower() == ".svg":
+        width_pt, height_pt = svg_size_pt(path)
+        scale = (
+            EXECUTED_SVG_PX_PER_PT
+            if "/figure-html/" in source
+            else NATURAL_SVG_PX_PER_PT
+        )
+        return round(width_pt * scale), round(height_pt * scale)
+    from PIL import Image
+
+    with Image.open(path) as image:
+        return image.size
+
+
+def add_figure_dimensions(page_text: str, page: Path) -> str:
+    """Give every figure image integer width and height attributes (ruling D4).
+
+    Quarto writes them for retina PNGs but not for SVGs, whose lazy boxes then collapse to
+    0 x 0 until they load. The attributes also carry the drawn width that the phone
+    pan-strip rule reads (responsive-figures.html). Images that already carry both are
+    left alone, so the transform is idempotent.
+    """
+
+    def replace(match: re.Match[str]) -> str:
+        attrs = match.group("attrs")
+        values = {
+            item.group("name").lower(): (item.group("value") or "").strip("\"'")
+            for item in ATTRIBUTE_RE.finditer(attrs)
+        }
+        if "figure-img" not in values.get("class", "").split():
+            return match.group(0)
+        if values.get("width", "").isdigit() and values.get("height", "").isdigit():
+            return match.group(0)
+        source = html.unescape(values.get("src", ""))
+        path = (page.parent / source.split("#", 1)[0].split("?", 1)[0]).resolve()
+        if not source or re.match(r"^[a-z]+:", source) or not path.is_file():
+            # Left for scripts/audit_html_assets.py, which reports the missing file and
+            # the missing size; a print render must not fail on a stale HTML page here.
+            return match.group(0)
+        width, height = image_size_px(path, source)
+        if values.get("width", "").isdigit():
+            height = round(int(values["width"]) * height / width)
+            width = int(values["width"])
+        elif values.get("height", "").isdigit():
+            width = round(int(values["height"]) * width / height)
+            height = int(values["height"])
+        attrs = ATTRIBUTE_RE.sub(
+            lambda item: ""
+            if item.group("name").lower() in ("width", "height")
+            else item.group(0),
+            attrs,
+        )
+        trailing = "/" if attrs.rstrip().endswith("/") else ""
+        attrs = attrs.rstrip().rstrip("/").rstrip()
+        return f'<img{attrs} width="{width}" height="{height}"{trailing}>'
+
+    return FIGURE_IMAGE_RE.sub(replace, page_text)
+
+
 def move_skip_link_first(page_text: str) -> str:
     """Move Quarto's included skip link before its navigation controls."""
     if not SKIP_LINK_RE.search(page_text):
@@ -216,6 +307,7 @@ def transformed_page(
         raise RuntimeError(f"{page}: rendered HTML page has no closing head tag")
     updated = updated.replace("</head>", f"{link}\n</head>", 1)
     updated = add_missing_source_alts(updated, figure_alts)
+    updated = add_figure_dimensions(updated, page)
     updated = move_skip_link_first(updated)
     return add_stamp(updated, stamp)
 

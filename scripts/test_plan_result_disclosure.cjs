@@ -14,7 +14,31 @@ const root = path.resolve(__dirname, "..");
 const script = fs.readFileSync(path.join(root, "plan-code-interactions.html"), "utf8")
   .replace(/^<script>\s*/, "").replace(/\s*<\/script>\s*$/, "");
 
-function panel(id, withResults = true) {
+const pixel = "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=";
+
+function figureMarkup(id, kind) {
+  if (kind === "none") return "";
+  if (kind === "labelled") {
+    // Quarto 1.10's form for a labelled figure cell: the float and its caption sit
+    // inside the display output, and the #fig- anchor is the float's id.
+    return `<div class="cell-output cell-output-display" id="${id}-figure">
+      <div id="fig-${id}" class="quarto-float quarto-figure quarto-figure-center anchored">
+      <figure class="quarto-float quarto-float-fig figure"><div aria-describedby="fig-${id}-caption">
+      <img src="${pixel}" alt="A labelled figure" class="figure-img" width="10" height="5"></div>
+      <figcaption id="fig-${id}-caption">Figure 1.1: A labelled figure.</figcaption></figure></div></div>`;
+  }
+  if (kind === "subfigures") {
+    return `<div id="fig-${id}" class="quarto-float quarto-figure anchored" data-kind="subfigures">
+      <figure class="quarto-float quarto-float-fig figure"><div>
+      <div class="cell-output cell-output-display" id="${id}-sub-a"><img src="${pixel}" alt="Panel a"></div>
+      <div class="cell-output cell-output-display" id="${id}-sub-b"><img src="${pixel}" alt="Panel b"></div>
+      </div><figcaption>Figure 1.2: Two panels.</figcaption></figure></div>`;
+  }
+  return `<div class="cell-output cell-output-display" id="${id}-figure"><img alt="An existing figure" src="${pixel}"></div>`;
+}
+
+function panel(id, withResults = true, { figure = "plain", mixed = false } = {}) {
+  const figureHtml = figureMarkup(id, figure);
   return `<div class="plan-code" id="${id}">
     <div class="plan"><ol><li>Construct the witness.</li>
       <li>Measure the difference.</li><li>Audit the same difference.</li></ol></div>
@@ -26,16 +50,19 @@ function panel(id, withResults = true) {
         <span id="${id}-line4">print(x)</span>
       </code></pre><button class="code-copy-button">Copy</button></div>
       ${withResults ? `<div class="cell-output cell-output-stdout" id="${id}-stdout"><pre>verified: 1</pre></div>
+      ${mixed ? figureHtml : ""}
       <div class="cell-output cell-output-stderr"><pre>expected warning</pre></div>
       <div class="cell-output cell-output-display"><pre>tensor([1])</pre></div>` : ""}
-      <div class="cell-output cell-output-display" id="${id}-figure"><img alt="An existing figure" src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs="></div>
+      ${mixed ? "" : figureHtml}
       <div class="cell-output cell-output-display" id="${id}-table"><table><tr><td>1</td></tr></table></div>
     </div></div>`;
 }
 
-function fixture({ untilFound = true, javascript = true, proseWrap = false } = {}) {
+function fixture({ untilFound = true, javascript = true, proseWrap = false, figure = "plain",
+  mixed = false, secondFigure = "plain" } = {}) {
   const dom = new JSDOM(`<!doctype html><html><head></head><body>
-    ${panel("first")}${panel("second", false)}</body></html>`, {
+    ${panel("first", true, { figure, mixed })}${panel("second", false, { figure: secondFigure })}
+    <p id="after-panels">Prose after the panels.</p></body></html>`, {
     runScripts: "outside-only", pretendToBeVisual: true,
   });
   const { window } = dom;
@@ -52,7 +79,7 @@ function fixture({ untilFound = true, javascript = true, proseWrap = false } = {
   window.getComputedStyle = (element) => computed(element);
   const originalOutput = window.document.getElementById("first-stdout");
   const originalMarkup = originalOutput.outerHTML;
-  const originalFigureParent = window.document.getElementById("first-figure").parentElement;
+  const originalFigureParent = window.document.getElementById("first-cell");
   if (proseWrap) originalFigureParent.classList.add("prose-output-wrap");
   if (javascript) window.eval(script);
   const first = window.document.getElementById("first");
@@ -73,7 +100,21 @@ function expectCodeClosed(context) {
   }
 }
 
-test("both disclosures start closed; plain outputs move once, rich figures stay put", () => {
+function expectFigureBelow(context, panelElement, unitId) {
+  const unit = context.window.document.getElementById(unitId);
+  const region = panelElement.nextElementSibling;
+  assert(region.classList.contains("plan-code-figures"));
+  assert.equal(unit.parentElement, region);
+  assert.equal(unit.closest(".plan-code"), null);
+  for (let node = unit; node; node = node.parentElement) {
+    assert.equal(node.getAttribute("hidden"), null);
+    assert.equal(node.getAttribute("aria-hidden"), null);
+  }
+  assert(!unit.classList.contains("plan-code-until-found-output"));
+  return region;
+}
+
+test("both disclosures start closed; plain outputs move once, figures wait below, tables stay", () => {
   const context = fixture();
   const { first, second, results, originalOutput, originalFigureParent, window } = context;
   expectCodeClosed(context);
@@ -85,7 +126,9 @@ test("both disclosures start closed; plain outputs move once, rich figures stay 
   assert.equal(window.document.querySelectorAll("#first-stdout").length, 1);
   assert.equal(region.querySelector("#first-stdout"), originalOutput);
   assert.equal(originalOutput.textContent, "verified: 1");
-  assert.equal(window.document.getElementById("first-figure").parentElement, originalFigureParent);
+  expectFigureBelow(context, first, "first-figure");
+  expectFigureBelow(context, second, "second-figure");
+  assert.equal(window.document.querySelectorAll("#first-figure").length, 1);
   assert.equal(window.document.getElementById("first-table").parentElement, originalFigureParent);
   assert.equal(second.querySelector(".plan-code-reveal-results"), null);
   for (const control of [context.all, ...context.steps]) {
@@ -125,31 +168,30 @@ test("Show all retains its legacy behavior while results can close independently
   assert.deepEqual([...context.first.querySelectorAll(".cell-output")].map(output => output.id),
     ["first-stdout", "plan-code-0-output-1", "plan-code-0-output-2", "first-figure", "first-table"]);
   assert.equal(context.first.querySelector(".plan-code-results").childElementCount, 0);
+  assert.equal(context.first.nextElementSibling.childElementCount, 0);
   context.results.click();
   assert(context.first.classList.contains("plan-code-showing-all"));
   assert.equal(context.results.getAttribute("aria-expanded"), "false");
   context.all.click();
   expectCodeClosed(context);
   assert.equal(context.originalOutput.parentElement.className, "plan-code-results");
+  expectFigureBelow(context, context.first, "first-figure");
   assert.equal(context.all.textContent, "Show all code");
   context.dom.window.close();
 });
 
 test("mixed stdout/figure/stdout sequences and original nodes survive every round trip", () => {
-  const context = fixture();
+  // A mixed output cell: printed, figure, printed, printed, then a table.
+  const context = fixture({ mixed: true });
   const { window, first } = context;
-  // The first fixture supplies three printed nodes before its figure. Move the
-  // figure between their origin placeholders to represent a mixed output cell.
-  const figure = window.document.getElementById("first-figure");
-  const origins = [...window.document.getElementById("first-cell").childNodes]
-    .filter(node => node.nodeType === window.Node.COMMENT_NODE);
-  origins[1].before(figure);
   for (let turn = 0; turn < 3; turn += 1) {
     context.results.click();
     expectCodeClosed(context);
+    expectFigureBelow(context, first, "first-figure");
     context.all.click();
     assert.deepEqual([...first.querySelectorAll(".cell-output")].map(output => output.id),
-      ["first-stdout", "first-figure", "plan-code-0-output-1", "plan-code-0-output-2", "first-table"]);
+      ["first-stdout", "first-figure", "plan-code-0-output-2", "plan-code-0-output-3", "first-table"]);
+    assert.equal(first.nextElementSibling.childElementCount, 0);
     assert.equal(window.document.querySelectorAll("#first-stdout").length, 1);
     assert.equal(window.document.getElementById("first-stdout"), context.originalOutput);
     context.all.click();
@@ -230,5 +272,81 @@ test("without JavaScript the canonical code/output markup is unchanged and visib
   assert.equal(context.originalOutput.parentElement.id, "first-cell");
   assert.equal(context.first.querySelectorAll("[hidden]").length, 0);
   assert.equal(context.first.querySelector("pre.sourceCode").getAttribute("tabindex"), "0");
+  assert.equal(context.window.document.getElementById("first-figure").parentElement.id, "first-cell");
+  assert.equal(context.window.document.querySelectorAll(".plan-code-figures").length, 0);
+  context.dom.window.close();
+});
+
+test("D8: a labelled figure and caption stay visible below the closed panel, anchor included", () => {
+  const context = fixture({ figure: "labelled" });
+  const { window, first, results, originalOutput } = context;
+  const doc = window.document;
+  const float = doc.getElementById("fig-first");
+  expectCodeClosed(context);
+  const region = expectFigureBelow(context, first, "first-figure");
+  assert.equal(float.closest(".plan-code-figures"), region);
+  assert.equal(float.closest("[hidden], [aria-hidden='true'], .plan-code"), null);
+  assert.equal(float.querySelector("figcaption").textContent, "Figure 1.1: A labelled figure.");
+  assert.equal(region.previousElementSibling, first);
+  // Printed stdout keeps today's place: behind Reveal results, closed.
+  assert.equal(results.getAttribute("aria-expanded"), "false");
+  assert.equal(originalOutput.parentElement.className, "plan-code-results");
+  assert.equal(originalOutput.getAttribute("hidden"), "until-found");
+  for (const control of [results, context.all, ...context.steps]) {
+    assert(!control.getAttribute("aria-controls").split(" ").includes("first-figure"));
+  }
+  // A plan step opens the full listing: the figure returns under its source, after
+  // the printed result, and the step highlight is unchanged.
+  context.steps[2].click();
+  assert.deepEqual([...first.querySelectorAll(".plan-code-line-active")].map(x => x.id),
+    ["first-line3", "first-line4"]);
+  assert.equal(doc.getElementById("first-figure").parentElement.id, "first-cell");
+  assert.deepEqual([...first.querySelectorAll(".cell-output")].map(output => output.id),
+    ["first-stdout", "plan-code-0-output-1", "plan-code-0-output-2", "first-figure", "first-table"]);
+  assert.equal(region.childElementCount, 0);
+  assert.equal(first.nextElementSibling, region);
+  context.steps[2].click();
+  expectCodeClosed(context);
+  expectFigureBelow(context, first, "first-figure");
+  // Native search opens the code; Escape closes it and the figure waits below again.
+  doc.getElementById("first-line2").dispatchEvent(new window.Event("beforematch", { bubbles: true }));
+  assert.equal(first.dataset.activePlanStep, "1");
+  assert.equal(doc.getElementById("first-figure").parentElement.id, "first-cell");
+  doc.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape" }));
+  expectCodeClosed(context);
+  expectFigureBelow(context, first, "first-figure");
+  // Opening another panel leaves this panel's figure in view.
+  context.second.querySelector(".plan-step-button").click();
+  expectFigureBelow(context, first, "first-figure");
+  assert.equal(doc.getElementById("second-figure").parentElement.id, "second-cell");
+  context.dom.window.close();
+});
+
+test("D8: subfigures travel as one float; a panel without figures gains no region", () => {
+  const context = fixture({ figure: "subfigures", secondFigure: "none" });
+  const { window, first, second } = context;
+  const doc = window.document;
+  const region = expectFigureBelow(context, first, "fig-first");
+  assert.equal(region.querySelectorAll(".cell-output-display").length, 2);
+  assert.equal(region.querySelector("figcaption").textContent, "Figure 1.2: Two panels.");
+  assert.equal(doc.getElementById("first-sub-a").getAttribute("hidden"), null);
+  assert.equal(second.nextElementSibling.id, "after-panels");
+  assert.equal(doc.querySelectorAll(".plan-code-figures").length, 1);
+  context.all.click();
+  assert.equal(doc.getElementById("fig-first").parentElement.id, "first-cell");
+  assert.equal(region.childElementCount, 0);
+  context.all.click();
+  expectFigureBelow(context, first, "fig-first");
+  context.dom.window.close();
+});
+
+test("D8: figures stay visible without beforematch support too", () => {
+  const context = fixture({ untilFound: false, figure: "labelled" });
+  expectCodeClosed(context);
+  expectFigureBelow(context, context.first, "first-figure");
+  context.steps[0].click();
+  assert.equal(context.window.document.getElementById("first-figure").parentElement.id, "first-cell");
+  context.steps[0].click();
+  expectFigureBelow(context, context.first, "first-figure");
   context.dom.window.close();
 });

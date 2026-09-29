@@ -73,12 +73,18 @@ class SupportAssetParser(HTMLParser):
         self.main_text_parts: list[str] = []
         self.main_images: list[tuple[str, str | None]] = []
         self.main_image_loading: list[dict[str, str | None]] = []
+        self.figure_images: list[tuple[str, str | None, str | None]] = []
 
     def handle_starttag(
         self, tag: str, attrs: list[tuple[str, str | None]]
     ) -> None:
         values = dict(attrs)
         classes = (values.get("class") or "").split()
+        if tag == "img" and "figure-img" in classes:
+            self.figure_images.append(
+                (values.get("src") or "<image without src>", values.get("width"),
+                 values.get("height"))
+            )
         if tag == "aside" and "chapter-tools" in classes:
             self.chapter_tools.append(
                 {"tag": tag, "aria_label": values.get("aria-label")}
@@ -722,6 +728,24 @@ def main_image_alt_errors(
     return errors
 
 
+def figure_image_size_errors(
+    page_name: str, images: list[tuple[str, str | None, str | None]]
+) -> list[str]:
+    """Every figure image reserves its box: integer width and height (ruling D4).
+
+    Quarto writes them for retina PNGs only; scripts/postrender_html.py adds them to SVG
+    figures (2 CSS px per pt for executed figures, natural size for TikZ). Without them a
+    lazy SVG collapses to 0 x 0 until it loads, and the phone pan-strip rule has no drawn
+    width to read.
+    """
+    return [
+        f"{page_name}: figure image lacks integer width and height "
+        f"(width={width!r}, height={height!r}): {source}"
+        for source, width, height in images
+        if not (width or "").isdigit() or not (height or "").isdigit()
+    ]
+
+
 def main_image_loading_errors(
     page_name: str, images: list[dict[str, str | None]]
 ) -> list[str]:
@@ -985,6 +1009,8 @@ def main() -> int:
         )
     notebook_linked_pages = 0
     notebook_placeholder_pages = 0
+    figure_errors: list[str] = []
+    referenced_images: set[Path] = set()
     for page in pages:
         page_text = page.read_text(encoding="utf-8")
         html_parser = SupportAssetParser()
@@ -995,6 +1021,8 @@ def main() -> int:
                 continue
             resolved = asset.resolve()
             checked.add(resolved)
+            if kind in ("image", "image source"):
+                referenced_images.add(resolved)
             if not resolved.is_file():
                 missing.setdefault((kind, resolved), []).append(page.relative_to(root))
 
@@ -1187,6 +1215,9 @@ def main() -> int:
         accessibility_errors.extend(
             main_image_alt_errors(page_name, html_parser.main_images)
         )
+        figure_errors.extend(
+            figure_image_size_errors(page_name, html_parser.figure_images)
+        )
         if page_name in expected_source_pages:
             accessibility_errors.extend(
                 main_image_loading_errors(
@@ -1311,6 +1342,19 @@ def main() -> int:
             f"notebook placeholders, found {notebook_placeholder_pages}"
         )
 
+    # Quarto's freezer copies figure folders without deleting, so a re-executed page can
+    # ship its old files beside the new ones (a PNG beside the SVG that replaced it).
+    for stale in sorted(
+        path
+        for path in root.rglob("*")
+        if path.is_file() and "figure-html" in path.relative_to(root).parts
+    ):
+        if stale.resolve() not in referenced_images:
+            figure_errors.append(
+                f"{stale.relative_to(root)}: figure file referenced by no page; prune the "
+                "freeze with scripts/figure_ledger.py and re-render"
+            )
+
     for advisory in advisories:
         print(advisory)
 
@@ -1321,6 +1365,7 @@ def main() -> int:
         or navigation_errors
         or rendered_content_errors
         or accessibility_errors
+        or figure_errors
         or publication_errors
     ):
         for error in source_contract_errors:
@@ -1347,6 +1392,8 @@ def main() -> int:
             print(error)
         for error in accessibility_errors:
             print(error)
+        for error in figure_errors:
+            print(error)
         for error in publication_errors:
             print(error)
         print(
@@ -1354,8 +1401,9 @@ def main() -> int:
             f"{len(missing)} missing unique HTML support asset(s), "
             f"{len(metadata_errors)} metadata/renderer violation(s), "
             f"{len(navigation_errors)} navigation/disclosure violation(s), "
-            f"{len(rendered_content_errors)} rendered-content leak(s), and "
-            f"{len(accessibility_errors)} image-alt violation(s), and "
+            f"{len(rendered_content_errors)} rendered-content leak(s), "
+            f"{len(accessibility_errors)} image-alt violation(s), "
+            f"{len(figure_errors)} figure-size/stale-figure violation(s), and "
             f"{len(publication_errors)} canonical/stamp/skip-link violation(s) across "
             f"{len(pages)} page(s)"
         )
@@ -1371,6 +1419,7 @@ def main() -> int:
         f"{notebook_linked_pages} published notebook routes with "
         f"{notebook_placeholder_pages} honest unavailable placeholders, "
         "canonical URLs, edition stamps, skip links, image alternatives, "
+        "sized figure images with no stale figure file, "
         "no PDF file or on-site PDF link, "
         f"and leak-free rendered content; {len(advisories)} cross-volume "
         "advisory warning(s))"

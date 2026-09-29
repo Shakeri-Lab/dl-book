@@ -425,6 +425,13 @@ Rules:
   and accessibility trees while the panel is closed, then restore them on reveal.
   Browsers without `beforematch` keep the ordinary closed disclosure. PDF keeps the
   same static numbered mapping without browser-only controls.
+- **A figure the cell draws stays in view** (ruling D8, September 2026). While the
+  Code region is closed, each figure output (with its float, caption, and `#fig-`
+  anchor) waits in a region directly below the panel, so a reference to it lands on a
+  visible figure. Opening the code by a step or **Show all code** returns the figure to
+  its place under the executed source; closing it moves the figure back below. Printed
+  stdout keeps its own **Reveal results** disclosure, and tables stay with the code.
+  HTML only; the print panel is unchanged.
 - **Fusion is a teaching moment.** When one line implements two plan steps
   (`# [2][5]`), say so in the prose beneath: the gap between a sequential plan
   and a vectorised kernel is where tensor bugs live.
@@ -446,14 +453,73 @@ Print has a five-inch text block, where two columns of Python would wrap into
 noise, so `filters/plan-code.lua` always stacks them — the plan becomes a ruled,
 breakable `planbox` above the code. The markers read identically in both.
 
+### Figure style (the author's rulings, September 29, 2026)
+
+Executed figures are data, drawn once at their printed size. The rulings of press W2
+phase 2, in brief:
+
+- **D1 Width and weight.** A data figure is authored at print width: 4.6 in (117 mm)
+  for a multi-panel figure, 3.07 in (78 mm) for a single small panel (a legend or an
+  image beside its legend may justify 4.6 in for one panel). Text inherits the style:
+  no `fontsize` literal from 8 to 10, nothing under 8 pt except math sub- and
+  superscripts. Strokes are 1.0 pt for data, 1.6 pt for an emphasized series, 0.6 pt for
+  reference lines and guides. Relayouts that make a figure fit (a two-over-one grid,
+  titles broken at hyphens, a moved legend, explicit ticks, constrained layout for a
+  colour bar) touch plotting lines only.
+- **D2 Colour.** Categorical series take grey inks (#1A1A1A, #4D4D4D, #7A7A7A,
+  #949494), each with its own linestyle (-, --, :, -.) or marker (o, s, ^, D). Where
+  three or more series overlap, the colour-blind-safe teal #0EA1A1 and magenta #9A0669
+  may replace two inks; linestyles still carry every series, and teal is never text,
+  never dotted, and never under 1.0 pt. Role colours (`tex/macros.tex`) mark roles only.
+  No two series in one axes share both linestyle and width; every multi-series axes
+  survives grayscale by linestyle or marker. Label text is #1A1A1A or #4D4D4D.
+- **D3 Type.** DejaVu Sans: 9 pt labels and titles, 8 pt ticks and legends; mathtext
+  `dejavusans`. Only fonts matplotlib bundles.
+- **D4 Web size.** A matplotlib SVG displays at 2 CSS px per pt, a TikZ SVG at its
+  natural 4/3 px per pt; `scripts/postrender_html.py` writes both as width and height,
+  and every figure image carries them.
+- **D5 Formats.** SVG for every figure in HTML, PDF for LaTeX; image content inside a
+  figure is embedded at 300 ppi (no `dpi=` in the code).
+- **D6 The loader.** One line per page,
+  `plt.style.use("../../code/dlbook/book.mplstyle")  # the book's figure style`
+  (`../code/...` for the Epilogue), placed by the placement table: in the page's setup
+  cell, which readers see on 14 pages and which is hidden on 10 (the Epilogue, the three
+  interludes, `13-attention.qmd`, `14-self-attention-transformer.qmd` and
+  `17-peft-quantization.qmd` to `20-multimodal.qmd`); `05-backpropagation.qmd` puts it
+  in its first visible figure cell, and `15-bert-pretraining.qmd` in the hidden figure
+  cell `fig-visibility-corruption`, never in a lab cell. So the line is visible on 15
+  pages and hidden on 11. It stands unindented in an evaluated cell, and nothing else
+  on the page sets rcParams. The notebook manifest ships the style file with the
+  page's unit in the same commit.
+- **D7 References.** Every figure is cited in running prose (`@fig-`, `@epfig-`), never
+  in Plan steps, exercises, Sources, or headings, with wording that varies across
+  chapters.
+- **D8 Plan → Code figures.** A figure drawn by a visible Plan → Code cell stays visible
+  below the panel while its code is collapsed.
+- **D9 Panel letters.** Wherever a caption would say left, right, top, or bottom, each
+  panel title starts "(a)", "(b)" at the left (`ax.set_title("(a) ...", loc="left")`)
+  and the caption uses the letters.
+- **D10 Colour maps.** Keep the existing maps, but never two role-hue maps for two
+  categories (one grey map with direct labels instead), and give a signed map a colour
+  bar when its caption's colour words are its only key.
+
+`scripts/audit_figure_style.py` checks the style file, the loader, the notebook asset,
+and the data-figure conventions (`audits/press/w2p2/data_figures.txt`, whose feeders
+column traces colours bound outside a figure's own cell);
+`scripts/figure_workbench.py` pre-tests a page's figures and lints them, and
+`scripts/contact_sheet.py` draws them at print size in colour, in grayscale, and as a
+deuteranope sees them.
+
 ### Responsive wide figures
 
 Vector artwork should own a valid SVG viewBox and normally scale fluidly with the
 reading column. Uniform scaling cannot repair collisions inside a diagram; correct
 those in the TikZ or plotting source first. In HTML, `responsive-figures.html`
-identifies unusually wide figure media (at least 600 intrinsic pixels and a 2.8:1
-aspect ratio). Below phone width it preserves a readable vector size inside a local,
-keyboard-accessible horizontal inspection strip while the caption and page reflow.
+identifies unusually wide figure media: a 2.8:1 aspect ratio and, for an executed
+figure, a drawn width (its width attribute) of at least 300 CSS px, or, for any other
+figure, at least 600 intrinsic pixels. Below phone width it preserves a readable
+vector size inside a local, keyboard-accessible horizontal inspection strip while the
+caption and page reflow.
 Use `#| classes: responsive-wide-opt-in` for a dense multi-panel figure whose labels
 need the same treatment even though its outer aspect ratio falls below the automatic
 threshold. Ordinary plots keep scaling without a pan region. The derived PDF remains
