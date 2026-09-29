@@ -769,10 +769,11 @@ test('integration: the excerpt is HTML-only, manifest-driven, and declared in th
   const chapter = chapterSource(NAME);
   assert.equal(chapter.split('\n').filter(line => line === '#| label: fig-lstm-conveyor').length, 1, 'the anchor cell appears exactly once');
   assert(chapter.indexOf('{#eq-lstm}') < chapter.indexOf('#| label: fig-lstm-conveyor'), 'the equation this panel draws precedes the anchor');
-  // Chapter 10 carries two excerpts; both must still be declared, on different anchors.
+  // Chapter 10 carries four excerpts; all must still be declared, on different anchors.
   const here = manifest.scenes.filter(other => other.qmd === scene.qmd);
-  assert.deepEqual(here.map(other => other.id).sort(), ['gate-product-excerpt', 'lstm-valves-excerpt']);
-  assert.equal(new Set(here.map(other => other.anchor.target)).size, 2, 'two panels in one chapter need two anchors');
+  assert.deepEqual(here.map(other => other.id).sort(),
+    ['detach-cut-excerpt', 'gate-product-excerpt', 'gru-blend-excerpt', 'lstm-valves-excerpt']);
+  assert.equal(new Set(here.map(other => other.anchor.target)).size, 4, 'four panels in one chapter need four anchors');
   assert.equal(read(`${scene.scene}/panel.html`).includes('data-playback='), scene.transport === 'shared');
   assert(manifest.scenes.some(other => other.id === NAME));
 });

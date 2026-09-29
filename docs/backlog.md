@@ -319,10 +319,33 @@ re-derives them. The briefs live in the author's Box folder `Teaching/6050/dl-bo
   - Chapter 14's other scenes duplicate `kernel-weighting` or the chapter's figures, are
     linear enough that two frames carry them (`SignedWeights`), repeat Chapter 1's
     bias-variance figure, or are results tables.
-- **Chapters 11 and 12, scoped September 28, not yet built.** Four replays (`detach-cut`,
-  `decoder-family`, `flat-line`, `gru-blend`), brief `dl-book-four-replays-prompt.md`. They
-  share registration files with every other batch, so build one batch at a time on current
-  `main`.
+- **Chapters 11 and 12, scoped September 28, built and shipped September 29.** Four
+  replays (`detach-cut`, `decoder-family`, `flat-line`, `gru-blend`), brief
+  `dl-book-four-replays-prompt.md`; see the next section.
+
+#### Chapters 11 and 12 (September 29, 2026)
+
+The four scoped picks shipped together, one build agent per scene, with the registrations
+kept in one place.
+
+- [`detach-cut`](detach-cut-excerpt.md), Chapter 12 (`10-sequences-rnn.qmd`), closes
+  "Training with a finite horizon": the value crosses a detached cut, the gradient stops
+  there, and reset passes neither. Declared schematic of six steps; no control.
+- [`gru-blend`](gru-blend-excerpt.md), Chapter 12, under the GRU diagram: halving the keep
+  lands the new state at the midpoint, 0.55. Declared toy (0.80, 0.30); one control, the
+  keep. It avoids the memory test's prediction and Exercise 3's named wrong answer.
+- [`decoder-family`](decoder-family-excerpt.md), Chapter 11 (`making-pca-learnable.qmd`),
+  before the decoder-ambiguity cell: every multiple of the vanishing term keeps zero error
+  at the codes while z = 0.5 slides along 0.25 − 0.375a. One control, the multiple.
+- [`flat-line`](flat-line-excerpt.md), Chapter 11, closing "What if the map could bend?":
+  a line turned about the curve's center leaves L = 0.098 flat and more at every tilt. One
+  control, the tilt.
+- Author's revisions after the first look: gradient rings and a one-way gate at the verdicts
+  (`detach-cut`), write left and keep right with an unfilled dial (`gru-blend`), and the
+  family's envelope band (`decoder-family`). Declined, with reasons in the receipts: token
+  tints, orange shares, a second control, a sampling prior, a digit panel and a VAE toggle.
+- Candidate for later: noisy codes forcing a smooth decoder, the VAE toggle's idea, as its
+  own scene in Chapter 22's "Put probability around the code" (`19-generative.qmd`).
 
 ### Shared acceptance contract
 

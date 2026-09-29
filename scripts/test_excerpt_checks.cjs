@@ -434,6 +434,55 @@ const expected = {
     const row = Array.from({length: n}, (_, j) => A[bank][order[j]].toFixed(2)).join(', ');
     return [`(${heavy.join(', ')})`, `(${own.join(', ')})`, row];
   },
+  // The check runs the same cut rule for nine steps: with cuts every `chunk` steps, the
+  // chunk holding step 9 starts at step 7, so step 9's loss reaches step 7 and stops short
+  // of step 5, whose value still arrives through the carried state.
+  'detach-cut': root => {
+    const chunk = Number(root.dataset.chunk), steps = Number(root.dataset.steps);
+    assert.equal(steps % chunk, 0, 'the scene cuts its stream into whole chunks');
+    const loss = 9, earliest = loss - ((loss - 1) % chunk);
+    assert.equal(earliest, 7);
+    assert(5 < earliest, 'step 5 sits behind the cut');
+    return [`Step ${earliest}, yes`, 'step 5, no', `after steps ${chunk}, ${2 * chunk} and ${3 * chunk}`];
+  },
+  // The check extends one blend to every step: the keep and the write are shares of one
+  // whole, so the new state lies between the old state and the candidate, and a state that
+  // starts at 0 with every candidate inside tanh's range never leaves it.
+  'gru-blend': root => {
+    const [lo, hi] = nums(root.dataset.range);
+    const old = Number(root.dataset.old), candidate = Number(root.dataset.candidate), keep = Number(root.dataset.keep);
+    assert.deepEqual([lo, hi], [-1, 1], 'the line is tanh\'s range');
+    const blend = keep * old + (1 - keep) * candidate;
+    assert(Math.abs(blend - 0.55) < 1e-12, 'the scene lands at 0.55');
+    for (let z = 0; z <= 1; z += 0.05) {
+      const h = z * old + (1 - z) * candidate;
+      assert(h >= Math.min(old, candidate) - 1e-12 && h <= Math.max(old, candidate) + 1e-12);
+    }
+    return ['No.', `inside (${minus(String(lo))}, ${hi})`];
+  },
+  // The check observes the draw itself: the added term is not zero there, so only the zero
+  // multiple still fits all four codes, while a term with a fourth root keeps the family open.
+  'decoder-family': root => {
+    const draw = Number(root.dataset.draw), codes = nums(root.dataset.codes);
+    const term = z => z * (z * z - 1);
+    // + 0 turns the -0 that z(z^2 - 1) yields at z = -1 and z = 0 into the 0 strict equality wants.
+    codes.forEach(z => assert.equal(term(z) + 0, 0, `the term vanishes at the code ${z}`));
+    assert.equal(term(draw), -0.375);
+    [...codes, draw].forEach(z => assert.equal(term(z) * (z - draw) + 0, 0));
+    return ['Only a = 0', fixed(term(draw), 3), 'z(z² − 1)(z − 0.5)'];
+  },
+  // The check doubles the bend: the residual a line leaves is the spread across it, and at
+  // height 3 the vertical spread passes the horizontal one, so the best line stands upright.
+  'flat-line': root => {
+    const n = Number(root.dataset.points), height = Number(root.dataset.height);
+    const ts = Array.from({length: n}, (_, j) => -1 + (2 * j + 1) / n);
+    const spread = values => { const m = values.reduce((a, b) => a + b) / n; return values.reduce((a, v) => a + (v - m) ** 2, 0) / n; };
+    const sxx = spread(ts), syy = h => spread(ts.map(t => h * (t * t - 1 / 3)));
+    assert.equal(fixed(syy(height) / 2, 3), '0.098', 'the scene\'s flat line');
+    assert(syy(2 * height) > sxx && syy(height) < sxx);
+    return ['The vertical line', `L = ${fixed(sxx / 2, 3)}`, fixed(syy(height), 3), fixed(syy(2 * height), 3),
+      fixed(sxx, 3), fixed(syy(2 * height) / 2, 3)];
+  },
 };
 
 for (const entry of manifest.scenes) {

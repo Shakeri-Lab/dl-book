@@ -1,3 +1,31 @@
+# Rolling post-v1.4: four mechanism replays, for Chapters 11 and 12 (September 29, 2026)
+
+- **Chapter 12, detach is not reset** (`detach-cut-excerpt`, at the end of "Training with a
+  finite horizon" in Section 12.3). Two lanes run six steps with a cut after the third.
+  Step 2's value crosses the cut only in the lane that carries the state, detached, and
+  step 6's gradient stops at the cut in both lanes, ringing steps 4 to 6 and never steps
+  1 to 3. The six steps are a declared schematic; the chapter's recipes cut every 20 to 50
+  steps or sample 100-character windows.
+- **Chapter 12, the GRU's keep blends two states** (`gru-blend-excerpt`, under the GRU
+  diagram in Section 12.5). One coordinate holds 0.80 and the candidate offers 0.30, a
+  declared toy. Halving the keep does not halve the state: 0.5 × 0.80 + 0.5 × 0.30 = 0.55,
+  the midpoint, and every keep lands the new state on the segment between the two. One
+  control, the keep z.
+- **Chapter 11, reconstruction pins the codes and nothing between** (`decoder-family-excerpt`,
+  before the decoder-ambiguity cell in Section 11.4). Every member of the chapter's
+  z² + a z(z² − 1) family has zero error at the codes −1, 0 and 1, while its value at the
+  unsupported draw z = 0.5 slides along 0.25 − 0.375a: 0.55, 0.25 and −0.05 at
+  a = −0.8, 0 and 0.8. One control, the multiple a.
+- **Chapter 11, no line beats PCA's flat one** (`flat-line-excerpt`, at the end of Section
+  11.3). Sixteen points of the chapter's curve (t, 1.5(t² − 1/3)); a line turning about
+  their mean leaves L = 0.098 flat, 0.132 at 45 degrees and 0.166 upright, each the loss of
+  exactly the drawn residuals. One control, the line's tilt.
+- **After the author's first look.** `detach-cut` rings the states the gradient reaches and
+  turns its detach tag into a one-way gate at the verdicts; `gru-blend`'s bar puts write on
+  the left and keep on the right, like its dial and its number line; `decoder-family`
+  shades the band between its two ghost curves. Each receipt records what was declined and
+  why.
+
 # Rolling post-v1.4: two mechanism replays, for Chapters 16 and 18 (September 29, 2026)
 
 - **Chapter 16, reordering moves both axes** (`both-axes-excerpt`, before "The position

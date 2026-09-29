@@ -25,7 +25,18 @@ fixes in all of them and to four contract changes below (prose budget, plain-tex
 format, never spoil a prediction, four-decimal geometry). See
 [the review-pass receipt](excerpt-review-pass.md). No new scene is authorized by it.
 
-**Source state (September 29, 2026):** forty-seven scenes are registered in
+**Source state (September 29, 2026, later):** fifty-one scenes are registered in
+`interactives/manifest.json`. The four newest are the author's scoped picks for Chapter 12
+(`10-sequences-rnn.qmd`) and Chapter 11 (`making-pca-learnable.qmd`). [Detach passes the
+value, not the gradient](detach-cut-excerpt.md) closes "Training with a finite horizon";
+[the GRU's keep gate blends the old state with the candidate](gru-blend-excerpt.md) sits
+under the GRU diagram; [no straight line leaves less squared residual than PCA's flat
+one](flat-line-excerpt.md) closes "What if the map could bend?"; and [reconstruction pins
+the codes, not the space between them](decoder-family-excerpt.md) sits before the
+decoder-ambiguity cell. Three were revised after the author's first look, and each receipt
+records what changed and what was declined.
+
+**Prior source state (September 29, 2026, morning):** forty-seven scenes are registered in
 `interactives/manifest.json`. The two newest come from the author's request for the next two
 chapters with films. [A weight moves with its query's row and its key's
 column](both-axes-excerpt.md) sits in Chapter 16 before "The position debt". [Every round counts
