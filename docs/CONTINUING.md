@@ -908,9 +908,10 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 > byte on the same runner. A separate portability ledger compares the result with the
 > frozen HTML stdout: exact is the default, and only narrowly reviewed numerical or
 > structural contracts may differ across platforms. The Appendix A1 and Chapter 18
-> public/reference pairs use a recorded one-thread numerical-library environment to
-> remove process-level LAPACK reduction drift without perturbing seeded training
-> elsewhere. Chapter 18's hidden setup keeps its six-thread manuscript default, but
+> public/reference pairs use a recorded one-thread numerical-library environment, which
+> keeps the thread count out of their LAPACK calls without perturbing seeded training
+> elsewhere; it is not a determinism guarantee (see the `lstsq` pivot-array entry in
+> §5). Chapter 18's hidden setup keeps its four-thread manuscript default, but
 > honors and asserts the CI-only PyTorch override inside notebook validation and the
 > weekly full-manuscript execution audit.
 > Deliberately heavier chapter cells may still choose their own PyTorch thread count, and
@@ -1506,6 +1507,17 @@ These are precedents; when a new experiment misbehaves, check here first.
   0.632 and the gain faded with more labels. Reject the affirmative story when a
   shallow baseline exposes it; redesign the mechanism test rather than hiding the
   baseline.
+- **An uninitialized input is not rounding noise (Appendix A1, September 28, 2026):**
+  A1's normal-equation residual flipped between 6.661e-16 and 1.790e-15 across the two
+  kernels of the exact public/reference gate, on two runner CPU models, under the
+  one-thread environment, and blocked the publish of `main` twice. Thread counts and MKL
+  reproducibility modes cannot fix it: torch 2.12.1's `lstsq` default driver `gelsy`
+  hands LAPACK an uninitialized pivot array. A1 now passes `driver="gels"` (residual
+  6.661e-16 on the reference machine; the prose follows, by the author's decision).
+  Before blaming thread count for a last-bit flip, ask whether the call reads memory it
+  never wrote: `torch.use_deterministic_algorithms(True)` fills uninitialized memory and
+  exposes the dependence. Details and the remaining default-driver calls are in
+  `docs/compatibility.md`.
 
 ## 6. Data assets (committed; no downloads at render)
 
