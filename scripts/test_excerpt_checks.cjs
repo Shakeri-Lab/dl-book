@@ -38,6 +38,46 @@ const expected = {
     assert.equal(doc.querySelector('[data-token="4"] .bert-original').textContent, 'rose');
     return ['position 4', '“rose”', 'Position 3'];
   },
+  // The check counts lower 4 times instead of 2: w+e (6 + 4) outruns every 9 and merges
+  // first, taking newest's e, so the next round finds e+s only in widest.
+  'pair-recount': root => {
+    const words = root.dataset.words.trim().split(/\s+/), freq = nums(root.dataset.frequencies), end = root.dataset.endMarker;
+    assert.equal(end, '</w>'); assert.equal(root.dataset.tieBreak, 'lexicographic');
+    const [low, lower, newest, widest] = ['low', 'lower', 'newest', 'widest'].map(word => words.indexOf(word));
+    assert.equal(freq[lower], 2, 'the scene itself uses the chapter\'s 2');
+    freq[lower] = 4;
+    const byWord = (pieces, pair) => pieces.map((s, w) => {
+      let n = 0;
+      for (let i = 0; i + 1 < s.length; i++) if (s[i] === pair[0] && s[i + 1] === pair[1]) n += 1;
+      return n * freq[w];
+    });
+    const counts = pieces => {
+      const all = new Map();
+      pieces.forEach((s, w) => { for (let i = 0; i + 1 < s.length; i++) all.set(`${s[i]}\n${s[i + 1]}`, (all.get(`${s[i]}\n${s[i + 1]}`) || 0) + freq[w]); });
+      return all;
+    };
+    const tuple = (a, b) => (a[0] !== b[0] ? (a[0] < b[0] ? -1 : 1) : a[1] === b[1] ? 0 : a[1] < b[1] ? -1 : 1);
+    const start = words.map(word => [...word, end]), first = counts(start), top = Math.max(...first.values());
+    const tied = [...first].filter(([, c]) => c === top).map(([key]) => key.split('\n')).sort(tuple), best = tied[0];
+    assert.equal(top, 10); assert.deepEqual(tied, [['w', 'e']], 'w+e is alone at the round-1 maximum');
+    const we = byWord(start, ['w', 'e']);
+    assert.equal(we[newest] + we[lower], top); assert.equal(we[newest], 6);
+    const nines = [...first].filter(([, c]) => c === 9).map(([key]) => key.split('\n').join('+')).sort();
+    assert.deepEqual(nines, ['e+s', 'l+o', 'o+w', 's+t', 't+</w>'], 'five pairs tie at 9');
+    const lo = byWord(start, ['l', 'o']), ow = byWord(start, ['o', 'w']);
+    assert.deepEqual([lo[low], lo[lower]], [5, 4]); assert.deepEqual([ow[low], ow[lower]], [5, 4]);
+    const merge = s => {
+      const out = [];
+      for (let i = 0; i < s.length;) {
+        if (i + 1 < s.length && s[i] === best[0] && s[i + 1] === best[1]) { out.push(best.join('')); i += 2; } else { out.push(s[i]); i += 1; }
+      }
+      return out;
+    };
+    const es = byWord(start.map(merge), ['e', 's']);
+    assert.deepEqual(es.map((value, w) => (value ? words[w] : null)).filter(Boolean), ['widest'], 'e+s survives in widest alone');
+    const five = ['zero', 'one', 'two', 'three', 'four', 'five'][nines.length];
+    return [`${we[newest]} + ${we[lower]} = ${top}`, `${five} pairs`, `${lo[low]} + ${lo[lower]}`, `only the ${es[widest]} from ${words[widest]}`];
+  },
   'softmax-shift': root => {
     const logits = nums(root.dataset.logits), top = Math.max(...logits), shifted = logits.map(o => o - top);
     const e = shifted.map(Math.exp), total = e.reduce((x, y) => x + y);
@@ -375,6 +415,24 @@ const expected = {
     const [, inC, outC] = /compressing (\d+) feature maps into (\d+)/.exec(chapter).map(Number);
     return [(inC * outC + outC).toLocaleString('en-US'), `${outC} × ${inC} weight matrix and ${outC} biases`,
       `nn.Linear(${inC}, ${outC})`, `${inC} feature maps compressed into ${outC}`];
+  },
+  // The check reorders to the, river, by, bank, a 4-cycle the panel never shows: bank's row
+  // takes bank's new slot, and each weight follows its key's column to that key's new slot.
+  'both-axes': root => {
+    const tokens = root.dataset.tokens.trim().split(/\s+/);
+    const A = root.dataset.weights.split(';').map(row => nums(row));
+    const order = [2, 3, 1, 0], declared = nums(root.dataset.order);
+    const n = tokens.length, slot = token => order.indexOf(token);
+    assert(order.every((token, i) => token !== i), 'the check order moves every token');
+    assert(order.some((token, i) => order[token] !== i), 'and is not its own inverse');
+    assert.notDeepEqual(order, declared, 'and differs from the order the panel animates');
+    const bank = tokens.indexOf('bank'), river = tokens.indexOf('river');
+    assert.equal(A[bank].indexOf(Math.max(...A[bank])), river, 'bank\'s heaviest weight is on river\'s key');
+    const heavy = [slot(bank), slot(river)], own = [slot(bank), slot(bank)];
+    const rowsOnly = [slot(bank), river];
+    assert.deepEqual(rowsOnly, own, 'moving the rows alone leaves 0.70 on bank\'s final self-weight cell');
+    const row = Array.from({length: n}, (_, j) => A[bank][order[j]].toFixed(2)).join(', ');
+    return [`(${heavy.join(', ')})`, `(${own.join(', ')})`, row];
   },
 };
 

@@ -276,6 +276,54 @@ experiment ledger table, the capacity U-curve, Chapter 5's §5.1 local-slope zoo
 outer product, the three splits, Chapter 3's §3.4 tile-the-gaps, and Adam. Each was set
 aside either as a results plot or as a duplicate of a shipped scene's mechanism.
 
+#### Film selections for Chapters 13, 14, 16 and 18 (September 28 and 29, 2026)
+
+The author asked for the next replays from the films, two chapters at a time. For each pair,
+an assessor judged every unshipped scene against the scoping rules, and three critics
+(pedagogy, fixture fidelity, a confused learner) tried to refute each candidate. Two
+refutations removed a candidate. The outcomes are recorded here so that no later session
+re-derives them. The briefs live in the author's Box folder `Teaching/6050/dl-book-prompts/`.
+
+- **Chapters 16 and 18, built and shipped September 29.** Twenty-eight scenes were judged;
+  two survived, each with one critic dissenting.
+  - Built: [`both-axes`](both-axes-excerpt.md), from `PermutationDebt`, and
+    [`pair-recount`](pair-recount-excerpt.md), from the BPE half of `BertInput`.
+  - Set aside, Chapter 16:
+    - `SameSequence`, `PositionClocks`, `MultiHeadSplit`, `CausalMask`, `FFNMemory`,
+      `DecoderOnlyBuild`, `KVCost`: the section states or tests the answer before every legal
+      anchor, or the scene duplicates a chapter figure or a shipped scene (`kernel-weighting`,
+      `mask-before-softmax`, `attention-bill`).
+    - `RoPERotation`: deferred genre.
+    - `ResidualStream`: a static schematic.
+    - `ProtocolLedger`, `PairedTraining`, `HeldOutRematch`, `LearnedMaps`: receipts, results
+      and training replays.
+  - Set aside, Chapter 18:
+    - `VisibilityDecision`, `SelfSupervision`, `MLMObjective`, `CorruptionPolicy`,
+      `SummaryToken`, `FineTuneMoves`: recall or duplicates of `bert-ledger`,
+      `mask-before-softmax` and the chapter's figures.
+    - `TransferDesign`, `TinyEncoder`, `PairedProtocol`, `TransferReceipt`,
+      `GeometryReceipt`: design cards, ledgers and measured results.
+    - `PretrainingFamilies`, `RegimeShift`: taxonomy and narrative bridges.
+  - Film-less leads, not film ports, each with a conflict to settle first:
+    - the causal mask leaking order through nested prefixes (Chapter 16 callout);
+    - transpose-before-reshape (Chapter 16; needs a manuscript sentence first);
+    - the row-sparse embedding gradient (Chapter 18; Exercise 5 asks about it).
+- **Chapters 13 and 14, scoped September 28, not yet built.** Twenty-three scenes were judged;
+  one survived.
+  - `bandwidth-share` (Chapter 14, from `BandwidthDial`) waits on the author's ruling on
+    whether `kernel-weighting`'s "no bandwidth knob" binds only that panel (brief:
+    `dl-book-ch14-bandwidth-share-prompt.md`).
+  - Chapter 13 gets none. Its padding, packing and teacher-forcing scenes are recall (the
+    section states and tests each answer before any anchor), `BeamSearch` duplicates
+    `greedy-tree`, and the rest are title cards, receipts or results.
+  - Chapter 14's other scenes duplicate `kernel-weighting` or the chapter's figures, are
+    linear enough that two frames carry them (`SignedWeights`), repeat Chapter 1's
+    bias-variance figure, or are results tables.
+- **Chapters 11 and 12, scoped September 28, not yet built.** Four replays (`detach-cut`,
+  `decoder-family`, `flat-line`, `gru-blend`), brief `dl-book-four-replays-prompt.md`. They
+  share registration files with every other batch, so build one batch at a time on current
+  `main`.
+
 ### Shared acceptance contract
 
 - Follow the approved convolution player: optional and closed/paused initially,

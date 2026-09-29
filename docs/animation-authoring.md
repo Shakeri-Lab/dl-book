@@ -25,7 +25,15 @@ fixes in all of them and to four contract changes below (prose budget, plain-tex
 format, never spoil a prediction, four-decimal geometry). See
 [the review-pass receipt](excerpt-review-pass.md). No new scene is authorized by it.
 
-**Source state — September 26, 2026:** forty-five scenes are registered in
+**Source state (September 29, 2026):** forty-seven scenes are registered in
+`interactives/manifest.json`. The two newest come from the author's request for the next two
+chapters with films. [A weight moves with its query's row and its key's
+column](both-axes-excerpt.md) sits in Chapter 16 before "The position debt". [Every round counts
+the pairs again](pair-recount-excerpt.md) sits in Chapter 18 before the BPE code. An assessor and
+three critics judged all 28 unshipped scenes of films `6050-Ch14` and `6050-Ch15`; see the
+September 29 section of `docs/backlog.md`. Both receipts end with notes for a future edit.
+
+**Prior source state — September 26, 2026:** forty-five scenes are registered in
 `interactives/manifest.json`. The five newest follow the author's requests for Chapters 8
 and 9: [channels say what, pooling says roughly where](what-where-excerpt.md) before
 LeNet; [counting the window's stops](out-size-excerpt.md) after the output-size formula;

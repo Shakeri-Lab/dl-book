@@ -1,3 +1,21 @@
+# Rolling post-v1.4: two mechanism replays, for Chapters 16 and 18 (September 29, 2026)
+
+- **Chapter 16, reordering moves both axes** (`both-axes-excerpt`, before "The position
+  debt" in Section 16.1). The chapter's illustrative weights for bank, by, the, river,
+  reordered as by, river, bank, the. Bank's row follows its query to slot 2, then the
+  columns follow their keys, so 0.70 moves from (0, 3) to (2, 3) to (2, 1) and 0.20 returns
+  to the diagonal. Each value block travels with its column, so bank's output is unchanged.
+  The reordering is declared; the proof below it covers every reordering.
+- **Chapter 18, every round counts the pairs again** (`pair-recount-excerpt`, before the
+  BPE code in Section 18.4). The chapter's loop on its own corpus. w+e first counts 8
+  against l+o's 7, but merge 1 (e+s) takes newest's e, the recount leaves w+e with lower's
+  2, and l+o merges fourth, as the printed merges show. Every count is recomputed from the
+  corpus line.
+- **How they were chosen.** An assessor and three critics judged every unshipped scene
+  of the two chapters' films, 28 in all. These two survived, each with one critic
+  dissenting. The scenes set aside, and why, are in `docs/backlog.md`. Each receipt ends
+  with notes for a future edit.
+
 # Rolling post-v1.4: Appendix A's least-squares solver (September 28, 2026)
 
 - **Appendix A names its `lstsq` driver.** The normal-equation residual in the
