@@ -1,3 +1,20 @@
+# Rolling post-v1.4: Appendix A's least-squares solver (September 28, 2026)
+
+- **Appendix A names its `lstsq` driver.** The normal-equation residual in the
+  `a1-solve-lstsq` cell printed 6.661e-16 in one kernel and 1.790e-15 in the other on
+  CI's exact public/reference gate, and blocked the publish of `main` twice. The cause
+  is torch 2.12.1's default `gelsy` driver, which hands LAPACK an uninitialized pivot
+  array (fixed upstream in torch 2.14.0), not thread count or rounding. The call now
+  passes `driver="gels"`, plain QR for the full-rank design. Re-executed on the reference
+  machine, the residual reads 6.661e-16 (was 2.220e-15), and by the author's decision the
+  prose says about 6.7e-16; every other printed line and figure is unchanged.
+- **Maintainer docs.** `docs/compatibility.md`, `docs/CONTINUING.md`,
+  `docs/NEW-CHAT-PROMPT.md`, and `docs/style-guide.md` no longer credit the one-thread
+  environment with removing this drift, and correct Chapter 21's manuscript thread default
+  to four. `docs/compatibility.md` lists the remaining default-driver calls (Chapters 1,
+  4, and 21, safe because their printed output is coarse, rounded, or absent), and the
+  other docs point to it. `CLAUDE.md` gains a failure-mode row for the `lstsq` flip.
+
 # Rolling post-v1.4: Chapter 13 wording, Figure 13.1, and two Chapter 16 schematics (September 28, 2026)
 
 - **Chapter 13.** The author's wording edits: "The components are not new"; "One

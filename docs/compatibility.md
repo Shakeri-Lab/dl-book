@@ -24,18 +24,20 @@ The **Execution Audit** workflow re-executes every cell from scratch weekly. The
 notebook gate runs on the explicit `ubuntu-24.04` label with Python 3.12.14 and records
 the resolved runner image, CPU, numerical libraries, and full package set. A green run
 is the current compatibility statement. The Appendix A1 and Chapter 18 public/reference
-pairs are launched with a recorded one-thread numerical-library environment; that removes
-scheduling-dependent LAPACK reduction drift without changing the seeded training
-trajectories elsewhere. This setting reduces one source of variation but is not itself a
-blanket determinism guarantee—the output comparisons remain the proof. Chapter 18's
-hidden setup defaults to six threads in manuscript builds and honors an asserted
-CI-only PyTorch override in notebook validation and the weekly full-manuscript audit.
-That weekly audit overlays the same exact numerical-runtime pins on the broader
-rendering requirements before it regenerates the freeze. Reproduction policy: generated
-notebook and full manuscript reference output is byte-identical within that one runtime;
-committed HTML/TeX freeze records are byte-identical to each other. Across CPU backends,
-outputs must instead satisfy the narrow, surface-specific portability ledger—every
-unlisted surface remains byte-exact (see PyTorch's reproducibility notes).
+pairs are launched with a recorded one-thread numerical-library environment, which keeps
+the thread count out of their LAPACK calls without changing the seeded training
+trajectories elsewhere. This setting removes one source of variation but is not a
+determinism guarantee: Appendix A1's residual still flipped under it, from an
+uninitialized `lstsq` pivot array (see the `lstsq` entry below), and the output
+comparisons remain the proof. Chapter 18's hidden setup defaults to four threads in
+manuscript builds and honors an asserted CI-only PyTorch override in notebook validation
+and the weekly full-manuscript audit. That weekly audit overlays the same exact
+numerical-runtime pins on the broader rendering requirements before it regenerates the
+freeze. Reproduction policy: generated notebook and full manuscript reference output is
+byte-identical within that one runtime; committed HTML/TeX freeze records are
+byte-identical to each other. Across CPU backends, outputs must instead satisfy the
+narrow, surface-specific portability ledger: every unlisted surface remains byte-exact
+(see PyTorch's reproducibility notes).
 
 ### Verified version equivalence
 
@@ -69,10 +71,10 @@ real changes.
   executed on an M1 MacBook Air (`MacBookAir10,1`, four performance cores) with
   `~/.venvs/dl-book` (Python 3.12, torch 2.12.1) and Quarto 1.10.18, at 4 CPU threads.
   Every executing chapter's setup cell pins `torch.set_num_threads(4)` unless it pins a
-  count of its own for a stated reason: one thread for the LAPACK pairs below (Appendix A1
-  sets none, so CI's one-thread environment reaches it; the reference machine renders it
-  at its default 4), and 6
-  threads in `16-vit-scaling.qmd` (six of its stdout blocks change at 4) and
+  count of its own for a stated reason: one thread for the LAPACK pairs below, in CI only
+  (Chapter 18 reads the `DLBOOK_TORCH_NUM_THREADS` override and otherwise pins 4; Appendix
+  A1 sets none, so CI's one-thread environment reaches it; the reference machine renders
+  both at 4), and 6 threads in `16-vit-scaling.qmd` (six of its stdout blocks change at 4) and
   `17-peft-quantization.qmd` (its in-context coverage figure changes at 4). Moving
   either to 4 is a re-baseline, the author's call. The exported notebooks omit the
   sixteen reference-machine pins: in CI's two-core runners, 4 threads moved Chapters 6, 9,
@@ -82,13 +84,38 @@ real changes.
   96.582%, which no thread count here reproduces. A freeze made elsewhere is spliced
   (the paused numerical-runtime migration), never committed as a new execution.
 - **Thread pinning:** the Appendix A1 and Chapter 18 notebook-validation pairs use one
-  numerical thread because separate multithreaded LAPACK processes can differ in their
-  final residual bits or the sign attached to a rounded zero. Chapter 18 explicitly reads
-  and asserts the CI override after importing PyTorch; the weekly execution audit uses the
-  same override when it regenerates the manuscript transcript for comparison.
+  numerical thread, which keeps the thread count out of their LAPACK calls. It is a guard,
+  not a demonstrated cure: the last-bit residual flip and the rounded-zero sign flip that
+  prompted it both recurred under it, and both come from default-driver `lstsq` calls.
+  Appendix A1's was traced to the pivot array (next entry); Chapter 18's is absorbed by
+  `round(x, 6) + 0.0`. Chapter 18 explicitly reads and asserts the CI override after
+  importing PyTorch; the weekly execution audit uses the same override when it
+  regenerates the manuscript transcript for comparison.
   Selected heavy chapters independently use `torch.set_num_threads(...)` for predictable
   runtime on shared machines. Thread counts are machine choices, not semantic ones, and
   exact/typed output gates still decide whether a run is acceptable.
+- **`torch.linalg.lstsq` driver (torch 2.12.1):** the default CPU driver, `gelsy`,
+  allocates its column-pivot array without initializing it (`at::empty` in
+  `aten/src/ATen/native/BatchLinearAlgebraKernel.cpp`), and LAPACK reads a nonzero entry
+  as "move this column to the front". The last bits of the solution therefore depend on
+  leftover heap memory, which differs from one process to the next. On September 28, 2026
+  Appendix A1's normal-equation residual printed 6.661e-16 in one kernel and 1.790e-15 in
+  the other, under the one-thread environment, and failed the exact public/reference gate
+  on two runner CPU models (run 36498234082, attempts 1 and 2). On the reference machine,
+  `torch.use_deterministic_algorithms(True)`, which fills uninitialized memory, moves the
+  same call from 2.220e-15 to 6.661e-16. Appendix A1 now passes `driver="gels"` (plain QR,
+  valid because its design has full column rank), which uses no pivot array; its residual
+  reads 6.661e-16 on the reference machine, and the prose follows (the author's decision).
+  Upstream zero-fills the array (PyTorch commit `8cb058b9e655`, PR #187436, issue
+  #187411), first released in torch 2.14.0; 2.13.0 still has the bug. The remaining
+  default-driver calls, three in `01-linear-regression.qmd`, one in
+  `04-training-loss-sgd.qmd`, and two rank-deficient ones in `18-alignment.qmd`, pass the
+  gate because their stdout is coarse or rounded (`round(x, 6) + 0.0` in Chapter 18,
+  whose `.2e` line prints an exact zero because adding 37 absorbs the round-off) or, for
+  the Chapter 1 bias-variance figure and the Chapter 4 SGD-zones figure, absent (the gate
+  compares stdout only). A new cell that prints `lstsq` results to the last bits should name `driver="gels"` for a
+  full-rank problem or `driver="gelsd"` for a rank-deficient one until the pin reaches
+  2.14.0.
 - **Determinism flags**: `torch.use_deterministic_algorithms(True)` where paired
   digests demand it (ch. 14/16). Some backends lack deterministic kernels; if a
   future version errors, the fallback is documented in the PyTorch determinism

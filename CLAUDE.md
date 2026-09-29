@@ -194,6 +194,7 @@ automatically during conversion, but chapters should use the canonical set.
 | Eval numbers vary with batch contents | BatchNorm left in train mode — `model.eval()` before eval, `model.train()` in the loop |
 | Live site serves old page for >10 min | Pages build wedged: `gh api repos/Shakeri-Lab/dl-book/pages/builds/latest`; requeue via `gh api -X POST .../pages/builds`; bust CDN with `?v=N` |
 | CI job cancelled with zero steps run | GitHub runner capacity noise — `gh run rerun <id> --failed` |
+| Exact public/reference gate flips the last bits of a `torch.linalg.lstsq` result | torch 2.12.1's default `gelsy` driver reads an uninitialized pivot array; pass `driver="gels"` (full column rank) or `driver="gelsd"`; fixed upstream in torch 2.14.0 (`docs/compatibility.md`) |
 
 More case law: `docs/CONTINUING.md` §5.
 

@@ -595,12 +595,15 @@ misdiagnosis deserves to be made explicit.
   every exception must name one surface, parse its complete output, bound each mutable
   quantity, and state the invariant that survives the platform change. Never use a
   book-wide tolerance. The Appendix A1 and Chapter 18 validation pairs use and record a
-  one-thread numerical-library environment to remove process-level LAPACK reduction drift
-  without perturbing seeded training elsewhere. Chapter 18's hidden setup keeps its
-  six-thread manuscript default while honoring and asserting the CI-only PyTorch override
-  during notebook validation and the weekly full-manuscript execution audit. A heavy
-  chapter may explicitly choose its own PyTorch thread count; the output gates remain the
-  proof rather than the thread setting.
+  one-thread numerical-library environment, which keeps the thread count out of their
+  LAPACK calls without perturbing seeded training elsewhere; it is not a determinism
+  guarantee. A cell that prints a `torch.linalg.lstsq` result to the last bits names its
+  driver (`"gels"` at full column rank, `"gelsd"` otherwise), because the default reads an
+  uninitialized pivot array in torch 2.12.1 (`docs/compatibility.md`). Chapter 18's hidden
+  setup keeps its four-thread manuscript default while honoring and asserting the CI-only
+  PyTorch override during notebook validation and the weekly full-manuscript execution
+  audit. A heavy chapter may explicitly choose its own PyTorch thread count; the output
+  gates remain the proof rather than the thread setting.
   Executed notebooks are evidence for the gate, not public artifacts. A deliberately
   partial or non-executable listing stays visibly marked as such; the exporter must not
   invent missing implementation.
