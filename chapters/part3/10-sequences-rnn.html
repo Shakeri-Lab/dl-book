@@ -733,47 +733,6 @@ Figure&nbsp;12.2: How much gradient a freshly initialized vanilla RNN’s output
 <p>BPTT has a second, blunter problem: unrolling a book-length sequence costs book-length memory and compute per step. The standard fix leans on the Markov claim from the callout above. In <strong>truncated BPTT</strong>, contiguous chunks carry the recurrent state forward but detach it at each boundary. The values cross the boundary; the gradient graph does not. This bounds memory while preserving running context.</p>
 <p>Where to cut is itself a choice. A fixed horizon ignores every dependency longer than the chunk: a bias toward short-range structure that practice usually tolerates and that can even act as a mild regularizer. Cutting at random points instead, and reweighting each retained term by the probability that the cut spared it, gives an unbiased estimate of the full gradient (Tallec and Ollivier), paid for with extra variance. Most training keeps the fixed horizon.</p>
 <p>The final experiment below uses a simpler finite-horizon recipe: it samples random 100-character windows and starts each from zero state. That is <strong>fixed-window training</strong>, not truncated BPTT, because no state is carried between windows. It is cheap and appropriate for this small demonstration, but the model can neither see nor learn dependencies beyond 100 characters. In production character models, contiguous chunks of roughly 20–50 steps with carried-and-detached state are common. In either recipe, clipping handles spikes; neither creates gradients beyond the truncation horizon.</p>
-</section>
-</section>
-<section id="engineering-a-memory-the-lstm" class="level2" data-number="12.4">
-<h2 data-number="12.4" class="anchored" data-anchor-id="engineering-a-memory-the-lstm"><span class="header-section-number">12.4</span> Engineering a memory: the LSTM</h2>
-<p>So the vanilla RNN’s memory dies of repeated multiplication. A useful way to stage the fix is as a design-by-constraints exercise, and it is worth walking because you already own the key move. We want a memory pathway that is:</p>
-<ol type="1">
-<li><strong>Preserved by default.</strong> Repeated <em>multiplication</em> killed the signal <span class="math inline">\(\rightarrow\)</span> make the carried state <strong>additive</strong>: <span class="math inline">\(\vect{c}_t = \vect{c}_{t-1} + \Delta_t\)</span>. A conveyor belt: information rides along untouched unless something deliberately intervenes. You met this exact maneuver two chapters ago: <a href="../part2/09-modern-cnns-transfer.html" class="quarto-xref"><span>Chapter 10</span></a>’s residual connection, <span class="math inline">\(H(x) = F(x) + x\)</span>, whose Jacobian’s identity term let gradients cross forty layers. Same trick, laid across time.</li>
-<li><strong>Forgettable on command.</strong> Memory is finite; some of it should expire. Install a valve: <span class="math inline">\(\vect{f}_t \in (0,1)\)</span> multiplying <span class="math inline">\(\vect{c}_{t-1}\)</span>.</li>
-<li><strong>Writable on command.</strong> New information enters through a second valve <span class="math inline">\(\vect{i}_t\)</span> scaling a candidate <span class="math inline">\(\tilde{\vect{c}}_t\)</span>.</li>
-<li><strong>Readable on command.</strong> Expose only what the current step needs, through a third valve <span class="math inline">\(\vect{o}_t\)</span>.</li>
-</ol>
-<p>Each valve is a small learned layer squashed by a sigmoid (<a href="../part1/02-logistic-softmax.html" class="quarto-xref"><span>Chapter 2</span></a>’s machine, reinterpreted: a number in <span class="math inline">\((0,1)\)</span> read as <em>what fraction passes</em>). The candidate content is shaped by <span class="math inline">\(\tanh\)</span>, keeping it bounded and centered. Assembled, this is the <strong>Long Short-Term Memory</strong> cell (Hochreiter &amp; Schmidhuber, 1997; the forget gate <span class="math inline">\(\vect{f}_t\)</span> was added by Gers, Schmidhuber &amp; Cummins, 2000):</p>
-<p><span id="eq-lstm"><span class="math display">\[
-\begin{aligned}
-\vect{f}_t &amp;= \sigma\!\left(\matr{W}_f\,[\vect{h}_{t-1}, \vect{x}_t] + \vect{b}_f\right)
-&amp;\quad
-\vect{i}_t &amp;= \sigma\!\left(\matr{W}_i\,[\vect{h}_{t-1}, \vect{x}_t] + \vect{b}_i\right)
-\\
-\tilde{\vect{c}}_t &amp;= \tanh\!\left(\matr{W}_c\,[\vect{h}_{t-1}, \vect{x}_t] + \vect{b}_c\right)
-&amp;\quad
-\vect{o}_t &amp;= \sigma\!\left(\matr{W}_o\,[\vect{h}_{t-1}, \vect{x}_t] + \vect{b}_o\right)
-\\[2pt]
-\vect{c}_t &amp;= \vect{f}_t \odot \vect{c}_{t-1} \;+\; \vect{i}_t \odot \tilde{\vect{c}}_t
-&amp;\quad
-\vect{h}_t &amp;= \vect{o}_t \odot \tanh(\vect{c}_t).
-\end{aligned}
-\tag{12.5}\]</span></span></p>
-<div id="cell-fig-lstm-conveyor" class="cell" data-execution_count="4">
-<div class="cell-output cell-output-display">
-<div id="fig-lstm-conveyor" class="quarto-float quarto-figure quarto-figure-center anchored" alt="LSTM flow diagram. A shared input, the previous hidden state concatenated with the current input, runs along the bottom and feeds four boxes: the forget gate, the input gate, the candidate, and the output gate. Across the top, the previous cell state travels along a horizontal orange highway, is multiplied by the forget gate, then receives the input-gated candidate at an addition node to form the new cell state. A tanh branch from that state is multiplied by the output gate to form the hidden state.">
-<figure class="quarto-float quarto-float-fig figure">
-<div aria-describedby="fig-lstm-conveyor-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<img src="10-sequences-rnn_files/figure-html/fig-lstm-conveyor-output-1.png" loading="lazy" decoding="async" alt="LSTM flow diagram. A shared input, the previous hidden state concatenated with the current input, runs along the bottom and feeds four boxes: the forget gate, the input gate, the candidate, and the output gate. Across the top, the previous cell state travels along a horizontal orange highway, is multiplied by the forget gate, then receives the input-gated candidate at an addition node to form the new cell state. A tanh branch from that state is multiplied by the output gate to form the hidden state." width="701" height="279" class="figure-img">
-</div>
-<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-lstm-conveyor-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;12.3: The LSTM cell as a conveyor belt with valves. All four learned layers read the same input <span class="math inline">\([h_{t-1}, x_t]\)</span>, drawn along the bottom. The forget gate <span class="math inline">\(f_t\)</span> controls how much old cell state continues; the input gate <span class="math inline">\(i_t\)</span> controls how much candidate content <span class="math inline">\(\tilde{c}_t\)</span> is added; the output gate <span class="math inline">\(o_t\)</span> controls what becomes visible as <span class="math inline">\(h_t\)</span>. The upper additive route is the long-memory highway.
-</figcaption>
-</figure>
-</div>
-</div>
-</div>
 <style>
 .mechanism-excerpt { color: #263445; background: #fff; border: 1px solid #d5dde5; border-radius: .4rem; margin: 1.4rem 0; }
 .mechanism-excerpt > summary { font-weight: 600; padding: .85rem 1rem; cursor: pointer; }
@@ -829,6 +788,187 @@ Figure&nbsp;12.3: The LSTM cell as a conveyor belt with valves. All four learned
 @media (max-width: 360px) { .mechanism-stages { font-size: .68rem; gap: .15rem; } }
 @media (max-width: 400px) { .mechanism-body { padding: 0 .65rem .65rem; } .mechanism-excerpt [data-pane] { padding: .5rem; } }
 
+/* Detach cut: one picture, one formula line, one caption (docs/animation-authoring.md,
+   "Visual grammar"). Colour = meaning, everywhere at once, in the book's macro colours:
+   the carried value is \featurepart blue on the picture, in the formula and in the
+   question; the loss and its gradient are \residualpart wine; the cut, the detach tag, the
+   zero start and the stop bar are emphasis ink, because they are design choices and not
+   quantities; the cells are grey scenery. No orange: nothing here is a learnable parameter
+   being turned. Shape repeats every distinction: the value is a round packet on the line
+   of states, the gradient a pointed packet on the rail beneath it. Stroke widths are
+   written by the player per layout, so the narrow print keeps phone-sized lines. */
+#detach-cut-excerpt { --dc-value:#2b6cb0; --dc-loss:#722f37; --dc-ink:#232d4b; --dc-scenery:#667483; --dc-line:#a3aebb; --dc-cell:#8793a1; }
+#detach-cut-excerpt .dc-value-word { color:var(--dc-value); font-weight:600; }
+#detach-cut-excerpt .dc-gradient-word { color:var(--dc-loss); font-weight:600; }
+.detach-cut-figure { container-type:inline-size; }
+.detach-cut-figure svg { display:block; width:100%; height:auto; font-family:inherit; }
+.detach-cut-figure text { font-variant-numeric:tabular-nums; fill:var(--dc-ink); }
+.detach-cut-figure .dc-sub { font-size:.72em; }
+.detach-cut-figure .dc-title { font-weight:700; }
+.detach-cut-figure .dc-label { fill:var(--dc-scenery); }
+.detach-cut-figure .dc-label.is-source { fill:var(--dc-value); font-weight:700; }
+.detach-cut-figure .dc-arrow { fill:none; stroke:var(--dc-line); }
+.detach-cut-figure .dc-head { fill:var(--dc-line); }
+.detach-cut-figure .dc-tick { stroke:var(--dc-line); }
+.detach-cut-figure .dc-tick.is-source { stroke:var(--dc-value); }
+.detach-cut-figure .dc-node { fill:#fff; stroke:var(--dc-cell); }
+/* A state the value has reached holds it: shaded, with the packet's path running in. */
+.detach-cut-figure .dc-node.is-carrying { fill:#dde8f4; }
+.detach-cut-figure .dc-cut { fill:none; stroke:var(--dc-ink); }
+.detach-cut-figure .dc-cut-label { font-weight:700; }
+.detach-cut-figure .dc-tag, .detach-cut-figure .dc-zero { fill:#fff; stroke:var(--dc-ink); }
+.detach-cut-figure .dc-tag-text { font-weight:600; }
+.detach-cut-figure .dc-zero-text { font-weight:700; }
+.detach-cut-figure .dc-feed { stroke:var(--dc-line); }
+.detach-cut-figure .dc-feed-head { fill:var(--dc-line); }
+.detach-cut-figure .dc-feed.is-live { stroke:var(--dc-ink); }
+.detach-cut-figure .dc-feed-head.is-live { fill:var(--dc-ink); }
+/* The tracked value: a round packet and the path it has ridden. */
+.detach-cut-figure .dc-trail { fill:none; stroke:var(--dc-value); stroke-linecap:round; stroke-linejoin:round; }
+.detach-cut-figure .dc-value { fill:var(--dc-value); stroke:#fff; }
+.detach-cut-figure .dc-ghost { fill:none; stroke:var(--dc-value); }
+/* The loss and the gradient it sends back: a pointed packet on the rail under the states. */
+.detach-cut-figure .dc-loss-box { fill:#fff; stroke:var(--dc-loss); }
+.detach-cut-figure .dc-loss-text { fill:var(--dc-loss); font-weight:700; }
+.detach-cut-figure .dc-back { fill:none; stroke:var(--dc-loss); stroke-linecap:round; }
+.detach-cut-figure .dc-gradient { fill:var(--dc-loss); }
+.detach-cut-figure .dc-stop { stroke:var(--dc-ink); stroke-linecap:round; }
+/* The states the gradient reaches wear a wine ring; the detach tag's forward point is ink,
+   a gate like the tag itself. */
+.detach-cut-figure .dc-sensed { fill:none; stroke:var(--dc-loss); }
+.detach-cut-figure .dc-gate { fill:var(--dc-ink); }
+.detach-cut-figure .dc-knock { fill:#fff; }
+.detach-cut-figure .dc-verdict-value { fill:var(--dc-value); font-weight:700; }
+.detach-cut-figure .dc-verdict-gradient { fill:var(--dc-loss); font-weight:700; }
+.detach-cut-formula { display:flex; flex-wrap:wrap; justify-content:center; align-items:center; gap:.45rem 1.8rem; margin:.3rem 0 .4rem; font-size:.95rem; }
+.detach-cut-formula > span { max-width:100%; }
+/* Each lane's part of the formula is washed in ink while that lane acts at the cut; the
+   static fallback, without script, is fully lit. */
+.detach-cut-formula .dc-carry, .detach-cut-formula .dc-reset { border-radius:3px; }
+#detach-cut-excerpt[data-ready] .detach-cut-formula.dc-carry-lit .dc-carry,
+#detach-cut-excerpt[data-ready] .detach-cut-formula.dc-reset-lit .dc-reset { background:rgba(35,45,75,.13); box-shadow:0 0 0 2px rgba(35,45,75,.13); }
+#detach-cut-excerpt:not([data-ready]) .detach-cut-figure svg { aspect-ratio:713 / 294; }
+#detach-cut-excerpt:not([data-ready]) [data-static-frame="narrow"] { display:none; }
+@container (max-width:599px) {
+  #detach-cut-excerpt:not([data-ready]) .detach-cut-figure svg { aspect-ratio:296 / 230; }
+  #detach-cut-excerpt:not([data-ready]) [data-drawing] { display:none; }
+  #detach-cut-excerpt:not([data-ready]) [data-static-frame="narrow"] { display:block; }
+}
+@media (max-width:480px) { .detach-cut-formula { font-size:.85rem; gap:.4rem .8rem; } }
+
+</style>
+
+<details id="detach-cut-excerpt" class="mechanism-excerpt" data-player="../../interactives/detach-cut/player.js" data-playback="../../interactives/shared/playback.js" data-steps="6" data-chunk="3" data-source="2" data-loss="6" data-evidence-class="schematic">
+  
+  <summary>Watch the mechanism: what crosses a truncation cut</summary>
+  <div class="mechanism-body">
+    <p class="mechanism-question">Two lanes train on the same six-step stream, cut into chunks of three. One carries the state across the cut, detached; the other resets it to zero. What crosses the cut in each lane: the <span class="dc-value-word">value</span> going forward, the <span class="dc-gradient-word">gradient</span> coming back, both, or neither?</p>
+    <p class="mechanism-intro">A schematic of the two finite-horizon recipes just described: truncated BPTT carries the state across each cut and detaches it there; fixed-window training starts every window from zero state.</p>
+    <div data-pane="" data-duration="40" data-beats="0 5 10 15 20 25 30 35" tabindex="0" role="group" aria-label="Truncation cut animation" aria-describedby="detach-cut-playback-help">
+      <div class="detach-cut-figure" data-figure="">
+        <svg viewbox="0 0 713 294" preserveaspectratio="xMinYMin meet" role="img" aria-label="Two lanes of 6 steps, cut after step 3: carry, detached, above; reset to zero, below. In the carry lane step 2's value crosses the cut through the detach tag and reaches step 6; in the reset lane it halts at the cut and step 4 starts from zero. Step 6's loss is marked in both lanes. Its gradient runs back to step 4 and stops at the cut in both lanes. Wine rings mark steps 4, 5 and 6, the states it reached; the steps behind the cut have none. At the cut: carry, value crosses and gradient stops; reset, value stops and gradient stops. The detach tag now points forward, a one-way gate.">
+          <title>Two lanes across one cut</title>
+          
+          <g data-drawing=""><text x="329" y="18" class="dc-cut-label" font-size="12" text-anchor="middle">cut</text><line class="dc-cut" x1="329" y1="25" x2="329" y2="288" stroke-width="1.6" stroke-dasharray="5 4" data-mark="cut" data-after="3"></line><rect class="dc-knock" x="278.68" y="53.6" width="100.64" height="13.65"></rect><rect class="dc-knock" x="275.04" y="115.6" width="107.92" height="13.65"></rect><rect class="dc-knock" x="285.96" y="199.6" width="86.08" height="13.65"></rect><rect class="dc-knock" x="275.04" y="261.6" width="107.92" height="13.65"></rect><g data-mark="lane-carry"><text x="54" y="42" class="dc-title" font-size="13" text-anchor="start">carry, detached</text><text x="66" y="64" class="dc-label" font-size="13" text-anchor="middle" data-label="h" data-step="1">h<tspan class="dc-sub" dy="3">1</tspan></text><text x="66" y="136" class="dc-label" font-size="13" text-anchor="middle" data-label="x" data-step="1">x<tspan class="dc-sub" dy="3">1</tspan></text><line class="dc-tick" x1="66" y1="94" x2="66" y2="118" stroke-width="1.5" data-step="1"></line><line class="dc-arrow" x1="78" y1="82" x2="131.5" y2="82" stroke-width="1.5"></line><path class="dc-head" d="M138 82l-7 -3.85v7.7z"></path><text x="150" y="64" class="dc-label" font-size="13" text-anchor="middle" data-label="h" data-step="2">h<tspan class="dc-sub" dy="3">2</tspan></text><text x="150" y="136" class="dc-label is-source" font-size="13" text-anchor="middle" data-label="x" data-step="2">x<tspan class="dc-sub" dy="3">2</tspan></text><line class="dc-tick is-source" x1="150" y1="94" x2="150" y2="118" stroke-width="2.6" data-step="2"></line><line class="dc-arrow" x1="162" y1="82" x2="215.5" y2="82" stroke-width="1.5"></line><path class="dc-head" d="M222 82l-7 -3.85v7.7z"></path><text x="234" y="64" class="dc-label" font-size="13" text-anchor="middle" data-label="h" data-step="3">h<tspan class="dc-sub" dy="3">3</tspan></text><text x="234" y="136" class="dc-label" font-size="13" text-anchor="middle" data-label="x" data-step="3">x<tspan class="dc-sub" dy="3">3</tspan></text><line class="dc-tick" x1="234" y1="94" x2="234" y2="118" stroke-width="1.5" data-step="3"></line><line class="dc-arrow" x1="246" y1="82" x2="405.5" y2="82" stroke-width="1.5" data-mark="crossing"></line><path class="dc-head" d="M412 82l-7 -3.85v7.7z"></path><text x="424" y="64" class="dc-label" font-size="13" text-anchor="middle" data-label="h" data-step="4">h<tspan class="dc-sub" dy="3">4</tspan></text><text x="424" y="136" class="dc-label" font-size="13" text-anchor="middle" data-label="x" data-step="4">x<tspan class="dc-sub" dy="3">4</tspan></text><line class="dc-tick" x1="424" y1="94" x2="424" y2="118" stroke-width="1.5" data-step="4"></line><line class="dc-arrow" x1="436" y1="82" x2="489.5" y2="82" stroke-width="1.5"></line><path class="dc-head" d="M496 82l-7 -3.85v7.7z"></path><text x="508" y="64" class="dc-label" font-size="13" text-anchor="middle" data-label="h" data-step="5">h<tspan class="dc-sub" dy="3">5</tspan></text><text x="508" y="136" class="dc-label" font-size="13" text-anchor="middle" data-label="x" data-step="5">x<tspan class="dc-sub" dy="3">5</tspan></text><line class="dc-tick" x1="508" y1="94" x2="508" y2="118" stroke-width="1.5" data-step="5"></line><line class="dc-arrow" x1="520" y1="82" x2="573.5" y2="82" stroke-width="1.5"></line><path class="dc-head" d="M580 82l-7 -3.85v7.7z"></path><text x="592" y="64" class="dc-label" font-size="13" text-anchor="middle" data-label="h" data-step="6">h<tspan class="dc-sub" dy="3">6</tspan></text><text x="592" y="136" class="dc-label" font-size="13" text-anchor="middle" data-label="x" data-step="6">x<tspan class="dc-sub" dy="3">6</tspan></text><line class="dc-tick" x1="592" y1="94" x2="592" y2="118" stroke-width="1.5" data-step="6"></line><polyline class="dc-trail" points="150,118 150,82 592,82" stroke-width="3.2" data-mark="value-trail"></polyline><circle class="dc-node" cx="66" cy="82" r="12" stroke-width="1.6" data-mark="node" data-step="1"></circle><circle class="dc-node is-carrying" cx="150" cy="82" r="12" stroke-width="1.6" data-mark="node" data-step="2"></circle><circle class="dc-node is-carrying" cx="234" cy="82" r="12" stroke-width="1.6" data-mark="node" data-step="3"></circle><circle class="dc-node is-carrying" cx="424" cy="82" r="12" stroke-width="1.6" data-mark="node" data-step="4"></circle><circle class="dc-node is-carrying" cx="508" cy="82" r="12" stroke-width="1.6" data-mark="node" data-step="5"></circle><circle class="dc-node is-carrying" cx="592" cy="82" r="12" stroke-width="1.6" data-mark="node" data-step="6"></circle><circle class="dc-sensed" cx="424" cy="82" r="16" stroke-width="1.8" data-mark="sensed" data-step="4"></circle><circle class="dc-sensed" cx="508" cy="82" r="16" stroke-width="1.8" data-mark="sensed" data-step="5"></circle><circle class="dc-sensed" cx="592" cy="82" r="16" stroke-width="1.8" data-mark="sensed" data-step="6"></circle><circle class="dc-value" cx="592" cy="82" r="6" stroke-width="1.5" data-mark="value"></circle><rect class="dc-tag" x="297" y="71" width="64" height="22" rx="3" stroke-width="1.6" data-mark="detach" data-gate="one-way"></rect><text x="324.5" y="86.2" class="dc-tag-text" font-size="12" text-anchor="middle">detach</text><path class="dc-gate" d="M358.5 82l-7 -4.5v9z" data-mark="gate"></path><line class="dc-arrow" x1="604" y1="82" x2="615.5" y2="82" stroke-width="1.5"></line><path class="dc-head" d="M622 82l-7 -3.85v7.7z"></path><rect class="dc-loss-box" x="622" y="71" width="34" height="42" rx="4" stroke-width="1.6" data-mark="loss" data-step="6"></rect><text x="639" y="96.68" class="dc-loss-text" font-size="13" text-anchor="middle" data-label="L">L<tspan class="dc-sub" dy="3">6</tspan></text><line class="dc-back" x1="337.1" y1="104" x2="622" y2="104" stroke-width="2.6" data-mark="gradient-trail"></line><line class="dc-stop" x1="329" y1="96" x2="329" y2="112" stroke-width="3.2" data-mark="stop"></line><path class="dc-gradient" d="M331.6 104l11 -5.5v11z" data-mark="gradient" data-x="331.6"></path><text x="329" y="64" class="dc-verdict-value" font-size="13" text-anchor="middle" data-value="carry-value">value crosses</text><text x="329" y="126" class="dc-verdict-gradient" font-size="13" text-anchor="middle" data-value="carry-gradient">gradient stops</text></g><g data-mark="lane-reset"><text x="54" y="188" class="dc-title" font-size="13" text-anchor="start">reset to zero</text><text x="66" y="210" class="dc-label" font-size="13" text-anchor="middle" data-label="h" data-step="1">h<tspan class="dc-sub" dy="3">1</tspan></text><text x="66" y="282" class="dc-label" font-size="13" text-anchor="middle" data-label="x" data-step="1">x<tspan class="dc-sub" dy="3">1</tspan></text><line class="dc-tick" x1="66" y1="240" x2="66" y2="264" stroke-width="1.5" data-step="1"></line><line class="dc-arrow" x1="78" y1="228" x2="131.5" y2="228" stroke-width="1.5"></line><path class="dc-head" d="M138 228l-7 -3.85v7.7z"></path><text x="150" y="210" class="dc-label" font-size="13" text-anchor="middle" data-label="h" data-step="2">h<tspan class="dc-sub" dy="3">2</tspan></text><text x="150" y="282" class="dc-label is-source" font-size="13" text-anchor="middle" data-label="x" data-step="2">x<tspan class="dc-sub" dy="3">2</tspan></text><line class="dc-tick is-source" x1="150" y1="240" x2="150" y2="264" stroke-width="2.6" data-step="2"></line><line class="dc-arrow" x1="162" y1="228" x2="215.5" y2="228" stroke-width="1.5"></line><path class="dc-head" d="M222 228l-7 -3.85v7.7z"></path><text x="234" y="210" class="dc-label" font-size="13" text-anchor="middle" data-label="h" data-step="3">h<tspan class="dc-sub" dy="3">3</tspan></text><text x="234" y="282" class="dc-label" font-size="13" text-anchor="middle" data-label="x" data-step="3">x<tspan class="dc-sub" dy="3">3</tspan></text><line class="dc-tick" x1="234" y1="240" x2="234" y2="264" stroke-width="1.5" data-step="3"></line><line class="dc-arrow" x1="246" y1="228" x2="329" y2="228" stroke-width="1.5" data-mark="stub"></line><text x="424" y="210" class="dc-label" font-size="13" text-anchor="middle" data-label="h" data-step="4">h<tspan class="dc-sub" dy="3">4</tspan></text><text x="424" y="282" class="dc-label" font-size="13" text-anchor="middle" data-label="x" data-step="4">x<tspan class="dc-sub" dy="3">4</tspan></text><line class="dc-tick" x1="424" y1="240" x2="424" y2="264" stroke-width="1.5" data-step="4"></line><line class="dc-arrow" x1="436" y1="228" x2="489.5" y2="228" stroke-width="1.5"></line><path class="dc-head" d="M496 228l-7 -3.85v7.7z"></path><text x="508" y="210" class="dc-label" font-size="13" text-anchor="middle" data-label="h" data-step="5">h<tspan class="dc-sub" dy="3">5</tspan></text><text x="508" y="282" class="dc-label" font-size="13" text-anchor="middle" data-label="x" data-step="5">x<tspan class="dc-sub" dy="3">5</tspan></text><line class="dc-tick" x1="508" y1="240" x2="508" y2="264" stroke-width="1.5" data-step="5"></line><line class="dc-arrow" x1="520" y1="228" x2="573.5" y2="228" stroke-width="1.5"></line><path class="dc-head" d="M580 228l-7 -3.85v7.7z"></path><text x="592" y="210" class="dc-label" font-size="13" text-anchor="middle" data-label="h" data-step="6">h<tspan class="dc-sub" dy="3">6</tspan></text><text x="592" y="282" class="dc-label" font-size="13" text-anchor="middle" data-label="x" data-step="6">x<tspan class="dc-sub" dy="3">6</tspan></text><line class="dc-tick" x1="592" y1="240" x2="592" y2="264" stroke-width="1.5" data-step="6"></line><polyline class="dc-trail" points="150,264 150,228 321,228" stroke-width="3.2" data-mark="value-trail"></polyline><circle class="dc-node" cx="66" cy="228" r="12" stroke-width="1.6" data-mark="node" data-step="1"></circle><circle class="dc-node is-carrying" cx="150" cy="228" r="12" stroke-width="1.6" data-mark="node" data-step="2"></circle><circle class="dc-node is-carrying" cx="234" cy="228" r="12" stroke-width="1.6" data-mark="node" data-step="3"></circle><circle class="dc-node" cx="424" cy="228" r="12" stroke-width="1.6" data-mark="node" data-step="4"></circle><circle class="dc-node" cx="508" cy="228" r="12" stroke-width="1.6" data-mark="node" data-step="5"></circle><circle class="dc-node" cx="592" cy="228" r="12" stroke-width="1.6" data-mark="node" data-step="6"></circle><circle class="dc-sensed" cx="424" cy="228" r="16" stroke-width="1.8" data-mark="sensed" data-step="4"></circle><circle class="dc-sensed" cx="508" cy="228" r="16" stroke-width="1.8" data-mark="sensed" data-step="5"></circle><circle class="dc-sensed" cx="592" cy="228" r="16" stroke-width="1.8" data-mark="sensed" data-step="6"></circle><circle class="dc-ghost" cx="321" cy="228" r="6" stroke-width="1.6" stroke-dasharray="2.5 2" data-mark="value-ghost"></circle><rect class="dc-zero" x="349" y="218" width="20" height="20" rx="3" stroke-width="1.6" data-mark="zero" data-feeds="4"></rect><text x="359" y="232.68" class="dc-zero-text" font-size="13" text-anchor="middle">0</text><line class="dc-feed is-live" x1="369" y1="228" x2="405.5" y2="228" stroke-width="1.6" data-mark="feed"></line><path class="dc-feed-head is-live" d="M412 228l-7 -3.85v7.7z"></path><line class="dc-arrow" x1="604" y1="228" x2="615.5" y2="228" stroke-width="1.5"></line><path class="dc-head" d="M622 228l-7 -3.85v7.7z"></path><rect class="dc-loss-box" x="622" y="217" width="34" height="42" rx="4" stroke-width="1.6" data-mark="loss" data-step="6"></rect><text x="639" y="242.68" class="dc-loss-text" font-size="13" text-anchor="middle" data-label="L">L<tspan class="dc-sub" dy="3">6</tspan></text><line class="dc-back" x1="337.1" y1="250" x2="622" y2="250" stroke-width="2.6" data-mark="gradient-trail"></line><line class="dc-stop" x1="329" y1="242" x2="329" y2="258" stroke-width="3.2" data-mark="stop"></line><path class="dc-gradient" d="M331.6 250l11 -5.5v11z" data-mark="gradient" data-x="331.6"></path><text x="329" y="210" class="dc-verdict-value" font-size="13" text-anchor="middle" data-value="reset-value">value stops</text><text x="329" y="272" class="dc-verdict-gradient" font-size="13" text-anchor="middle" data-value="reset-gradient">gradient stops</text></g></g>
+          
+          
+          <g data-static-frame="narrow" data-width="296" data-height="230" transform="scale(2.4088)"><text x="133" y="13" class="dc-cut-label" font-size="11" text-anchor="middle">cut</text><line class="dc-cut" x1="133" y1="18" x2="133" y2="224" stroke-width="1.3" stroke-dasharray="4 3" data-mark="cut" data-after="3"></line><rect class="dc-knock" x="89.96" y="41.2" width="86.08" height="11.55"></rect><rect class="dc-knock" x="86.88" y="89.2" width="92.24" height="11.55"></rect><rect class="dc-knock" x="96.12" y="155.2" width="73.76" height="11.55"></rect><rect class="dc-knock" x="86.88" y="203.2" width="92.24" height="11.55"></rect><g data-mark="lane-carry"><text x="10" y="32" class="dc-title" font-size="12" text-anchor="start">carry, detached</text><text x="18" y="50" class="dc-label" font-size="12" text-anchor="middle" data-label="h" data-step="1">h<tspan class="dc-sub" dy="2.5">1</tspan></text><text x="18" y="107" class="dc-label" font-size="12" text-anchor="middle" data-label="x" data-step="1">x<tspan class="dc-sub" dy="2.5">1</tspan></text><line class="dc-tick" x1="18" y1="72" x2="18" y2="92" stroke-width="1.3" data-step="1"></line><line class="dc-arrow" x1="26" y1="64" x2="35.5" y2="64" stroke-width="1.3"></line><path class="dc-head" d="M40 64l-5 -2.75v5.5z"></path><text x="48" y="50" class="dc-label" font-size="12" text-anchor="middle" data-label="h" data-step="2">h<tspan class="dc-sub" dy="2.5">2</tspan></text><text x="48" y="107" class="dc-label is-source" font-size="12" text-anchor="middle" data-label="x" data-step="2">x<tspan class="dc-sub" dy="2.5">2</tspan></text><line class="dc-tick is-source" x1="48" y1="72" x2="48" y2="92" stroke-width="2.2" data-step="2"></line><line class="dc-arrow" x1="56" y1="64" x2="65.5" y2="64" stroke-width="1.3"></line><path class="dc-head" d="M70 64l-5 -2.75v5.5z"></path><text x="78" y="50" class="dc-label" font-size="12" text-anchor="middle" data-label="h" data-step="3">h<tspan class="dc-sub" dy="2.5">3</tspan></text><text x="78" y="107" class="dc-label" font-size="12" text-anchor="middle" data-label="x" data-step="3">x<tspan class="dc-sub" dy="2.5">3</tspan></text><line class="dc-tick" x1="78" y1="72" x2="78" y2="92" stroke-width="1.3" data-step="3"></line><line class="dc-arrow" x1="86" y1="64" x2="175.5" y2="64" stroke-width="1.3" data-mark="crossing"></line><path class="dc-head" d="M180 64l-5 -2.75v5.5z"></path><text x="188" y="50" class="dc-label" font-size="12" text-anchor="middle" data-label="h" data-step="4">h<tspan class="dc-sub" dy="2.5">4</tspan></text><text x="188" y="107" class="dc-label" font-size="12" text-anchor="middle" data-label="x" data-step="4">x<tspan class="dc-sub" dy="2.5">4</tspan></text><line class="dc-tick" x1="188" y1="72" x2="188" y2="92" stroke-width="1.3" data-step="4"></line><line class="dc-arrow" x1="196" y1="64" x2="205.5" y2="64" stroke-width="1.3"></line><path class="dc-head" d="M210 64l-5 -2.75v5.5z"></path><text x="218" y="50" class="dc-label" font-size="12" text-anchor="middle" data-label="h" data-step="5">h<tspan class="dc-sub" dy="2.5">5</tspan></text><text x="218" y="107" class="dc-label" font-size="12" text-anchor="middle" data-label="x" data-step="5">x<tspan class="dc-sub" dy="2.5">5</tspan></text><line class="dc-tick" x1="218" y1="72" x2="218" y2="92" stroke-width="1.3" data-step="5"></line><line class="dc-arrow" x1="226" y1="64" x2="235.5" y2="64" stroke-width="1.3"></line><path class="dc-head" d="M240 64l-5 -2.75v5.5z"></path><text x="248" y="50" class="dc-label" font-size="12" text-anchor="middle" data-label="h" data-step="6">h<tspan class="dc-sub" dy="2.5">6</tspan></text><text x="248" y="107" class="dc-label" font-size="12" text-anchor="middle" data-label="x" data-step="6">x<tspan class="dc-sub" dy="2.5">6</tspan></text><line class="dc-tick" x1="248" y1="72" x2="248" y2="92" stroke-width="1.3" data-step="6"></line><polyline class="dc-trail" points="48,92 48,64 248,64" stroke-width="2.6" data-mark="value-trail"></polyline><circle class="dc-node" cx="18" cy="64" r="8" stroke-width="1.3" data-mark="node" data-step="1"></circle><circle class="dc-node is-carrying" cx="48" cy="64" r="8" stroke-width="1.3" data-mark="node" data-step="2"></circle><circle class="dc-node is-carrying" cx="78" cy="64" r="8" stroke-width="1.3" data-mark="node" data-step="3"></circle><circle class="dc-node is-carrying" cx="188" cy="64" r="8" stroke-width="1.3" data-mark="node" data-step="4"></circle><circle class="dc-node is-carrying" cx="218" cy="64" r="8" stroke-width="1.3" data-mark="node" data-step="5"></circle><circle class="dc-node is-carrying" cx="248" cy="64" r="8" stroke-width="1.3" data-mark="node" data-step="6"></circle><circle class="dc-sensed" cx="188" cy="64" r="11" stroke-width="1.5" data-mark="sensed" data-step="4"></circle><circle class="dc-sensed" cx="218" cy="64" r="11" stroke-width="1.5" data-mark="sensed" data-step="5"></circle><circle class="dc-sensed" cx="248" cy="64" r="11" stroke-width="1.5" data-mark="sensed" data-step="6"></circle><circle class="dc-value" cx="248" cy="64" r="5" stroke-width="1.2" data-mark="value"></circle><rect class="dc-tag" x="108.75" y="56" width="48.5" height="16" rx="3" stroke-width="1.3" data-mark="detach" data-gate="one-way"></rect><text x="129.25" y="67.5" class="dc-tag-text" font-size="10" text-anchor="middle">detach</text><path class="dc-gate" d="M154.75 64l-5.5 -3.5v7z" data-mark="gate"></path><line class="dc-arrow" x1="256" y1="64" x2="261.5" y2="64" stroke-width="1.3"></line><path class="dc-head" d="M266 64l-5 -2.75v5.5z"></path><rect class="dc-loss-box" x="266" y="55" width="24" height="33" rx="4" stroke-width="1.3" data-mark="loss" data-step="6"></rect><text x="278" y="75.82" class="dc-loss-text" font-size="12" text-anchor="middle" data-label="L">L<tspan class="dc-sub" dy="2.5">6</tspan></text><line class="dc-back" x1="139.9" y1="81" x2="266" y2="81" stroke-width="2.2" data-mark="gradient-trail"></line><line class="dc-stop" x1="133" y1="75" x2="133" y2="87" stroke-width="2.8" data-mark="stop"></line><path class="dc-gradient" d="M135.4 81l9 -4.5v9z" data-mark="gradient" data-x="135.4"></path><text x="133" y="50" class="dc-verdict-value" font-size="11" text-anchor="middle" data-value="carry-value">value crosses</text><text x="133" y="98" class="dc-verdict-gradient" font-size="11" text-anchor="middle" data-value="carry-gradient">gradient stops</text></g><g data-mark="lane-reset"><text x="10" y="146" class="dc-title" font-size="12" text-anchor="start">reset to zero</text><text x="18" y="164" class="dc-label" font-size="12" text-anchor="middle" data-label="h" data-step="1">h<tspan class="dc-sub" dy="2.5">1</tspan></text><text x="18" y="221" class="dc-label" font-size="12" text-anchor="middle" data-label="x" data-step="1">x<tspan class="dc-sub" dy="2.5">1</tspan></text><line class="dc-tick" x1="18" y1="186" x2="18" y2="206" stroke-width="1.3" data-step="1"></line><line class="dc-arrow" x1="26" y1="178" x2="35.5" y2="178" stroke-width="1.3"></line><path class="dc-head" d="M40 178l-5 -2.75v5.5z"></path><text x="48" y="164" class="dc-label" font-size="12" text-anchor="middle" data-label="h" data-step="2">h<tspan class="dc-sub" dy="2.5">2</tspan></text><text x="48" y="221" class="dc-label is-source" font-size="12" text-anchor="middle" data-label="x" data-step="2">x<tspan class="dc-sub" dy="2.5">2</tspan></text><line class="dc-tick is-source" x1="48" y1="186" x2="48" y2="206" stroke-width="2.2" data-step="2"></line><line class="dc-arrow" x1="56" y1="178" x2="65.5" y2="178" stroke-width="1.3"></line><path class="dc-head" d="M70 178l-5 -2.75v5.5z"></path><text x="78" y="164" class="dc-label" font-size="12" text-anchor="middle" data-label="h" data-step="3">h<tspan class="dc-sub" dy="2.5">3</tspan></text><text x="78" y="221" class="dc-label" font-size="12" text-anchor="middle" data-label="x" data-step="3">x<tspan class="dc-sub" dy="2.5">3</tspan></text><line class="dc-tick" x1="78" y1="186" x2="78" y2="206" stroke-width="1.3" data-step="3"></line><line class="dc-arrow" x1="86" y1="178" x2="133" y2="178" stroke-width="1.3" data-mark="stub"></line><text x="188" y="164" class="dc-label" font-size="12" text-anchor="middle" data-label="h" data-step="4">h<tspan class="dc-sub" dy="2.5">4</tspan></text><text x="188" y="221" class="dc-label" font-size="12" text-anchor="middle" data-label="x" data-step="4">x<tspan class="dc-sub" dy="2.5">4</tspan></text><line class="dc-tick" x1="188" y1="186" x2="188" y2="206" stroke-width="1.3" data-step="4"></line><line class="dc-arrow" x1="196" y1="178" x2="205.5" y2="178" stroke-width="1.3"></line><path class="dc-head" d="M210 178l-5 -2.75v5.5z"></path><text x="218" y="164" class="dc-label" font-size="12" text-anchor="middle" data-label="h" data-step="5">h<tspan class="dc-sub" dy="2.5">5</tspan></text><text x="218" y="221" class="dc-label" font-size="12" text-anchor="middle" data-label="x" data-step="5">x<tspan class="dc-sub" dy="2.5">5</tspan></text><line class="dc-tick" x1="218" y1="186" x2="218" y2="206" stroke-width="1.3" data-step="5"></line><line class="dc-arrow" x1="226" y1="178" x2="235.5" y2="178" stroke-width="1.3"></line><path class="dc-head" d="M240 178l-5 -2.75v5.5z"></path><text x="248" y="164" class="dc-label" font-size="12" text-anchor="middle" data-label="h" data-step="6">h<tspan class="dc-sub" dy="2.5">6</tspan></text><text x="248" y="221" class="dc-label" font-size="12" text-anchor="middle" data-label="x" data-step="6">x<tspan class="dc-sub" dy="2.5">6</tspan></text><line class="dc-tick" x1="248" y1="186" x2="248" y2="206" stroke-width="1.3" data-step="6"></line><polyline class="dc-trail" points="48,206 48,178 126,178" stroke-width="2.6" data-mark="value-trail"></polyline><circle class="dc-node" cx="18" cy="178" r="8" stroke-width="1.3" data-mark="node" data-step="1"></circle><circle class="dc-node is-carrying" cx="48" cy="178" r="8" stroke-width="1.3" data-mark="node" data-step="2"></circle><circle class="dc-node is-carrying" cx="78" cy="178" r="8" stroke-width="1.3" data-mark="node" data-step="3"></circle><circle class="dc-node" cx="188" cy="178" r="8" stroke-width="1.3" data-mark="node" data-step="4"></circle><circle class="dc-node" cx="218" cy="178" r="8" stroke-width="1.3" data-mark="node" data-step="5"></circle><circle class="dc-node" cx="248" cy="178" r="8" stroke-width="1.3" data-mark="node" data-step="6"></circle><circle class="dc-sensed" cx="188" cy="178" r="11" stroke-width="1.5" data-mark="sensed" data-step="4"></circle><circle class="dc-sensed" cx="218" cy="178" r="11" stroke-width="1.5" data-mark="sensed" data-step="5"></circle><circle class="dc-sensed" cx="248" cy="178" r="11" stroke-width="1.5" data-mark="sensed" data-step="6"></circle><circle class="dc-ghost" cx="126" cy="178" r="5" stroke-width="1.3" stroke-dasharray="2 1.6" data-mark="value-ghost"></circle><rect class="dc-zero" x="142" y="171" width="14" height="14" rx="3" stroke-width="1.3" data-mark="zero" data-feeds="4"></rect><text x="149" y="182.32" class="dc-zero-text" font-size="12" text-anchor="middle">0</text><line class="dc-feed is-live" x1="156" y1="178" x2="175.5" y2="178" stroke-width="1.3" data-mark="feed"></line><path class="dc-feed-head is-live" d="M180 178l-5 -2.75v5.5z"></path><line class="dc-arrow" x1="256" y1="178" x2="261.5" y2="178" stroke-width="1.3"></line><path class="dc-head" d="M266 178l-5 -2.75v5.5z"></path><rect class="dc-loss-box" x="266" y="169" width="24" height="33" rx="4" stroke-width="1.3" data-mark="loss" data-step="6"></rect><text x="278" y="189.82" class="dc-loss-text" font-size="12" text-anchor="middle" data-label="L">L<tspan class="dc-sub" dy="2.5">6</tspan></text><line class="dc-back" x1="139.9" y1="195" x2="266" y2="195" stroke-width="2.2" data-mark="gradient-trail"></line><line class="dc-stop" x1="133" y1="189" x2="133" y2="201" stroke-width="2.8" data-mark="stop"></line><path class="dc-gradient" d="M135.4 195l9 -4.5v9z" data-mark="gradient" data-x="135.4"></path><text x="133" y="164" class="dc-verdict-value" font-size="11" text-anchor="middle" data-value="reset-value">value stops</text><text x="133" y="212" class="dc-verdict-gradient" font-size="11" text-anchor="middle" data-value="reset-gradient">gradient stops</text></g></g>
+          
+        </svg>
+      </div>
+      <p class="detach-cut-formula" data-formula=""><span id="eq-detach-cut-1">\( \featurepart{\vect{h}_4} = f(\class{dc-carry}{\operatorname{detach}(\featurepart{\vect{h}_3})},\, \featurepart{\vect{x}_4}) \)</span><span id="eq-detach-cut-2">\( \featurepart{\vect{h}_4} = f(\class{dc-reset}{\vect{0}},\, \featurepart{\vect{x}_4}) \)</span></p>
+      <p class="mechanism-caption" data-caption="" aria-live="polite" aria-atomic="true">The values cross the boundary; the gradient graph does not.</p>
+      <div class="mechanism-controls" data-controls="" role="group" aria-label="Playback controls" hidden="">
+  <button type="button" data-action="play" data-state="play" aria-label="Play" title="Play">
+    <svg data-icon="play" viewbox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"></path></svg>
+    <svg data-icon="pause" viewbox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7zM14 5h4v14h-4z" fill="currentColor"></path></svg>
+    <svg data-icon="replay" viewbox="0 0 24 24" aria-hidden="true"><path d="M5 8a8 8 0 1 1-1 8M5 3v6h6" fill="none" stroke="currentColor" stroke-width="2"></path></svg>
+    <span class="mechanism-sr" data-button-label="">Play</span>
+  </button>
+  <label class="mechanism-scrubber"><span class="mechanism-sr">Playback position</span><input type="range" min="0" max="40" value="0" step="0.01"></label>
+  <span class="mechanism-clock" aria-hidden="true"><span data-elapsed="">0:00</span><span data-duration=""> / 0:40</span></span>
+  <select data-speed="" aria-label="Playback speed" title="Playback speed"><option value="0.5">0.5×</option><option value="1">1×</option><option value="1.5" selected="">1.5×</option><option value="2">2×</option></select>
+  <button type="button" data-action="fullscreen" data-state="expand" aria-label="Fullscreen" title="Fullscreen">
+    <svg data-icon="expand" viewbox="0 0 24 24" aria-hidden="true"><path d="M9 4H4v5M15 4h5v5M20 15v5h-5M9 20H4v-5" fill="none" stroke="currentColor" stroke-width="2"></path></svg>
+    <svg data-icon="contract" viewbox="0 0 24 24" aria-hidden="true"><path d="M4 9h5V4M20 9h-5V4M15 20v-5h5M4 15h5v5" fill="none" stroke="currentColor" stroke-width="2"></path></svg>
+    <span class="mechanism-sr" data-button-label="">Fullscreen</span>
+  </button>
+</div>
+<p data-notice="" role="status"></p>
+
+    </div>
+    <dialog aria-label="Expanded truncation cut animation"></dialog>
+    <p data-load-status="" role="status">The calculation is readable without playback. Opening this panel loads the optional controls.</p>
+    <div class="mechanism-boundary">
+      <p>Inside a chunk the gradient still flows back and still trains the shared weights; the cut removes only the paths that cross it.</p>
+      <details class="mechanism-scope"><summary>Scope and caveats</summary>
+        <p>Six steps and one cut after the third are a schematic. The recipes above carry and detach the state across chunks of roughly 20 to 50 steps, or sample 100-character windows that each start from zero state; neither length is drawn here.</p>
+        <p>In code, the carry lane is <code>h = h.detach()</code> between chunks, and the reset lane starts each window from a zero state.</p>
+        <p>Cutting at random points and reweighting what each cut spares, the unbiased alternative mentioned above, is not drawn. Clipping is a separate tool: it rescales large gradients and moves no cut.</p>
+        <p>Blue marks the carried value, wine the loss, its gradient and the rings on the states the gradient reaches, and ink the cut, the detach tag with its forward point, the zero start and the stop bar; the cells are grey. Shape and text carry the same distinctions: the value is a round packet on the line of states, the gradient a pointed packet on the rail beneath it.</p>
+      </details>
+    </div>
+    <details class="mechanism-check"><summary><strong>Check yourself.</strong> Chunks of three steps, carried and detached, run for nine steps. The loss at step 9 depends on steps 5 and 7. Which of the two can its gradient reach?</summary>
+      <p>Step 7, yes; step 5, no. The cuts fall after steps 3, 6 and 9, so steps 7, 8 and 9 share one chunk and the gradient of step 9's loss stops at the cut after step 6. Step 5's value still reaches step 9 through the carried state.</p>
+    </details>
+    <details class="mechanism-transcript" id="detach-cut-transcript"><summary>Transcript and keyboard help</summary>
+      <ol>
+        <li>Two lanes run the same stream of six steps, cut after step 3. The upper lane carries the state across the cut through a detach tag; the lower lane starts step 4 again from a zero box. Step 2's input is marked. Before playing on: what crosses the cut in each lane, the value going forward, the gradient coming back, both, or neither?</li>
+        <li>Step 2's input enters the state and rides to step 3 in both lanes, then holds there.</li>
+        <li>In the carry lane the value passes through the detach tag, crosses the cut and rides on to step 6; the states it reaches are shaded. In the reset lane it halts at the cut and fades to a ring, and step 4 starts again from zero.</li>
+        <li>The loss at step 6 appears in both lanes. Before playing on: how far back does its gradient travel in each lane?</li>
+        <li>The gradient runs back along the rail under the states, through steps 6, 5 and 4 in both lanes, and stops at the cut, where a short bar ends it. Each state it reaches wears a wine ring; steps 1 to 3 get none.</li>
+        <li>At the cut, the carry lane reads “value crosses” and “gradient stops”; the reset lane reads “value stops” and “gradient stops”. Detach passes the value but not the gradient; reset passes neither. The detach tag gains a forward point: a one-way gate.</li>
+        <li>The carry lane alone: step 6 uses step 2's value, carried through the cut, yet the gradient of step 6's loss stops at the cut and never reaches step 3 or step 2, so it cannot teach the model to keep that value.</li>
+        <li>The values cross the boundary; the gradient graph does not.</li>
+      </ol>
+      <p id="detach-cut-playback-help">Silent; paused initially; 1.5× playback. Focus the animation pane: Space or K plays/pauses, arrows seek between beats, Home/End jump, Escape pauses. The scrubber and speed menu also work by keyboard. Reduced-motion mode holds each beat's finished state instead of moving between them.</p>
+    </details>
+  </div>
+</details>
+
+</section>
+</section>
+<section id="engineering-a-memory-the-lstm" class="level2" data-number="12.4">
+<h2 data-number="12.4" class="anchored" data-anchor-id="engineering-a-memory-the-lstm"><span class="header-section-number">12.4</span> Engineering a memory: the LSTM</h2>
+<p>So the vanilla RNN’s memory dies of repeated multiplication. A useful way to stage the fix is as a design-by-constraints exercise, and it is worth walking because you already own the key move. We want a memory pathway that is:</p>
+<ol type="1">
+<li><strong>Preserved by default.</strong> Repeated <em>multiplication</em> killed the signal <span class="math inline">\(\rightarrow\)</span> make the carried state <strong>additive</strong>: <span class="math inline">\(\vect{c}_t = \vect{c}_{t-1} + \Delta_t\)</span>. A conveyor belt: information rides along untouched unless something deliberately intervenes. You met this exact maneuver two chapters ago: <a href="../part2/09-modern-cnns-transfer.html" class="quarto-xref"><span>Chapter 10</span></a>’s residual connection, <span class="math inline">\(H(x) = F(x) + x\)</span>, whose Jacobian’s identity term let gradients cross forty layers. Same trick, laid across time.</li>
+<li><strong>Forgettable on command.</strong> Memory is finite; some of it should expire. Install a valve: <span class="math inline">\(\vect{f}_t \in (0,1)\)</span> multiplying <span class="math inline">\(\vect{c}_{t-1}\)</span>.</li>
+<li><strong>Writable on command.</strong> New information enters through a second valve <span class="math inline">\(\vect{i}_t\)</span> scaling a candidate <span class="math inline">\(\tilde{\vect{c}}_t\)</span>.</li>
+<li><strong>Readable on command.</strong> Expose only what the current step needs, through a third valve <span class="math inline">\(\vect{o}_t\)</span>.</li>
+</ol>
+<p>Each valve is a small learned layer squashed by a sigmoid (<a href="../part1/02-logistic-softmax.html" class="quarto-xref"><span>Chapter 2</span></a>’s machine, reinterpreted: a number in <span class="math inline">\((0,1)\)</span> read as <em>what fraction passes</em>). The candidate content is shaped by <span class="math inline">\(\tanh\)</span>, keeping it bounded and centered. Assembled, this is the <strong>Long Short-Term Memory</strong> cell (Hochreiter &amp; Schmidhuber, 1997; the forget gate <span class="math inline">\(\vect{f}_t\)</span> was added by Gers, Schmidhuber &amp; Cummins, 2000):</p>
+<p><span id="eq-lstm"><span class="math display">\[
+\begin{aligned}
+\vect{f}_t &amp;= \sigma\!\left(\matr{W}_f\,[\vect{h}_{t-1}, \vect{x}_t] + \vect{b}_f\right)
+&amp;\quad
+\vect{i}_t &amp;= \sigma\!\left(\matr{W}_i\,[\vect{h}_{t-1}, \vect{x}_t] + \vect{b}_i\right)
+\\
+\tilde{\vect{c}}_t &amp;= \tanh\!\left(\matr{W}_c\,[\vect{h}_{t-1}, \vect{x}_t] + \vect{b}_c\right)
+&amp;\quad
+\vect{o}_t &amp;= \sigma\!\left(\matr{W}_o\,[\vect{h}_{t-1}, \vect{x}_t] + \vect{b}_o\right)
+\\[2pt]
+\vect{c}_t &amp;= \vect{f}_t \odot \vect{c}_{t-1} \;+\; \vect{i}_t \odot \tilde{\vect{c}}_t
+&amp;\quad
+\vect{h}_t &amp;= \vect{o}_t \odot \tanh(\vect{c}_t).
+\end{aligned}
+\tag{12.5}\]</span></span></p>
+<div id="cell-fig-lstm-conveyor" class="cell" data-execution_count="4">
+<div class="cell-output cell-output-display">
+<div id="fig-lstm-conveyor" class="quarto-float quarto-figure quarto-figure-center anchored" alt="LSTM flow diagram. A shared input, the previous hidden state concatenated with the current input, runs along the bottom and feeds four boxes: the forget gate, the input gate, the candidate, and the output gate. Across the top, the previous cell state travels along a horizontal orange highway, is multiplied by the forget gate, then receives the input-gated candidate at an addition node to form the new cell state. A tanh branch from that state is multiplied by the output gate to form the hidden state.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-lstm-conveyor-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="10-sequences-rnn_files/figure-html/fig-lstm-conveyor-output-1.png" loading="lazy" decoding="async" alt="LSTM flow diagram. A shared input, the previous hidden state concatenated with the current input, runs along the bottom and feeds four boxes: the forget gate, the input gate, the candidate, and the output gate. Across the top, the previous cell state travels along a horizontal orange highway, is multiplied by the forget gate, then receives the input-gated candidate at an addition node to form the new cell state. A tanh branch from that state is multiplied by the output gate to form the hidden state." width="701" height="279" class="figure-img">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-lstm-conveyor-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;12.3: The LSTM cell as a conveyor belt with valves. All four learned layers read the same input <span class="math inline">\([h_{t-1}, x_t]\)</span>, drawn along the bottom. The forget gate <span class="math inline">\(f_t\)</span> controls how much old cell state continues; the input gate <span class="math inline">\(i_t\)</span> controls how much candidate content <span class="math inline">\(\tilde{c}_t\)</span> is added; the output gate <span class="math inline">\(o_t\)</span> controls what becomes visible as <span class="math inline">\(h_t\)</span>. The upper additive route is the long-memory highway.
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<style>
 /* LSTM valves: one picture, one formula line, one caption (docs/animation-authoring.md,
    "Visual grammar"). Colour = meaning, everywhere at once: everything the cell carries -- the
    previous cell state, the candidate, the new cell state, the hidden state -- is the book's
@@ -1228,6 +1368,235 @@ Figure&nbsp;12.4: The gradient-vs-lag experiment, rerun with an LSTM whose effec
   </div>
 </details>
 
+</section>
+<section id="gru-the-streamlined-cousin" class="level2" data-number="12.5">
+<h2 data-number="12.5" class="anchored" data-anchor-id="gru-the-streamlined-cousin"><span class="header-section-number">12.5</span> GRU: the streamlined cousin</h2>
+<p>The <strong>Gated Recurrent Unit</strong> (Cho et al., 2014) folds the same ideas into a smaller box: cell and hidden state merged into one <span class="math inline">\(\vect{h}_t\)</span>, forget and input valves merged into a single <strong>update gate</strong> <span class="math inline">\(\vect{z}_t\)</span> (what you keep you do not overwrite, and vice versa), plus a <strong>reset gate</strong> <span class="math inline">\(\vect{r}_t\)</span> that can blank the past when a fresh start is called for:</p>
+<p><span id="eq-gru"><span class="math display">\[
+\begin{aligned}
+\vect{z}_t &amp;= \sigma\!\left(\matr{W}_z [\vect{h}_{t-1}, \vect{x}_t]\right), \qquad
+\vect{r}_t = \sigma\!\left(\matr{W}_r [\vect{h}_{t-1}, \vect{x}_t]\right),\\
+\tilde{\vect{h}}_t &amp;= \tanh\!\left(\matr{W}_h [\vect{r}_t \odot \vect{h}_{t-1},\, \vect{x}_t]\right), \qquad
+\vect{h}_t = \vect{z}_t \odot \vect{h}_{t-1} + (1 - \vect{z}_t) \odot \tilde{\vect{h}}_t .
+\end{aligned}
+\tag{12.7}\]</span></span></p>
+<p>This follows Cho et al.’s original convention: <span class="math inline">\(\vect{z}_t\)</span> weights the old state, so it reads as <strong>keep</strong>. Some later references reverse the symbol and let <span class="math inline">\(\vect{z}_t\)</span> weight the candidate instead; compare the interpolation equation, not the gate’s name alone.</p>
+<p>Two gates instead of three, one state instead of two, comparable performance in most settings. The memory test below enters PyTorch’s version beside the LSTM, and Exercise 3 builds one by hand. <a href="#fig-gru-cell" class="quarto-xref">Figure&nbsp;<span>12.5</span></a> draws the cell on the conveyor’s layout.</p>
+<div id="cell-fig-gru-cell" class="cell" data-execution_count="7">
+<div class="cell-output cell-output-display">
+<div id="fig-gru-cell" class="quarto-float quarto-figure quarto-figure-center anchored" alt="GRU flow diagram. Across the top, the previous hidden state travels along an orange line, is multiplied by the update gate, and then receives the candidate, scaled by one minus the update gate, at an addition node to form the new hidden state. Along the bottom, a shared input of the previous hidden state and the current input feeds the update gate and the reset gate; the reset gate multiplies the previous hidden state, and that product and the current input feed the candidate.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-gru-cell-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="10-sequences-rnn_files/figure-html/fig-gru-cell-output-1.png" loading="lazy" decoding="async" alt="GRU flow diagram. Across the top, the previous hidden state travels along an orange line, is multiplied by the update gate, and then receives the candidate, scaled by one minus the update gate, at an addition node to form the new hidden state. Along the bottom, a shared input of the previous hidden state and the current input feeds the update gate and the reset gate; the reset gate multiplies the previous hidden state, and that product and the current input feed the candidate." width="701" height="279" class="figure-img">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-gru-cell-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;12.5: The GRU cell on the conveyor’s layout. One state travels: the update gate <span class="math inline">\(z_t\)</span> keeps a fraction of <span class="math inline">\(h_{t-1}\)</span>, and the same dial’s complement <span class="math inline">\(1 - z_t\)</span> writes in the candidate <span class="math inline">\(\tilde{h}_t\)</span>. The reset gate <span class="math inline">\(r_t\)</span> scales <span class="math inline">\(h_{t-1}\)</span> before the candidate reads it, as in <a href="#eq-gru" class="quarto-xref">Equation&nbsp;<span>12.7</span></a>.
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<style>
+/* GRU blend: one picture, one formula line, one caption (docs/animation-authoring.md,
+   "Visual grammar"), plus the one parameter control the grammar's amendment allows: the keep
+   gate z, which the timeline sweeps by default. Scoped by the scene's id or its gb- prefix.
+
+   Colour = meaning, everywhere at once. Every value the cell carries (the old state, the
+   candidate, the new state and the two shares that build it) is the book's \featurepart
+   blue, told apart by mark shape: a filled circle, a hollow diamond, a ring, and arrows
+   filled or hollow like the mark they come from. The keep gate is not a carried value and
+   nothing here learns it, so the bar of its two shares, the dial and the formula's gate
+   washes are the book's emphasis ink. The line and its ticks are grey scenery. */
+#gru-blend-excerpt {
+  --gb-feature:#2b6cb0;       /* \featurepart blue: every carried value            */
+  --gb-parameter:#c05621;     /* \parameterpart orange: unused, nothing is learned  */
+  --gb-prediction:#2f855a;    /* \predictionpart green: unused                      */
+  --gb-target:#805ad5;        /* \targetpart purple: unused                         */
+  --gb-residual:#722f37;      /* \residualpart wine: unused                         */
+  --gb-ink:#232d4b;           /* emphasis ink: the gate, its bar and its dial       */
+  --gb-scenery:#667483;       /* the line, its ticks and their labels               */
+}
+#gru-blend-excerpt .target-role { color:var(--gb-target); }
+#gru-blend-excerpt .error-role { color:var(--gb-residual); }
+
+/* The picture. It is the static fallback too, so it is never hidden before the player
+   mounts: a reader without script sees the final frame with its witness values. */
+.gru-blend-figure { container-type:inline-size; }
+.gru-blend-figure svg { display:block; width:100%; height:auto; font-family:inherit; }
+.gru-blend-figure text { font-variant-numeric:tabular-nums; fill:var(--gb-ink); }
+.gru-blend-figure .gb-scenery { fill:var(--gb-scenery); }
+.gru-blend-figure .gb-feature-text { fill:var(--gb-feature); }
+.gru-blend-figure .gb-gate-text { fill:var(--gb-ink); }
+.gru-blend-figure .gb-number { font-weight:700; }
+.gru-blend-figure .gb-share-text { font-weight:600; }
+/* The state names are the formula's letters, set in the serif the typeset formula uses. */
+.gru-blend-figure .gb-symbol { font-family:Georgia, "Times New Roman", serif; font-style:italic; font-weight:700; }
+.gru-blend-figure .gb-var { font-family:Georgia, "Times New Roman", serif; font-style:italic; }
+
+/* The line over tanh's range, and the segment every blend of its two ends lands on. */
+.gru-blend-figure .gb-axis { fill:none; stroke:var(--gb-scenery); stroke-width:1.5; }
+.gru-blend-figure .gb-tick { fill:none; stroke:var(--gb-scenery); stroke-width:1.2; }
+.gru-blend-figure .gb-segment { fill:none; stroke:var(--gb-feature); stroke-opacity:.38; stroke-width:10; stroke-linecap:round; }
+
+/* The carried values: one blue, told apart by shape. */
+.gru-blend-figure .gb-old { fill:var(--gb-feature); }
+.gru-blend-figure .gb-candidate { fill:#ffffff; stroke:var(--gb-feature); stroke-width:2; stroke-linejoin:round; }
+.gru-blend-figure .gb-new { fill:#ffffff; stroke:var(--gb-feature); stroke-width:3.2; }
+.gru-blend-figure .gb-kept { fill:var(--gb-feature); stroke:var(--gb-feature); stroke-width:1.2; stroke-linejoin:round; }
+.gru-blend-figure .gb-written { fill:#ffffff; stroke:var(--gb-feature); stroke-width:1.8; stroke-linejoin:round; }
+
+/* The gate's two shares of one whole: write pale on the left, keep solid on the right, one
+   frame around both, each named beside the mark of the value it weighs. */
+.gru-blend-figure .gb-share-keep { fill:var(--gb-ink); fill-opacity:.55; }
+.gru-blend-figure .gb-share-write { fill:var(--gb-ink); fill-opacity:.08; }
+.gru-blend-figure .gb-split { fill:none; stroke:#ffffff; stroke-width:1.5; }
+.gru-blend-figure .gb-bar { fill:none; stroke:var(--gb-ink); stroke-opacity:.8; stroke-width:1; }
+
+/* The dial: the scene's one parameter control, the keep gate z. A gate, not a learned
+   weight and not a carried value, so it wears neutral ink. Inert, and so hidden, until the
+   player mounts; space is reserved so nothing below it jumps. */
+#gru-blend-excerpt .gb-dial { display:grid; grid-template-columns:minmax(0, 1fr) auto; align-items:start; gap:.4rem .8rem; margin:.5rem 0 .2rem; }
+#gru-blend-excerpt .gb-dial-track { min-width:0; }
+#gru-blend-excerpt .gb-dial-track input { display:block; width:100%; height:28px; margin:0; accent-color:var(--gb-ink); }
+#gru-blend-excerpt .gb-dial-ends { display:flex; justify-content:space-between; gap:.4rem; margin-top:4px; color:var(--gb-scenery); font-size:.72rem; line-height:1.3; }
+#gru-blend-excerpt .gb-out { margin:.15rem 0 0; color:var(--gb-ink); font-size:.9rem; font-variant-numeric:tabular-nums; white-space:nowrap; }
+#gru-blend-excerpt .gb-out output { font-weight:700; }
+#gru-blend-excerpt:not([data-ready]) .gb-dial { visibility:hidden; }
+/* The dial draws no fill. The bar above shows the two shares with keep on the right, and a
+   native fill growing from the left would contradict it; so the track is plain, with ticks
+   at 0, 0.5 and 1 centred on the thumb's stops, and the thumb is ink. */
+#gru-blend-excerpt .gb-dial-track input[type="range"] { -webkit-appearance:none; appearance:none; background:transparent; --gb-thumb:18px; }
+#gru-blend-excerpt .gb-dial-track input[type="range"]:focus-visible { outline:2px solid var(--gb-ink); outline-offset:4px; border-radius:4px; }
+#gru-blend-excerpt .gb-dial-track input[type="range"]::-webkit-slider-runnable-track {
+  height:14px;
+  background:
+    linear-gradient(var(--gb-scenery), var(--gb-scenery)) calc(var(--gb-thumb) / 2 - 1px) 50% / 2px 14px no-repeat,
+    linear-gradient(var(--gb-scenery), var(--gb-scenery)) 50% 50% / 2px 14px no-repeat,
+    linear-gradient(var(--gb-scenery), var(--gb-scenery)) calc(100% - var(--gb-thumb) / 2 + 1px) 50% / 2px 14px no-repeat,
+    linear-gradient(#d5dae1, #d5dae1) 0 50% / 100% 6px no-repeat;
+}
+#gru-blend-excerpt .gb-dial-track input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance:none; appearance:none; width:var(--gb-thumb); height:var(--gb-thumb); margin-top:-2px;
+  border-radius:50%; background:var(--gb-ink); border:2px solid #fff; box-shadow:0 0 0 1px var(--gb-ink);
+}
+#gru-blend-excerpt .gb-dial-track input[type="range"]::-moz-range-track {
+  height:14px;
+  background:
+    linear-gradient(var(--gb-scenery), var(--gb-scenery)) calc(var(--gb-thumb) / 2 - 1px) 50% / 2px 14px no-repeat,
+    linear-gradient(var(--gb-scenery), var(--gb-scenery)) 50% 50% / 2px 14px no-repeat,
+    linear-gradient(var(--gb-scenery), var(--gb-scenery)) calc(100% - var(--gb-thumb) / 2 + 1px) 50% / 2px 14px no-repeat,
+    linear-gradient(#d5dae1, #d5dae1) 0 50% / 100% 6px no-repeat;
+}
+#gru-blend-excerpt .gb-dial-track input[type="range"]::-moz-range-progress { background:transparent; }
+#gru-blend-excerpt .gb-dial-track input[type="range"]::-moz-range-thumb {
+  box-sizing:border-box; width:var(--gb-thumb); height:var(--gb-thumb); border-radius:50%;
+  background:var(--gb-ink); border:2px solid #fff; box-shadow:0 0 0 1px var(--gb-ink);
+}
+
+.gru-blend-formula { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; margin:.3rem 0 .4rem; font-size:1rem; }
+.gru-blend-formula > span { max-width:100%; }
+/* The formula is animated by state, never by rewriting its TeX: the gate's part that acts
+   now is washed in ink. Every wash is scoped to [data-ready], so the script-free fallback
+   shows the whole expression fully lit. */
+#gru-blend-excerpt[data-ready] .gru-blend-formula.gb-keep-lit .gb-keep,
+#gru-blend-excerpt[data-ready] .gru-blend-formula.gb-write-lit .gb-write { background:rgba(35,45,75,.14); border-radius:3px; }
+
+/* The static fallback carries the final frame twice inside the one svg: the wide layout at
+   713 units in the svg's own viewBox, and the narrow layout at 296 units, scaled into that
+   viewBox by its group transform and chosen by the figure's own width. */
+#gru-blend-excerpt:not([data-ready]) .gru-blend-figure svg { aspect-ratio:713 / 206; }
+#gru-blend-excerpt:not([data-ready]) [data-static-frame="narrow"] { display:none; }
+@container (max-width:599px) {
+  #gru-blend-excerpt:not([data-ready]) .gru-blend-figure svg { aspect-ratio:296 / 160; }
+  #gru-blend-excerpt:not([data-ready]) [data-drawing] { display:none; }
+  #gru-blend-excerpt:not([data-ready]) [data-static-frame="narrow"] { display:block; }
+}
+@media (max-width:480px) {
+  .gru-blend-formula { font-size:.9rem; }
+  #gru-blend-excerpt .gb-dial { grid-template-columns:minmax(0, 1fr); row-gap:.1rem; }
+  #gru-blend-excerpt .gb-out { font-size:.85rem; }
+  #gru-blend-excerpt .gb-dial-ends { font-size:.7rem; }
+}
+
+</style>
+
+<details id="gru-blend-excerpt" class="mechanism-excerpt" data-player="../../interactives/gru-blend/player.js" data-playback="../../interactives/shared/playback.js" data-old="0.8" data-candidate="0.3" data-keep="0.5" data-range="-1 1" data-evidence-class="declared-toy">
+  
+  <summary>Watch the mechanism: halve the keep gate and follow the new state</summary>
+  <div class="mechanism-body">
+    <p class="mechanism-question">One coordinate of the state holds 0.80, and the candidate offers 0.30. With the keep gate fully open, the new state stays at 0.80. Halve the keep to 0.5: where does the new state land?</p>
+    <p class="mechanism-intro">One coordinate of the cell drawn above: the old state and the candidate on a line from −1 to 1, and the keep gate as a dial.</p>
+    <div data-pane="" data-duration="40" data-beats="0 5 10 15 20 25 30 35" tabindex="0" role="group" aria-label="GRU keep gate animation" aria-describedby="gru-blend-playback-help">
+      <div class="gru-blend-figure" data-figure="">
+        <svg viewbox="0 0 713 206" preserveaspectratio="xMinYMin meet" role="img" aria-label="A number line from −1 to 1: the old state at 0.80, a filled circle, and the candidate at 0.30, a hollow diamond; the bar gives write 0.50 on the left and keep 0.50 on the right; the kept share, 0.5 times 0.80, is 0.40, an arrow from 0; the written share, 0.5 times 0.30, is 0.15, joined at the kept arrow's tip; the new state, a ring, is at 0.55; it lies on the segment from 0.30 to 0.80.">
+          <title>One dial, two jobs</title>
+          
+          <g data-drawing=""><rect class="gb-share-write" data-mark="write-share" data-share="0.5" x="44" y="33" width="312.5" height="10"></rect><rect class="gb-share-keep" data-mark="keep-share" data-share="0.5" x="356.5" y="33" width="312.5" height="10"></rect><path class="gb-split" d="M356.5 33V43"></path><rect class="gb-bar" data-mark="bar" x="44" y="33" width="625" height="10"></rect><path class="gb-candidate" data-mark="write-glyph" d="M48.5 15.95L53 20.45L48.5 24.95L44 20.45Z"></path><text x="58" y="25" class="gb-gate-text" font-size="13" text-anchor="start">write 1 − <tspan class="gb-var">z</tspan></text><circle class="gb-old" data-mark="keep-glyph" cx="664.5" cy="20.45" r="4.05"></circle><text x="655" y="25" class="gb-gate-text" font-size="13" text-anchor="end">keep <tspan class="gb-var">z</tspan></text><text x="44" y="101" class="gb-scenery" font-size="12" text-anchor="middle">−1</text><text x="356.5" y="101" class="gb-scenery" font-size="12" text-anchor="middle">0</text><text x="669" y="101" class="gb-scenery" font-size="12" text-anchor="middle">1</text><path class="gb-axis" d="M44 114H669"></path><path class="gb-tick" d="M44 109V119M200.25 111V117M356.5 109V119M512.75 111V117M669 109V119"></path><path class="gb-segment" data-mark="segment" data-from="0.3" data-to="0.8" d="M450.25 114H606.5"></path><path class="gb-candidate" data-mark="candidate" data-at="0.3" d="M450.25 106.5L457.75 114L450.25 121.5L442.75 114Z"></path><circle class="gb-old" data-mark="old" data-at="0.8" cx="606.5" cy="114" r="6.5"></circle><text x="606.5" y="83" class="gb-symbol gb-feature-text" font-size="15" text-anchor="middle">h<tspan dy="4" font-size="11">t−1</tspan></text><text x="606.5" y="101" class="gb-feature-text gb-number" font-size="13" text-anchor="middle" data-value="old">0.80</text><text x="450.25" y="83" class="gb-symbol gb-feature-text" font-size="15" text-anchor="middle"><tspan class="mechanism-accent">h̃</tspan><tspan dy="4" font-size="11">t</tspan></text><text x="450.25" y="101" class="gb-feature-text gb-number" font-size="13" text-anchor="middle" data-value="candidate">0.30</text><circle class="gb-new" data-mark="new" data-at="0.55" cx="528.375" cy="132" r="8.5"></circle><text x="514.375" y="136.55" class="gb-symbol gb-feature-text" font-size="15" text-anchor="end">h<tspan dy="4" font-size="11">t</tspan></text><text x="542.375" y="136.55" class="gb-feature-text gb-number" font-size="13" text-anchor="start" data-value="new">0.55</text><path class="gb-arrow gb-kept" data-mark="kept" data-from="0" data-to="0.4" d="M356.5 152.5H470.5V149L481.5 157L470.5 165V161.5H356.5Z"></path><text x="344.5" y="161.55" class="gb-feature-text gb-share-text" font-size="13" text-anchor="end" data-value="kept"><tspan class="gb-gate-text">0.5</tspan> × 0.80 = 0.40</text><path class="gb-arrow gb-written" data-mark="written" data-from="0.4" data-to="0.55" data-lift="1" d="M481.5 152.5H517.375V149L528.375 157L517.375 165V161.5H481.5Z"></path><text x="504.9375" y="185" class="gb-feature-text gb-share-text" font-size="13" text-anchor="middle" data-value="written"><tspan class="gb-gate-text">0.5</tspan> × 0.30 = 0.15</text></g>
+          
+          
+          <g data-static-frame="narrow" data-width="296" data-height="160" transform="scale(2.4088)"><rect class="gb-share-write" data-mark="write-share" data-share="0.5" x="18" y="21" width="130" height="9"></rect><rect class="gb-share-keep" data-mark="keep-share" data-share="0.5" x="148" y="21" width="130" height="9"></rect><path class="gb-split" d="M148 21V30"></path><rect class="gb-bar" data-mark="bar" x="18" y="21" width="260" height="9"></rect><path class="gb-candidate" data-mark="write-glyph" d="M22 5.8L26 9.8L22 13.8L18 9.8Z"></path><text x="31" y="14" class="gb-gate-text" font-size="12" text-anchor="start">write 1 − <tspan class="gb-var">z</tspan></text><circle class="gb-old" data-mark="keep-glyph" cx="274" cy="9.8" r="3.6"></circle><text x="265" y="14" class="gb-gate-text" font-size="12" text-anchor="end">keep <tspan class="gb-var">z</tspan></text><text x="18" y="70" class="gb-scenery" font-size="11" text-anchor="middle">−1</text><text x="148" y="70" class="gb-scenery" font-size="11" text-anchor="middle">0</text><text x="278" y="70" class="gb-scenery" font-size="11" text-anchor="middle">1</text><path class="gb-axis" d="M18 82H278"></path><path class="gb-tick" d="M18 77.5V86.5M83 79.5V84.5M148 77.5V86.5M213 79.5V84.5M278 77.5V86.5"></path><path class="gb-segment" data-mark="segment" data-from="0.3" data-to="0.8" d="M187 82H252"></path><path class="gb-candidate" data-mark="candidate" data-at="0.3" d="M187 75.5L193.5 82L187 88.5L180.5 82Z"></path><circle class="gb-old" data-mark="old" data-at="0.8" cx="252" cy="82" r="5.5"></circle><text x="252" y="53" class="gb-symbol gb-feature-text" font-size="14" text-anchor="middle">h<tspan dy="3.5" font-size="10">t−1</tspan></text><text x="252" y="70" class="gb-feature-text gb-number" font-size="12" text-anchor="middle" data-value="old">0.80</text><text x="187" y="53" class="gb-symbol gb-feature-text" font-size="14" text-anchor="middle"><tspan class="mechanism-accent">h̃</tspan><tspan dy="3.5" font-size="10">t</tspan></text><text x="187" y="70" class="gb-feature-text gb-number" font-size="12" text-anchor="middle" data-value="candidate">0.30</text><circle class="gb-new" data-mark="new" data-at="0.55" cx="219.5" cy="97.5" r="7"></circle><text x="207.5" y="101.7" class="gb-symbol gb-feature-text" font-size="14" text-anchor="end">h<tspan dy="3.5" font-size="10">t</tspan></text><text x="231.5" y="101.7" class="gb-feature-text gb-number" font-size="12" text-anchor="start" data-value="new">0.55</text><path class="gb-arrow gb-kept" data-mark="kept" data-from="0" data-to="0.4" d="M148 115H191V112L200 119L191 126V123H148Z"></path><text x="140" y="123.2" class="gb-feature-text gb-share-text" font-size="12" text-anchor="end" data-value="kept"><tspan class="gb-gate-text">0.5</tspan> × 0.80 = 0.40</text><path class="gb-arrow gb-written" data-mark="written" data-from="0.4" data-to="0.55" data-lift="1" d="M200 115H210.5V112L219.5 119L210.5 126V123H200Z"></path><text x="209.75" y="144" class="gb-feature-text gb-share-text" font-size="12" text-anchor="middle" data-value="written"><tspan class="gb-gate-text">0.5</tspan> × 0.30 = 0.15</text></g>
+          
+        </svg>
+      </div>
+      <div class="gb-dial">
+        <div class="gb-dial-track">
+          <input id="gru-blend-keep" data-keep-slider="" type="range" min="0" max="1" step="0.01" value="0.5" list="gru-blend-keep-ticks" aria-label="Keep gate z" aria-valuetext="keep 0.50, write 0.50">
+          <datalist id="gru-blend-keep-ticks"><option value="0"></option><option value="0.5"></option><option value="1"></option></datalist>
+          <div class="gb-dial-ends" aria-hidden="true"><span>0 · write all</span><span>1 · keep all</span></div>
+        </div>
+        <p class="gb-out" data-keep-display=""><label for="gru-blend-keep">keep</label> <output data-keep-readout="" for="gru-blend-keep">0.50</output> · write <output data-write-readout="" for="gru-blend-keep">0.50</output></p>
+      </div>
+      <p class="gru-blend-formula" data-formula=""><span id="eq-gru-blend-1">\( \featurepart{\vect{h}_t} = \class{gb-keep}{\vect{z}_t} \odot \featurepart{\vect{h}_{t-1}} + \class{gb-write}{(1 - \vect{z}_t)} \odot \featurepart{\tilde{\vect{h}}_t} \)</span></p>
+      <p class="mechanism-caption" data-caption="" aria-live="polite" aria-atomic="true">One dial, two jobs: keep z of the old state, write 1 − z of the candidate.</p>
+      <div class="mechanism-controls" data-controls="" role="group" aria-label="Playback controls" hidden="">
+  <button type="button" data-action="play" data-state="play" aria-label="Play" title="Play">
+    <svg data-icon="play" viewbox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"></path></svg>
+    <svg data-icon="pause" viewbox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7zM14 5h4v14h-4z" fill="currentColor"></path></svg>
+    <svg data-icon="replay" viewbox="0 0 24 24" aria-hidden="true"><path d="M5 8a8 8 0 1 1-1 8M5 3v6h6" fill="none" stroke="currentColor" stroke-width="2"></path></svg>
+    <span class="mechanism-sr" data-button-label="">Play</span>
+  </button>
+  <label class="mechanism-scrubber"><span class="mechanism-sr">Playback position</span><input type="range" min="0" max="40" value="0" step="0.01"></label>
+  <span class="mechanism-clock" aria-hidden="true"><span data-elapsed="">0:00</span><span data-duration=""> / 0:40</span></span>
+  <select data-speed="" aria-label="Playback speed" title="Playback speed"><option value="0.5">0.5×</option><option value="1">1×</option><option value="1.5" selected="">1.5×</option><option value="2">2×</option></select>
+  <button type="button" data-action="fullscreen" data-state="expand" aria-label="Fullscreen" title="Fullscreen">
+    <svg data-icon="expand" viewbox="0 0 24 24" aria-hidden="true"><path d="M9 4H4v5M15 4h5v5M20 15v5h-5M9 20H4v-5" fill="none" stroke="currentColor" stroke-width="2"></path></svg>
+    <svg data-icon="contract" viewbox="0 0 24 24" aria-hidden="true"><path d="M4 9h5V4M20 9h-5V4M15 20v-5h5M4 15h5v5" fill="none" stroke="currentColor" stroke-width="2"></path></svg>
+    <span class="mechanism-sr" data-button-label="">Fullscreen</span>
+  </button>
+</div>
+<p data-notice="" role="status"></p>
+
+    </div>
+    <dialog aria-label="Expanded GRU keep gate animation"></dialog>
+    <p data-load-status="" role="status">The calculation is readable without playback. Opening this panel loads the optional controls.</p>
+    <div class="mechanism-boundary">
+      <p>The values 0.80 and 0.30 are an illustrative toy: a real cell gives every coordinate its own keep, computed by a sigmoid from the input and the old state.</p>
+      <details class="mechanism-scope"><summary>Scope and caveats</summary>
+        <p>The two values are round numbers inside the range of tanh, which shapes every candidate; the chapter trains its gates and prints no state values. A real state is a vector, and every coordinate of <span class="math inline">\( \vect{z}_t \)</span> is a keep of its own, so one coordinate can hold its value while its neighbor is overwritten.</p>
+        <p>The reset gate decides how much of the old state the candidate reads: it shapes the candidate before the blend and is not drawn. PyTorch’s reset-after candidate changes how the candidate is computed, not this blend.</p>
+        <p>This panel follows the chapter’s convention: <span class="math inline">\( \vect{z}_t \)</span> weights the old state, so it reads as keep. Some references swap the roles; compare the interpolation equation, not the gate’s name.</p>
+        <p>Blue marks every value the cell carries: the filled circle is the old state, the hollow diamond the candidate, the ring the new state, and the arrows their kept and written shares, filled and hollow like the marks they come from. The keep and write bar and the dial are neutral ink: a gate weighs values and carries none. The bar puts write on the left and keep on the right, the sides where the candidate and the old state sit on the line and where the dial writes all or keeps all, and each share is named beside its value's mark.</p>
+      </details>
+    </div>
+    <details class="mechanism-check"><summary><strong>Check yourself.</strong> A GRU starts from h<sub>0</sub> = 0, and every candidate it writes is a tanh output inside (−1, 1). Can a coordinate of its state ever reach 1.2, whatever the gates do?</summary>
+      <p>No. Each step lands the new state on the segment between the old state and the candidate, since keep and write are shares of one whole. If both ends lie inside (−1, 1), so does the new state, and from h<sub>0</sub> = 0 every state stays inside (−1, 1).</p>
+    </details>
+    <details class="mechanism-transcript" id="gru-blend-transcript"><summary>Transcript and keyboard help</summary>
+      <ol>
+        <li>A number line from −1 to 1, the range of tanh. The old state sits at 0.80, a filled circle; the candidate at 0.30, a hollow diamond. The keep gate is fully open, so the bar is all keep and the new state, a ring, sits under the old state at 0.80.</li>
+        <li>The keep halves to 0.5: the bar splits into write on the left and keep on the right, half each, and the new state leaves the picture. Predict: where does it land?</li>
+        <li>The old state becomes an arrow from 0 to 0.80, and the keep shrinks it to half: 0.5 × 0.80 = 0.40.</li>
+        <li>The candidate becomes an arrow from 0 to 0.30. What is not kept is written: it shrinks to 0.5 × 0.30 = 0.15 and slides onto the tip of the kept arrow, and the new state lands at that tip, 0.40 + 0.15 = 0.55.</li>
+        <li>The segment from the candidate to the old state is marked. With equal shares, 0.55 sits halfway along it.</li>
+        <li>The dial turns up to full keep. The kept arrow grows back to 0.80, the written arrow shrinks to nothing, and the new state slides along the segment to 0.80.</li>
+        <li>The dial turns down to keep 0. The kept arrow shrinks to nothing and the written arrow carries the whole candidate: the new state slides the length of the segment to 0.30, overwritten.</li>
+        <li>Home at keep 0.5: 0.40 kept plus 0.15 written gives 0.55. One dial does two jobs, keeping z of the old state and writing 1 − z of the candidate, so the new state always lands on the segment between them. Drag the dial to try another keep.</li>
+      </ol>
+      <p id="gru-blend-playback-help">Silent; paused initially; 1.5× playback. Focus the animation pane: Space or K plays/pauses, arrows seek between beats, Home/End jump, Escape pauses. The scrubber and speed menu also work by keyboard. The keep dial pauses playback and redraws the whole picture for the keep you choose; playing or scrubbing returns to the timeline. Reduced-motion mode holds each beat’s finished state instead of moving between them.</p>
+    </details>
+  </div>
+</details>
+
 <script>
 (() => {
   document.querySelectorAll('.mechanism-excerpt[data-player]').forEach(root => {
@@ -1281,34 +1650,6 @@ Figure&nbsp;12.4: The gradient-vs-lag experiment, rerun with an LSTM whose effec
 })();
 
 </script>
-</section>
-<section id="gru-the-streamlined-cousin" class="level2" data-number="12.5">
-<h2 data-number="12.5" class="anchored" data-anchor-id="gru-the-streamlined-cousin"><span class="header-section-number">12.5</span> GRU: the streamlined cousin</h2>
-<p>The <strong>Gated Recurrent Unit</strong> (Cho et al., 2014) folds the same ideas into a smaller box: cell and hidden state merged into one <span class="math inline">\(\vect{h}_t\)</span>, forget and input valves merged into a single <strong>update gate</strong> <span class="math inline">\(\vect{z}_t\)</span> (what you keep you do not overwrite, and vice versa), plus a <strong>reset gate</strong> <span class="math inline">\(\vect{r}_t\)</span> that can blank the past when a fresh start is called for:</p>
-<p><span id="eq-gru"><span class="math display">\[
-\begin{aligned}
-\vect{z}_t &amp;= \sigma\!\left(\matr{W}_z [\vect{h}_{t-1}, \vect{x}_t]\right), \qquad
-\vect{r}_t = \sigma\!\left(\matr{W}_r [\vect{h}_{t-1}, \vect{x}_t]\right),\\
-\tilde{\vect{h}}_t &amp;= \tanh\!\left(\matr{W}_h [\vect{r}_t \odot \vect{h}_{t-1},\, \vect{x}_t]\right), \qquad
-\vect{h}_t = \vect{z}_t \odot \vect{h}_{t-1} + (1 - \vect{z}_t) \odot \tilde{\vect{h}}_t .
-\end{aligned}
-\tag{12.7}\]</span></span></p>
-<p>This follows Cho et al.’s original convention: <span class="math inline">\(\vect{z}_t\)</span> weights the old state, so it reads as <strong>keep</strong>. Some later references reverse the symbol and let <span class="math inline">\(\vect{z}_t\)</span> weight the candidate instead; compare the interpolation equation, not the gate’s name alone.</p>
-<p>Two gates instead of three, one state instead of two, comparable performance in most settings. The memory test below enters PyTorch’s version beside the LSTM, and Exercise 3 builds one by hand. <a href="#fig-gru-cell" class="quarto-xref">Figure&nbsp;<span>12.5</span></a> draws the cell on the conveyor’s layout.</p>
-<div id="cell-fig-gru-cell" class="cell" data-execution_count="7">
-<div class="cell-output cell-output-display">
-<div id="fig-gru-cell" class="quarto-float quarto-figure quarto-figure-center anchored" alt="GRU flow diagram. Across the top, the previous hidden state travels along an orange line, is multiplied by the update gate, and then receives the candidate, scaled by one minus the update gate, at an addition node to form the new hidden state. Along the bottom, a shared input of the previous hidden state and the current input feeds the update gate and the reset gate; the reset gate multiplies the previous hidden state, and that product and the current input feed the candidate.">
-<figure class="quarto-float quarto-float-fig figure">
-<div aria-describedby="fig-gru-cell-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<img src="10-sequences-rnn_files/figure-html/fig-gru-cell-output-1.png" loading="lazy" decoding="async" alt="GRU flow diagram. Across the top, the previous hidden state travels along an orange line, is multiplied by the update gate, and then receives the candidate, scaled by one minus the update gate, at an addition node to form the new hidden state. Along the bottom, a shared input of the previous hidden state and the current input feeds the update gate and the reset gate; the reset gate multiplies the previous hidden state, and that product and the current input feed the candidate." width="701" height="279" class="figure-img">
-</div>
-<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-gru-cell-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;12.5: The GRU cell on the conveyor’s layout. One state travels: the update gate <span class="math inline">\(z_t\)</span> keeps a fraction of <span class="math inline">\(h_{t-1}\)</span>, and the same dial’s complement <span class="math inline">\(1 - z_t\)</span> writes in the candidate <span class="math inline">\(\tilde{h}_t\)</span>. The reset gate <span class="math inline">\(r_t\)</span> scales <span class="math inline">\(h_{t-1}\)</span> before the candidate reads it, as in <a href="#eq-gru" class="quarto-xref">Equation&nbsp;<span>12.7</span></a>.
-</figcaption>
-</figure>
-</div>
-</div>
-</div>
 <p>One convention matters before you compare code. <a href="#eq-gru" class="quarto-xref">Equation&nbsp;<span>12.7</span></a> applies the reset gate to <span class="math inline">\(\vect{h}_{t-1}\)</span> <strong>before</strong> the candidate’s hidden-state linear map. PyTorch’s <code>nn.GRU</code> uses a reset-after form, <span class="math inline">\(\tanh(W_{in}x+b_{in}+r\odot(W_{hn}h+b_{hn}))\)</span>, for implementation efficiency. The gates serve the same purpose, but the two cells are not algebraically identical for the same weights. An exact manual-loop verification must implement PyTorch’s ordering rather than <a href="#eq-gru" class="quarto-xref">Equation&nbsp;<span>12.7</span></a>’s.</p>
 </section>
 <section id="the-memory-test" class="level2" data-number="12.6">
