@@ -1,3 +1,38 @@
+# Rolling post-v1.4: Chapter 22 exposition (September 30, 2026)
+
+- **The variational family is a choice.** The sentence before Equation 22.2 names the
+  diagonal Gaussian as the family chosen here, with its own mean and variance for each
+  coordinate (not isotropic). After the reparameterization, one paragraph states the
+  general form $\vect{z}=g_\phi(\vect{x},\vect{\epsilon})$ with a parameter-free
+  base and a differentiable map (Kingma and Welling), gives location–scale families as
+  the example, and notes that the closed-form KL is specific to the diagonal Gaussian.
+  The decoder's "isotropic Gaussian" sentence is correct and unchanged.
+- **GAN steps made explicit.** The discriminator is named a binary classifier.
+  $V(D_\phi,G_\theta)$ is defined as the expression inside the braces of
+  Equation 22.7 and $V(D,G)$ as the same sum for an unrestricted $D$. Before
+  Equation 22.8, the second expectation is rewritten over
+  $\vect{x}\sim p_g$, and the pointwise maximization of $a\log u+b\log(1-u)$ is shown
+  with its concavity, and the support sentence gains the case where only one density is
+  zero. Before Equation 22.9, the mixture $m$ and the intermediate
+  $-\log4+D_{\mathrm{KL}}(p_{\mathrm{data}}\|m)+D_{\mathrm{KL}}(p_g\|m)$ appear, and
+  Jensen–Shannon divergence is defined. A comma splice after $D^*=1/2$ is fixed. The new
+  displays are unnumbered, so every equation keeps its number; the chapter's own GAN
+  audit reproduces the intermediate equality (values -1.379789 and -1.019755).
+- **Headings name the families.** "Variational autoencoders (VAEs): put probability
+  around the code", "Generative adversarial networks (GANs): let the judge move" and
+  "Diffusion models: corrupt, then generate". The first two are pinned to their old
+  anchors so external links survive.
+- **Diffusion is one section.** The forward process ("Destroy data on purpose", anchor
+  kept) and the reverse process ("Learn the path back", anchor kept) are its two
+  subsections; "Why the denoiser needs time" moves one level down with them, so at the
+  book's `toc-depth: 3` it leaves the page's contents list (its anchor stays). Sections
+  22.5 to 22.7 become 22.4 to 22.6. The opening now scopes "fixed, not learned" to the
+  formulation used here and names the "forward, or noising, process".
+- **Nothing re-executed.** The chapter's frozen Markdown carries the same edits (a
+  prose-only refresh); all 137 stdout blocks are unchanged, and the `score-field`
+  receipt is re-hashed. The added sentences are listed in
+  `audits/voice/edits/19-generative.json`, so the I17 added-sentence audit covers them.
+
 # Rolling post-v1.4: figures show in closed code panels (September 30, 2026)
 
 - **Evidence is visible by default.** A Plan → Code panel starts with its code closed,
