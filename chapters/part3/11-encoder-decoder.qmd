@@ -34,8 +34,8 @@ Before recurrence, every model lived on a
 **fixed-size contract**: 784 pixels in, 10 logits out; $28 \times 28$ garments in, one
 verdict out. The interesting world breaks that contract on both ends at once:
 translation maps a sentence of *any* length to a sentence of *some other* length, in a
-different vocabulary. @sec-10-sequences-rnn's six requirements were all about reading. Writing
-adds three more:
+different vocabulary. The six requirements of the previous chapter were all about reading.
+Writing adds three more:
 
 1. **Output of any length.** The model decides where the output ends.
 2. **Reordering.** An output token may depend on input that arrives after it: the year
@@ -43,16 +43,25 @@ adds three more:
 3. **Conditioning on both sides.** Each output token depends on the whole input and on
    every token already written.
 
-The smallest design that meets all three reuses the two recurrent machines built in @sec-10-sequences-rnn:
+The smallest design that meets all three reuses two recurrent machines already built:
 one that reads a sequence into a state, and the character model that writes
 one token at a time from a state.
+
+Four earlier ideas return in new roles: the one-hot linear map of
+@sec-01-linear-regression becomes an embedding table; the estimator cases of
+@sec-04-estimator-cases fix which tokens a loss averages over; the masked update of
+@sec-10-sequences-rnn becomes the framework's packed sequences; and the hard max of
+@sec-02-logistic-softmax, confident one step at a time, returns as greedy decoding.
+Two later chapters take over what this one leaves open: @sec-13-attention softens the
+embedding's hard address, and @sec-14-self-attention-transformer puts masking at the
+center of a language model.
 
 ## Two RNNs and a handoff
 
 An **encoder** RNN reads the source sequence and
 keeps only its final state, the entire input compressed into fixed-size memory,
 the **context**. A **decoder** RNN starts *from* that state and generates the
-output token by token, feeding each token back in, exactly like @sec-10-sequences-rnn's
+output token by token, feeding each token back in, exactly like the
 character model. A language model, in other words, but one with something to say.
 
 Our laboratory task keeps the core mechanics of translation:
@@ -157,14 +166,14 @@ translation pipeline: `<pad>` fills the short sequences of a batch out to a
 rectangle, `<bos>` tells the decoder "begin," and `<eos>` lets the *model* say
 "I am done": remember, the machine must be free to choose its output length.
 
-@sec-10-sequences-rnn fed characters in as one-hot
+The character model fed characters in as one-hot
 vectors. This chapter gives each token a learned vector instead: `nn.Embedding`, a
 table with one trainable row per vocabulary entry. There is no new math: an
-embedding is exactly a one-hot vector times a weight matrix, @sec-01-linear-regression's linear
+embedding is exactly a one-hot vector times a weight matrix, a linear
 map wearing a lookup table's clothes, but the reading matters: *the address is
 hard, the content is learned*. Row 17 is fetched by index, rigidly; what lives in
 row 17 is whatever training decides that token should mean. Keep the phrase "hard
-address, learned content" nearby: in @sec-13-attention we soften the address too,
+address, learned content" nearby: attention softens the address too,
 and that will be the whole story.
 
 :::: {.plan-code}
@@ -292,7 +301,7 @@ padding poisons two places:
 1. **The loss.** Positions holding `<pad>` are not predictions to be graded.
    `F.cross_entropy(..., ignore_index=PAD)` excludes them. Our ISO targets all have
    the same length, so this branch is dormant here, but it makes the loop correct for
-   genuinely variable-length targets. (In the vocabulary of @sec-04-estimator-cases
+   genuinely variable-length targets. (In the vocabulary of estimator cases,
    this is Case 1 over *real* tokens, and which tokens count, the denominator, is
    part of the objective's definition, so it must be stated.)
 2. **The encoder.** Subtler and far worse: an LSTM does not know your zeros are
@@ -526,7 +535,7 @@ enforce, in two places: `ignore_index` for the loss, `pack_padded_sequence` (or 
 explicit mask) for the encoder. When a sequence model underperforms mysteriously,
 audit the padding before touching the architecture. And file the general shape of
 this tool away: telling a model *which positions it may not look at* is called
-**masking**, and it returns center-stage in @sec-14-self-attention-transformer,
+**masking**, and it returns center-stage with the transformer,
 where a *causal* mask is what turns a transformer into a language model.
 :::
 
@@ -548,7 +557,7 @@ $\rightarrow$ the whole target can be submitted in **one fused decoder call** (t
 `model(S, L, T[:, :-1])` line), rather than a Python feedback loop. The LSTM still
 processes time recurrently inside that call; teacher forcing does not make its
 timesteps mathematically parallel. What still fixes their order is the state each
-step hands to the next: the decoder has inherited @sec-10-sequences-rnn's second unmet need,
+step hands to the next: the decoder has inherited the recurrence's second unmet need,
 time in parallel. Every step nevertheless learns from a sensible
 context from epoch one. Watch both effects:
 
@@ -647,9 +656,8 @@ probable token at each step and never looks back. Complexity $O(V \cdot T)$,
 quality: usually fine, occasionally myopic. The failure mode is structural: a
 token that looks best *right now* can commit the decoder to a mediocre
 continuation, when a slightly worse token now would have opened a much better
-path. Maximizing each step is not maximizing the sequence. You met this exact
-gap in @sec-02-logistic-softmax, where the hard max's stepwise confidence hid the
-alternatives softmax kept alive.
+path. Maximizing each step is not maximizing the sequence. It is the hard max's old gap:
+stepwise confidence hides the alternatives a softmax keeps alive.
 
 <!-- lecture-source: Video_lectures/6050-Ch11/lecture.jsx, SGreedyTree;
      Video_lectures/audit-ch11-encoder-decoder.py, toy_search_tree_evidence.
@@ -816,16 +824,16 @@ residual digit and order errors are consistent with a decoder reconstructing fro
 compressed summary rather than consulting source positions directly. They do not,
 by themselves, prove that compression caused each error. Now scale the ambition: a
 forty-word sentence, clause structure, names, negations,
-all crammed through the same fixed pipe, *regardless of length*. @sec-10-sequences-rnn
-called this the price of the Markov claim; here the bill arrives itemized.
+all crammed through the same fixed pipe, *regardless of length*. The recurrence's
+Markov claim named this price; here the bill arrives itemized.
 
 And notice what the architecture throws away: the encoder *had* a state at every
 step, a whole trajectory of summaries, one per source position, and we kept
 only the last. The fix that defines Part IV is almost embarrassingly direct: keep
 them all, and let the decoder *look back* at whichever ones matter for the token
-it is writing right now. Choosing where to look, by similarity, on the fly: you
-have owned the primitive since @sec-01-linear-regression's dot product, and @sec-02-logistic-softmax promised
-you the "soft lookup" that makes it differentiable. @sec-12-kernel-regression
+it is writing right now. Choosing where to look, by similarity, on the fly: the
+primitive is a dot product, and a softmax turns it into a "soft lookup" that stays
+differentiable. @sec-12-kernel-regression
 builds the classical version; @sec-13-attention makes it learnable and comes back
 for this very date task with an alignment map to show where the decoder looks.
 
@@ -848,7 +856,7 @@ Close the book for one minute and reconstruct the sequence pipeline from memory.
    lets it choose its length, embeddings replace one-hots (hard address, learned
    content).
 2. **Padding poisons twice**: the loss (`ignore_index`) and the encoder
-   (`pack_padded_sequence`, the framework's form of @sec-10-sequences-rnn's masked update). On
+   (`pack_padded_sequence`, the framework's form of the masked update). On
    never-seen source strings, the same model and budget
    score 34.3% naive versus 93.1% packed. Target padding is included for reuse but
    not exercised by these fixed-length ISO targets. Audit bookkeeping before architecture.

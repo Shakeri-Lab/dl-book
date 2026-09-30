@@ -59,13 +59,24 @@ maximum length, and it cannot finish before the last piece arrives.
 Recurrence asks us to make the carried summary learnable: rather than compressing
 once, the model learns how to revise its memory after each new piece.
 
+Four earlier tools do most of the work in this chapter: the kernel shared across space
+in @sec-07-filters-convolution and @sec-08-cnn, which becomes one rule shared across
+time; the product of Jacobians that vanished down deep networks in
+@sec-05-backpropagation, now measured across time; the sigmoid and softmax of
+@sec-02-logistic-softmax, which become gates and a distribution over the next
+character; and the residual highway of @sec-09-modern-cnns-transfer, which the LSTM
+lays along the sequence. The next chapter, @sec-11-encoder-decoder, joins two
+recurrences into a translator and measures what padding costs, and Part IV
+(@sec-12-kernel-regression onward) stops forcing the whole past through one
+fixed-size state.
+
 ## Stretching the old toolkit
 
-Before building anything new, the book's habit: try what we own.
+Before building anything new, try the tools already in hand.
 
 **A window.** Predict the next element from the last $k$: slide a width-$k$ window
 along the sequence and feed each snapshot to an MLP. This should feel familiar twice
-over: it is autoregression, and the *sliding* is @sec-07-filters-convolution's one-dimensional
+over: it is autoregression, and the *sliding* is a one-dimensional
 convolution: locality, transplanted from space to time. Windows are genuinely
 useful (they power real forecasting systems), but they inherit locality's blind
 spot: anything older than $k$ steps ago does not exist. Widen $k$ and the parameter
@@ -82,10 +93,10 @@ the model is **non-stationary**: it insists the rules of language at position 17
 differ from the rules at position 18, when the whole point of language is that they
 do not. It fails the first and fourth requirements at once.
 
-You have watched this book face that exact configuration twice. A template for
+The convolution chapters met this exact configuration twice. A template for
 every image position was wasteful and brittle $\rightarrow$ share the kernel across
-space (@sec-07-filters-convolution). A detector per location was the wrong
-prior $\rightarrow$ share it (@sec-08-cnn). The move is the same here, and it is the
+space. A detector per location was the wrong
+prior $\rightarrow$ share it. The move is the same here, and it is the
 chapter's one big idea: **share the function across time**,
 
 $$
@@ -94,8 +105,7 @@ $$ {#eq-recurrence}
 
 one learned rule $f$, applied at every step, carrying a running summary
 $\vect{h}_t$, the **hidden state**, from each step to the next. This is the
-book's third weight sharing: across examples (every chapter since the first),
-across space (Part II), and now across *time*. Stationarity is to sequences what
+third weight sharing: across examples, across space, and now across *time*. Stationarity is to sequences what
 translation equivariance was to images: the same pattern means the same thing
 whenever it occurs. On paper, one shared $f$ meets the first five requirements. The
 sixth is a question about gradients, and most of this chapter is spent answering it.
@@ -109,29 +119,27 @@ classical name, the **Markov property**: $\vect{h}_{t-1}$ and $\vect{x}_t$ toget
 contain everything needed for the next step. Nothing else from the past gets a
 second look. That claim buys streaming (process tokens as they arrive), any
 sequence length (the loop does not care), and, later in this chapter, the license
-to train on chopped-up chunks. Its price is that the memory is *finite*, and this
-part of the book ends when we finally refuse to pay that price
-(@sec-12-kernel-regression).
+to train on chopped-up chunks. Its price is that the memory is *finite*.
 :::
 
 ## A network with a loop
 
-The simplest choice of $f$ is @sec-03-nonlinearity-mlp's recipe with the state concatenated in:
+The simplest choice of $f$ is a one-layer network with the state concatenated in:
 a linear map of $(\vect{h}_{t-1}, \vect{x}_t)$, squashed by a $\tanh$:
 
 $$
 \vect{h}_t \;=\; \tanh\!\left(\matr{W}_{hh}\,\vect{h}_{t-1} + \matr{W}_{xh}\,\vect{x}_t + \vect{b}_h\right),
 \qquad
-\vect{o}_t \;=\; \matr{W}_{hq}\,\vect{h}_t + \vect{b}_q ,
+\vect{s}_t \;=\; \matr{W}_{hs}\,\vect{h}_t + \vect{b}_s ,
 $$ {#eq-rnn-cell}
 
 the **vanilla recurrent neural network**. Three weight matrices total, reused at
 every step, regardless of whether the sequence has five tokens or five thousand.
-The readout $\vect{o}_t$ produces logits (@sec-02-logistic-softmax's machinery) and you can
+The readout $\vect{s}_t$ holds the logits, one score per class, and you can
 collect one at every step (predicting each next character, labeling each word) or
 only at the end (classifying the whole sequence); both designs appear below.
 
-Per the book's habit, build the loop by hand, then verify against the framework:
+Build the loop by hand, then verify it against the framework:
 
 :::: {.plan-code}
 ::: {.plan}
@@ -173,8 +181,8 @@ print(f"manual loop vs. nn.RNN: max |diff| = {(manual - out_ref).abs().max():.1e
 ```
 ::::
 Notice what the shapes say. `nn.RNN` eats `(batch, time, features)`: a third
-axis has joined @sec-08-cnn's NCHW discipline, and the loop runs over that middle
-axis carrying `h` along.
+axis has joined the batch-first layout of image tensors, and the loop runs over that
+middle axis carrying `h` along.
 
 That rectangle hides a practical wrinkle. Sentences in one minibatch rarely share a
 length, so shorter ones are padded at the end to the longest one's length, and the
@@ -186,8 +194,7 @@ $$
 $$ {#eq-masked-update}
 
 Each sequence then ends holding the state of its own last real element, exactly as if
-it had run alone. @sec-11-encoder-decoder measures what skipping this bookkeeping costs
-and meets the framework's packed form of the same idea.
+it had run alone.
 
 Unroll the loop on paper and the RNN is an ordinary
 feedforward network that happens to be $T$ layers deep with every layer's weights
@@ -197,7 +204,7 @@ tied. Hold that thought; it is about to matter enormously.
 #| label: fig-unrolled-rnn
 #| echo: false
 #| fig-alt: "Two diagrams show one recurrent cell as a loop and as four copies unrolled across time. On the left, an orange state arrow labeled h leaves the cell and loops back into it. On the right, input arrows enter each copy, output arrows leave it, and orange arrows labeled h0 through h4 carry the hidden state from copy to copy, showing that the same cell and weights are reused."
-#| fig-cap: "Two drawings of the same machine. Left: one cell whose hidden state loops back into itself. Right: the loop unrolled: a chain of copies of the *same* cell, each consuming one input and passing the state along. Read vertically it is @sec-03-nonlinearity-mlp's network; read horizontally it is a network as deep as the sequence is long, with every layer's weights tied. Both halves of that sentence are about to matter."
+#| fig-cap: "Two drawings of the same machine. Left: one cell whose hidden state loops back into itself. Right: the loop unrolled: a chain of copies of the *same* cell, each consuming one input and passing the state along. Read vertically it is an ordinary feedforward network; read horizontally it is a network as deep as the sequence is long, with every layer's weights tied. Both halves of that sentence are about to matter."
 #| code-summary: "Code: loop view vs. unrolled view (schematic)"
 from matplotlib.patches import FancyBboxPatch, FancyArrowPatch
 from matplotlib.path import Path
@@ -216,7 +223,7 @@ axl.annotate("", xy=(4.0, 3.85), xytext=(4.0, 1.4),
 axl.text(4.0, 0.7, "$\\mathbf{x}_t$", ha="center", fontsize=11)
 axl.annotate("", xy=(4.0, 9.2), xytext=(4.0, 6.7),
              arrowprops=dict(arrowstyle="->", lw=1.5, color=navy))
-axl.text(4.0, 9.6, "$\\mathbf{o}_t$", ha="center", fontsize=11)
+axl.text(4.0, 9.6, "$\\mathbf{s}_t$", ha="center", fontsize=11)
 loop = Path([(5.85, 4.55), (8.3, 3.7), (8.3, 6.7), (5.9, 5.85)],   # out, around, in
             [Path.MOVETO, Path.CURVE4, Path.CURVE4, Path.CURVE4])
 axl.add_patch(FancyArrowPatch(path=loop, arrowstyle="->", mutation_scale=13,
@@ -235,7 +242,7 @@ for i, x in enumerate(xs):
     axr.text(x, 1.1, f"$\\mathbf{{x}}_{i+1}$", ha="center", fontsize=10)
     axr.annotate("", xy=(x, 8.6), xytext=(x, 6.35),
                  arrowprops=dict(arrowstyle="->", lw=1.3, color=navy))
-    axr.text(x, 9.2, f"$\\mathbf{{o}}_{i+1}$", ha="center", fontsize=10)
+    axr.text(x, 9.2, f"$\\mathbf{{s}}_{i+1}$", ha="center", fontsize=10)
 starts = [0.35] + [x + 0.75 for x in xs]             # h_0 enters, h_4 leaves
 ends = [x - 0.75 for x in xs] + [10.55]
 for t, (a, b) in enumerate(zip(starts, ends)):
@@ -251,7 +258,7 @@ plt.tight_layout(); plt.show()
 
 ## Gradients through time
 
-Tied depth means @sec-05-backpropagation's rules apply verbatim. To train on a sequence, run the
+Tied depth means backpropagation applies verbatim. To train on a sequence, run the
 loop forward, collect losses at the readouts, and backpropagate through the
 *unrolled* network, a procedure called **backpropagation through time** (BPTT). A gradient that lands on
 $\vect{h}_T$ must travel back through every application of @eq-rnn-cell to reach an
@@ -269,7 +276,7 @@ $$ {#eq-bptt}
 
 A product of $T$ near-identical matrices. The second expression shows the reverse-mode
 order explicitly: the derivative gate acts on the incoming gradient, then
-$\matr{W}_{hh}^{\top}$ carries it to the previous state. @sec-05-backpropagation taught you to fear
+$\matr{W}_{hh}^{\top}$ carries it to the previous state. Deep networks taught you to fear
 this shape. If the factors shrink the signal, the product dies exponentially; if they
 grow it, it explodes exponentially. Since $\tanh' \le 1$ and
 $\matr{W}_{hh}$ repeats at every step, keeping every relevant direction near unit
@@ -279,8 +286,7 @@ the pre-activations sit near zero, where $\tanh'\approx 1$, each hop preserves t
 gradient's norm. Training moves $\matr{W}_{hh}$, and $\tanh'$ drops below one as
 pre-activations grow, so orthogonality governs only the start of training (Exercise 2).
 Depth was measured in layers there; here it is measured in *time*, and a paragraph
-of text is a hundred layers deep. Watch the collapse, in the spirit of @sec-05-backpropagation's
-depth experiment:
+of text is a hundred layers deep. Watch the collapse:
 
 :::: {.plan-code}
 ::: {.plan}
@@ -291,7 +297,7 @@ depth experiment:
 
 ```{python}
 #| label: fig-vanishing-time
-#| fig-cap: "How much gradient a freshly initialized vanilla RNN's output sends back to its first input, as the lag between them grows. Fifteen orders of magnitude gone by sixty steps: the same exponential decay @sec-05-backpropagation measured down a deep network, now measured across time, because an unrolled RNN *is* a deep network with tied weights."
+#| fig-cap: "How much gradient a freshly initialized vanilla RNN's output sends back to its first input, as the lag between them grows. Fifteen orders of magnitude gone by sixty steps: the same exponential decay measured down a deep network, now measured across time, because an unrolled RNN *is* a deep network with tied weights."
 #| fig-alt: "Log-scale line chart of the norm of the output gradient with respect to the first input versus lag. The vanilla RNN curve falls almost linearly on the log axis, from above one at lag 1 to roughly 10 to the minus 15 at lag 60."
 #| code-summary: "Code: gradient reaching the first input vs. lag"
 #| code-fold: false
@@ -349,12 +355,21 @@ from the callout above. In **truncated BPTT**, contiguous chunks carry the recur
 state forward but detach it at each boundary. The values cross the boundary; the
 gradient graph does not. This bounds memory while preserving running context.
 
-Where to cut is itself a choice. A fixed horizon ignores every dependency longer than
-the chunk: a bias toward short-range structure that practice usually tolerates and
-that can even act as a mild regularizer. Cutting at random points instead, and
-reweighting each retained term by the probability that the cut spared it, gives an
-unbiased estimate of the full gradient (Tallec and Ollivier), paid for with extra
-variance. Most training keeps the fixed horizon.
+Where to cut is itself a choice. A fixed horizon of $K$ steps does not hide the
+distant past from the forward pass, because the carried state still delivers it, but
+it trains only dependencies whose two ends fall inside one chunk. A loss at the end of
+a chunk sends gradient back $K-1$ steps; a loss just after a boundary reaches only its
+own input. Averaged over a chunk, a dependency of lag $\ell$ gets gradient from a
+fraction $1-\ell/K$ of the losses, and from none once $\ell \ge K$. The model can use
+a longer dependency that its state happens to carry, but no gradient teaches it to
+keep one: a bias toward short-range structure that practice usually tolerates.
+Cutting at random points does not remove that bias by itself, because long-range terms
+are still the ones most often cut. Dividing each surviving term by the probability
+that the cuts spared it does: a term kept with probability $p$ and scaled by $1/p$
+contributes its full value on average, so the estimate of the full gradient is
+unbiased (Tallec & Ollivier, 2017). The price is extra variance, since the rare
+long-range terms that survive arrive with large weights. Most training keeps the
+fixed horizon.
 
 The final experiment below uses a simpler finite-horizon recipe: it samples random
 100-character windows and starts each from zero state. That is **fixed-window
@@ -374,10 +389,9 @@ already own the key move. We want a memory pathway that is:
 1. **Preserved by default.** Repeated *multiplication* killed the signal
    $\rightarrow$ make the carried state **additive**:
    $\vect{c}_t = \vect{c}_{t-1} + \Delta_t$. A conveyor belt: information rides
-   along untouched unless something deliberately intervenes. You met this exact
-   maneuver two chapters ago: @sec-09-modern-cnns-transfer's residual connection,
-   $H(x) = F(x) + x$, whose Jacobian's identity term let gradients cross forty
-   layers. Same trick, laid across time.
+   along untouched unless something deliberately intervenes. This is the residual
+   connection's maneuver, $H(x) = F(x) + x$, whose Jacobian's identity term let
+   gradients cross forty layers. Same trick, laid across time.
 2. **Forgettable on command.** Memory is finite; some of it should expire. Install
    a valve: $\vect{f}_t \in (0,1)$ multiplying $\vect{c}_{t-1}$.
 3. **Writable on command.** New information enters through a second valve
@@ -385,8 +399,7 @@ already own the key move. We want a memory pathway that is:
 4. **Readable on command.** Expose only what the current step needs, through a
    third valve $\vect{o}_t$.
 
-Each valve is a small learned layer squashed by a sigmoid (@sec-02-logistic-softmax's machine,
-reinterpreted: a number in $(0,1)$ read as *what fraction passes*). The candidate
+Each valve is a small learned layer squashed by a sigmoid (a number in $(0,1)$ read as *what fraction passes*). The candidate
 content is shaped by $\tanh$, keeping it bounded and centered. Assembled, this is
 the **Long Short-Term Memory** cell (Hochreiter & Schmidhuber, 1997; the forget gate
 $\vect{f}_t$ was added by Gers, Schmidhuber & Cummins, 2000):
@@ -494,7 +507,7 @@ $$
 $$ {#eq-lstm-highway}
 
 Still a product, but of *learned, data-dependent gates*, not a fixed weight
-matrix. Where @sec-09-modern-cnns-transfer's residual highway kept an unconditional identity lane
+matrix. Where the residual highway kept an unconditional identity lane
 open, the LSTM's lane has a valve the network controls: hold $\vect{f}_j$ near 1
 and gradients ride the conveyor belt across dozens of steps; drop it toward 0 and
 the memory (deliberately) expires. The practical corollary: *initialize the
@@ -529,7 +542,7 @@ g_lstm = grad_at_first_input(lstm, lags)
 ```{python}
 #| echo: false
 #| label: fig-highway-time
-#| fig-cap: "The gradient-vs-lag experiment, rerun with an LSTM whose effective forget-gate bias is initialized to +1. The vanilla RNN's derivative signal dies exponentially; the LSTM's rides the cell-state conveyor belt and arrives at lag 60 attenuated but alive, about ten orders of magnitude stronger. @sec-09-modern-cnns-transfer built this highway across layers; the LSTM builds it across time, with a learned valve on the on-ramp."
+#| fig-cap: "The gradient-vs-lag experiment, rerun with an LSTM whose effective forget-gate bias is initialized to +1. The vanilla RNN's derivative signal dies exponentially; the LSTM's rides the cell-state conveyor belt and arrives at lag 60 attenuated but alive, about ten orders of magnitude stronger. The residual connection built this highway across layers; the LSTM builds it across time, with a learned valve on the on-ramp."
 #| fig-alt: "Log-scale comparison of input-gradient norm versus lag. The vanilla RNN falls from above one to about 10 to the minus 15 by lag 60, while the LSTM with forget bias plus one declines much more slowly and remains near 10 to the minus 5."
 plt.figure(figsize=(6.2, 3.2))
 plt.semilogy(lags, g_rnn, "o-", color="#E57200", ms=5, label="vanilla RNN")
@@ -726,7 +739,7 @@ compounded eighty times, is as fatal as no valve. The third row flips the single
 bias that opens the valve: its signal at birth rises by about nine orders of
 magnitude, and the task is solved outright, every seed. The
 highway was built by the architecture; *initialization opened it*: the same
-lesson @sec-05-backpropagation taught about signal scales at birth, now with a memory attached.
+lesson about signal scales at birth that deep networks taught, now with a memory attached.
 
 The GRU rows repeat the lesson with a twist: the LSTM's $+1$ does not carry over. At
 $+1$ the GRU's signal at birth is still more than two orders of magnitude below the
@@ -736,9 +749,9 @@ admitting the candidate, and the measurement shows that the same bias need not o
 the same highway in a different cell (Exercise 3 asks why). Across the six rows the
 birth signal sorts the outcomes: the two setups that solve every seed start near
 $10^{-6}$ or above, and every setup below $10^{-8}$ fails, the vanilla RNN's lucky
-seed aside. That sorting holds for these six rows on this task.
-@sec-a3-precision-performance separates this mathematical attenuation from the later
-question of whether a chosen dtype can still represent the resulting value or update.
+seed aside. That sorting holds for these six rows on this task.^[@sec-a3-precision-performance
+separates this mathematical attenuation from the later question of whether a chosen
+dtype can still represent the resulting value or update.]
 And the deliverable is not raw capability but **reliability**: what the gates buy,
 once initialized to remember, is that memory stops being a lottery. (For shorter
 stretches the drama disappears: at lag 20 the vanilla RNN and both LSTM setups solve
@@ -832,9 +845,8 @@ recurrent route deserves to be understood on its own terms.
 
 ## The book reads itself
 
-Time to put fixed windows, clipping, gates, and @sec-02-logistic-softmax's softmax over a
-vocabulary to work on real text. In keeping with a book whose every experiment runs
-on its own pages, the training corpus is *nine of the chapters you have already read*:
+Time to put fixed windows, clipping, gates, and a softmax over a
+vocabulary to work on real text. The training corpus is *nine of the chapters you have already read*:
 their prose, stripped of code cells, about 150,000 characters. We commit that
 code-stripped text as a benchmark snapshot; later copyedits must not silently change
 the task. The task is the oldest one in language modeling: read a character, predict
@@ -889,7 +901,7 @@ class CharLSTM(nn.Module):
 
 ```
 ::::
-The training loop below is the book's **canonical next-token trainer**: Listing
+The training loop below is the **canonical next-token trainer**: Listing
 12.1. Chunk sampling *is* fixed-window training: fresh random
 100-character windows every step, gradients clipped, no state carried across
 chunk boundaries. The listing lives in the support module as tested source
@@ -959,10 +971,12 @@ The loss falls from $\ln(V) \approx 4.6$ for the printed vocabulary size (unifor
 to 1.42 on the last sampled training minibatch. The deterministic held-out
 tail is harder, at 1.89, but both are far below uniform guessing. The model has
 learned a great deal about what this book's next character tends to be. To *hear*
-what it learned, generate: feed a prompt, sample
-the next character from the softmax (divided by a **temperature** that sharpens or
-flattens it, @sec-02-logistic-softmax's dial between hard max and uniform), feed that character
-back in, repeat. The hidden state streams; nothing is recomputed.
+what it learned, generate: feed a prompt, divide the last step's logits by a
+**temperature** $\tau$, take the softmax, and sample the next character from the
+result; feed that character back in and repeat. A temperature below 1 sharpens the
+distribution, and as $\tau \to 0$ each draw becomes the argmax; above 1 it flattens
+toward uniform. The sampler below uses $\tau = 0.8$. The hidden state streams; nothing
+is recomputed.
 
 :::: {.plan-code}
 ::: {.plan}
@@ -1001,8 +1015,6 @@ the book's accent with none of its intent. Some of that is scale (a 150k-charact
 corpus and 128 hidden units is a *tiny* language model), and some of it is the
 finite state. By the end of a sentence, the beginning has been squeezed through
 the LSTM's two 128-dimensional states, $(\vect{h}, \vect{c})$: 256 scalars in all.
-Both diagnoses point down the road this part of the book is
-traveling.
 
 ## A full-scale rematch: words, layers, and corpus size
 
@@ -1095,7 +1107,7 @@ matter how long the sentence runs. The char-LM's trailing clauses were this
 bottleneck in miniature. The honest fix is not a bigger vector; it is admitting
 that the decoder should be allowed to *look back at all of the encoder's states*,
 not just the last. Choosing where to look, on the fly, is a similarity
-computation you have been prepared for since @sec-01-linear-regression's dot products. The next
+computation built from dot products. The next
 chapter will first make the fixed-code failure visible in translation. Part IV will
 then build an alternative from that need.
 
@@ -1121,20 +1133,20 @@ Close the book for one minute and unroll the recurrence.
 ## Okay, so: weight sharing moved into time
 
 1. **Six requirements**: any length, order, streaming, parameters independent of
-   length, reach, and trainable reach. @sec-06-generalization-inductive-bias's MLP could absorb one fixed pixel
+   length, reach, and trainable reach. An MLP could absorb one fixed pixel
    permutation; a sentence's reorderings cannot be absorbed, so order is most of the
    signal. The fixed-size toolkit of Parts I–II has no honest answer.
 2. **The third weight sharing**: one function $f$, applied at every timestep,
    carrying a hidden state (@eq-recurrence, @eq-rnn-cell). This is stationarity as
    inductive bias, exactly as sharing across space was in Part II. The unrolled
    RNN is a deep network with tied weights.
-3. **Tied depth in time = @sec-05-backpropagation's nightmare**: BPTT multiplies $T$
+3. **Tied depth in time is the deep-network nightmare**: BPTT multiplies $T$
    near-identical Jacobians (@eq-bptt) $\rightarrow$ vanishing or exploding,
    unless their gains are carefully controlled. Clipping belts in the explosions;
    truncation caps the cost, but neither lengthens memory. Windows of roughly 20–50
    steps are a common practical horizon, not a universal vanilla-RNN ceiling.
 4. **The LSTM engineers the memory**: an additive cell-state conveyor belt,
-   @sec-09-modern-cnns-transfer's residual highway laid across time, with three sigmoid valves
+   the residual highway laid across time, with three sigmoid valves
    (forget, input, output; @eq-lstm). Its gradient rides a product of *gates*, not
    weights (@eq-lstm-highway).
 5. **Architecture proposes, initialization disposes**: at lag 80 the default LSTM
@@ -1150,26 +1162,84 @@ Close the book for one minute and unroll the recurrence.
 
 ## Sources and further reading {.unnumbered}
 
-- [Merity et al., *Pointer Sentinel Mixture
-  Models*](https://arxiv.org/abs/1609.07843): introduces the WikiText corpora used by
-  the chapter's pinned word-level language-model scale study.
-- [Elman, *Finding Structure in Time*](https://doi.org/10.1207/s15516709cog1402_1): the classic simple recurrent network and its view of hidden state as temporal context.
-- [Hochreiter & Schmidhuber, *Long Short-Term Memory*](https://doi.org/10.1162/neco.1997.9.8.1735): the original gated-memory architecture and constant-error pathway.
-- [Gers, Schmidhuber, & Cummins, *Learning to Forget: Continual Prediction with LSTM*](https://doi.org/10.1162/089976600300015015): adds the adaptive forget gate to the 1997 cell, giving the form used in this chapter.
-- [Cho et al., *Learning Phrase Representations using RNN Encoder–Decoder for Statistical Machine Translation*](https://aclanthology.org/D14-1179/): introduces the gated recurrent unit in its encoder–decoder setting.
-- [Pascanu, Mikolov, & Bengio, *On the Difficulty of Training Recurrent Neural Networks*](https://proceedings.mlr.press/v28/pascanu13.html): geometric analysis of vanishing/exploding gradients and gradient clipping.
-- [Saxe, McClelland, & Ganguli, *Exact Solutions to the Nonlinear Dynamics of Learning in Deep Linear Neural Networks*](https://arxiv.org/abs/1312.6120): orthogonal initialization and norm preservation across depth, the idea behind an orthogonal $\matr{W}_{hh}$.
-- [Tallec & Ollivier, *Unbiasing Truncated Backpropagation Through Time*](https://arxiv.org/abs/1705.08209): random truncation points with compensating weights give an unbiased gradient estimate.
-- [Maas et al., *Learning Word Vectors for Sentiment Analysis*](https://aclanthology.org/P11-1015/): introduces the IMDb movie-review corpus used in Exercise 6.
-- [Mikolov et al., *Efficient Estimation of Word Representations in Vector Space*](https://arxiv.org/abs/1301.3781): the CBOW and skip-gram predictive objectives.
-- [Pennington, Socher, & Manning, *GloVe: Global Vectors for Word Representation*](https://aclanthology.org/D14-1162/): static embeddings learned from global word co-occurrence statistics.
+- Merity, S., Xiong, C., Bradbury, J., & Socher, R. (2017). [*Pointer Sentinel Mixture
+  Models*](https://arxiv.org/abs/1609.07843). International Conference on Learning
+  Representations (ICLR 2017). arXiv:1609.07843. Introduces the WikiText corpora used
+  by the chapter's pinned word-level language-model scale study.
+- Elman, J. L. (1990). [*Finding Structure in
+  Time*](https://doi.org/10.1207/s15516709cog1402_1). *Cognitive Science*, 14(2),
+  179–211. The classic simple recurrent network and its view of hidden state as
+  temporal context.
+- Hochreiter, S., & Schmidhuber, J. (1997). [*Long Short-Term
+  Memory*](https://doi.org/10.1162/neco.1997.9.8.1735). *Neural Computation*, 9(8),
+  1735–1780. The original gated-memory architecture and constant-error pathway.
+- Gers, F. A., Schmidhuber, J., & Cummins, F. (2000). [*Learning to Forget: Continual
+  Prediction with LSTM*](https://doi.org/10.1162/089976600300015015). *Neural
+  Computation*, 12(10), 2451–2471. Adds the adaptive forget gate to the 1997 cell,
+  giving the form used in this chapter.
+- Cho, K., van Merriënboer, B., Gulcehre, C., Bahdanau, D., Bougares, F., Schwenk, H.,
+  & Bengio, Y. (2014). [*Learning Phrase Representations using RNN Encoder–Decoder for
+  Statistical Machine Translation*](https://doi.org/10.3115/v1/D14-1179). In
+  *Proceedings of the 2014 Conference on Empirical Methods in Natural Language
+  Processing (EMNLP)*, 1724–1734. Association for Computational Linguistics.
+  Introduces the gated recurrent unit in its encoder–decoder setting.
+- Pascanu, R., Mikolov, T., & Bengio, Y. (2013). [*On the Difficulty of Training
+  Recurrent Neural Networks*](https://proceedings.mlr.press/v28/pascanu13.html). In
+  *Proceedings of the 30th International Conference on Machine Learning (ICML)*,
+  PMLR 28(3), 1310–1318. Geometric analysis of vanishing and exploding gradients, and
+  gradient clipping.
+- Saxe, A. M., McClelland, J. L., & Ganguli, S. (2014). [*Exact Solutions to the
+  Nonlinear Dynamics of Learning in Deep Linear Neural
+  Networks*](https://arxiv.org/abs/1312.6120). International Conference on Learning
+  Representations (ICLR 2014). arXiv:1312.6120. Orthogonal initialization and norm
+  preservation across depth, the idea behind an orthogonal $\matr{W}_{hh}$.
+- Tallec, C., & Ollivier, Y. (2017). [*Unbiasing Truncated Backpropagation Through
+  Time*](https://arxiv.org/abs/1705.08209). arXiv preprint arXiv:1705.08209. Random
+  truncation points, with each surviving gradient term divided by the probability that
+  it survived, give an unbiased gradient estimate.
+- Maas, A. L., Daly, R. E., Pham, P. T., Huang, D., Ng, A. Y., & Potts, C. (2011).
+  [*Learning Word Vectors for Sentiment Analysis*](https://aclanthology.org/P11-1015/).
+  In *Proceedings of the 49th Annual Meeting of the Association for Computational
+  Linguistics: Human Language Technologies*, 142–150. Association for Computational
+  Linguistics. Introduces the IMDb movie-review corpus used in Exercise 6.
+- Mikolov, T., Chen, K., Corrado, G., & Dean, J. (2013). [*Efficient Estimation of Word
+  Representations in Vector Space*](https://arxiv.org/abs/1301.3781). International
+  Conference on Learning Representations (ICLR 2013), Workshop Track.
+  arXiv:1301.3781. The CBOW and skip-gram predictive objectives.
+- Pennington, J., Socher, R., & Manning, C. (2014). [*GloVe: Global Vectors for Word
+  Representation*](https://doi.org/10.3115/v1/D14-1162). In *Proceedings of the 2014
+  Conference on Empirical Methods in Natural Language Processing (EMNLP)*, 1532–1543.
+  Association for Computational Linguistics. Static embeddings learned from global
+  word co-occurrence statistics.
 
 For Exercise 8's research bridge, recurrences that compute in parallel:
 
-- [Bradbury, Merity, Xiong, & Socher, *Quasi-Recurrent Neural Networks*](https://arxiv.org/abs/1611.01576) and [Lei et al., *Simple Recurrent Units for Highly Parallelizable Recurrence*](https://arxiv.org/abs/1709.02755): gates computed from the inputs alone, so only a cheap elementwise recurrence stays serial.
-- [Martin & Cundy, *Parallelizing Linear Recurrent Neural Nets Over Sequence Length*](https://arxiv.org/abs/1709.04057): computes linear recurrences with a parallel scan.
-- [Gu, Goel, & Ré, *Efficiently Modeling Long Sequences with Structured State Spaces*](https://arxiv.org/abs/2111.00396) and [Orvieto et al., *Resurrecting Recurrent Neural Networks for Long Sequences*](https://arxiv.org/abs/2303.06349): long-memory linear recurrences as state-space layers, and what a plain linear RNN needs to match them.
-- [Feng et al., *Were RNNs All We Needed?*](https://arxiv.org/abs/2410.01201): strips the LSTM and GRU down to input-only gates so the whole sequence trains in parallel.
+- Bradbury, J., Merity, S., Xiong, C., & Socher, R. (2017). [*Quasi-Recurrent Neural
+  Networks*](https://arxiv.org/abs/1611.01576). International Conference on Learning
+  Representations (ICLR 2017). arXiv:1611.01576. Gates computed from the inputs alone,
+  so only a cheap elementwise recurrence stays serial.
+- Lei, T., Zhang, Y., Wang, S. I., Dai, H., & Artzi, Y. (2018). [*Simple Recurrent
+  Units for Highly Parallelizable Recurrence*](https://doi.org/10.18653/v1/D18-1477). In
+  *Proceedings of the 2018 Conference on Empirical Methods in Natural Language
+  Processing (EMNLP)*, 4470–4481. Association for Computational Linguistics. The same
+  input-only gating in a lighter recurrent unit.
+- Martin, E., & Cundy, C. (2018). [*Parallelizing Linear Recurrent Neural Nets Over
+  Sequence Length*](https://arxiv.org/abs/1709.04057). International Conference on
+  Learning Representations (ICLR 2018). arXiv:1709.04057. Computes linear recurrences
+  with a parallel scan.
+- Gu, A., Goel, K., & Ré, C. (2022). [*Efficiently Modeling Long Sequences with
+  Structured State Spaces*](https://arxiv.org/abs/2111.00396). International Conference
+  on Learning Representations (ICLR 2022). arXiv:2111.00396. Long-memory linear
+  recurrences as state-space layers.
+- Orvieto, A., Smith, S. L., Gu, A., Fernando, A., Gulcehre, C., Pascanu, R., & De, S.
+  (2023). [*Resurrecting Recurrent Neural Networks for Long
+  Sequences*](https://proceedings.mlr.press/v202/orvieto23a.html). In *Proceedings of
+  the 40th International Conference on Machine Learning (ICML)*, PMLR 202,
+  26670–26698. What a plain linear RNN needs to match state-space layers.
+- Feng, L., Tung, F., Ahmed, M. O., Bengio, Y., & Hajimirsadeghi, H. (2024). [*Were RNNs
+  All We Needed?*](https://arxiv.org/abs/2410.01201) arXiv preprint arXiv:2410.01201.
+  Strips the LSTM and GRU down to input-only gates so the whole sequence trains in
+  parallel.
 
 ## Exercises {.unnumbered}
 
