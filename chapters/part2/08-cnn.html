@@ -84,7 +84,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../../site_libs/bootstrap/bootstrap-d6c2a5637886d1f98a1e4c94616a37d9.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../../site_libs/bootstrap/bootstrap-761b3ae2ddbb18576bc1debbef1ffa84.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -1845,14 +1845,20 @@ k)/s \rfloor + 1\)</span> (<a href="#eq-outsize" class="quarto-xref">Equation&nb
 
     // Bootstrap declares `[hidden] { display: none !important; }`, which would
     // defeat hidden-until-found. Keep the searchable boxes in layout, but clip
-    // their container out of view until beforematch opens the panel.
+    // their container out of view until beforematch opens the panel. A cell that
+    // shows evidence (a figure or a rendered table) stays in view: only its source
+    // and printed text are clipped, so the evidence shows while the code is closed.
     document.documentElement.classList.add("plan-code-supports-until-found");
     const style = document.createElement("style");
     style.dataset.planCodeUntilFound = "";
     style.textContent = `
       html.plan-code-supports-until-found
         .plan-code.plan-code-code-collapsed
-        > .plan-code-until-found-container,
+        > .plan-code-until-found-container:not(.plan-code-evidence-holder),
+      html.plan-code-supports-until-found
+        .plan-code.plan-code-code-collapsed
+        > .plan-code-evidence-holder
+        > :not(.plan-code-evidence-output),
       html.plan-code-supports-until-found
         .plan-code.plan-code-results-collapsed
         > .plan-code-results {
@@ -1881,8 +1887,21 @@ k)/s \rfloor + 1\)</span> (<a href="#eq-outsize" class="quarto-xref">Equation&nb
     document.head.appendChild(style);
   }
 
+  // A mechanism replay placed after a cell is reading material, not source: it
+  // stays outside the code disclosure and visible, closed and paused as authored.
+  // Its stylesheet and loader, like any never-rendered child, are not regions
+  // either; clipping would force them to render and expose their text.
   function codeRegions(panel) {
-    return [...panel.children].filter((child) => !child.classList.contains("plan"));
+    return [...panel.children].filter((child) =>
+      !child.matches(".plan, .mechanism-excerpt, style, script, template, link")
+    );
+  }
+
+  // Plots and rendered results tables are evidence the reader should see without
+  // opening the source, so they never collapse. Printed text (stdout, stderr, a
+  // dataframe printed as text) stays behind its toggle with the code.
+  function isEvidenceOutput(output) {
+    return Boolean(output.querySelector(".quarto-figure, figure, img, svg, canvas, table"));
   }
 
   function markerSteps(line) {
@@ -2144,11 +2163,22 @@ k)/s \rfloor + 1\)</span> (<a href="#eq-outsize" class="quarto-xref">Equation&nb
       region.classList.add("plan-code-until-found-container");
     });
 
-    const outputs = regions.flatMap((region) => [
+    const allOutputs = regions.flatMap((region) => [
       ...region.querySelectorAll(".cell-output")
     ]);
-    outputs.forEach((output, outputIndex) => {
+    allOutputs.forEach((output, outputIndex) => {
       if (!output.id) output.id = `plan-code-${panelIndex}-output-${outputIndex}`;
+    });
+    const evidenceOutputs = allOutputs.filter(isEvidenceOutput);
+    evidenceOutputs.forEach((output) => {
+      output.classList.add("plan-code-evidence-output");
+      regions.find((region) => region.contains(output))
+        ?.classList.add("plan-code-evidence-holder");
+    });
+    // Everything else is searchable-collapsed with the code: source lines and
+    // printed results.
+    const outputs = allOutputs.filter((output) => !evidenceOutputs.includes(output));
+    outputs.forEach((output) => {
       output.classList.add("plan-code-until-found-output");
     });
 
@@ -2196,7 +2226,7 @@ k)/s \rfloor + 1\)</span> (<a href="#eq-outsize" class="quarto-xref">Equation&nb
 
     // Move, never clone, plain printed evidence into its own disclosure while
     // code is closed. Placeholders retain its source-order position for the full
-    // listing; figures and rich displays never move.
+    // listing; evidence (figures, rendered tables) stays in place and in view.
     const resultOutputs = outputs.filter((output) =>
       !output.querySelector("img, svg, canvas, figure, table, audio, video, iframe") &&
       (output.matches(".cell-output-stdout, .cell-output-stderr") ||
