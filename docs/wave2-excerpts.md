@@ -45,7 +45,7 @@ Digests recomputed with `shasum -a 256` while writing this receipt:
 
 | Source | SHA-256 |
 |---|---|
-| `chapters/part2/08-cnn.qmd` | `08edb73ffc8cc80f5524528ba05659d7ce44aa47fee167e0835b0aa3324521c8` |
+| `chapters/part2/08-cnn.qmd` | `532442ad2fbba95f605e8eac73052bae4c15f02818c34194a9110598d3c64758` |
 | `chapters/part1/03-nonlinearity-mlp.qmd` | `3d421d5d377da80ce4bdd3babcf620f99bac3e4b11b3ddc236d49757355f234d` |
 | `chapters/part5/17-peft-quantization.qmd` | `9c05a58a0581726a38a9c7b9087417a61b95175f489fb7bbcd1c76712849f09d` |
 | `chapters/part3/10-sequences-rnn.qmd` | `9682aea4435c641189131305b649f20f651346bf4f48e0fee6c1702bc463923f` |

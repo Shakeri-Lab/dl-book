@@ -652,7 +652,7 @@ test('both axes: plain-text numbers use a true minus, and the player is inert', 
   assert.doesNotMatch(player, /0\.70|0\.20|0\.05|'bank'|'river'/);
 });
 
-test('integration: the excerpt is HTML-only, manifest-driven, and placed before the position debt', () => {
+test('integration: the excerpt is HTML-only, manifest-driven, and placed before the order heading', () => {
   const filter = fs.readFileSync(path.join(ROOT, scene.filter), 'utf8');
   assert.match(filter, /^(?:--[^\n]*\n)+if not FORMAT:match\("\^html"\) then return \{\} end/,
     'the non-HTML guard is the first executable line, so the PDF is untouched');
@@ -665,8 +665,11 @@ test('integration: the excerpt is HTML-only, manifest-driven, and placed before 
   assert.match(resources, /^\s+- interactives\/both-axes\/player\.js$/m);
   assert(!resources.includes('both-axes/panel.html'));
   const chapter = chapterSource(NAME);
-  assert.deepEqual(scene.anchor, {type: 'before-heading', target: 'The position debt'});
-  assert.equal(chapter.split('\n').filter(line => line === `### ${scene.anchor.target}`).length, 1);
+  assert.deepEqual(scene.anchor, {type: 'before-heading', target: 'Self-attention does not see order'});
+  // The heading keeps its pre-rename id, {#the-position-debt}, so older links still land.
+  const heading = `### ${scene.anchor.target} {#the-position-debt}`;
+  assert.equal(chapter.split('\n').filter(line => line.startsWith(`### ${scene.anchor.target}`)).length, 1);
+  assert(chapter.includes(`\n${heading}\n`));
   const at = chapter.indexOf(`### ${scene.anchor.target}`);
   // After the figure it replays and the paragraph that closes the section's opening; before
   // the slogan, the proof, the name and the audit.
