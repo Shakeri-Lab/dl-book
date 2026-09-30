@@ -33,9 +33,29 @@ function panel(id, withResults = true) {
     </div></div>`;
 }
 
+function figureOnlyPanel(id) {
+  return `<div class="plan-code plan-code-wide" id="${id}">
+    <div class="plan"><ol><li>Draw the figure.</li></ol></div>
+    <div class="cell" id="${id}-cell"><div class="sourceCode">
+      <pre class="sourceCode" tabindex="0"><code class="sourceCode">
+        <span id="${id}-line1"><span class="co"># [1]</span></span>
+        <span id="${id}-line2">plt.show()</span>
+      </code></pre><button class="code-copy-button">Copy</button></div>
+      <div class="cell-output cell-output-display" id="${id}-figure"><div id="fig-${id}" class="quarto-float quarto-figure">
+        <figure class="figure"><div><img class="figure-img" alt="A plot" src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs="></div>
+        <figcaption>Figure 1: A plot.</figcaption></figure></div></div>
+      <div class="cell-output cell-output-display" id="${id}-svg"><svg viewBox="0 0 1 1"><rect width="1" height="1"/></svg></div>
+      <div class="cell-output cell-output-display" id="${id}-imgtable"><img alt="" src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs="><table><tr><td>2</td></tr></table></div>
+    </div>
+    <style>.mechanism-excerpt { color: #263445; }</style>
+    <details class="mechanism-excerpt" id="${id}-excerpt"><summary>Watch the replay</summary></details>
+    <script>/* replay loader */</script>
+  </div>`;
+}
+
 function fixture({ untilFound = true, javascript = true, proseWrap = false } = {}) {
   const dom = new JSDOM(`<!doctype html><html><head></head><body>
-    ${panel("first")}${panel("second", false)}</body></html>`, {
+    ${panel("first")}${panel("second", false)}${figureOnlyPanel("third")}</body></html>`, {
     runScripts: "outside-only", pretendToBeVisual: true,
   });
   const { window } = dom;
@@ -57,8 +77,9 @@ function fixture({ untilFound = true, javascript = true, proseWrap = false } = {
   if (javascript) window.eval(script);
   const first = window.document.getElementById("first");
   const second = window.document.getElementById("second");
+  const third = window.document.getElementById("third");
   return {
-    dom, window, first, second, originalOutput, originalMarkup, originalFigureParent,
+    dom, window, first, second, third, originalOutput, originalMarkup, originalFigureParent,
     results: first.querySelector(".plan-code-reveal-results"),
     all: first.querySelector(".plan-code-show-all"),
     steps: [...first.querySelectorAll(".plan-step-button")],
@@ -95,6 +116,101 @@ test("both disclosures start closed; plain outputs move once, rich figures stay 
     [...region.querySelectorAll(".cell-output")].map(output => output.id));
   assert.equal(region.getAttribute("aria-label"), "Printed results");
   assert.equal(region.getAttribute("aria-hidden"), "true");
+  context.dom.window.close();
+});
+
+// jsdom resolves the injected stylesheet, so check what it does to every
+// ancestor: nothing between a figure and the page may be hidden or clipped.
+function expectRendered(context, element) {
+  for (let node = element; node && node.nodeType === 1; node = node.parentElement) {
+    const style = context.window.getComputedStyle(node);
+    const name = node.id || node.className || node.tagName;
+    assert.notEqual(style.display, "none", `${element.id}: ${name} is display:none`);
+    assert(!(style.position === "absolute" && /inset\(50%\)/.test(style.clipPath)),
+      `${element.id}: ${name} is clipped`);
+  }
+}
+
+function expectFiguresInView(context) {
+  expectRendered(context, context.window.document.getElementById("third-excerpt"));
+  for (const id of ["first-figure", "second-figure", "third-figure", "third-svg"]) {
+    const figure = context.window.document.getElementById(id);
+    expectRendered(context, figure);
+    assert.equal(figure.getAttribute("hidden"), null, `${id} must never be hidden`);
+    assert.equal(figure.getAttribute("aria-hidden"), null, `${id} must stay in the accessibility tree`);
+    assert(figure.classList.contains("plan-code-figure-output"));
+    assert(!figure.classList.contains("plan-code-until-found-output"));
+    assert(figure.parentElement.classList.contains("plan-code-figure-holder"));
+  }
+}
+
+test("figures show while code is closed; source, printed text and tables stay collapsed", () => {
+  const context = fixture();
+  const { window, first } = context;
+  expectCodeClosed(context);
+  expectFiguresInView(context);
+  // The table is not a plot: it collapses with the code, searchable until found.
+  assert.equal(window.document.getElementById("first-table").getAttribute("hidden"), "until-found");
+  assert(window.document.getElementById("first-table").classList.contains("plan-code-until-found-output"));
+  // The injected clip spares the figure's cell but still clips its other children.
+  const css = window.document.querySelector("style[data-plan-code-until-found]").textContent;
+  assert.match(css, /\.plan-code-until-found-container:not\(\.plan-code-figure-holder\)/);
+  assert.match(css, /\.plan-code-figure-holder\s*>\s*:not\(\.plan-code-figure-output\)/);
+  // No figure output is named by the results control; the source controls still own the cell.
+  assert(!context.results.getAttribute("aria-controls").split(" ").includes("first-figure"));
+  assert(context.all.getAttribute("aria-controls").split(" ").includes("first-cell"));
+  for (const control of [context.results, context.all, context.steps[1], context.all, context.steps[1]]) {
+    control.click();
+    expectFiguresInView(context);
+  }
+  window.document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape" }));
+  expectCodeClosed(context);
+  expectFiguresInView(context);
+  assert.equal(first.querySelector("#first-cell > .plan-code-figure-output"), window.document.getElementById("first-figure"));
+  context.dom.window.close();
+});
+
+test("a figure-only cell needs no results control and its figure never collapses", () => {
+  const context = fixture();
+  const { window, third } = context;
+  assert(third.classList.contains("plan-code-code-collapsed"));
+  assert.equal(third.querySelector(".plan-code-reveal-results"), null);
+  assert(window.document.getElementById("third-cell").classList.contains("plan-code-figure-holder"));
+  assert.equal(window.document.getElementById("third-line2").getAttribute("hidden"), "until-found");
+  third.querySelector(".plan-code-show-all").click();
+  assert(!third.classList.contains("plan-code-code-collapsed"));
+  third.querySelector(".plan-code-show-all").click();
+  assert(third.classList.contains("plan-code-code-collapsed"));
+  expectFiguresInView(context);
+  context.dom.window.close();
+});
+
+test("a replay placed after a cell stays outside the code disclosure", () => {
+  const context = fixture();
+  const excerpt = context.window.document.getElementById("third-excerpt");
+  assert(!excerpt.classList.contains("plan-code-until-found-container"));
+  assert.equal(excerpt.getAttribute("hidden"), null);
+  const controls = context.third.querySelector(".plan-code-show-all").getAttribute("aria-controls").split(" ");
+  assert(!controls.includes("third-excerpt"));
+  assert(controls.includes("third-cell"));
+  // Its stylesheet and loader are never regions: clipping would render their text.
+  for (const child of context.third.querySelectorAll(":scope > style, :scope > script")) {
+    assert(!child.classList.contains("plan-code-until-found-container"));
+    assert(!child.id || !controls.includes(child.id));
+    assert.equal(context.window.getComputedStyle(child).display, "none");
+  }
+  context.dom.window.close();
+});
+
+test("svg outputs count as figures; an output that also holds a table does not", () => {
+  const context = fixture();
+  const { window } = context;
+  const svg = window.document.getElementById("third-svg");
+  assert(svg.classList.contains("plan-code-figure-output"));
+  expectRendered(context, svg);
+  const mixed = window.document.getElementById("third-imgtable");
+  assert(!mixed.classList.contains("plan-code-figure-output"));
+  assert.equal(mixed.getAttribute("hidden"), "until-found");
   context.dom.window.close();
 });
 
@@ -215,8 +331,10 @@ test("prose outputs retain their opt-in wrapping through results/code round trip
 test("ordinary controls work without beforematch support", () => {
   const context = fixture({ untilFound: false });
   assert(!context.window.document.documentElement.classList.contains("plan-code-supports-until-found"));
+  expectFiguresInView(context);
   context.results.click();
   expectCodeClosed(context);
+  expectFiguresInView(context);
   assert.equal(context.originalOutput.getAttribute("hidden"), null);
   context.steps[0].click();
   assert.equal(context.first.dataset.activePlanStep, "1");

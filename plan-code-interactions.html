@@ -12,14 +12,20 @@
 
     // Bootstrap declares `[hidden] { display: none !important; }`, which would
     // defeat hidden-until-found. Keep the searchable boxes in layout, but clip
-    // their container out of view until beforematch opens the panel.
+    // their container out of view until beforematch opens the panel. A cell that
+    // draws a figure stays in view: only its source and printed text are clipped,
+    // so the plot shows while the code is closed.
     document.documentElement.classList.add("plan-code-supports-until-found");
     const style = document.createElement("style");
     style.dataset.planCodeUntilFound = "";
     style.textContent = `
       html.plan-code-supports-until-found
         .plan-code.plan-code-code-collapsed
-        > .plan-code-until-found-container,
+        > .plan-code-until-found-container:not(.plan-code-figure-holder),
+      html.plan-code-supports-until-found
+        .plan-code.plan-code-code-collapsed
+        > .plan-code-figure-holder
+        > :not(.plan-code-figure-output),
       html.plan-code-supports-until-found
         .plan-code.plan-code-results-collapsed
         > .plan-code-results {
@@ -48,8 +54,21 @@
     document.head.appendChild(style);
   }
 
+  // A mechanism replay placed after a cell is reading material, not source: it
+  // stays outside the code disclosure and visible, closed and paused as authored.
+  // Its stylesheet and loader, like any never-rendered child, are not regions
+  // either; clipping would force them to render and expose their text.
   function codeRegions(panel) {
-    return [...panel.children].filter((child) => !child.classList.contains("plan"));
+    return [...panel.children].filter((child) =>
+      !child.matches(".plan, .mechanism-excerpt, style, script, template, link")
+    );
+  }
+
+  // Plots are evidence the reader should see without opening the source. A
+  // figure output never collapses; tables and printed text stay with the code.
+  function isFigureOutput(output) {
+    return Boolean(output.querySelector(".quarto-figure, figure, img, svg, canvas")) &&
+      !output.querySelector("table");
   }
 
   function markerSteps(line) {
@@ -311,11 +330,22 @@
       region.classList.add("plan-code-until-found-container");
     });
 
-    const outputs = regions.flatMap((region) => [
+    const allOutputs = regions.flatMap((region) => [
       ...region.querySelectorAll(".cell-output")
     ]);
-    outputs.forEach((output, outputIndex) => {
+    allOutputs.forEach((output, outputIndex) => {
       if (!output.id) output.id = `plan-code-${panelIndex}-output-${outputIndex}`;
+    });
+    const figureOutputs = allOutputs.filter(isFigureOutput);
+    figureOutputs.forEach((output) => {
+      output.classList.add("plan-code-figure-output");
+      regions.find((region) => region.contains(output))
+        ?.classList.add("plan-code-figure-holder");
+    });
+    // Everything else is searchable-collapsed with the code: source lines, printed
+    // results, and any non-figure display.
+    const outputs = allOutputs.filter((output) => !figureOutputs.includes(output));
+    outputs.forEach((output) => {
       output.classList.add("plan-code-until-found-output");
     });
 
@@ -363,7 +393,7 @@
 
     // Move, never clone, plain printed evidence into its own disclosure while
     // code is closed. Placeholders retain its source-order position for the full
-    // listing; figures and rich displays never move.
+    // listing; figures stay in place (and in view), and rich displays never move.
     const resultOutputs = outputs.filter((output) =>
       !output.querySelector("img, svg, canvas, figure, table, audio, video, iframe") &&
       (output.matches(".cell-output-stdout, .cell-output-stderr") ||
