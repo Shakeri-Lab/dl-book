@@ -55,6 +55,27 @@
   changed, and three replay receipts are re-hashed. The Air re-renders Chapter 8 with
   the next Part II execution.
 
+# Rolling post-v1.4: Figure 10.1 redrawn from the chapter's code (September 29, 2026)
+
+- **One row per block design.** Figure 10.1 (`fig-cnn-building-blocks`) now has a row
+  for each block the chapter builds, VGG-style (`atom`, `VGGSmall`), NiN (`nin_block`,
+  `NINSmall`) and residual (`Block`, `DeepNet`), and three columns: compose a block,
+  repeat it, add a head. Every box is a layer of the chapter's code, including NiN's
+  BN and the residual branch's inner ReLU. The identity route runs forward into the sum;
+  the old drawing looped it back into the block, so it read as a recurrence.
+- **Neutral ink.** Every operator is drawn in ink; a heavy outline marks what each row
+  adds. Orange stays reserved for learnable parameters and is unused.
+- **Source renamed by content.** `figures/tikz-src/cnn-building-blocks.tex` replaces
+  `9_1_cnn_building_blocks.tex`; the `9_1_` SVG and PDF are retired.
+  `scripts/build_tikz.sh cnn-building-blocks` rebuilds both outputs.
+- **Text that describes the figure.** The caption, the alt text and the paragraph after
+  the figure (read each row left to right) follow the new layout. The figure opts into
+  the phone-width inspection strip (`responsive-wide-opt-in`), as its old, wider
+  drawing did automatically.
+- **Nothing re-executed.** The chapter's frozen Markdown carries the same edits (a
+  prose-only refresh); all 137 stdout blocks are unchanged, and five replay receipts are
+  re-hashed.
+
 # Rolling post-v1.4: Part III connections and Chapter 12 corrections (September 29, 2026)
 
 - **Connections move to the openers.** Chapters 12 and 13 name the chapters they draw
