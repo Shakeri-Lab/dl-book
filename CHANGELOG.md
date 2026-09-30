@@ -1,29 +1,41 @@
 # Rolling post-v1.4: figures show in closed code panels (September 30, 2026)
 
-- **Plots are visible by default.** A Plan → Code panel starts with its code closed,
+- **Evidence is visible by default.** A Plan → Code panel starts with its code closed,
   and the whole code cell used to be clipped out of view, figure included. Twenty
   figures (in Chapters 1 to 6, 8 to 10 and 12, and Appendices A and C) stayed hidden
   until the reader chose a step or Show all code.
-  `plan-code-interactions.html` now marks a figure output and its cell, clips only the
-  cell's other children, and never gives the figure `hidden="until-found"`. The figure
-  stays in its source position, so opening the code shows the listing and its outputs
-  in their original order.
-- **Everything else stays behind its toggle.** Source lines and printed results keep
-  their searchable collapse (`hidden="until-found"`); printed text still opens from
-  Reveal results, and a table still opens with the code. No figure moves, so the phone
-  inspection strip and the Quarto cell context are unchanged.
+  `plan-code-interactions.html` now marks each evidence output (a figure or a rendered
+  results table) and its cell, clips only the cell's other children, and never gives
+  the evidence `hidden="until-found"`. The evidence stays in its source position, so
+  opening the code shows the listing and its outputs in their original order. No panel
+  renders a table today; the rule is in place for the first one.
+- **Everything else stays behind its toggle.** Source lines and printed text (stdout,
+  stderr, a dataframe printed as text) keep their searchable collapse
+  (`hidden="until-found"`) and open from a plan step, Show all code, or Reveal results.
+  Nothing moves, so the phone inspection strip and the Quarto cell context are
+  unchanged.
 - **The Appendix A replay.** The `svd-circle` replay, anchored after the cell that draws
   Figure A.2, sat inside that panel and was clipped with the code. A replay is no longer
   part of the code disclosure, and neither is any never-rendered child of a panel (the
   replay's stylesheet and loader): clipping forced them to render, which exposed their
   CSS and JavaScript text to screen readers.
+- **A real-page check.** `scripts/audit_panel_evidence.py` loads every page with a panel
+  in headless Chromium at 1280 and 375 px and fails if any figure or results table in a
+  panel is hidden, zero-sized or undecoded with its code closed, if the source or
+  printed text shows, if the page scrolls sideways, or if the browser measured fewer
+  evidence outputs than the HTML holds. It needs no browser library (Chrome's
+  `--dump-dom` with an injected probe) and prefers `chrome-headless-shell`, because full
+  Chrome's headless mode will not open a 375 px window. The publish job installs it and
+  runs the check before deploying, and keeps the measurements as an artifact. Against
+  the pre-fix render it reports all 20 figures.
 - **Checks.** `scripts/test_plan_result_disclosure.cjs` gains tests that fail on the
-  old script (a figure is never hidden through every control, Escape and the fallback
-  without `beforematch`; a table still collapses; a replay stays outside the code
-  disclosure) and check computed style up every figure's ancestors;
-  `audit_html_assets.py` pins the `dlbook.scss` fallback selectors, which the jsdom test
-  does not load. HTML only: chapter sources, the freeze and the PDF are unchanged, and
-  the Preface (`index.qmd`) gains an HTML-only revision note.
+  old script (evidence is never hidden through every control, Escape and the fallback
+  without `beforematch`; a rendered table shows while the same frame printed as text
+  waits behind Reveal results; a replay stays outside the code disclosure) and check
+  computed style up every evidence output's ancestors; `audit_html_assets.py` pins the
+  `dlbook.scss` fallback selectors, which the jsdom test does not load. HTML only:
+  chapter sources, the freeze and the PDF are unchanged, and the Preface (`index.qmd`)
+  gains an HTML-only revision note.
 
 # Rolling post-v1.4: Part III connections and Chapter 12 corrections (September 29, 2026)
 
