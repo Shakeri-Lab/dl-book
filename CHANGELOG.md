@@ -37,6 +37,24 @@
   chapter sources, the freeze and the PDF are unchanged, and the Preface (`index.qmd`)
   gains an HTML-only revision note.
 
+# Rolling post-v1.4: Figure 8.2 prints its kernels (September 29, 2026)
+
+- **Numbers above effects.** Figure 8.2 (`fig-filter-zoo`) gains a top row that prints
+  the nine weights of each kernel in the `kernels` dictionary (identity, blur, sharpen,
+  and the two Sobel kernels) as fractions on one neutral scale centered at zero, above
+  the shapes and boot rows, which are unchanged. The dictionary's first key is now
+  `"identity"` (it was `"original"`), so the column title names the kernel the caption
+  names. The plan gains a step, and the caption and alt text follow. The figure opts
+  into the phone-width inspection strip (`responsive-wide-opt-in`) so the weights stay
+  readable on a phone.
+- **Machine and proof.** The figure was regenerated on the author's MacBook Pro
+  (Mac16,5), not the reference machine. First, the same standalone pipeline reproduced
+  the committed Figure 8.2 PNG byte for byte and its PDF pixel for pixel. The new
+  figure and the cell's frozen Markdown were then spliced into the Chapter 8 freeze. The
+  cell prints nothing; all 137 stdout blocks are unchanged, no other freeze entry
+  changed, and three replay receipts are re-hashed. The Air re-renders Chapter 8 with
+  the next Part II execution.
+
 # Rolling post-v1.4: Part III connections and Chapter 12 corrections (September 29, 2026)
 
 - **Connections move to the openers.** Chapters 12 and 13 name the chapters they draw
