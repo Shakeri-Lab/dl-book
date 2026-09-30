@@ -144,15 +144,17 @@ subset:
 1. Define the reusable `make_shapes` helper.
 2. Load one boot image and define five 3×3 kernels: identity, blur, sharpen, and two
    Sobel edge detectors.
-3. Apply every kernel to both images and show the outputs.
+3. Draw each kernel's nine weights, all five on one shared scale centered at zero.
+4. Apply every kernel to both images and show the outputs.
 :::
 
 ```{python}
 #| label: fig-filter-zoo
-#| fig-alt: "Two image rows, a synthetic shapes scene and a boot, are processed across five columns. Blur softens both inputs, sharpen strengthens local contrast, and the two Sobel outputs illuminate boundaries of different orientations."
-#| fig-cap: "One recipe, five kernels. Each column applies a different 3×3 kernel to the same inputs: identity, blur (local average), sharpen, and two Sobel edge detectors. The vertical-edge kernel fires on vertical boundaries; the horizontal one fires on horizontal boundaries."
+#| fig-alt: "Three rows across five columns. The top row prints each 3-by-3 kernel as a grid of numbers shaded by sign: identity has a single 1 at the center; blur has nine entries of 1/9; sharpen has 5 at the center and −1 at its four neighbors; the vertical Sobel kernel has −1, −2, −1 down its left column and 1, 2, 1 down its right; the horizontal Sobel kernel has −1, −2, −1 across its top row and 1, 2, 1 across its bottom. Below, a synthetic shapes scene and a boot pass through each kernel: blur softens both inputs, sharpen strengthens local contrast, and the two Sobel outputs illuminate boundaries of different orientations."
+#| fig-cap: "One recipe, five kernels. The top row prints the nine weights of each 3×3 kernel (identity, blur, sharpen, and two Sobel edge detectors), shaded on one scale centered at zero; each column below applies that kernel to the same two inputs. The vertical-edge kernel fires on vertical boundaries; the horizontal one fires on horizontal boundaries."
 #| code-summary: "Code: the zoo"
 #| code-fold: false
+#| classes: responsive-wide-opt-in
 # [1]
 def make_shapes(n: int = 64) -> torch.Tensor:
     img = torch.zeros(n, n)
@@ -168,22 +170,35 @@ development = torch.load("../../data/fashion-train.pt")
 boot = development["X"][(development["y"] == 9).nonzero()[0, 0]].float() / 255.0
 
 kernels = {
-    "original": torch.tensor([[0., 0., 0.], [0., 1., 0.], [0., 0., 0.]]),
+    "identity": torch.tensor([[0., 0., 0.], [0., 1., 0.], [0., 0., 0.]]),
     "blur": torch.full((3, 3), 1 / 9),
     "sharpen": torch.tensor([[0., -1., 0.], [-1., 5., -1.], [0., -1., 0.]]),
     "Sobel (vert.)": torch.tensor([[-1., 0., 1.], [-2., 0., 2.], [-1., 0., 1.]]),
     "Sobel (horiz.)": torch.tensor([[-1., -2., -1.], [0., 0., 0.], [1., 2., 1.]]),
 }
 
-fig, axes = plt.subplots(2, 5, figsize=(7.8, 3.4))
+from fractions import Fraction
+from matplotlib.colors import LinearSegmentedColormap
+
+fig, axes = plt.subplots(3, 5, figsize=(7.8, 5.0))
 # [3]
-for row, image in enumerate([make_shapes(), boot]):
+signed = LinearSegmentedColormap.from_list("signed", ["#4A5566", "white", "#6F6152"])
+scale = max(k.abs().max().item() for k in kernels.values())   # shared by all five
+for col, (name, k) in enumerate(kernels.items()):
+    axes[0, col].imshow(k, cmap=signed, vmin=-scale, vmax=scale)
+    for i in range(3):
+        for j in range(3):
+            w = k[i, j].item()
+            label = str(Fraction(w).limit_denominator(9)).replace("-", "\u2212")
+            axes[0, col].text(j, i, label, ha="center", va="center", fontsize=8,
+                              color="white" if abs(w) > 0.6 * scale else "#232D4B")
+    axes[0, col].set_title(name, fontsize=9)
+# [4]
+for row, image in enumerate([make_shapes(), boot], start=1):
     for col, (name, k) in enumerate(kernels.items()):
-        out = conv2d(image, k)
-        axes[row, col].imshow(out, cmap="gray")
-        axes[row, col].set_xticks([]); axes[row, col].set_yticks([])
-        if row == 0:
-            axes[row, col].set_title(name, fontsize=9)
+        axes[row, col].imshow(conv2d(image, k), cmap="gray")
+for ax in axes.flat:
+    ax.set_xticks([]); ax.set_yticks([])
 plt.tight_layout(); plt.show()
 ```
 ::::
