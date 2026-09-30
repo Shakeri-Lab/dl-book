@@ -775,6 +775,23 @@ def html_source_errors() -> list[str]:
                 "plan-code-interactions.html: missing searchable-collapse contract "
                 f"{contract!r}"
             )
+    # Evidence (figures, rendered tables) stays visible while code is closed. Pin the
+    # selectors that spare its cell and clip only the cell's other children.
+    stylesheet = (ROOT / "dlbook.scss").read_text(encoding="utf-8")
+    for source, text, contract in (
+        ("plan-code-interactions.html", plan_script,
+         ".plan-code-until-found-container:not(.plan-code-evidence-holder)"),
+        ("plan-code-interactions.html", plan_script,
+         "> .plan-code-evidence-holder\n        > :not(.plan-code-evidence-output)"),
+        ("dlbook.scss", stylesheet,
+         ":not(.plan):not(.plan-code-results):not(.plan-code-evidence-holder)"
+         ":not(.mechanism-excerpt)"),
+        ("dlbook.scss", stylesheet,
+         ".plan-code.plan-code-code-collapsed > .plan-code-evidence-holder > "
+         ":not(.plan-code-evidence-output)"),
+    ):
+        if contract not in text:
+            errors.append(f"{source}: missing evidence-visibility contract {contract!r}")
 
     if not re.search(
         r"loader\s*:\s*\{\s*load\s*:\s*\[\s*[\"']ui/lazy[\"']\s*\]",

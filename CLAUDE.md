@@ -155,7 +155,10 @@ compositions for figures. Full guide: `docs/dl-course-code.md`.
    because the asset audit rejects any PDF in the bundle.
 8. **Verify before pushing**: grep the built HTML for the cells' printed numbers and
    confirm they support the prose; check any local print proof; skim for unrendered
-   math.
+   math. `python scripts/audit_panel_evidence.py _book` loads every page in headless
+   Chromium and fails if a figure or results table in a Plan → Code panel is hidden or
+   zero-sized with the code closed (CI runs it before publishing; add
+   `--site https://shakeri-lab.github.io/dl-book/` to check the live site).
 9. **Commit `_freeze/` together with the chapter.** Push; then confirm CI:
    `gh run list -R Shakeri-Lab/dl-book -L 1` and spot-check the live URL (mind CDN
    cache, ~1 min).
