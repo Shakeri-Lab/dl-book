@@ -159,8 +159,8 @@ The scope disclosure adds, in four short paragraphs: that six steps and one cut 
 third are a schematic, while the chapter's recipes carry and detach state across chunks of
 roughly 20 to 50 steps or sample 100-character windows that start from zero state; that in
 code the carry lane is `h = h.detach()` between chunks and the reset lane starts each
-window from a zero state; that cutting at random points with reweighting, the unbiased
-alternative the chapter mentions, is not drawn, and that clipping is a separate tool that
+window from a zero state; that cutting at random points and dividing each surviving term by its
+survival probability, the unbiased alternative the chapter mentions, is not drawn, and that clipping is a separate tool that
 moves no cut; and the palette key, with shape and text carrying the same distinctions.
 
 Deliberately left out: the gradients that flow from each loss into the inputs and the
@@ -225,6 +225,6 @@ Lecture paths are relative to the lecture repository root.
 
 | Source | SHA-256 |
 |---|---|
-| `chapters/part3/10-sequences-rnn.qmd` | `dada2874083d8055b2cc071752265314295673647c615dad71d51c170ff080e5` |
+| `chapters/part3/10-sequences-rnn.qmd` | `9682aea4435c641189131305b649f20f651346bf4f48e0fee6c1702bc463923f` |
 | `6050-Ch10/lecture.jsx` | `3a2cabb00546067f5c3c0a3715c043ac96ec4f09faa298815428089689a22350` |
 | `6050-Ch10/STORYBOARD.md` | `23204f3ef89ad845ee07ec11c6e618154391908294429381798f7c20de888902` |

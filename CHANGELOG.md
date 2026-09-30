@@ -1,3 +1,39 @@
+# Rolling post-v1.4: Part III connections and Chapter 12 corrections (September 29, 2026)
+
+- **Connections move to the openers.** Chapters 12 and 13 name the chapters they draw
+  on, and the ones that take over their loose ends, in one roadmap paragraph in the
+  opener; the body refers to those tools by content. Chapter 12 goes from 29 to 12
+  cross-references (9 in the opener, one footnote, one closing handoff, two in
+  exercises), Chapter 13 from 20 to 12 (8 in the opener, the closing handoff, one
+  source note, two in exercises). The Part III page now ties the Part to the
+  autoencoder interlude, Part II's shared kernel, and the residual highway.
+- **Habits stay implicit.** "Per the book's habit", "the book's habit: try what we
+  own", "In keeping with a book whose every experiment runs on its own pages" and
+  similar lines in Chapters 11 and 12 are rewritten as the action itself.
+- **Truncated BPTT (Section 12.3).** A fixed horizon of $K$ steps does not hide the
+  distant past from the forward pass; it trains only dependencies whose two ends fall
+  inside one chunk, and a dependency of lag $\ell$ gets gradient from a fraction
+  $1-\ell/K$ of the losses. Randomized truncation is unbiased only when each surviving
+  term is divided by the probability that it survived (the text had multiplied by it),
+  after Tallec & Ollivier (2017, arXiv:1705.08209, Proposition 1). The unsupported
+  "mild regularizer" clause is removed. The `detach-cut` replay's scope note follows.
+- **One symbol per object (Sections 12.2 and 12.4).** The plain RNN's readout is now
+  $\vect{s}_t$ (the logits, one score per class) with $\matr{W}_{hs}$ and
+  $\vect{b}_s$, so $\vect{o}_t$ names only the LSTM's output gate. Figure 12.1 is
+  redrawn with the new labels; the standalone drawing pipeline first reproduced the
+  committed PNG byte for byte and the PDF pixel for pixel.
+- **Temperature (Section 12.7).** The logits are divided by $\tau$ before the softmax;
+  $\tau<1$ sharpens, $\tau\to0$ gives the argmax, and $\tau>1$ flattens toward
+  uniform. The code already did this; the sentence had divided the softmax.
+- **Complete references.** Every entry in Chapter 12's Sources gives authors, year,
+  title, venue, volume, issue and pages, with a DOI or arXiv identifier, checked
+  against Crossref, the arXiv API, the ACL Anthology, PMLR and the ICLR programmes.
+  Mikolov et al. (2013) is the ICLR workshop track; Tallec & Ollivier (2017) and Feng
+  et al. (2024) remain arXiv preprints.
+- **Nothing re-executed.** The three chapters' frozen Markdown carries the same prose
+  edits (a prose-only refresh); all 137 stdout blocks are unchanged, and the affected
+  replay receipts are re-hashed.
+
 # Rolling post-v1.4: two mechanism replays, for Chapter 10 (September 29, 2026)
 
 - **Chapter 10, training-mode BatchNorm measures with the batch's ruler**

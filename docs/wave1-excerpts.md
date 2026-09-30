@@ -53,7 +53,7 @@ Digests recomputed with `shasum -a 256` while writing this receipt:
 |---|---|
 | `chapters/part1/02-logistic-softmax.qmd` | `2d3699d07de75db5bed590b39c28834cffda7ec5304276f0a1a3748a601b016f` |
 | `chapters/part1/05-backpropagation.qmd` | `8d8166cef4dfd90bc8a3626cb6879678b556657e6504e60f525f7052ec34a126` |
-| `chapters/part3/10-sequences-rnn.qmd` | `dada2874083d8055b2cc071752265314295673647c615dad71d51c170ff080e5` |
+| `chapters/part3/10-sequences-rnn.qmd` | `9682aea4435c641189131305b649f20f651346bf4f48e0fee6c1702bc463923f` |
 | `chapters/appendices/a3-precision-performance.qmd` | `8fee277b9112baee05c801ade882a8e15c2fd94f44dcef684d32efcbeb47dab9` |
 
 The appendix is here because one witness `gate-product` displays is printed there and not
