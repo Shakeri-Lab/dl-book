@@ -284,7 +284,7 @@ Lecture paths are relative to
 
 | Source | SHA-256 |
 |---|---|
-| `chapters/part1/02-logistic-softmax.qmd` | `65be2b942ec7dd7e5e18d577aabb131b18bcfc5142431fa2197ae98fcbe66e80` |
+| `chapters/part1/02-logistic-softmax.qmd` | `b7e5db7244d5c52de02c8cafbc6913fc2a4fc966d0110dd34064a9bea6abf6ed` |
 | `6050-Ch2/STORYBOARD.md` | `16022632a6a90c8cb8f202ed8d51bd60490e040914fd732ef1e7090af9333e77` |
 | `6050-Ch2/lecture.jsx` | `025b275df2150cd71963358e332ff14d73d2a610d481b9606f6cc66ce5824eeb` |
 
