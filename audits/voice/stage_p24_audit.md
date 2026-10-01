@@ -5,13 +5,13 @@ Branch `voice-coherence`, rebased onto `main` at `3ea96e3` (#15, #13 and #14 mer
 ## Invariants
 
 ```text
-I1   PASS  code cells byte-identical (caption/alt options masked) [chapters/part4/15-bert-pretraining.qmd: 2 cell(s) changed only in caption/alt options]
+I1   FAIL  chapters/part2/08-cnn.qmd: code blocks differ; chapters/part2/09-modern-cnns-transfer.qmd: code blocks differ
 I3   FAIL  chapters/part4/12-kernel-regression.qmd: math removed [] added ['$q=3.5$', '$h=0.6$', '$(0.0002, 0.9413, 0.0585)$']
-I4   FAIL  chapters/part4/12-kernel-regression.qmd: numbers removed {} added {'1': 1, '3': 1, '5': 1, '1.5': 1, '2.8': 1, '1.8': 1}; chapters/part4/13-attention.qmd: numbers removed {} added {'59.2%': 1}
+I4   FAIL  chapters/part2/08-cnn.qmd: numbers removed {} added {'6': 2}; chapters/part2/09-modern-cnns-transfer.qmd: numbers removed {} added {'3': 1, '10.1007': 1, '978': 1, '319': 1, '46493': 1, '0': 1, '38': 1}; chapters/part4/12-kernel-regression.qmd: numbers removed {} added {'1': 1, '3': 1, '5': 1, '1.5': 1, '2.8': 1, '1.8': 1}; chapters/part4/13-attention.qmd: numbers removed {} added {'59.2%': 1}
 I5   FAIL  chapters/part4/14-self-attention-transformer.qmd: anchors removed [] added ['the-position-debt']
-I6   FAIL  chapters/part2/08-cnn.qmd: link instances removed {} added {'https://doi.org/10.1109/5.726791': 1}; chapters/part2/09-modern-cnns-transfer.qmd: link instances removed {} added {'https://proceedings.mlr.press/v37/ioffe15.html': 1, 'https://arxiv.org/abs/1409.1556': 1, 'https://openaccess.thecvf.com/content_cvpr_2016/html/He_Deep_Residual_Learning_CVPR_2016_paper.html': 1, 'https://arxiv.org/abs/1312.4400': 1, 'https://openaccess.thecvf.com/content_cvpr_2015/html/Szegedy_Going_Deeper_With_2015_CVPR_paper.html': 2, 'https://openaccess.thecvf.com/content_cvpr_2017/html/Huang_Densely_Connected_Convolutional_CVPR_2017_paper.html': 1, 'https://arxiv.org/abs/1708.07747': 1, 'https://arxiv.org/abs/1602.07360': 1, 'https://doi.org/10.1109/CVPR.2009.5206848': 1}; chapters/part4/12-kernel-regression.qmd: link instances removed {'https://vita-group.github.io/TTC-Net/': 1} added {'https://doi.org/10.1137/1109020': 1, 'https://www.jstor.org/stable/25049340': 1, 'https://arxiv.org/abs/2501.12352': 1, 'https://proceedings.mlr.press/v267/sun25h.html': 1, 'https://proceedings.mlr.press/v139/schlag21a.html': 1, 'https://arxiv.org/abs/2501.00663': 1, 'https://arxiv.org/abs/2506.05233': 1, 'https://arxiv.org/abs/2603.09221': 2, 'sec-11-encoder-decoder': 1, 'sec-13-attention': 1}; chapters/part4/13-attention.qmd: link instances removed {} added {'https://aclanthology.org/D15-1166/': 1, 'https://papers.nips.cc/paper/7181-attention-is-all-you-need': 1, 'https://arxiv.org/abs/1409.0473': 1}; chapters/part4/14-self-attention-transformer.qmd: link instances removed {} added {'https://papers.nips.cc/paper_files/paper/2017/hash/3f5ee243547dee91fbd053c1c4a845aa-Abstract.html': 1, 'https://arxiv.org/abs/2104.09864': 1, 'https://arxiv.org/abs/1607.06450': 1, 'https://proceedings.neurips.cc/paper/2019/hash/1e8a19426224ca89e83cef47f1e7f53b-Abstract.html': 1, 'https://arxiv.org/abs/1904.09751': 1}; chapters/part4/15-bert-pretraining.qmd: link instances removed {} added {'https://aclanthology.org/N19-1423/': 1, 'https://aclanthology.org/N18-1202/': 1, 'https://aclanthology.org/P18-1031/': 1, 'https://cdn.openai.com/research-covers/language-unsupervised/language_understanding_paper.pdf': 1, 'https://arxiv.org/abs/1907.11692': 1, 'https://aclanthology.org/P16-1162/': 1, 'https://github.com/google-research/bert/blob/master/run_pretraining.py': 1, 'https://www.jmlr.org/papers/v21/20-074.html': 1}; chapters/part4/16-vit-scaling.qmd: link instances removed {} added {'https://arxiv.org/abs/2010.11929': 1, 'https://openaccess.thecvf.com/content/ICCV2021/html/Liu_Swin_Transformer_Hierarchical_Vision_Transformer_Using_Shifted_Windows_ICCV_2021_paper.html': 1, 'https://proceedings.mlr.press/v139/touvron21a.html': 1, 'https://openaccess.thecvf.com/content/CVPR2022/html/Liu_A_ConvNet_for_the_2020s_CVPR_2022_paper.html': 1, 'https://proceedings.mlr.press/v97/tan19a.html': 1, 'https://arxiv.org/abs/2001.08361': 1, 'https://arxiv.org/abs/2203.15556': 1}
-I7   FAIL  chapters/part4/14-self-attention-transformer.qmd: heading text changed 'The position debt' -> 'Self-attention does not see order {#the-position-debt}'
-I8   PASS  figure references and alt text identical (alt text only under R6)
+I6   FAIL  chapters/part2/08-cnn.qmd: link instances removed {'sec-06-generalization-inductive-bias': 1, 'sec-03-nonlinearity-mlp': 1} added {'https://doi.org/10.1109/5.726791': 1}; chapters/part2/09-modern-cnns-transfer.qmd: link instances removed {} added {'https://proceedings.mlr.press/v37/ioffe15.html': 1, 'https://arxiv.org/abs/1409.1556': 1, 'https://openaccess.thecvf.com/content_cvpr_2016/html/He_Deep_Residual_Learning_CVPR_2016_paper.html': 1, 'https://arxiv.org/abs/1312.4400': 1, 'https://openaccess.thecvf.com/content_cvpr_2015/html/Szegedy_Going_Deeper_With_2015_CVPR_paper.html': 2, 'https://openaccess.thecvf.com/content_cvpr_2017/html/Huang_Densely_Connected_Convolutional_CVPR_2017_paper.html': 1, 'https://arxiv.org/abs/1708.07747': 1, 'https://arxiv.org/abs/1602.07360': 1, 'https://doi.org/10.1109/CVPR.2009.5206848': 1, 'https://doi.org/10.1007/978-3-319-46493-0_38': 1}; chapters/part4/12-kernel-regression.qmd: link instances removed {'https://vita-group.github.io/TTC-Net/': 1} added {'https://doi.org/10.1137/1109020': 1, 'https://www.jstor.org/stable/25049340': 1, 'https://arxiv.org/abs/2501.12352': 1, 'https://proceedings.mlr.press/v267/sun25h.html': 1, 'https://proceedings.mlr.press/v139/schlag21a.html': 1, 'https://arxiv.org/abs/2501.00663': 1, 'https://arxiv.org/abs/2506.05233': 1, 'https://arxiv.org/abs/2603.09221': 2, 'sec-11-encoder-decoder': 1, 'sec-13-attention': 1}; chapters/part4/13-attention.qmd: link instances removed {} added {'https://aclanthology.org/D15-1166/': 1, 'https://papers.nips.cc/paper/7181-attention-is-all-you-need': 1, 'https://arxiv.org/abs/1409.0473': 1}; chapters/part4/14-self-attention-transformer.qmd: link instances removed {} added {'https://papers.nips.cc/paper_files/paper/2017/hash/3f5ee243547dee91fbd053c1c4a845aa-Abstract.html': 1, 'https://arxiv.org/abs/2104.09864': 1, 'https://arxiv.org/abs/1607.06450': 1, 'https://proceedings.neurips.cc/paper/2019/hash/1e8a19426224ca89e83cef47f1e7f53b-Abstract.html': 1, 'https://arxiv.org/abs/1904.09751': 1}; chapters/part4/15-bert-pretraining.qmd: link instances removed {} added {'https://aclanthology.org/N19-1423/': 1, 'https://aclanthology.org/N18-1202/': 1, 'https://aclanthology.org/P18-1031/': 1, 'https://cdn.openai.com/research-covers/language-unsupervised/language_understanding_paper.pdf': 1, 'https://arxiv.org/abs/1907.11692': 1, 'https://aclanthology.org/P16-1162/': 1, 'https://github.com/google-research/bert/blob/master/run_pretraining.py': 1, 'https://www.jmlr.org/papers/v21/20-074.html': 1}; chapters/part4/16-vit-scaling.qmd: link instances removed {} added {'https://arxiv.org/abs/2010.11929': 1, 'https://openaccess.thecvf.com/content/ICCV2021/html/Liu_Swin_Transformer_Hierarchical_Vision_Transformer_Using_Shifted_Windows_ICCV_2021_paper.html': 1, 'https://proceedings.mlr.press/v139/touvron21a.html': 1, 'https://openaccess.thecvf.com/content/CVPR2022/html/Liu_A_ConvNet_for_the_2020s_CVPR_2022_paper.html': 1, 'https://proceedings.mlr.press/v97/tan19a.html': 1, 'https://arxiv.org/abs/2001.08361': 1, 'https://arxiv.org/abs/2203.15556': 1}
+I7   FAIL  chapters/part2/09-modern-cnns-transfer.qmd: heading text changed 'Architecture bridge (optional): DenseNet concatenates the history' -> 'Question 2: going deeper, and the wall you hit'; chapters/part2/09-modern-cnns-transfer.qmd: heading text changed 'Question 2: going deeper, and the wall you hit' -> 'Architecture bridge (optional): DenseNet concatenates the history'; chapters/part4/14-self-attention-transformer.qmd: heading text changed 'The position debt' -> 'Self-attention does not see order {#the-position-debt}'
+I8   FAIL  chapters/part2/08-cnn.qmd: alt text changed: '"Three nested outline boxes are centered on a coat image. Th'; chapters/part2/09-modern-cnns-transfer.qmd: alt text changed: '"Flow diagram in which input x splits into two paths. The le'
 I9   FAIL  chapters/part2/08-cnn.qmd: exercise text changed; chapters/part2/09-modern-cnns-transfer.qmd: exercise text changed
 I10  FAIL  chapters/part2/09-modern-cnns-transfer.qmd: Sources changed; chapters/part4/12-kernel-regression.qmd: Sources changed
 I11  FAIL  chapters/part2/09-modern-cnns-transfer.qmd: plan steps changed; chapters/part4/15-bert-pretraining.qmd: plan steps changed
@@ -19,18 +19,21 @@ I15  PASS  cross-volume references identical
 I9   PASS  exercise count over checked files 47 -> 47
 I12  FAIL  chapters/part4/12-kernel-regression.qmd: class A words 1431 -> 1536 (+7.3%)
 I16  PASS  em dashes in classes A to F, H, T on checked pages: 07-filters-convolution: 0 (0 exempt); 08-cnn: 0 (0 exempt); 09-modern-cnns-transfer: 0 (0 exempt); 12-kernel-regression: 0 (0 exempt); 13-attention: 0 (0 exempt); 14-self-attention-transformer: 0 (0 exempt); 15-bert-pretraining: 0 (0 exempt); 16-vit-scaling: 0 (0 exempt)
-I17  PASS  162 added sentences on 15 page(s); no shared four-word sequence across chapters, no shared promise opening, no apparatus word
-I18  FAIL  chapters/part2/07-filters-convolution.qmd: nominalizations 2->3 ['Part I ended with a diagnosis and a prescription.']; chapters/part2/09-modern-cnns-transfer.qmd: nominalizations 1->2 ['The task is to classify the three shoe classes (sandal, sneaker, ankle boot) fro']; chapters/part4/12-kernel-regression.qmd: links removed {'https://vita-group.github.io/TTC-Net/': 1} ['Nadaraya, On Estimating Regression: the 1964 two-page paper introducing one side']; chapters/part4/15-bert-pretraining.qmd: mean sentence length 19.0->23.0 ['A learned summary token can gather a sequence for a downstream head; REF will gi']
+I17  PASS  175 added sentences on 15 page(s); no shared four-word sequence across chapters, no shared promise opening, no apparatus word
+I18  FAIL  chapters/part2/07-filters-convolution.qmd: nominalizations 2->3 ['Part I ended with a diagnosis and a prescription.']; chapters/part2/08-cnn.qmd: links removed {'sec-03-nonlinearity-mlp': 1} ['which evaluates REF across every input channel, accumulates across MATH , and ad']; chapters/part2/08-cnn.qmd: links removed {'sec-06-generalization-inductive-bias': 1} ['The validation rematch.']; chapters/part2/09-modern-cnns-transfer.qmd: links removed {'sec-a2-tensors': 1} ['GoogLeNet\'s Inception block (2014) answers "which kernel size?" with "all of the']; chapters/part2/09-modern-cnns-transfer.qmd: nominalizations 1->2 ['The task is to classify the three shoe classes (sandal, sneaker, ankle boot) fro']; chapters/part4/12-kernel-regression.qmd: links removed {'https://vita-group.github.io/TTC-Net/': 1} ['Nadaraya, On Estimating Regression: the 1964 two-page paper introducing one side']; chapters/part4/15-bert-pretraining.qmd: mean sentence length 19.0->23.0 ['A learned summary token can gather a sequence for a downstream head; REF will gi']
 ```
 
 The failures are the pass's declared changes, not slips:
 
 - **I3, I4, I12** (Chapter 14): the W8 worked instance adds $q=3.5$, $h=0.6$, the weights $(0.0002, 0.9413, 0.0585)$ and the numbers 1, 3, 5, 1.5, 2.8, 1.8, all printed by the chapter's own table and `fixed-gaussian-attention` cell; class A words rise 7.3%. **I4** (Chapter 15): "59.2%" is repeated from the warning callout in recap item 5, replacing "the parameter/compute caveat stated in full".
+- **I1, I8**: the author asked for Figures 9.3 and 10.3 to be redrawn. Their drawing cells (`fig-receptive-field`, `fig-residual-stream`; `echo: false`, no printed output) change, and so does their alt text. The standalone pipeline first reproduced both committed PNGs byte for byte and both PDFs pixel for pixel, then drew the new figures, which were installed in the freeze with their HTML width and height.
+- **I7 (Chapter 10)**: the DenseNet callout moves after the residual block, so its title and the Question 2 heading swap order.
 - **I5, I7**: the Section 16.1 subsection heading is renamed and pinned to its old id `{#the-position-debt}`, which is the id it had before, so rendered anchors are unchanged (`audit_public_anchors.py --rendered` passes).
 - **I6**: the W7 links at first mention (41), Chapter 14's Sources URL change, the W8 paragraph's two cross-references (to Chapters 13 and 15), and Chapter 10's new Sources entry.
 - **I11**: Chapter 18's Plan step "five Boolean ledgers" → "five Boolean rows" and Chapter 10's "Implement the parameter bill, C = 32." → "Count both designs' parameters at C = 32." (W6).
 - **I9**: Chapter 9 Exercise 2, "receptive-field ledger" → "receptive-field growth" (W6); Chapter 10 Exercise 5 opens with an imperative, "Try data augmentation as a third road" (W1).
 - **I10**: Chapter 14's *Beyond Test-Time Memory* entry → arXiv:2603.09221, and Chapter 10's new entry for Szegedy et al., *Going Deeper with Convolutions* (W7).
+- **I6, I18 (Chapters 9 and 10)**: Chapter 9's "@sec-03-nonlinearity-mlp's recipe" becomes "an MLP layer" at the author's request, and a sentence that cited Chapter 6 twice drops the repeat (08-R9-5); each removes one cross-reference. In Chapter 10, `@sec-a2-tensors` moves with the DenseNet callout, so the paragraph group it left reads as having lost a link.
 - **I18**: the Sources URL above, read as a removed link; Chapter 18's closing paragraph, whose mean sentence length rises from 19 to 23 words when its shortest sentence, the dropped frame, goes. Its two nominalization flags on Chapters 8 and 10 are artifacts of the audit's exemption filter: the raw counts do not rise (3 → 3 and 2 → 2; report, B3.6).
 
 ## Measures before and after (rendered HTML, the author's definitions)
@@ -39,9 +42,9 @@ Rates are per 1,000 words of running prose. Hits are split by where they sit: pr
 
 | ch | words | colon leads (per 1k) | accounting words | announcements (excl. "Here is") |
 |---|---:|---:|---:|---:|
-| 8 | 3151 → 3129 | 22 → 19 (7.0 → 6.1) | 0 → 0 | 3 → 0 |
-| 9 | 5632 → 5611 | 47 → 43 (8.3 → 7.7) | 7 → 1 | 2 → 0 |
-| 10 | 6260 → 6243 | 37 → 31 (5.9 → 5.0) | 6 → 3 | 0 → 0 |
+| 8 | 3151 → 3130 | 22 → 19 (7.0 → 6.1) | 0 → 0 | 3 → 0 |
+| 9 | 5632 → 5608 | 47 → 43 (8.3 → 7.7) | 7 → 1 | 2 → 0 |
+| 10 | 6260 → 6244 | 37 → 31 (5.9 → 5.0) | 6 → 3 | 0 → 0 |
 | 14 | 2275 → 2379 | 8 → 8 (3.5 → 3.4) | 2 → 1 | 1 → 0 |
 | 15 | 2915 → 2924 | 4 → 4 (1.4 → 1.4) | 3 → 0 | 0 → 0 |
 | 16 | 5135 → 5127 | 14 → 14 (2.7 → 2.7) | 5 → 0 | 1 → 0 |
@@ -158,16 +161,16 @@ Ledger rows the pass leaves, all outside W1, W6, W7 and W8 (provenance narration
 
 ## Edits by rule
 
-| page | R9 | W1 | W6 | W7 | W8 | total |
-|---|---:|---:|---:|---:|---:|---:|
-| 07-filters-convolution | 0 | 14 | 0 | 0 | 0 | 14 |
-| 08-cnn | 1 | 12 | 7 | 1 | 0 | 21 |
-| 09-modern-cnns-transfer | 0 | 19 | 10 | 6 | 0 | 35 |
-| 12-kernel-regression | 1 | 2 | 1 | 3 | 1 | 8 |
-| 13-attention | 0 | 3 | 6 | 2 | 0 | 11 |
-| 14-self-attention-transformer | 0 | 5 | 6 | 5 | 0 | 16 |
-| 15-bert-pretraining | 0 | 5 | 4 | 6 | 0 | 15 |
-| 16-vit-scaling | 0 | 5 | 5 | 5 | 0 | 15 |
+| page | FIG | MOVE | R9 | W1 | W6 | W7 | W8 | total |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 07-filters-convolution | 0 | 0 | 0 | 15 | 0 | 0 | 0 | 15 |
+| 08-cnn | 1 | 0 | 2 | 13 | 7 | 1 | 0 | 24 |
+| 09-modern-cnns-transfer | 1 | 2 | 1 | 20 | 10 | 7 | 0 | 41 |
+| 12-kernel-regression | 0 | 0 | 1 | 2 | 1 | 3 | 1 | 8 |
+| 13-attention | 0 | 0 | 0 | 3 | 6 | 2 | 0 | 11 |
+| 14-self-attention-transformer | 0 | 0 | 0 | 5 | 6 | 5 | 0 | 16 |
+| 15-bert-pretraining | 0 | 0 | 0 | 5 | 4 | 6 | 0 | 15 |
+| 16-vit-scaling | 0 | 0 | 0 | 5 | 5 | 5 | 0 | 15 |
 
 ## Rule-blind reader pass (P3)
 
@@ -204,8 +207,10 @@ The I17 row above counts every stage's added sentences on the pages with edit li
 - `07-W1-9`: Edge detection (Sobel) uses positive and negative weights summing to zero.
 - `07-W1-9`: Over any flat region the products cancel and the output is silent; over an edge, a sharp change in values, the sum swings large.
 - `07-W1-10`: It answers one question: does intensity change here, in my direction?
-- `07-W1-11`: The two words will both matter: equivariant means the output moves along with the input (what convolution gives us); invariant means the output does not change at all (what a classifier ultimately wants: "boot", regardless of position).
 - `07-W1-14`: But that matrix has a rigid structure: almost everywhere zero (locality means each row touches only one patch), and the same nine numbers repeating along its diagonals (sharing means every row is the same template, relocated).
+- `07-W1-15`: Before going further, keep these two distinct:
+- `07-W1-15`: Equivariant means the output moves along with the input (what convolution gives us).
+- `07-W1-15`: Invariant means the output does not change at all (what a classifier ultimately wants: "boot", regardless of position).
 
 **chapters/part2/08-cnn.qmd**
 
@@ -226,8 +231,8 @@ The I17 row above counts every stage's added sentences on the pages with edit li
 - `08-W1-16`: Backpropagation through the slide follows the same fan-out rule we met in REF .
 - `08-W1-17`: Think of nn modules as appliances: they have knobs and memory, and PyTorch carries their state around for you (nn.Conv2d owns its kernels and biases as nn.Parameters, registered for autograd and visible to the optimizer).
 - `08-W1-18`: Before running, write down two predictions: LeNet's clean accuracy and LeNet at a two-pixel shift.
-- `08-W1-19`: Take one last look inside, because REF also showed us what the MLP's first layer looked like (global, smeared, garment-shaped templates, REF ) and promised that structure would change:
 - `08-W1-20`: And Part IV goes further: self-attention ( REF ) is so thoroughly position-agnostic that we will have to put position back in explicitly.
+- `08-W1-21`: A convolutional layer is an MLP layer with a structured linear map: dot products MATH add bias MATH ReLU.
 
 **chapters/part2/09-modern-cnns-transfer.qmd**
 
@@ -260,6 +265,8 @@ The I17 row above counts every stage's added sentences on the pages with edit li
 - `09-W6-10`: Pretraining is curriculum, gaps shrink what transfers, and small targets may leave little room for imports.
 - `09-W1-19`: Try data augmentation as a third road: on the 30-image shoe task, train from scratch with random horizontal flips and ±3-pixel shifts ( REF 's exercise, now as a tool).
 - `09-W7-9`: Szegedy et al., Going Deeper with Convolutions: GoogLeNet's Inception block, parallel branches of several kernel sizes joined by channel concatenation.
+- `09-W1-20`: In the printout above, the BN row holds a near-constant spread at every printed depth: the signal reaches each layer at a usable scale from the first step.
+- `09-W7-10`: He et al., Identity Mappings in Deep Residual Networks: pre-activation residual blocks, which place BatchNorm and ReLU before each convolution in the learned branch and drop the ReLU after the sum, so the sum passes straight through.
 
 **chapters/part4/12-kernel-regression.qmd**
 

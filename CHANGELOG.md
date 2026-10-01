@@ -36,6 +36,14 @@
   kernel-regression/sequence-memory table, one paragraph walks the opening example
   ($q=3.5$, keys 1, 3, 5, weights $(0.0002, 0.9413, 0.0585)$, output $2.7412$)
   through the roles and points to Chapter 13's date task for the other column.
+- **The author's figure and wording requests.**
+  - Figure 9.3 is titled "Receptive fields by depth" and gains the 6×6 field after the first pool (the chapter's 5 → 6 → 14 → 16 count). Ink and blue replace orange, which the palette keeps for learnable parameters, and pooling stages are dotted.
+  - Figure 10.3 now draws the residual block as `Block` builds it: the identity stream is the straight line, the learned branch $F(x)$ runs below it, and the output is ReLU$(x+F(x))$. The caption says the final ReLU still gates the shortcut and cites pre-activation ResNets (He et al., 2016, added to Sources).
+  - Both figures were redrawn with a standalone pipeline that first reproduced the committed PNGs byte for byte and their PDFs pixel for pixel.
+  - Chapter 8's equivariant/invariant definitions become a two-item list.
+  - Chapter 9 names the MLP layer instead of pointing to Chapter 3.
+  - Chapter 10's BN sentence matches its printout ("at every printed depth"), and the DenseNet aside moves after the residual block.
+  - Figure 9.5's colour bar waits for the next reference-machine run.
 - **Scene fixtures.** The `what-where`, `sobel-split`, `stacked-sight` and
   `identity-lane` scenes' bound literals follow the Chapter 8, 9 and 10 sentences they
   quote; the `both-axes` scene anchors on the renamed subsection heading in Section 16.1.

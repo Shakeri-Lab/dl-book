@@ -104,11 +104,11 @@ Reader pass: no mark.
 
 Reader pass: no mark.
 
-**07-W1-11** (W1 (V4)). 'One precision worth keeping sharp' frame dropped; its reason stays.
+**07-W1-15** (W1). Author's wording: the two definitions become a list after 'Before going further, keep these two distinct:'; parentheses kept where the author's draft had an em dash (D6).
 
-> **The two words will both matter: equivariant means the output moves along with the input (what convolution gives us); invariant means the output does not change at all (what a classifier ultimately wants: “boot”, regardless of position).** Equivariance is the raw material; in Chapter 9 , pooling will spend some position information to buy local shift tolerance. Exact invariance is a stronger property and must be tested, not presumed.
+> **Before going further, keep these two distinct:**
 >
-> Replaced: “One precision worth keeping sharp, because the two words will both matter: equivariant means the output moves along with the input (what convolution gives us); invariant means the output does not change at all (what a classifier ultimately wants: "boot", regardless of position).”
+> Replaced: “The two words will both matter: equivariant means the output moves along with the input (what convolution gives us); invariant means the output does not change at all (what a classifier ultimately wants: "boot", regardless of position).”
 
 Reader pass: no mark.
 
@@ -117,6 +117,16 @@ Reader pass: no mark.
 > One more pair of glasses. Every output pixel is a dot product $\rightarrow$ the whole operation is linear $\rightarrow$ cross-correlation could be written as one enormous matrix multiplying the flattened image. **But that matrix has a rigid structure: almost everywhere zero (locality means each row touches only one patch), and the same nine numbers repeating along its diagonals (sharing means every row is the same template, relocated).**
 >
 > Replaced: “But it is a matrix with a rigid structure: almost everywhere zero (locality means each row touches only one patch), and the same nine numbers repeating along its diagonals (sharing means every row is the same template, relocated).”
+
+Reader pass: no mark.
+
+**07-W1-11** (W1 (V4)). 'One precision worth keeping sharp' frame dropped; its reason stays.
+
+> **Before going further, keep these two distinct:** **Equivariant means the output moves along with the input (what convolution gives us).** **Invariant means the output does not change at all (what a classifier ultimately wants: "boot", regardless of position).** Equivariance is the raw material; in REF , pooling will spend some position information to buy local shift tolerance. Exact invariance is a stronger property and must be tested, not presumed.
+>
+> (source text of the paragraph; the gate tool does not match it to a rendered block)
+>
+> Replaced: “One precision worth keeping sharp, because the two words will both matter: equivariant means the output moves along with the input (what convolution gives us); invariant means the output does not change at all (what a classifier ultimately wants: "boot", regardless of position).”
 
 Reader pass: no mark.
 
@@ -171,6 +181,14 @@ Reader pass: P3 mark on the next, unedited sentence (the F.mse_loss reduction, '
 > **Out-channels add detectives.** A conv layer with 6 output channels owns 6 independent kernels and produces a stack of 6 feature maps.
 >
 > Replaced: “Out-channels: more detectives.” “In-channels: detectives read the whole stack.”
+
+Reader pass: no mark.
+
+**08-W1-21** (W1). Author's request: name the recipe instead of pointing to Chapter 3.
+
+> which evaluates Equation 8.1 across every input channel, accumulates across $C_{\text{in}}$ , and adds the scalar channel bias $b_o$ ; a pointwise activation follows. **A convolutional layer is an MLP layer with a structured linear map: dot products $\rightarrow$ add bias $\rightarrow$ ReLU.** Nothing in the recipe changed; only the wiring of the linear part did.
+>
+> Replaced: “A convolutional layer is REF 's recipe with a structured linear map: dot products MATH add bias MATH ReLU.”
 
 Reader pass: no mark.
 
@@ -296,17 +314,35 @@ Reader pass: no mark.
 
 **08-W1-19** (W1). Verbless sentence before a colon gets its verb; the Chapter 7 harvest stays.
 
-> **Take one last look inside, because Chapter 6 also showed us what the MLP’s first layer looked like (global, smeared, garment-shaped templates, Chapter 6 ) and promised that structure would change:**
+> **Take one last look inside, because Chapter 6 also showed us what the MLP’s first layer looked like (global, smeared, garment-shaped templates) and promised that structure would change:**
 >
 > Replaced: “One last look inside, because REF also showed us what the MLP's first layer looked like (global, smeared, garment-shaped templates, REF ) and promised that structure would change:”
 
 Reader pass: no mark.
+
+**08-R9-5** (R9). P3 slip: Chapter 6 was cited twice in one sentence; the parenthesis drops the repeat.
+
+> **Take one last look inside, because Chapter 6 also showed us what the MLP’s first layer looked like (global, smeared, garment-shaped templates) and promised that structure would change:**
+>
+> Replaced: “Take one last look inside, because REF also showed us what the MLP's first layer looked like (global, smeared, garment-shaped templates, REF ) and promised that structure would change:”
+
+Reader pass: P3 mark (punctuation slip): fixed.
 
 **08-W6-9** (W6). 'Ledger' replaced in the exercise that points at the renamed passage.
 
 > (Pencil.) **Verify the receptive-field growth $5 \rightarrow 6 \rightarrow 14 \rightarrow 16$ .** (Track two numbers per stage: the field size, and the jump , the spacing in input pixels between neighboring units, which each stride-2 pool doubles.) Then show that no convolutional or pooling unit in LeNet ever sees the full $28 \times 28$ frame. Where does globality finally enter the network?
 >
 > Replaced: “Verify the receptive-field ledger MATH .”
+
+Reader pass: no mark.
+
+**08-FIG-1** (FIG). Author's request: Figure 9.3 names the receptive field and adds the 6×6 field after the first pool (the chapter's 5 → 6 → 14 → 16 count); orange, reserved for learnable parameters, gives way to ink and blue; pooling stages dotted. Redrawn with the standalone pipeline, which first reproduced the committed PNG byte for byte and PDF pixel for pixel.
+
+> **Receptive fields by depth.** **Each box is the patch of the input that one unit sees after a stage, drawn concentric for comparison.** **On the coat, the nested fields cross visible sleeves, torso, and boundary.** **One unit sees a 5×5 patch after conv1, 6×6 after the first pool, 14×14 after conv2, and 16×16 after the final pool.** Local wiring earns increasingly global sight; the dense head then reads all 25 overlapping final views at once.
+>
+> (source text of the caption; the gate tool does not match it to a rendered block)
+>
+> Replaced: “What one neuron sees, by depth.” “A coat replaces the earlier sandal so the nested fields cross visible sleeves, torso, and boundary.” “Conv1 sees a 5×5 patch, conv2 sees 14×14, and the final pooled cell sees 16×16.”
 
 Reader pass: no mark.
 
@@ -382,6 +418,14 @@ Reader pass: no mark.
 
 Reader pass: no mark.
 
+**09-W1-20** (W1). Author's request ('day one'); the printout shows six depths, not twelve, and measures forward spread (B1 row 10 resolved).
+
+> The $\gamma, \beta$ pair matters: normalization is a reset to a healthy scale , not a straitjacket. The network can learn to restore any mean and spread that helps, but it starts every layer from sane numbers. **In the printout above, the BN row holds a near-constant spread at every printed depth: the signal reaches each layer at a usable scale from the first step.** The standard placement we adopt is conv $\rightarrow$ BN $\rightarrow$ ReLU, with bias=False on the convolution, since $\beta$ already provides the shift.
+>
+> Replaced: “In the printout above, the BN row holds a near-constant spread through all twelve layers: every layer trains from day one.”
+
+Reader pass: no mark.
+
 **09-W1-4** (W1). Single-noun label becomes a clause; the batch-ruler test's sentence stays verbatim.
 
 > At training time BN normalizes by the current batch’s statistics. At evaluation time there may be no batch (one image), so it uses running averages collected during training. model.train() and model.eval() switch between the two. Forgetting the switch is the classic BN bug: evaluate in train mode and your predictions depend on whatever else happens to be in the batch; train in eval mode and BN never learns its statistics. Our train_model recipe flips the switch in both directions; look for it. **It follows that BN needs real batches to estimate statistics, so it gets unreliable at tiny batch sizes.**
@@ -420,12 +464,6 @@ Reader pass: no mark.
 
 Reader pass: no mark.
 
-**09-W7-4** (W7). First mention of Huang et al.; same URL as Sources.
-
-> The residual block below preserves an old representation by addition : $x_{\ell+1}=x_\ell+F_\ell(x_\ell)$ . A DenseNet block makes a different connectivity choice. If $x_j$ denotes layer $j$ ’s output feature map, layer $\ell$ receives the channel-wise concatenation $[x_0,x_1,\ldots,x_{\ell-1}]$ and contributes a small new group of feature maps for later layers. Earlier features therefore remain directly available instead of being recreated, while the channel axis grows; transition blocks compress channels and downsample between dense blocks. In Appendix B’s language, the defining operation is concatenation along the feature-channel axis, not another kind of residual addition ( Appendix B ).
-
-Reader pass: no mark.
-
 **09-W1-7** (W1). Stacked colons and verbless glosses become clauses; the prediction prompt stays.
 
 > **Predict before running. Two networks have identical parameter counts and twenty blocks each; one is plain, one residual.** Will the plain net merely trail, or fail to fit the training set at all?
@@ -447,6 +485,18 @@ Reader pass: no mark.
 > **The one change is that each block computes $F(x)$ and outputs $F(x) + x$ .** A residual connection lets the input skip over the block and adds it back.
 >
 > Replaced: “The one change: each block computes MATH and outputs MATH .”
+
+Reader pass: no mark.
+
+**09-W7-4** (W7). First mention of Huang et al.; same URL as Sources.
+
+> The residual block above preserves an old representation by addition : $x_{\ell+1}=x_\ell+F_\ell(x_\ell)$ . A DenseNet block makes a different connectivity choice. If $x_j$ denotes layer $j$ ’s output feature map, layer $\ell$ receives the channel-wise concatenation $[x_0,x_1,\ldots,x_{\ell-1}]$ and contributes a small new group of feature maps for later layers. Earlier features therefore remain directly available instead of being recreated, while the channel axis grows; transition blocks compress channels and downsample between dense blocks. In Appendix B’s language, the defining operation is concatenation along the feature-channel axis, not another kind of residual addition ( Appendix B ).
+
+Reader pass: no mark.
+
+**09-MOVE-2** (MOVE). Author's request: the DenseNet bridge now follows the residual block it compares against; 'below' becomes 'above'.
+
+> **The residual block above preserves an old representation by addition : $x_{\ell+1}=x_\ell+F_\ell(x_\ell)$ .** A DenseNet block makes a different connectivity choice. If $x_j$ denotes layer $j$ ’s output feature map, layer $\ell$ receives the channel-wise concatenation $[x_0,x_1,\ldots,x_{\ell-1}]$ and contributes a small new group of feature maps for later layers. Earlier features therefore remain directly available instead of being recreated, while the channel axis grows; transition blocks compress channels and downsample between dense blocks. In Appendix B’s language, the defining operation is concatenation along the feature-channel axis, not another kind of residual addition ( Appendix B ).
 
 Reader pass: no mark.
 
@@ -574,11 +624,41 @@ Reader pass: no mark.
 
 Reader pass: no mark.
 
+**09-W7-10** (W7). Sources entry for the work the new caption names; verified against Crossref (ECCV 2016, pp. 630-645) and arXiv:1603.05027.
+
+> **He et al., Identity Mappings in Deep Residual Networks : pre-activation residual blocks, which place BatchNorm and ReLU before each convolution in the learned branch and drop the ReLU after the sum, so the sum passes straight through.**
+
+Reader pass: no mark.
+
+**09-R9-9** (R9). P3 slip: a line-end hyphen rendered as "1×1-plus- 5×5".
+
+> (Pencil.) Generalize the kernel-stacking arithmetic: $n$ stacked $3\times3$ layers versus one $(2n{+}1)\times(2n{+}1)$ kernel, at constant width $C$ . Then redo it for a layer that grows channels $C \rightarrow 2C$ : split into two $3\times3$ s ( $C \rightarrow C \rightarrow 2C$ and $C \rightarrow 2C \rightarrow 2C$ ) and find when the split stops saving parameters.
+
+Reader pass: P3 mark (punctuation slip): fixed.
+
 **09-W1-19** (W1). Noun-phrase topic label in an exercise becomes an imperative, like its neighbors.
 
 > (Code.) **Try data augmentation as a third road: on the 30-image shoe task, train from scratch with random horizontal flips and ±3-pixel shifts ( Chapter 6 ’s exercise, now as a tool).** Does augmentation close the gap to the pinned full-data results further than transfer did? Why might augmentation and transfer help in different regimes?
 >
 > Replaced: “Data augmentation as a third road: on the 30-image shoe task, train from scratch with random horizontal flips and ±3-pixel shifts ( REF 's exercise, now as a tool).”
+
+Reader pass: no mark.
+
+**09-MOVE-1** (MOVE). Author's request: the DenseNet bridge leaves its place before the residual block (removal half).
+
+> Heading now: `## Question 2: going deeper, and the wall you hit` (source; headings are not rendered paragraphs)
+>
+> Removed: “The residual block below preserves an old representation by addition: MATH .” “A DenseNet block makes a different connectivity choice.” “If MATH denotes layer MATH 's output feature map, layer MATH receives the channel-wise concatenation MATH and contributes a small new group of feature maps for later layers.” “Earlier features therefore remain directly available instead of being recreated, while the channel axis grows; transition blocks compress channels and downsample between dense blocks.” “In Appendix B's language, the defining operation is concatenation along the feature-channel axis, not another kind of residual addition ( REF ).”
+
+Reader pass: no mark.
+
+**09-FIG-1** (FIG). Author's request (Option 2, faithful to the code's `F.relu(y + x)`): identity stream drawn as the straight spine, learned branch F(x) below, output ReLU(x + F(x)); ink replaces orange; the caption states that the final ReLU gates the route and cites pre-activation ResNets. Redrawn with the standalone pipeline, which first reproduced the committed PNG byte for byte and PDF pixel for pixel.
+
+> **A residual block in the original ResNet form, which Block implements.** **The identity stream carries MATH straight to the sum.** **The learned branch adds a correction MATH , so MATH , and a ReLU follows.** **The sum has no weights, so the shortcut is a direct route for activations and gradients wherever MATH is positive.** **Pre-activation ResNets move that ReLU into the branch and leave the route clean.**
+>
+> (source text of the caption; the gate tool does not match it to a rendered block)
+>
+> Replaced: “A residual block has two routes.” “The learned branch computes a correction MATH ; the identity branch carries MATH unchanged to the addition.” “Even when the learned branch has a difficult Jacobian, the shortcut leaves a direct route for activations and gradients.”
 
 Reader pass: no mark.
 
@@ -1105,7 +1185,7 @@ claim. The default is the shortest fix.
 | 7 | Ch 19, §19.4 | "all five rows enter one analysis" | `run_paired_seed` appends a CNN row and a ViT row per seed, so `fashion_results` holds ten | "five rows" → "ten rows" |
 | 8 | Ch 8, Figure 8.3 caption and alt text | "so most entries are zero" / "contains mostly zeros" | the drawn matrix is $4\times6$ with three nonzero weights per row: 12 of 24 entries are zero | "most entries are zero" → "half the entries are zero here, and nearly all are for a real image" |
 | 9 | Ch 8, §8.6 | "Exactly zero on the compared interior." | the check prints `0.0` through `:.1f`, which cannot tell zero from anything under 0.05 (a re-run gives a bitwise zero, so the claim is true) | print the difference with `:.1e`, or say "prints 0.0" (the cell is frozen under N1, so the author decides) |
-| 10 | Ch 10, §10.2 | "the BN row holds a near-constant spread through all twelve layers" | `with BN    layer stds: 0.344  0.404  0.395  0.385  0.432  0.384` (six values) | "through all twelve layers" → "at every printed depth" |
+| 10 | Ch 10, §10.2 | "the BN row holds a near-constant spread through all twelve layers" | `with BN    layer stds: 0.344  0.404  0.395  0.385  0.432  0.384` (six values) | **applied** at the author's request (09-W1-20): "at every printed depth: the signal reaches each layer at a usable scale from the first step" |
 | 11 | Ch 10, §10.4 | "It is not a matched-head ablation: the trunks and training recipes differ too." | the page trains LeNet "same recipe" (`train_model(LeNet, epochs=150)`) and NINSmall with the same seed, optimizer, batch size and 75 + 75 epochs of the same loop | "the trunks and training recipes differ too" → "the trunks differ too" |
 | 12 | Ch 10, full-data rematch | "Scratch ends 0.22 points above fine-tuning, smaller than the run-to-run variation one would need…" | $93.92\% \pm 0.12\%$ and $94.14\% \pm 0.08\%$ across three seeds: the gap is about 1.8 times fine-tuning's spread and 2.75 times scratch's | "smaller than the run-to-run variation one would need to resolve as a family-level claim" → "larger than either arm's seed spread (0.12 and 0.08) but, across three seeds, too small for a family-level claim" |
 | 13 | Ch 10, §10.2 | "we need the tool Chapter 9 used and we deferred" | Chapter 9's LeNet (printed here as `# Chapter 9's model`) has no BatchNorm layer | "used and we deferred" → "promised and deferred" |
@@ -1115,8 +1195,11 @@ claim. The default is the shortest fix.
 Baseline sentences, not edited by this pass. Listed for the author; the default is to leave
 each until its chapter's own pass.
 
+- **Ch 8 (second reading).** "The detector's report moves with the garment." follows a check that shifts the synthetic shapes scene, not a garment. "equivariance ties the survivors together" credits equivariance with what weight sharing does (the paragraph before and Figure 8.3's caption say sharing). Figure 8.1 draws the fixed moving average in orange and Figure 8.3 shades $v_2$ orange, against the palette's rule that orange marks learned weights; the box-average panel says so beside it. The replay panels spell "centre" and "neighbouring" where the prose writes American English.
 - **Ch 8.** "precisely the “small network analyzing one patch” of our strategy" misquotes §8.1, which says "use a small detector that analyzes one patch at a time". "The failures of @sec-06… tell us what knowledge to build in, the two principles from the mechanism:" has no referent for *the mechanism*. The recap's "Locality and sharing are built in: as a matrix, convolution is almost-all-zero with nine numbers repeating: 615,000 weights collapsed to 9." chains two colons (recap content is frozen). The §8.8 sentence "Treating the kernel as a parameter tensor … yields the convolutional neural network." read as a different, nominal voice.
+- **Ch 10 (second reading).** Figure 10.5's log axis places LeNet near $2\times10^5$ parameters, NiN near $7.7\times10^4$ and VGG near $2.9\times10^5$, while the page prints 61,706, 35,034 and 218,586 for the small-data models and never says the full-data models were resized. The opening's reason for `train_existing` ("this chapter's whole subject is training models it did not just construct") does not match how the probes and the fine-tune run their own loops. Exercise 2 points to "the callout". The summary's BatchNorm bullet ends with a third-person blurb for the companion book.
 - **Ch 10.** "The chapter's small-data studies isolated mechanisms." sits against the page's own caveats ("does not isolate which ingredient earned the gain", "not a matched-head ablation"). "one change we will reveal after the numbers" is followed at once by the Predict prompt, which names the change ("one is plain, one residual") before any number prints. "its 64 features flatten sandals, sneakers, and boots into nearly the same point" sits beside a 70.6% probe mean on three classes. "because this chapter's whole subject is training models it did not just construct" overstates the section. Exercise 4's "the bn-drift cell" names an internal cell label.
+- **Ch 9 (second reading).** "the head is as brittle to cell-level shifts as @sec-06…'s MLP was to pixel-level ones" does not match the rematch printout (LeNet loses 51.5 points at a 4-pixel shift; the MLP lost 11.5 at 1 pixel). "fires precisely when both experts agree" overstates Figure 9.2, whose corner reader also responds along all four sides (its caption says "fires hardest"). The recap's "Local wiring earns global sight gradually" sits beside the 16×16-of-28 count and Exercise 2, which place globality in the dense head. Figure 9.5's caption still compares the coat with "the earlier sandal", which is not on the page.
 - **Ch 9.** "That converter is pooling." has no earlier *converter*, and it casts pooling as
   producing invariance where the pooling panel says "Not invariance". "Under the
   predeclared two-pixel shift, the gap becomes 41.8% versus 62.3%" gives two accuracies for
@@ -1216,7 +1299,14 @@ Line numbers in this section are those of `4828b2e`, where the readings were tak
    an earlier exempt record replaced (Chapter 8: the B0 restoration 07-B0-C11a; Chapter 10:
    09-T5-1), which lowers the "before" side. Default:
    accept.
-7. **Later passes.** The PCA interlude's "Here is one shape ledger." and Chapter 20's "The
+7. **Figures 9.5 and 10.3, from the author's review.** Figure 9.5's kernels (red positive,
+   blue negative) need a shared colour bar, symmetric about zero. The figure is drawn from
+   LeNet's trained weights, so it is redrawn on the reference machine with the next Part II
+   execution. Figure 10.3 now follows the code (Option 2). The prose sentence before
+   @eq-residual still reads "each block computes $F(x)$ and outputs $F(x) + x$" (a bound
+   identity-lane literal), while `Block` returns `F.relu(y + x)`. Default: "and adds $x$ back
+   before its final ReLU", with the scene literal moved in the same edit.
+8. **Later passes.** The PCA interlude's "Here is one shape ledger." and Chapter 20's "The
    separate cost ledger below" are outside Parts II and IV. The epilogue's running-prose
    link to *Beyond Test-Time Memory* (`chapters/epilogue.qmd` l.315) still points at the
    TTC-Net project page; its Sources entry already uses arXiv:2603.09221.
@@ -1236,3 +1326,8 @@ Line numbers in this section are those of `4828b2e`, where the readings were tak
 | Ch 19 | "A student can outgrow its teacher …" after the new DeiT link | baseline, kept, counted |
 | Ch 10 | "The chapter's small-data studies isolated mechanisms." in the paragraph that gained the Fashion-MNIST link | baseline; listed in B2 |
 | Ch 10 | "Why that matters is the subject of the second section." after the recast "The recipe has two small novelties" | baseline borderline; listed in B3.2 |
+| Ch 9 | Figure 9.3's redrawn caption kept "A coat replaces the earlier sandal", which is not on the page | recast: "On the coat, the nested fields cross visible sleeves, torso, and boundary." |
+| Ch 9 | "Take one last look inside, because @sec-06… also showed us … (…, @sec-06…)" cites Chapter 6 twice | R9: the parenthesis drops the repeat (08-R9-5) |
+| Ch 10 | the identity-lane replay said the chapter's figure draws the identity path in orange, which the redraw made false | the panel note and its receipt now say both draw it in ink |
+| Ch 10 | "Predict before running. … one is plain, one residual." gives away the change the paragraph before promises to reveal | the original prompt named it too; listed in B2 |
+| Ch 10 | Exercise 2's "1×1-plus- 5×5" (a line-end hyphen) | R9: "1×1-plus-5×5" (09-R9-9) |
