@@ -149,7 +149,7 @@ git credential helper and never prints it:
 export GH_TOKEN=$(printf "protocol=https\nhost=github.com\n" | git credential fill | sed -n 's/^password=//p')
 ```
 
-Pushing to `main` is what publishes: CI renders HTML + PDF and deploys to
+Pushing to `main` is what publishes: CI renders HTML and deploys to
 `gh-pages`. Never commit to `gh-pages` by hand.
 
 ---
@@ -157,23 +157,15 @@ Pushing to `main` is what publishes: CI renders HTML + PDF and deploys to
 ## 5. Verify the setup
 
 **A. Build the book without executing anything.** The freeze caches are
-committed, so this exercises Quarto, LuaLaTeX, and the filters, and should take a
-few minutes rather than forty:
+committed, so this exercises Quarto and the filters, and should take about a minute:
 
 ```bash
 cd ~/Library/CloudStorage/Box-Box/Teaching/6050/dl-book
 export QUARTO_PYTHON="$HOME/.venvs/dl-book/bin/python"
-"$QUARTO_PYTHON" scripts/render_pdf_profiles.py
-ls -la _book/Deep-Learning--Making-It-Learnable.pdf     # expect ~5 MB
-pdfinfo _book/Deep-Learning--Making-It-Learnable.pdf | grep Pages
-pdfinfo _book/Deep-Learning--Making-It-Learnable--Continuous.pdf | grep Pages
-quarto render --to html --no-clean
+quarto render --to html
 ```
 
-The PDF helper materializes frozen figures, renders each profile with the configured
-three-pass LaTeX floor, and retries to a bounded fixpoint until every outline entry
-lands exactly on its rendered heading. The final command restores the canonical HTML
-bundle after both PDF profiles.
+The book PDFs are retired (September 30, 2026), so this is the whole book build.
 
 **B. Execute one chapter and check it reproduces.** This is the real test of the
 Python side — it re-runs a chapter's cells and compares the printed output against
@@ -219,7 +211,7 @@ environment** (which is what the refactor acceptance tests rely on), and
 platforms. So:
 
 - Editing a chapter? Re-render *that chapter* (no `--to` flag — both formats, or
-  the PDF ships stale), then the project, then diff its outputs.
+  the TeX freeze the Springer manuscript is converted from goes stale), then the project, then diff its outputs.
 - If a number moves, decide deliberately: either update the prose to the new
   measured value, or pin the environment. Never hand-edit a printed output.
 - The weekly **Execution Audit** workflow does a from-scratch re-execution of

@@ -54,8 +54,9 @@ chapter must respect. Those two files replace any account-local memory.
   `::: {.content-hidden when-profile="press"}` blocks or `[...]{.content-hidden
   when-profile="press"}` spans; optional material is labelled "(optional)"; the second
   volume is cited by title as a separate work. `scripts/audit_independence.py` warns in
-  the publish run and fails the weekly execution audit and the press build. Chapters the
-  author is revising are locked for `press` (`docs/locks.md`).
+  the publish run and fails the weekly execution audit. The Quarto press PDF is retired,
+  but these markers still say what the publisher's edition omits. Chapters the author is
+  revising are locked for `press` (`docs/locks.md`).
 
 ## Environment (this machine)
 
@@ -71,7 +72,7 @@ export PATH="$HOME/.local/quarto-1.10.18/bin:$HOME/.local/bin:$HOME/Library/Tiny
 |---|---|---|
 | quarto 1.10.18 | `~/.local/quarto-1.10.18/bin/quarto` | user-land tarball (brew cask needs sudo, unavailable here); CI pins the same version. `~/.local/bin/quarto` is an older 1.9.38 launcher, so keep 1.10.18 first on `PATH` |
 | pandoc | bundled: `quarto pandoc` | |
-| TinyTeX | `~/Library/TinyTeX` | for PDF + TikZ; `tlmgr update --self` before `tlmgr install <pkg>` |
+| TinyTeX | `~/Library/TinyTeX` | for TikZ and a chapter's TeX freeze; `tlmgr update --self` before `tlmgr install <pkg>` |
 | Python venv | `~/.venvs/dl-book` (python3.12, torch, matplotlib, sklearn) — **outside Box on purpose** | always render with `QUARTO_PYTHON=$HOME/.venvs/dl-book/bin/python` |
 | TikZ→SVG | latexmk + `pdftocairo` (poppler) | dvisvgm is broken here (ghostscript linkage) — don't use it |
 | gh | `/opt/homebrew/bin/gh` | not logged in; authenticate per-command: |
@@ -84,8 +85,11 @@ Remote: `https://github.com/Shakeri-Lab/dl-book` (push to `main` → CI renders 
 publishes the HTML edition to `gh-pages` → https://shakeri-lab.github.io/dl-book/).
 The website serves HTML only (author's decision, September 26, 2026): CI builds no
 PDF, and the contract and asset audits fail if a PDF, a PDF link, or the retired
-`download.html` page returns. PDFs are local print proofs only. Never commit to
-`gh-pages` manually.
+`download.html` page returns. The book PDFs (print, continuous and press) are retired
+(September 30, 2026): the print edition moves to a separate Springer SNmono manuscript,
+so there are no local print proofs, and the contract audit fails if their profiles or
+scripts return. The chapter TeX freeze (`tex.json`, `figure-pdf/`) stays, because that
+manuscript is converted from it. Never commit to `gh-pages` manually.
 
 **This repo lives in Box** (author's decision, July 25 2026):
 `~/Library/CloudStorage/Box-Box/Teaching/6050/dl-book`, alongside the rest of the
@@ -149,12 +153,16 @@ compositions for figures. Full guide: `docs/dl-course-code.md`.
    An `--to html` single-file render leaves the TeX freeze (`tex.json`) stale, and
    CI's frozen-stdout audit compares the HTML and TeX freezes. Any later prose edit
    invalidates the freeze and re-executes the whole chapter, so batch fixes before
-   re-rendering. For a local print proof, `"$QUARTO_PYTHON" scripts/render_pdf_profiles.py`
-   renders both profiles into `_book` through the three-pass LaTeX floor and a bounded
-   outline fixpoint; render HTML again (without `--no-clean`) before auditing `_book`,
-   because the asset audit rejects any PDF in the bundle.
+   re-rendering. Because `pdf` is a single-file book format, a chapter render with no
+   `--to` flag becomes a whole-book render: it re-executes only that chapter, writes
+   `html.json`, `tex.json` and `figure-pdf/` before any LaTeX runs, renders the rest
+   from freeze, and compiles a book PDF into `_book`. That PDF is a by-product, not an
+   edition: render `--to html` again (without `--no-clean`) before auditing `_book`,
+   because the asset audit rejects any PDF in the bundle. A LaTeX error after
+   execution leaves the new freeze in place, so check `git diff _freeze/<chapter>`.
+   The frozen-stdout audit fails if the two freezes carry different source hashes.
 8. **Verify before pushing**: grep the built HTML for the cells' printed numbers and
-   confirm they support the prose; check any local print proof; skim for unrendered
+   confirm they support the prose; skim for unrendered
    math. `python scripts/audit_panel_evidence.py _book` loads every page in headless
    Chromium and fails if a figure or results table in a Plan → Code panel is hidden or
    zero-sized with the code closed (CI runs it before publishing; add
@@ -169,7 +177,7 @@ HTML renders via **MathJax** (`html-math-method: mathjax`), *not* KaTeX — KaTe
 Quarto path can't take custom macros (learned the hard way). Adding a macro means
 updating **both**:
 
-- `tex/macros.tex` (PDF path, and prepended by `tex2qmd.sh` during conversion)
+- `tex/macros.tex` (TikZ figures and the TeX freeze, and prepended by `tex2qmd.sh` during conversion)
 - `mathjax-config.html` (HTML path — `window.MathJax.tex.macros`; args form is
   `name: ["body", nargs]`)
 
@@ -189,7 +197,7 @@ automatically during conversion, but chapters should use the canonical set.
 | Equations unrendered / red on the site | a macro exists in `tex/macros.tex` but not `mathjax-config.html` |
 | Render hangs or times out | you're probably in Box; work in `~/dl-book` |
 | Subagents unavailable (spend limit) | draft inline: read seed + transcripts fully first, then write; audit-by-construction and verify code by executing |
-| Book PDF missing latest chapter edits | stale `tex.json` from an `--to html` render — re-render the chapter with no `--to` flag, then full render |
+| Frozen-stdout audit reports an HTML/TeX pair mismatch | stale `tex.json` from an `--to html` render — re-render the chapter with no `--to` flag |
 | Book-corpus LM numbers move after a copyedit | the training cell read live chapter sources — Chapters 10 and 14 must read `data/book-corpus-ch1-9.txt`, whose length and SHA-256 are asserted; rebuild it only as an explicit benchmark revision |
 | PDF chapter links all print as “Chapter 1” | chapter-level `sec-*` references were resolved in a chapter-local PDF pass — keep `filters/pdf-chapter-xrefs.lua` enabled and never begin an indented continuation line with `@sec-*` (Pandoc reads it as an example-list marker) |
 | seq2seq/RNN mysteriously stuck at 40–60% | padding poisoning — `pack_padded_sequence` the encoder, `ignore_index=PAD` the loss (ch. 11 runs this as an experiment) |

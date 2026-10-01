@@ -197,14 +197,12 @@ The numerical-runtime migration and its monitor remain paused.
 
 I'm Heman Shakeri (UVA School of Data Science). You're helping me with my
 deep-learning textbook, **_Deep Learning: Making It Learnable_** — a Quarto book
-rendering to HTML + PDF, the course text for DS 6050.
+rendering to HTML, the course text for DS 6050.
 
 **Repo:** `~/Library/CloudStorage/Box-Box/Teaching/6050/dl-book` (in Box with the
 rest of my 6050 material; the virtualenv is deliberately outside it). Remote `https://github.com/Shakeri-Lab/dl-book`, live at
-`https://shakeri-lab.github.io/dl-book/`, PDF at
-`https://shakeri-lab.github.io/dl-book/Deep-Learning--Making-It-Learnable.pdf`, and
-continuous-screen PDF at
-`https://shakeri-lab.github.io/dl-book/Deep-Learning--Making-It-Learnable--Continuous.pdf`.
+`https://shakeri-lab.github.io/dl-book/`. The site serves HTML only, and the book PDFs
+are retired (September 30, 2026): the print edition is a separate Springer manuscript.
 Current stable release **v1.4** (September 28, 2026) numbers the interludes as chapters
 and makes the book read on its own; the website serves the HTML edition only, and the
 chapter numbers from 7 on differ from v1.3's (`docs/chapter-numbering.md`). The previous
@@ -335,23 +333,16 @@ answer.**
   not defer to an off-page narrator. Keep exact source paths in hidden provenance,
   not learner-facing Sources entries.
 - **HTML is the source of truth.** Review and approve the canonical HTML edition
-  first. The PDF is its derived print/offline conversion and may differ only where
-  pagination, line breaking, float placement, or print-safe sizing requires it.
-  Repair disagreements in the shared source or conversion layer; never create a
-  substantively different PDF edition.
+  first. The Quarto PDF editions are retired (September 30, 2026); the print edition
+  is a separate Springer manuscript converted from each chapter's TeX freeze.
 - **Unnumbered-section figures are independent.** Experiment, autoencoder, and
   test-time-regression figures use `EX.`, `AE.`, and `TTR.` namespaces; epilogue
   figures use `E.` in both formats. Experiment-interlude tables use `EX.` too.
   Interlude display equations remain unnumbered.
-- **PDF glyph hygiene is enforced.** Greek and relation symbols belong in math mode;
-  code elisions are ASCII; the publish job audits LaTeX missing-character warnings,
-  NUL/U+FFFD extraction, and decorative icon text.
-- **Print geometry and navigation are enforced.** Learner-visible Python is at most 88 columns.
-  Print-side wrapping is a safety net, not permission for unreadable source. The PDF
-  audit fails if text leaves the media box, reports text-block intrusions for visual
-  review. Three LaTeX passes are the minimum; `scripts/render_pdf_profiles.py`
-  retries each profile to a bounded fixpoint and requires every reader-visible
-  outline destination to land exactly on its heading.
+- **Glyph hygiene.** Greek and relation symbols belong in math mode; code elisions are
+  ASCII.
+- **Learner-visible Python is at most 88 columns.** The PDF geometry, glyph and outline
+  audits retired with the book PDFs (September 30, 2026).
 - **Edition dates are content dates.** `_quarto.yml` records the most recent change
   to the rolling manuscript or public presentation, never the CI/render wall clock.
   Rebuilding an unchanged commit must leave the visible stamp unchanged.
@@ -366,7 +357,7 @@ answer.**
 - **Box caution.** The working tree is in Box; GitHub is the source of truth. If git objects ever look corrupt, re-clone rather than repair in place, and never let a render run while Box is mid-sync of the same folder.
 - **Freeze discipline.** Any prose edit invalidates that chapter's freeze cache.
   Re-render the chapter with **no `--to` flag** (both formats), then the project —
-  otherwise the PDF ships stale. Renders are slow: a heavy chapter is 20–40
+  otherwise the TeX freeze the Springer manuscript is converted from goes stale. Renders are slow: a heavy chapter is 20–40
   minutes, the full book about 40. Run them in the background and keep working.
 - **Refactors must be content-bit-identical** on the frozen stdout. Snapshot the
   `cell-output-stdout` blocks from

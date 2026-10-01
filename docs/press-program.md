@@ -1,5 +1,11 @@
 # Press program: plan of record
 
+**Update (September 30, 2026).** The Quarto press PDF (`_quarto-press.yml`, `_press/`)
+is retired with the other book PDFs: the publisher's edition is a separate Springer SNmono
+manuscript, and W4's press build no longer applies. The `when-profile="press"` markers
+stay and still say what the publisher's edition omits. The independence audit warns in
+the publish run and fails in the execution audit.
+
 Branch `press`, cut from `main` after the voice merge (B2a). Four workstreams in order;
 each ends at a gate (human report first, audit tables in an appendix file), pushed, never
 merged by this work. The voice working rules apply throughout: one edit list per page

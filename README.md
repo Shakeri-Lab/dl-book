@@ -49,10 +49,10 @@ export QUARTO_PYTHON="$HOME/.venvs/dl-book/bin/python"
 quarto render --to html
 ```
 
-CI publishes this HTML bundle and builds no PDF. For a local print proof,
-`"$QUARTO_PYTHON" scripts/render_pdf_profiles.py` renders both PDF profiles into
-`_book` until every outline destination lands on its heading; render HTML again
-afterwards, because the publication audit rejects a bundle that contains a PDF.
+CI publishes this HTML bundle and builds no PDF. The book PDFs are retired (September 30, 2026):
+the print edition is a separate Springer manuscript, converted from each chapter's TeX
+freeze (`_freeze/**/execute-results/tex.json` and `figure-pdf/`). Rendering a chapter
+with no `--to` flag keeps that freeze current.
 
 Execution uses Quarto **freeze** — CI never runs cells; after exporting
 `QUARTO_PYTHON`, refresh a chapter's cache with
