@@ -19,9 +19,9 @@
      view by reserving “frozen” for a probe and showing original BERT-style
      fine-tuning as updates through the full backbone. -->
 
-@sec-09-modern-cnns-transfer gave a decision rule: transfer should help when **labels are
-scarce, the target is feature-hungry, and source coverage is useful at a matched
-scale**. Images supplied a natural source task: learn
+The decision rule from @sec-09-modern-cnns-transfer says that transfer should help when
+**labels are scarce, the target is feature-hungry, and the pretraining data
+plausibly covers the target's features at a matched scale**. Images supplied a natural source task: learn
 visual features from many labeled photographs, then adapt them. What should play
 the same role for language, where task labels are expensive but raw text is
 everywhere?
@@ -35,8 +35,8 @@ corruption turns it into a question.
 That move depends on what @sec-14-self-attention-transformer showed:
 **visibility is a modeling decision**. A next-token model used a causal triangle
 because looking right would reveal its target. A representation model can instead
-let every nonpadding token consult both sides, provided selected targets are
-treated so copying cannot solve the whole task. Full visibility over a
+let every nonpadding token consult both sides, provided enough selected positions
+are masked or replaced in the input that copying cannot solve the whole task. Full visibility over a
 corrupted input, scored on the original selected tokens, gives **masked language modeling (MLM)**, and pretraining on raw text changed
 the default workflow
 from “initialize and train” to “pretrain, then adapt.”
@@ -214,8 +214,8 @@ $$
 \log p_\theta\!\left(x_i\mid \widetilde{x}\right).
 $$
 
-The condition is $\widetilde{x}$, the one jointly corrupted sequence, not a
-different clean sequence with only $x_i$ removed for every term. With batches,
+Every term conditions on the same jointly corrupted sequence $\widetilde{x}$, not on its own
+clean sequence with only $x_i$ removed. With batches,
 token IDs have shape $(B,T)$, hidden states $(B,T,d)$, and dense vocabulary logits
 $(B,T,|V|)$. Boolean selection gathers $|M|$ rows, so cross-entropy receives
 selected logits $(|M|,|V|)$ and targets $(|M|,)$. Unselected positions can affect
@@ -297,7 +297,7 @@ print(f"[MASK] share of all eligible positions: {branch_counts[0] / 1000:.1%}")
 ```{python}
 #| label: fig-mlm-policy
 #| echo: false
-#| fig-cap: "Five Boolean rows keep BERT's controls separate. Eligibility excludes special and padding tokens; selection identifies direct loss targets; three disjoint corruption rows partition the selected sites into mask, random, and unchanged branches. Attention visibility remains full over nonpadding keys and is not encoded by any of these rows. The illustrated branch allocation is deliberately small; the 15% and 80/10/10 rates are population policies, not proportions to infer from twelve positions."
+#| fig-cap: "Five Boolean rows keep BERT's controls separate. Eligibility excludes special and padding tokens; selection identifies direct loss targets; three disjoint corruption rows partition the selected sites into mask, random, and unchanged branches. Attention visibility remains full over nonpadding keys and is not encoded by any of these rows. The example deliberately gives each branch only a few positions; the 15% and 80/10/10 rates hold on average over many positions and cannot be read from these twelve."
 #| fig-alt: "A token sequence runs across twelve columns. Five labeled Boolean rows mark eligible tokens, selected loss targets, mask replacements, random replacements, and unchanged selected tokens. Brackets group eligibility, supervision, and corruption, while a note states that full nonpadding attention visibility is a separate control."
 #| fig-width: 10
 #| fig-height: 4.3
@@ -624,9 +624,9 @@ not performance at equal total compute.
 
 ## A controlled transfer lab
 
-@sec-09-modern-cnns-transfer's three gates are easy to repeat and surprisingly hard to test. A first
-pre-test asked a tiny encoder to distinguish true continuations in this book from
-distant splices. The five-seed MLM gain was small, faded as labels increased, and
+The three conditions from @sec-09-modern-cnns-transfer are easy to state and surprisingly hard
+to test. A first pilot asked a tiny encoder to tell true continuations of passages in
+this book from segments spliced in from distant passages. The five-seed MLM gain was small, faded as labels increased, and
 lost decisively to a weighted lexical-overlap baseline. We rejected that task as
 the chapter's affirmative experiment: this pilot did not isolate what pretraining
 contributed.
@@ -648,8 +648,8 @@ Each covered word receives eight source sentences. Six contain cues from its own
 family; two deliberately contain cues from the other family. One family appears
 near words such as *rain*, *soil*, *roots*, and *garden*; the other appears near
 *power*, *metal*, *gears*, and *workshop*. The 25% cue noise gives every covered
-string a mixture of supporting and opposing contexts; the aggregate family signal
-is statistical rather than pure.
+string a mixture of supporting and opposing contexts, so the family signal holds only
+on average.
 
 ```{python}
 #| label: fig-bert-lab-design
@@ -963,8 +963,9 @@ performance.
 
 The encoder has two post-LayerNorm blocks, width 48, four heads, learned absolute
 positions, full nonpadding attention, and GELU feedforward layers. Here
-$\operatorname{GELU}(x)=x\Phi(x)$, with $\Phi$ the standard-normal cumulative
-distribution, a smooth, input-dependent gate used by original BERT. The lab omits
+$\operatorname{GELU}(x)=x\Phi(x)$, where $\Phi$ is the standard-normal cumulative
+distribution function. Original BERT used GELU, which scales each input by a smooth
+gate that depends on that input. The lab omits
 segment embeddings, NSP, and dropout. Its 43,920 encoder parameters make the study
 fast enough to repeat end to end, while preserving the relevant path from
 bidirectional attention to MLM to fine-tuning.
@@ -1115,8 +1116,8 @@ print(f"encoder parameters: {encoder_parameters:,}")
 The MLM decoder is deliberately *untied* from the input embedding table. The
 [original released BERT code](https://github.com/google-research/bert/blob/master/run_pretraining.py)
 explicitly tied those weights, but tying would update an uncovered input row
-through the vocabulary softmax even when that token never appeared. The custom
-control is stricter: random replacements are drawn only from source tokens, and the
+through the vocabulary softmax even when that token never appeared. The lab goes
+further: random replacements are drawn only from source tokens, and the
 code later asserts that every uncovered input embedding remains bitwise unchanged
 through pretraining. Untied decoder rows for the controls still participate as
 negative softmax classes, but they are discarded downstream and never expose a
@@ -1361,7 +1362,8 @@ run; failure to fit the labels therefore does not explain the scratch result.
 
 Did pretraining organize covered representations in a way
 that scarce labels could reuse, or did the classifier merely learn the tiny label
-set? The task, control, and geometry answer different parts.
+set? The downstream task, the uncovered controls, and the representation geometry each
+answer a different part.
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
@@ -1513,8 +1515,9 @@ The representation diagnostic agrees with the task result. In seed 6050, mean
 centered cosine similarity starts at $-0.0347$ within a family and $-0.0160$
 between families: no useful separation. After MLM, it is $0.5323$ within and
 $-0.5517$ between. *Centered cosine* first subtracts the mean representation,
-then unit-normalizes each vector and takes a dot product: positive values point in
-similar residual directions, negative values in opposing directions. Pretraining
+then unit-normalizes each vector and takes a dot product: a positive value means two
+centered vectors point in similar directions, a negative value that they point in
+opposing directions. Pretraining
 has organized neutral-context token states around
 the latent source regularity, and a few labels recover that organization for
 unseen covered types.
@@ -1522,12 +1525,12 @@ unseen covered types.
 The three conditions from @sec-09-modern-cnns-transfer hold at toy scale:
 
 - **Labels are scarce:** the task supplies only 2, 4, or 8 labeled words total.
-- **The target is representation-hungry:** spelling, frequency, and task-context
+- **The target is feature-hungry:** spelling, frequency, and task-context
   cues are neutralized; the label must transfer through the token representation.
-- **Source coverage is useful at a matched scale:** source and target use atomic
-  tokens and similarly short sequences; covered strings transfer, while balanced
-  vocabulary residents withheld from MLM inputs, replacements, and targets remain
-  near chance in both arms.
+- **The pretraining data covers the target's features at a matched scale:** source
+  and target use atomic tokens and similarly short sequences; covered strings
+  transfer, while the uncovered strings, balanced across families and withheld from
+  MLM inputs, replacements, and targets, remain near chance in both arms.
 
 The result is an existence proof for a mechanism. A co-occurrence method could
 also recover the synthetic families; the experiment does not establish
@@ -1654,7 +1657,7 @@ execution schedule.
 
 Once those next-token logits exist, @sec-11-encoder-decoder's greedy and beam-search machinery
 can rank continuations; the architecture changes, but decoding remains a separate
-decision layer. @sec-17-peft-quantization will return to how prompts alter the context supplied
+decision. @sec-17-peft-quantization will return to how prompts alter the context supplied
 to that decoder.
 
 [T5](https://www.jmlr.org/papers/v21/20-074.html) turns tasks into text-to-text problems and marks removed spans with learned
@@ -1764,9 +1767,10 @@ Close the book for one minute and reconstruct masked-language-model pretraining.
    than only their means. Which regime wins here, and what broader claim would
    outrun the experiment?
 5. **(Audit.)** Reproduce paired gains for covered and control
-   strings at all three budgets. Map the evidence to @sec-09-modern-cnns-transfer's gates. Explain
-   the unchanged-row assertion, name two unsupported conclusions, and propose one
-   predeclared coverage test.
+   strings at all three label budgets. Map the evidence to the three transfer conditions
+   from @sec-09-modern-cnns-transfer. Explain the assertion that uncovered input
+   embeddings stay bitwise unchanged, name two unsupported conclusions, and propose
+   one predeclared coverage test.
 6. **(Pencil.)** Define the pseudo-log-likelihood
    $\operatorname{PLL}(x)=\sum_{i=1}^{T}\log p(x_i\mid x_{\setminus i})$ and explain
    why ordinary masked scoring costs $T$ forward passes. Show why the collection of

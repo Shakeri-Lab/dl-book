@@ -21,7 +21,7 @@ is not what the update optimizes**. Full fine-tuning, LoRA, and a soft prompt ch
 different places for the gradient to write. None of them says what should count as
 a good answer.
 
-This chapter changes that second choice. Pretraining asks for the next corpus token.
+This chapter changes what the update optimizes. Pretraining asks for the next corpus token.
 Instruction tuning asks a model to imitate demonstrated responses. Preference
 learning asks which response wins a comparison. Online policy optimization asks a
 changing model to produce responses that score well under a reward signal. These
@@ -156,8 +156,8 @@ implementations sum instead; the choice changes gradient scale and must be state
 This is [Case 1](../part1/04-training-loss-sgd.qmd#sec-04-estimator-cases) applied to
 response tokens: the mask selects the targets, and the denominator determines how we
 average their losses.
-The prompt is still essential because it conditions every response probability. It
-simply does not receive target loss in this version.
+The prompt is still essential because it conditions every response probability. Its
+tokens are simply not scored as targets in this version.
 
 The tensor contract is explicit: `logits` has shape $(B,L,V)$, token IDs and the mask
 have shape $(B,L)$, and the returned sequence score has shape $(B,)$. The helper below
@@ -403,8 +403,8 @@ discover a hidden universal value.
 ## Trap: a preferred response is not scalar ground truth
 
 A pair says which presented response won under one prompt, rubric, candidate set, and
-review process. Report ties and disagreement, split by prompt rather than by correlated
-pairs, and state who supplied the judgments. Bradley--Terry is a useful model of those
+review process. Report ties and disagreement, split by prompt so that correlated pairs
+stay together, and state who supplied the judgments. Bradley--Terry is a useful model of those
 measurements, not proof that one population-independent reward exists.
 :::
 
@@ -658,8 +658,8 @@ axes[1].grid(alpha=0.18)
 plt.tight_layout()
 plt.show()
 ```
-The additive-reward audit echoes the preference experiment: multiplying every
-unnormalized policy weight by the same $e^{37/\beta}$ changes $Z(x)$ by that factor
+Adding 37 to every reward, as in the preference experiment, multiplies every
+unnormalized policy weight by the same $e^{37/\beta}$, which changes $Z(x)$ by that factor
 and leaves the normalized policy unchanged. Neither pairwise labels nor the regularized
 optimum identifies an absolute reward origin.
 
@@ -669,8 +669,8 @@ optimum identifies an absolute reward origin.
 language model instead has shared parameters, an enormous response space, and rewards
 that arrive mainly after a sequence is complete. Policy-gradient methods estimate how
 sampled token choices affected return. **Proximal Policy Optimization (PPO)** reuses a
-batch of trajectories while limiting the incentive for each sampled action ratio to
-move farther than a clipped interval.
+batch of trajectories while limiting the incentive to push each sampled action's
+probability ratio outside a clipped interval.
 
 For state $s_t$, sampled action $a_t$, current parameters $\theta$, and the policy
 $\pi_{\mathrm{old}}$ that generated the batch, define
@@ -697,16 +697,16 @@ $$ {#eq-ppo-clip}
 This gives us two anchors, each with a different job:
 
 - $\pi_{\mathrm{old}}$ generated the current rollout batch. PPO refreshes it as
-  training advances, and @eq-ppo-clip addresses stepwise optimization.
+  training advances, and @eq-ppo-clip discourages the new policy from moving far from it on that batch.
 - $\pi_{\mathrm{ref}}$ is usually a fixed SFT policy. The KL term in
   @eq-kl-regularized-objective addresses accumulated drift from that reference.
 
 ::: {.callout-warning}
 ## The old policy is not the reference policy
 
-PPO clipping is not a hard wall on the new policy; it removes favorable incentive for
-sampled ratios to move farther outside the interval; a sufficiently large optimizer
-step can still overshoot, and unsampled behavior can change. The fixed-reference KL
+PPO clipping is not a hard wall on the new policy. It removes the favorable incentive
+for sampled ratios to move farther outside the interval. A large enough optimizer step
+can still overshoot, and unsampled behavior can still change. The fixed-reference KL
 discourages drift, but neither mechanism certifies retained capability or prevents
 proxy exploitation. Measure the realized KL and the behaviors that matter.
 :::
@@ -715,7 +715,8 @@ proxy exploitation. Measure the realized KL and the behaviors that matter.
 
 The pipeline now has a vulnerable handoff: the reward model is validated on
 comparisons, but the policy is optimized to seek responses with high predicted
-reward. Those are different distributions; if the policy finds a region that the
+reward. The compared responses and the responses the policy seeks come from different
+distributions. If the policy finds a region that the
 comparison data did not identify, excellent held-out reward-model loss can coexist
 with poor policy behavior.
 
@@ -728,9 +729,9 @@ failure and proxy pressure can interact. It does not estimate the prevalence of 
 hacking in natural-language systems or validate one alignment method over another.
 :::
 
-Let us make that failure visible in a finite response world, and predict
-first: as reward pressure grows, will the narrow-feedback policy's *designed*
-utility rise, plateau, or rise-then-collapse? Each synthetic response
+We can make that failure visible in a finite response world. Predict
+first: as reward pressure grows, will the *designed* utility of a policy optimized on
+narrow feedback rise, plateau, or rise and then collapse? Each synthetic response
 has two observable features:
 
 - evidence $e$, where larger means that more relevant support is present; and
@@ -743,7 +744,7 @@ u(e,\ell)
 =e+0.6\ell-1.2\max(\ell-1,0)^2.
 $$ {#eq-designed-utility}
 
-Inside the feedback range $0\le\ell\le1$, the last feature is always zero. More
+Inside the feedback range $0\le\ell\le1$, the curvature term is always zero. More
 detail helps there, so comparisons cannot reveal that excessive length should
 eventually become costly. We generate 20,000 noisy Bradley--Terry comparisons per
 seed and fit the linear reward model
@@ -885,8 +886,8 @@ print(
 )
 ```
 ::::
-The narrow model looks excellent where it was tested, yet its mean held-out log loss is
-0.665633, only 0.000030 above the oracle that generated the labels, and its latent
+The narrow model looks excellent where it was tested: its mean held-out log loss
+is 0.665633, only 0.000030 above the oracle that generated the labels, and its latent
 ordering accuracy is 0.992940. The coefficient $w_q$ remains exactly zero: that feature was zero
 in every narrow comparison, so no gradient could identify its coefficient. A
 validation split drawn from the same support cannot expose the missing behavior.
@@ -1243,8 +1244,8 @@ Several details are easy to overstate:
 - DPO avoids an **explicit standalone** reward model and an online rollout loop during
   the optimization pass. Its policy--reference log ratio is still an implicit reward
   representation, and candidate generation plus labeling happened upstream.
-- The reference need not be the exact behavior policy that generated every pair. It is
-  a density-ratio anchor with a support and modeling role.
+- The reference need not be the exact behavior policy that generated every pair. It
+  anchors the density ratio, so its support matters and choosing it is a modeling decision.
 - $\beta$ appears in the regularized derivation, but finite-data DPO does not enforce a
   hard realized-KL budget. Measure the KL.
 - The gradient rewards a *relative reference-adjusted margin*. Shared parameters mean
@@ -1278,10 +1279,10 @@ whether new responses must be explored during optimization, as
 SFT may be enough when demonstrations directly specify the desired behavior. Fixed
 preference data may favor an offline direct method when comparison coverage is already
 good. Online methods can generate from the changing policy and request or compute
-fresh feedback, which matters when exploration is part of the task. They also add a
-larger failure and evaluation surface.
+fresh feedback, which matters when exploration is part of the task. They also have more
+ways to fail and more to evaluate.
 
-@sec-17-peft-quantization's axis remains orthogonal. SFT, DPO, or an online policy objective may update
+The update location studied in @sec-17-peft-quantization is a separate choice. SFT, DPO, or an online policy objective may update
 full weights, a LoRA branch, or another permitted state. Parameter efficiency changes
 the write surface and resource cost, not the rubric, comparison
 coverage, or reward fidelity.
@@ -1350,8 +1351,8 @@ plt.show()
 
 The feedback report should identify the prompt distribution, selection policy for
 candidates, rubric, reviewer population, and aggregation rule. If several pairs came
-from one ranked set, they are correlated; keep their prompt together across splits and
-cluster uncertainty at the prompt level. Randomize A/B order, retain ties, and disclose
+from one ranked set, they are correlated; keep pairs from the same prompt in the same
+split and cluster uncertainty at the prompt level. Randomize A/B order, retain ties, and disclose
 disagreement rather than converting it silently into certainty.
 
 Reward-model evaluation should include held-out pair log loss, calibration or Brier
@@ -1387,8 +1388,8 @@ around the system:
   and appeal.
 
 A model card can expose these choices. It cannot confer consent, resolve values,
-assign accountability, or certify deployment. @sec-a5-statistical-learning scopes
-statistical evidence; ethical and governance judgment remains separate.
+assign accountability, or certify deployment. @sec-a5-statistical-learning states the limits
+of statistical evidence; ethical and governance judgment remains separate.
 :::
 
 ::: {.callout-tip}

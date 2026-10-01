@@ -164,7 +164,7 @@ Lecture paths below are relative to
 
 | Source | SHA-256 |
 |---|---|
-| `chapters/part4/13-attention.qmd` | `36383d4878871f8c353c62eebc17c3d91fd905cc4373f982126cff764b36901e` |
+| `chapters/part4/13-attention.qmd` | `1fd5900fec0d49ce687da76d40f040f0fcfe4ca6bba467f3a1c73608c749fb79` |
 | `_freeze/chapters/part4/13-attention/execute-results/html.json` | `bd3430e8768748960c9c4cfaac055d3aea351f218fe919937725392b398b7d85` |
 | `6050-Ch13/lecture.jsx` | `9e6a849eeffad1b5e0e367a5b3aa5b4489136093e3979152e03c7b469f4f6501` |
 | `6050-Ch13/storyboard.md` | `2a932bf1b8eafe5e029f20562a3091a54e4e3943373a0528947d271cb53e1dc8` |
