@@ -55,8 +55,8 @@ carries both, and the dial then shows that every slope simply adds to the lane's
 | `data-range` | −1 to 1 | declared: the dial's range |
 | `data-evidence-class` | `declared-toy` | the chapter prints no Jacobian |
 
-The chapter literals bound in the manifest are the one-change sentence ("The one change: each
-block computes $F(x)$ and outputs $F(x) + x$."), `H(x) = F(x) + x`, the gradient line of the
+The chapter literals bound in the manifest are the one-change sentence ("The one change is
+that each block computes $F(x)$ and outputs $F(x) + x$."), `H(x) = F(x) + x`, the gradient line of the
 residual equation, the two sentences of the "not magical" caveat, and "to represent: $F = 0$."
 The panel's formula is the chapter's gradient line with its two bracketed terms wrapped in
 `\class{il-branch}` and `\class{il-lane}`; the suite strips the wrappers and finds the chapter's
@@ -185,6 +185,6 @@ Lecture paths are relative to the lecture repository root.
 
 | Source | SHA-256 |
 |---|---|
-| `chapters/part2/09-modern-cnns-transfer.qmd` | `864504f45d12b5d736b5af154cc9f85891a1b01e3241ef4e30feec9dfa0d29a8` |
+| `chapters/part2/09-modern-cnns-transfer.qmd` | `1a2c710f3851b92e9122c1317389c1eb0c2e21e1b644721d91febfd1f2caef2c` |
 | `6050-Ch9/lecture.jsx` | `446a5c3f889149b46f5fe275c37414d3240bb1b4dc27b347e9212d9f0527402a` |
 | `6050-Ch9/STORYBOARD.md` | `159fdb5484a5c8877ff04e1b7f7981bbf8bf4987b31d75c57a0019be95143da8` |

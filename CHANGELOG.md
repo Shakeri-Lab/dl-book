@@ -1,6 +1,6 @@
 # Rolling post-v1.4: Parts II and IV prose pass (September 30, 2026)
 
-- **Colon leads and announcements (W1).** In Chapters 9, 14, 15, 16, 18 and 19, a
+- **Colon leads and announcements (W1).** In Chapters 8, 9, 10, 14, 15, 16, 18 and 19, a
   label or verbless gloss before a colon becomes a clause ("So: declare the kernel" →
   "So we declare the kernel"; "Out-channels: more detectives" → "Out-channels add
   detectives"), and frames that only announce the next sentence go ("is worth stating
@@ -14,12 +14,18 @@
   16; the Section 16.1 subsection "The position debt" now reads "Self-attention does not
   see order", and its old anchor `#the-position-debt` still resolves). The CNN now
   "reaches" global sight through depth instead of buying it (harvested in Chapter 15).
-  `docs/arc-seeds.md` rows 34 and 36 follow. Organizing devices (Chapter 9's tolerance
+  Chapter 10's "Recall the receptive-field ledger" follows Chapter 9's new "the count
+  runs", and its "bills", "the deal", "the promised payoff", "pay rent" and "tax the
+  donation" give way to parameter counts, the saving, the promised benefit, "help" and
+  "shrink". `docs/arc-seeds.md` rows 34 and 36 follow. Organizing devices (Chapter 9's tolerance
   trade and IOU, Chapter 14's price list, the transfer rule's "transfer pays when" in
   Chapters 10 and 18, Chapter 19's inductive-bias trade) are listed for the author, not
   rewritten.
 - **Links at first mention (W7).** Each work a chapter names in its running prose now
   links there, to the same URL as its Sources entry: LeNet (LeCun et al.) in Chapter 9;
+  batch normalization, VGG, ResNet, NiN, GoogLeNet, DenseNet, Fashion-MNIST, SqueezeNet
+  and ImageNet in Chapter 10, whose Sources gain Szegedy et al., *Going Deeper with
+  Convolutions*;
   Nadaraya, Watson and the six test-time-regression works in Chapter 14; Luong,
   Vaswani and Bahdanau in Chapter 15; the Transformer, RoPE, LayerNorm, RMSNorm and
   nucleus sampling in Chapter 16; BERT, ELMo, ULMFiT, GPT, RoBERTa, BPE, the released
@@ -30,8 +36,9 @@
   kernel-regression/sequence-memory table, one paragraph walks the opening example
   ($q=3.5$, keys 1, 3, 5, weights $(0.0002, 0.9413, 0.0585)$, output $2.7412$)
   through the roles and points to Chapter 13's date task for the other column.
-- **Scene fixtures.** The `what-where` scene's bound literal follows the Chapter 9
-  bullet it quotes; the `both-axes` scene anchors on the renamed subsection heading in Section 16.1.
+- **Scene fixtures.** The `what-where`, `sobel-split`, `stacked-sight` and
+  `identity-lane` scenes' bound literals follow the Chapter 8, 9 and 10 sentences they
+  quote; the `both-axes` scene anchors on the renamed subsection heading in Section 16.1.
   No printed output changes: `audit_frozen_stdout.py --base 4828b2e` passes.
 
 # Rolling post-v1.4: Chapter 22 exposition (September 30, 2026)

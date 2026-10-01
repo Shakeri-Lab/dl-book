@@ -1,24 +1,144 @@
 # Parts II and IV prose pass (P24): gate report
 
-Branch `voice-coherence` from `4828b2e`. This batch carries W1 (colon leads and
-announcements), W6 (accounting words), W7 (links at first mention) and W8 (worked
-instances for correspondence tables) on Chapters 9, 14, 15, 16, 18 and 19, one writer per
-page, with the rule-blind reader pass (P3) run on the rendered pages. Chapters 8 and 10
-join after #13 and #14 merge. Ledgers, invariants, measures, the compiled-trace readings,
+Branch `voice-coherence`, rebased onto `main` at `3ea96e3` after #15, #13 and #14 merged.
+This batch carries W1 (colon leads and announcements), W6 (accounting words), W7 (links at
+first mention) and W8 (worked instances for correspondence tables) on Chapters 8, 9, 10,
+14, 15, 16, 18 and 19, one writer per page, with the rule-blind reader pass (P3) run on
+the rendered pages. Ledgers, invariants, measures, the compiled-trace readings,
 reader-mark counts and the I17 list are in `stage_p24_audit.md`. The PDFs built from this
 commit keep `main`'s lengths: print 564 pages (399 outline entries), continuous 537, press
 562.
 
-The P24 records in `audits/voice/edits/` replay exactly: applied in order from `4828b2e`
-they reproduce each of the six pages byte for byte.
+The P24 records in `audits/voice/edits/` replay exactly: applied in order from `3ea96e3`
+they reproduce each of the eight pages byte for byte.
 
 ## Section A: every changed or added sentence, in its paragraph
 
 Pages in reading order. Each entry gives the edit, its rule, one line of intent, and the
 paragraph as it now renders, with the new sentence in bold; a Removed or Replaced line
-shows what went. A heading, two captions, a table cell and one paragraph, which the gate tool does not
-match to a rendered paragraph, show their source text instead. The reader-pass mark and its
-resolution close each entry.
+shows what went. A heading, captions, a table cell and a few paragraphs, which the gate
+tool does not match to a rendered paragraph, show their source text instead. The
+reader-pass mark and its resolution close each entry.
+
+### 8 Filters and Convolution (Fixed Kernels)
+
+`chapters/part2/07-filters-convolution.qmd`
+
+**07-W1-1** (W1). Label before a colon becomes a clause; paired with the prescription.
+
+> Part I ended with a diagnosis and a prescription. **The diagnosis was that our MLP’s templates span the whole frame, so they are blind to adjacency and brittle to position ( Chapter 6 ).** The prescription was make the template local, and slide it.
+>
+> Replaced: “The diagnosis: our MLP's templates span the whole frame, so they are blind to adjacency and brittle to position ( REF ).”
+
+Reader pass: no mark.
+
+**07-W1-2** (W1). Paired label becomes a clause; the italic prescription stays verbatim (the Part II page repeats it).
+
+> Part I ended with a diagnosis and a prescription. The diagnosis was that our MLP’s templates span the whole frame, so they are blind to adjacency and brittle to position ( Chapter 6 ). **The prescription was make the template local, and slide it.**
+>
+> Replaced: “The prescription: make the template local, and slide it.”
+
+Reader pass: no mark.
+
+**07-W1-3** (W1). Noun-phrase label before a colon becomes a clause.
+
+> **They suggest a strategy: instead of one massive network staring at the entire image, use a small detector that analyzes one patch at a time, and slide it across the image to look for its feature everywhere.** To understand what such detectors do, we first look at how vision experts used to design them by hand.
+>
+> Replaced: “The strategy they suggest: instead of one massive network staring at the entire image, use a small detector that analyzes one patch at a time, and slide it across the image to look for its feature everywhere.”
+
+Reader pass: no mark.
+
+**07-W1-4** (W1 (V4)). 'it is worth stating as' frame dropped; the recipe and its three lines stay.
+
+> **The image version is the same idea with a small 2-D window. Its five-step recipe sits beside the three lines that carry it:**
+>
+> Replaced: “The image version is the same idea with a small 2-D window, and it is worth stating as the five-step recipe, set beside the three lines that carry it:”
+
+Reader pass: no mark.
+
+**07-W1-5** (W1 (V4)). The book's own habit goes unnamed; the check itself stays.
+
+> Read the markers and one thing stands out: steps 2 and 5 share a line. The plan moves one window at a time; unfold places every window at once, and the next line scores them all in parallel. **That gap between a sequential plan and a vectorized kernel is where most tensor bugs live, which is why the last line checks this implementation against the framework’s own.**
+>
+> Replaced: “That gap between a sequential plan and a vectorized kernel is where most tensor bugs live, which is why the last line checks this implementation against the framework's own: the build-then-verify habit of this book.”
+
+Reader pass: no mark.
+
+**07-W1-6** (W1 (V4)). Announcement frame and its colon lead dropped; the handoff to Chapter 9 stays.
+
+> **The output is smaller than the input.** A $k \times k$ kernel on an $n \times n$ image produces $(n - k + 1) \times (n - k + 1)$ outputs, because the window must stay inside the frame. What to do about that (and about sliding in bigger steps) is Chapter 9 ’s business.
+>
+> Replaced: “Also worth noticing before we move on: the output is smaller than the input.”
+
+Reader pass: no mark.
+
+**07-W1-7** (W1). A verbless gloss after a bold label gets its verb; one of a parallel set of three.
+
+> **Blur uses uniform positive weights summing to 1, the 2-D moving average.**
+>
+> Replaced: “Blur: uniform positive weights summing to 1, the 2-D moving average.”
+
+Reader pass: no mark.
+
+**07-W1-8** (W1). Same set.
+
+> **Sharpen amplifies each pixel’s difference from its neighbors.**
+>
+> Replaced: “Sharpen: amplify each pixel's difference from its neighbors.”
+
+Reader pass: no mark.
+
+**07-W1-9** (W1). Same set; the comma splice after *zero* becomes a sentence break. The sobel-split fixture literal follows (constraint 5).
+
+> **Edge detection (Sobel) uses positive and negative weights summing to zero . Over any flat region the products cancel and the output is silent; over an edge, a sharp change in values, the sum swings large.** It answers one question: does intensity change here, in my direction?
+>
+> Replaced: “Edge detection (Sobel): positive and negative weights summing to zero, over any flat region the products cancel and the output is silent; over an edge, a sharp change in values, the sum swings large.”
+
+Reader pass: no mark.
+
+**07-W1-10** (W1). Verbless noun-phrase sentence before a colon becomes a clause.
+
+> Edge detection (Sobel) uses positive and negative weights summing to zero . Over any flat region the products cancel and the output is silent; over an edge, a sharp change in values, the sum swings large. **It answers one question: does intensity change here, in my direction?**
+>
+> Replaced: “A detector that answers one question: does intensity change here, in my direction?”
+
+Reader pass: no mark.
+
+**07-W1-11** (W1 (V4)). 'One precision worth keeping sharp' frame dropped; its reason stays.
+
+> **The two words will both matter: equivariant means the output moves along with the input (what convolution gives us); invariant means the output does not change at all (what a classifier ultimately wants: “boot”, regardless of position).** Equivariance is the raw material; in Chapter 9 , pooling will spend some position information to buy local shift tolerance. Exact invariance is a stronger property and must be tested, not presumed.
+>
+> Replaced: “One precision worth keeping sharp, because the two words will both matter: equivariant means the output moves along with the input (what convolution gives us); invariant means the output does not change at all (what a classifier ultimately wants: "boot", regardless of position).”
+
+Reader pass: no mark.
+
+**07-W1-14** (W1). Recast so the edited sentence shares no four-word run with Chapter 9's 'but it is a trade'.
+
+> One more pair of glasses. Every output pixel is a dot product $\rightarrow$ the whole operation is linear $\rightarrow$ cross-correlation could be written as one enormous matrix multiplying the flattened image. **But that matrix has a rigid structure: almost everywhere zero (locality means each row touches only one patch), and the same nine numbers repeating along its diagonals (sharing means every row is the same template, relocated).**
+>
+> Replaced: “But it is a matrix with a rigid structure: almost everywhere zero (locality means each row touches only one patch), and the same nine numbers repeating along its diagonals (sharing means every row is the same template, relocated).”
+
+Reader pass: no mark.
+
+**07-W1-12** (W1). Noun label plus colon inside a parenthesis becomes a clause; no parenthesis added.
+
+> One more pair of glasses. Every output pixel is a dot product MATH the whole operation is linear MATH cross-correlation could be written as one enormous matrix multiplying the flattened image. **But that matrix has a rigid structure: almost everywhere zero (locality means each row touches only one patch), and the same nine numbers repeating along its diagonals (sharing means every row is the same template, relocated).**
+>
+> (source text of the paragraph; the gate tool does not match it to a rendered block)
+>
+> Replaced: “But it is a matrix with a rigid structure: almost everywhere zero (locality: each row touches only one patch), and the same nine numbers repeating along its diagonals (sharing: every row is the same template, relocated).”
+
+Reader pass: no mark.
+
+**07-W1-13** (W1). Pair of 07-W1-12.
+
+> One more pair of glasses. Every output pixel is a dot product MATH the whole operation is linear MATH cross-correlation could be written as one enormous matrix multiplying the flattened image. **But that matrix has a rigid structure: almost everywhere zero (locality means each row touches only one patch), and the same nine numbers repeating along its diagonals (sharing means every row is the same template, relocated).**
+>
+> (source text of the paragraph; the gate tool does not match it to a rendered block)
+>
+> Replaced: “But it is a matrix with a rigid structure: almost everywhere zero (locality means each row touches only one patch), and the same nine numbers repeating along its diagonals (sharing: every row is the same template, relocated).”
+
+Reader pass: no mark.
 
 ### 9 CNNs: Making the Filters Learnable
 
@@ -148,7 +268,7 @@ Reader pass: no mark.
 >
 > Replaced: “Write your predictions down before running: two numbers: LeNet's clean accuracy and LeNet at a two-pixel shift.”
 
-Reader pass: P3 marks in this paragraph: the prose 76% against the printed 75.5% goes to B1; the double colon in the sentence before is fixed (08-R9-1).
+Reader pass: P3 marks in this paragraph: the prose 76% against the printed 75.5% goes to B1; the double colon in the sentence before is fixed (08-R9-4).
 
 **08-R9-4** (R9). Slip: two colons in one sentence; the second becomes a semicolon.
 
@@ -187,6 +307,278 @@ Reader pass: no mark.
 > (Pencil.) **Verify the receptive-field growth $5 \rightarrow 6 \rightarrow 14 \rightarrow 16$ .** (Track two numbers per stage: the field size, and the jump , the spacing in input pixels between neighboring units, which each stride-2 pool doubles.) Then show that no convolutional or pooling unit in LeNet ever sees the full $28 \times 28$ frame. Where does globality finally enter the network?
 >
 > Replaced: “Verify the receptive-field ledger MATH .”
+
+Reader pass: no mark.
+
+### 10 Modern CNNs and Transfer Learning
+
+`chapters/part2/09-modern-cnns-transfer.qmd`
+
+**09-W7-1** (W7). First mention of Ioffe and Szegedy; same URL as Sources. The IOU device itself is author-gated and unchanged.
+
+> Chapter 9 ended with a working machine and a report card. LeNet reads garments at 82.5% with 61,706 parameters; graceful under shift where the MLP cliff-dived. But the card has two demerits we wrote down explicitly: 96% of those parameters sit in the dense head rather than in the convolutions that do the seeing, and the shift cliff was softened, not abolished. And one IOU: batch normalization , promised for this chapter.
+
+Reader pass: no mark.
+
+**09-W7-2** (W7). First mentions of VGG, ResNet and NiN; same URLs as Sources.
+
+> Each question has a famous answer ( VGG , ResNet , NiN ’s $1\times1$ + global pooling, and the block habit itself), and each answer is a constraint-shaped idea we can test on our own data. At the end, the practical superpower this sequence builds to, reusing a pretrained backbone, gets the most honest experiment in this book.
+
+Reader pass: no mark.
+
+**09-W1-1** (W1). Noun-phrase label before a colon becomes a clause.
+
+> **The recipe has two small novelties, both because this chapter’s networks contain batch normalization: model.train() before each step and model.eval() before each evaluation.** Why that matters is the subject of the second section.
+>
+> Replaced: “Two small novelties in the recipe, both because this chapter's networks contain batch normalization: model.train() before each step and model.eval() before each evaluation.”
+
+Reader pass: P3 mark on the next, unedited sentence ("Why that matters is the subject of the second section.", naming the book's structure): baseline borderline, listed in B3.2.
+
+**09-W1-2** (W1). Noun-phrase label before a colon becomes a clause.
+
+> **VGG (Simonyan & Zisserman, 2014) answers with a rule: never use a $5 \times 5$ kernel; stack $3 \times 3$ s until the field is as wide as you need.** Recall from Chapter 9 that stacking grows the receptive field. Two stacked $3 \times 3$ convolutions let the second layer see $5 \times 5$ of the input, the same receptive field as one $5 \times 5$ kernel. But compare the parameter counts, for a layer with $C$ channels in and $C$ out:
+>
+> Replaced: “VGG's answer (Simonyan & Zisserman, 2014): never use a MATH kernel; stack MATH s until the field is as wide as you need.”
+
+Reader pass: no mark.
+
+**09-W6-1** (W6). 'Ledger' in reader prose is always replaced; harvests Chapter 9's new 'the count runs'. The stacked-sight fixture literal follows (constraint 5).
+
+> VGG (Simonyan & Zisserman, 2014) answers with a rule: never use a $5 \times 5$ kernel; stack $3 \times 3$ s until the field is as wide as you need. **Recall from Chapter 9 that stacking grows the receptive field.** Two stacked $3 \times 3$ convolutions let the second layer see $5 \times 5$ of the input, the same receptive field as one $5 \times 5$ kernel. But compare the parameter counts, for a layer with $C$ channels in and $C$ out:
+>
+> Replaced: “Recall the receptive-field ledger of REF : stacking grows the field.”
+
+Reader pass: no mark.
+
+**09-W6-2** (W6). Literal test: the bills are parameter counts.
+
+> VGG (Simonyan & Zisserman, 2014) answers with a rule: never use a $5 \times 5$ kernel; stack $3 \times 3$ s until the field is as wide as you need. Recall from Chapter 9 that stacking grows the receptive field. Two stacked $3 \times 3$ convolutions let the second layer see $5 \times 5$ of the input, the same receptive field as one $5 \times 5$ kernel. **But compare the parameter counts, for a layer with $C$ channels in and $C$ out:**
+>
+> Replaced: “But compare the bills, for a layer with MATH channels in and MATH out:”
+
+Reader pass: no mark.
+
+**09-W6-3** (W6). Literal test; shorter.
+
+> a 28% saving. The stacked pair also fires a ReLU twice where the big kernel fires once. Same sight, fewer parameters, more nonlinearity. **Three $3\times3$ s reach a $7\times7$ field for $27C^2$ against $49C^2$ : the deeper you take the idea, the larger the saving.**
+>
+> Replaced: “Three MATH s reach a MATH field for MATH against MATH : the deeper you take the idea, the better the deal gets.”
+
+Reader pass: no mark.
+
+**09-W6-4** (W6). Plan step, 'bill' replaced; 'C = 32' (a fixture literal) stays.
+
+> **Count both designs’ parameters at C = 32.**
+>
+> Replaced: “Implement the parameter bill, C = 32.”
+
+Reader pass: no mark.
+
+**09-W1-3** (W1 (V4)). Announcement frame and its colon lead dropped; the constant-width caveat stays where the stacked-sight scope points to it.
+
+> **The $18C^2 < 25C^2$ arithmetic assumes the channel width stays $C$ through the stack.** When a layer grows channels (as LeNet’s $6 \rightarrow 16$ did), splitting it into two growing $3\times3$ s can cost more, not less. VGG’s design sidesteps this by keeping width constant inside each block and changing it only between blocks, which is exactly the shape our code will take. (Exercise 1 makes you find the break-even point.)
+>
+> Replaced: “One caveat before you re-derive the field equations of vision from this: the MATH arithmetic assumes the channel width stays MATH through the stack.”
+
+Reader pass: no mark.
+
+**09-W1-4** (W1). Single-noun label becomes a clause; the batch-ruler test's sentence stays verbatim.
+
+> At training time BN normalizes by the current batch’s statistics. At evaluation time there may be no batch (one image), so it uses running averages collected during training. model.train() and model.eval() switch between the two. Forgetting the switch is the classic BN bug: evaluate in train mode and your predictions depend on whatever else happens to be in the batch; train in eval mode and BN never learns its statistics. Our train_model recipe flips the switch in both directions; look for it. **It follows that BN needs real batches to estimate statistics, so it gets unreliable at tiny batch sizes.**
+>
+> Replaced: “Corollary: BN needs real batches to estimate statistics, so it gets unreliable at tiny batch sizes.”
+
+Reader pass: no mark.
+
+**09-W1-5** (W1). 'The good:' label becomes a phrase; paired with 09-W1-6.
+
+> Two readings again. **On the good side, this VGG-style recipe reaches 86.7%, four points above LeNet in this run.** Because depth, width, normalization, kernel sizes, parameter count, and training duration all changed together, this comparison does not isolate which ingredient earned the gain. On the bad side, it carries 218,586 parameters, three and a half times LeNet’s total, and the head’s share got worse: 92% of the network is a dense layer reading a flattened grid. The convolutional diet succeeded and the total got fatter anyway. Which forces the third question: where do the parameters live, and where can we do the most damage to the count?
+>
+> Replaced: “The good: this VGG-style recipe reaches 86.7%, four points above LeNet in this run.”
+
+Reader pass: no mark.
+
+**09-W1-6** (W1). 'The bad:' label and its verbless gloss become a clause.
+
+> Two readings again. On the good side, this VGG-style recipe reaches 86.7%, four points above LeNet in this run. Because depth, width, normalization, kernel sizes, parameter count, and training duration all changed together, this comparison does not isolate which ingredient earned the gain. **On the bad side, it carries 218,586 parameters, three and a half times LeNet’s total, and the head’s share got worse: 92% of the network is a dense layer reading a flattened grid.** The convolutional diet succeeded and the total got fatter anyway. Which forces the third question: where do the parameters live, and where can we do the most damage to the count?
+>
+> Replaced: “The bad: 218,586 parameters, three and a half times LeNet's total, and the head's share got worse: 92% of the network is a dense layer reading a flattened grid.”
+
+Reader pass: no mark.
+
+**09-W6-5** (W6). Literal test: the payoff is the benefit Chapter 9 promised.
+
+> The parameter story is a rout: 35,034 total, a 650-parameter head, six times smaller than VGGSmall. The accuracy is 76.2%, and that dip is worth more attention than the win. **First, though, check the promised benefit.** Chapter 9 said the remaining shift-cliff was the flatten head’s fault: it reads the final grid positionally . GAP averages over positions, so the head no longer assigns a different weight to every location. What remains is Chapter 2 ’s classification head in its plainest form: one linear layer reading one averaged number per channel. The rematch of the rematch:
+>
+> Replaced: “First, though, collect the promised payoff.”
+
+Reader pass: no mark.
+
+**09-W7-3** (W7). First mention of Szegedy et al.; a new Sources entry (09-W7-9) carries the same URL.
+
+> GoogLeNet ’s Inception block (2014) answers “which kernel size?” with “all of them”: parallel $1\times1$ , $3\times3$ , $5\times5$ , and pooling branches, concatenated. Its enabling trick is the $1\times1$ bottleneck : compress channels before the expensive spatial kernels. For one $5\times5$ branch at 256 channels: direct, $5^2 \times 256 \times 128 \approx 819$ k parameters; with a $1\times1$ squeeze to 32 first, $256 \times 32 + 5^2 \times 32 \times 128 \approx 111$ k, an 86% cut for the same nominal operation. We will not build Inception here (the principle, channel compression before spatial expense, is the transferable part), but Exercise 2 walks the arithmetic.
+
+Reader pass: no mark.
+
+**09-W7-4** (W7). First mention of Huang et al.; same URL as Sources.
+
+> The residual block below preserves an old representation by addition : $x_{\ell+1}=x_\ell+F_\ell(x_\ell)$ . A DenseNet block makes a different connectivity choice. If $x_j$ denotes layer $j$ ’s output feature map, layer $\ell$ receives the channel-wise concatenation $[x_0,x_1,\ldots,x_{\ell-1}]$ and contributes a small new group of feature maps for later layers. Earlier features therefore remain directly available instead of being recreated, while the channel axis grows; transition blocks compress channels and downsample between dense blocks. In Appendix B’s language, the defining operation is concatenation along the feature-channel axis, not another kind of residual addition ( Appendix B ).
+
+Reader pass: no mark.
+
+**09-W1-7** (W1). Stacked colons and verbless glosses become clauses; the prediction prompt stays.
+
+> **Predict before running. Two networks have identical parameter counts and twenty blocks each; one is plain, one residual.** Will the plain net merely trail, or fail to fit the training set at all?
+>
+> Replaced: “Predict before running: two networks, identical parameter counts, twenty blocks each: one plain, one residual.”
+
+Reader pass: no mark.
+
+**09-W1-8** (W1 (V4)). Importance frame dropped; the reading instruction stays.
+
+> **Look at the training column first.** The plain 40-conv-layer network cannot even fit the 1,200 images it sees every epoch: 61% train accuracy, while its residual twin memorizes them and generalizes twenty-seven points better. This is an optimization failure in the same family as the degradation problem He et al. reported in 2015, where their 56-layer plain net trained worse than their 20-layer one. Our experiment isolates the residual rescue at one depth; a strict demonstration that adding depth degrades a plain network would also require a shallower plain control.
+>
+> Replaced: “Look at the training column first, because it carries the whole lesson.”
+
+Reader pass: no mark.
+
+**09-W1-9** (W1). Noun-phrase label becomes a clause; the identity-lane fixture literal follows (constraint 5).
+
+> **The one change is that each block computes $F(x)$ and outputs $F(x) + x$ .** A residual connection lets the input skip over the block and adds it back.
+>
+> Replaced: “The one change: each block computes MATH and outputs MATH .”
+
+Reader pass: no mark.
+
+**09-W1-10** (W1). Label before a colon becomes a clause; the seed (arc-seeds row 37) keeps its words.
+
+> Residual connections are not only a CNN trick. They became a central design device in many deep architectures; when we assemble a transformer in Chapter 16 , every attention layer and every feedforward layer will be wrapped as $x + F(x)$ , and the freshly met layer normalization will sit beside each skip. **The picture to carry forward is a residual stream with direct additive routes through the network, each block reading from it and writing a correction back.** Those routes improve conditioning without making the stream immune to learned-branch interactions. Attention will be one kind of correction. You now own both parts of that skeleton.
+>
+> Replaced: “The picture to carry forward: a residual stream with direct additive routes through the network, each block reading from it and writing a correction back.”
+
+Reader pass: no mark.
+
+**09-W7-5** (W7). First mention of Xiao, Rasul and Vollgraf; same URL as Sources.
+
+> The chapter’s small-data studies isolated mechanisms. The architecture comparison deserves the full task: all 60,000 Fashion-MNIST training images, split once into 50,000 for fitting and 10,000 for validation, with the official 10,000-image test set opened only after validation selected the checkpoint. We ran LeNet, NiN, VGG, and a nine-block residual network for three end-to-end seeds on Rivanna:
+
+Reader pass: P3 mark on the paragraph's first, unedited sentence ("The chapter's small-data studies isolated mechanisms." against the page's caveats): baseline, listed in B2.
+
+**09-W6-6** (W6). Literal test; shorter.
+
+> The scale changes the verdict from the 1,200-image mechanism studies. **NiN’s global head no longer costs much clean accuracy, and all four architectures clear 92%.** The residual network leads this declared recipe, but the plot still has one horizontal axis too few: parameters measure storage, not optimizer steps, activation memory, or total training work.
+>
+> Replaced: “NiN's global head no longer pays a large clean-accuracy penalty, and all four architectures clear 92%.”
+
+Reader pass: no mark.
+
+**09-W1-11** (W1 (V4)). Announcement dropped; the stub label 'The task:' becomes a clause.
+
+> **The task is to classify the three shoe classes (sandal, sneaker, ankle boot) from ten labeled examples each .** The 30-image regime is exactly where transfer should shine: too few labels to learn features, goes the story, so imported features should dominate. Three contenders:
+>
+> Replaced: “We will test the idea properly.” “The task: classify the three shoe classes (sandal, sneaker, ankle boot) from ten labeled examples each.”
+
+Reader pass: no mark.
+
+**09-W1-12** (W1). Telegraphic list items get verbs; a parallel set of three.
+
+> **From scratch , our VGG-style trunk trains on the 30 images alone.**
+>
+> Replaced: “From scratch: our VGG-style trunk trained on the 30 images alone.”
+
+Reader pass: no mark.
+
+**09-W1-13** (W1). Same set.
+
+> **Our own pretrained trunk is the same trunk pretrained on the seven non-shoe classes (863 images), then frozen under a linear probe.**
+>
+> Replaced: “Our own pretrained trunk: the same trunk pretrained on the seven non-shoe classes (863 images), frozen, linear probe.”
+
+Reader pass: no mark.
+
+**09-W1-14** (W1). Same set; also the first mentions of SqueezeNet and ImageNet (W7), same URLs as Sources.
+
+> **A real pretrained backbone is SqueezeNet 1.1 trained on ImageNet (1.2 million photographs, 1,000 classes), loaded from weights committed with this book, frozen, and read by a linear probe on its 512-dimensional features.** (Fashion images get upsampled to 96×96 and repeated to three channels to fit its expectations. That awkwardness is part of the experiment.)
+>
+> Replaced: “A real pretrained backbone: SqueezeNet 1.1 trained on ImageNet (1.2 million photographs, 1,000 classes) loaded from weights committed with this book, frozen, linear probe on its 512-dimensional features.”
+
+Reader pass: no mark.
+
+**09-W1-15** (W1 (V4)). 'part of the lesson' frame dropped; the reason stays.
+
+> A real pretrained backbone is SqueezeNet 1.1 trained on ImageNet (1.2 million photographs, 1,000 classes), loaded from weights committed with this book, frozen, and read by a linear probe on its 512-dimensional features. (Fashion images get upsampled to 96×96 and repeated to three channels to fit its expectations. **That awkwardness is part of the experiment.)**
+>
+> Replaced: “That awkwardness is part of the experiment, and part of the lesson.)”
+
+Reader pass: no mark.
+
+**09-W1-16** (W1 (V4)). Superlative frame dropped; the reason stays. 'Table' (an apparatus word in an added sentence) becomes 'those numbers'.
+
+> **Read those numbers slowly, because they do not say what the textbook story predicts.** Training from scratch on thirty images fights the mighty ImageNet backbone to a dead heat: the means differ by less than a point, well inside seed noise. And our own pretrained trunk, perfectly competent on its source task per the printout above, transfers worse than nothing . Three reasons, each a general principle:
+>
+> Replaced: “Read that table slowly, because it does not say what the textbook story predicts, and the discrepancy is the best lesson in this chapter.”
+
+Reader pass: no mark.
+
+**09-W6-7** (W6). Fiscal metaphor replaced; the gift image stays. Recap mirror 09-W6-10.
+
+> **Domain and resolution gaps shrink the donation.** SqueezeNet’s filters expect 224-pixel color photographs; we feed it 28-pixel grayscale icons inflated to 96. Its early layers hunt for detail that simply is not there. (The matching recipe, resize and normalize to match the pretraining pipeline , is doing real work; we complied as far as the data allows.)
+>
+> Replaced: “Domain and resolution gaps tax the donation.”
+
+Reader pass: no mark.
+
+**09-W1-17** (W1 (V4)). Pure announcement dropped.
+
+> Transfer wins when the target is big relative to your labels, not small. Three shoe silhouettes at $28 \times 28$ is a small problem: thirty images genuinely suffice, so the scratch baseline is strong and there is little room for imported knowledge to help. The full ten-class task below is different: 50,000 fitting labels, 224-pixel inputs, and a ResNet-18-sized feature extractor.
+>
+> Removed: “This is the quiet one.”
+
+Reader pass: no mark.
+
+**09-W6-8** (W6). Named instance; literal test.
+
+> Transfer wins when the target is big relative to your labels, not small. **Three shoe silhouettes at $28 \times 28$ is a small problem: thirty images genuinely suffice, so the scratch baseline is strong and there is little room for imported knowledge to help.** The full ten-class task below is different: 50,000 fitting labels, 224-pixel inputs, and a ResNet-18-sized feature extractor.
+>
+> Replaced: “Three shoe silhouettes at MATH is a small problem: thirty images genuinely suffice, so the scratch baseline is strong and there is little room for imported knowledge to pay rent.”
+
+Reader pass: no mark.
+
+**09-W1-18** (W1 (V4)). 'for completeness' frame dropped; its reason becomes the clause before the colon.
+
+> **You will use the mechanics constantly from Part V onward: fine-tuning SqueezeNet’s last block with a two-learning-rate recipe (fresh head fast, pretrained layers slow):**
+>
+> Replaced: “The mechanics, for completeness, since you will use them constantly from Part V onward: fine-tuning SqueezeNet's last block with a two-learning-rate recipe (fresh head fast, pretrained layers slow):”
+
+Reader pass: no mark.
+
+**09-W6-9** (W6). Literal test inside the recap item.
+
+> $1\times1$ convolutions run Chapter 1 ’s linear model across channels at every pixel: summarize channels, do not discard them. **With global average pooling they fire the flatten head: parameters collapse (218k $\rightarrow$ 35k) and position-specific weights leave the head, at a cost in clean accuracy that our small dataset makes visible.** Boundaries and downsampling still prevent exact invariance.
+>
+> Replaced: “With global average pooling they fire the flatten head: parameters collapse (218k MATH 35k) and position-specific weights leave the head, at a clean-accuracy price our small dataset makes visible.”
+
+Reader pass: no mark.
+
+**09-W6-10** (W6). Recap mirror of 09-W6-7.
+
+> Transfer learning = freeze + probe, or gently fine-tune. Our experiment found scratch and the ImageNet probe in a near tie across three seeds at 28-pixel scale. **Pretraining is curriculum, gaps shrink what transfers, and small targets may leave little room for imports.** The pinned full-scale Rivanna runs report $88.79\% \pm 0.08\%$ for the frozen probe, $93.92\% \pm 0.12\%$ for fine-tuning, and $94.14\% \pm 0.08\%$ for scratch with ResNet-18. They illustrate a richer regime where adaptation repairs most of the feature mismatch. Diagnosing the regime is the skill.
+>
+> Replaced: “Pretraining is curriculum, gaps are taxed, and small targets may leave little room for imports.”
+
+Reader pass: no mark.
+
+**09-W7-9** (W7). New Sources entry for the work the chapter names; CVPR 2015, DOI 10.1109/CVPR.2015.7298594.
+
+> **Szegedy et al., Going Deeper with Convolutions : GoogLeNet’s Inception block, parallel branches of several kernel sizes joined by channel concatenation.**
+
+Reader pass: no mark.
+
+**09-W1-19** (W1). Noun-phrase topic label in an exercise becomes an imperative, like its neighbors.
+
+> (Code.) **Try data augmentation as a third road: on the 30-image shoe task, train from scratch with random horizontal flips and ±3-pixel shifts ( Chapter 6 ’s exercise, now as a tool).** Does augmentation close the gap to the pinned full-data results further than transfer did? Why might augmentation and transfer help in different regimes?
+>
+> Replaced: “Data augmentation as a third road: on the 30-image shoe task, train from scratch with random horizontal flips and ±3-pixel shifts ( REF 's exercise, now as a tool).”
 
 Reader pass: no mark.
 
@@ -234,7 +626,7 @@ Reader pass: P3 mark (punctuation slip): fixed.
 
 **12-W8-1** (W8). C3: the opening example walked through every row with the chapter's printed numbers (l.36-37 and the fixed-gaussian-attention output); one date-task instance for the right-hand column, no new numbers.
 
-> **The opening example fills every kernel-regression role. The query is the location $q=3.5$ . The keys are the stored locations 1, 3, and 5, and the values are their responses 1.5, 2.8, and 1.8. Gaussian similarity at $h=0.6$ , normalized, gives the weights $(0.0002, 0.9413, 0.0585)$ , and the output is the mixture $2.7412$ . The sequence-memory roles have their own instance in Chapter 13 ’s date task. When the decoder is about to write the year, its current state is the query; the encoder states at the source characters serve as keys to match and as values to read; and useful weights concentrate on the last four source characters, which spell the year. Chapter 15 measures how much weight lands there.**
+> **The opening example fills every kernel-regression role. The query is the location $q=3.5$ . The keys are the stored locations 1, 3, and 5, and the values are their responses 1.5, 2.8, and 1.8. Gaussian similarity at $h=0.6$ , normalized, gives the weights $(0.0002, 0.9413, 0.0585)$ , and the prediction is the mixture $2.7412$ . The sequence-memory roles have their own instance in Chapter 13 ’s date task. When the decoder is about to write the year, its current state is the query; the encoder states at the source characters serve as keys to match and as values to read; and useful weights concentrate on the last four source characters, which spell the year. Chapter 15 measures how much weight lands there.**
 
 Reader pass: P3 mark (names the table's layout): recast to name the roles, not the column.
 
@@ -334,7 +726,7 @@ Reader pass: no mark.
 
 **13-W6-1** (W6). Literal test: 'paying for' is the cost.
 
-> REF made one other promise. A CNN buys global sight by stacking local operations until its receptive field spans the input. One cross-attention read can score every encoder position in a single layer. **It buys global access directly, at the cost of all query--key comparisons and, for now, of the RNNs that created those states sequentially.**
+> REF made one other promise. **A CNN sees globally only by stacking local operations until its receptive field spans the input.** One cross-attention read can score every encoder position in a single layer. **It reaches the whole input directly, at the cost of all query--key comparisons and, for now, of the RNNs that created those states sequentially.**
 >
 > (source text of the paragraph; the gate tool does not match it to a rendered block)
 >
@@ -700,7 +1092,7 @@ Reader pass: no mark.
 
 Each was raised by the rule-blind reader and checked against the printout. None is on a
 sentence this pass wrote; each needs an author decision because it changes a number or a
-claim. The default is the one-token fix.
+claim. The default is the shortest fix.
 
 | # | page and place | prose says | printout says | default fix |
 |---|---|---|---|---|
@@ -711,12 +1103,20 @@ claim. The default is the one-token fix.
 | 5 | Ch 16, "What did the heads route?" | "The maps obey the contract exactly: … every row sums to one" | `maximum row-sum error: 1.1920928955078125e-07` | delete "exactly" |
 | 6 | Ch 18, §18.1 | "The padding mask separately blocks the final slot as a key." | the corrupted sequence displayed just above has five slots and no `[PAD]` (the six-position example before it ends in `[PAD]`) | add `\ [\text{PAD}]` to the corrupted display |
 | 7 | Ch 19, §19.4 | "all five rows enter one analysis" | `run_paired_seed` appends a CNN row and a ViT row per seed, so `fashion_results` holds ten | "five rows" → "ten rows" |
+| 8 | Ch 8, Figure 8.3 caption and alt text | "so most entries are zero" / "contains mostly zeros" | the drawn matrix is $4\times6$ with three nonzero weights per row: 12 of 24 entries are zero | "most entries are zero" → "half the entries are zero here, and nearly all are for a real image" |
+| 9 | Ch 8, §8.6 | "Exactly zero on the compared interior." | the check prints `0.0` through `:.1f`, which cannot tell zero from anything under 0.05 (a re-run gives a bitwise zero, so the claim is true) | print the difference with `:.1e`, or say "prints 0.0" (the cell is frozen under N1, so the author decides) |
+| 10 | Ch 10, §10.2 | "the BN row holds a near-constant spread through all twelve layers" | `with BN    layer stds: 0.344  0.404  0.395  0.385  0.432  0.384` (six values) | "through all twelve layers" → "at every printed depth" |
+| 11 | Ch 10, §10.4 | "It is not a matched-head ablation: the trunks and training recipes differ too." | the page trains LeNet "same recipe" (`train_model(LeNet, epochs=150)`) and NINSmall with the same seed, optimizer, batch size and 75 + 75 epochs of the same loop | "the trunks and training recipes differ too" → "the trunks differ too" |
+| 12 | Ch 10, full-data rematch | "Scratch ends 0.22 points above fine-tuning, smaller than the run-to-run variation one would need…" | $93.92\% \pm 0.12\%$ and $94.14\% \pm 0.08\%$ across three seeds: the gap is about 1.8 times fine-tuning's spread and 2.75 times scratch's | "smaller than the run-to-run variation one would need to resolve as a family-level claim" → "larger than either arm's seed spread (0.12 and 0.08) but, across three seeds, too small for a family-level claim" |
+| 13 | Ch 10, §10.2 | "we need the tool Chapter 9 used and we deferred" | Chapter 9's LeNet (printed here as `# Chapter 9's model`) has no BatchNorm layer | "used and we deferred" → "promised and deferred" |
 
 ### B2. Content the readers raised outside the voice rules
 
 Baseline sentences, not edited by this pass. Listed for the author; the default is to leave
 each until its chapter's own pass.
 
+- **Ch 8.** "precisely the “small network analyzing one patch” of our strategy" misquotes §8.1, which says "use a small detector that analyzes one patch at a time". "The failures of @sec-06… tell us what knowledge to build in, the two principles from the mechanism:" has no referent for *the mechanism*. The recap's "Locality and sharing are built in: as a matrix, convolution is almost-all-zero with nine numbers repeating: 615,000 weights collapsed to 9." chains two colons (recap content is frozen). The §8.8 sentence "Treating the kernel as a parameter tensor … yields the convolutional neural network." read as a different, nominal voice.
+- **Ch 10.** "The chapter's small-data studies isolated mechanisms." sits against the page's own caveats ("does not isolate which ingredient earned the gain", "not a matched-head ablation"). "one change we will reveal after the numbers" is followed at once by the Predict prompt, which names the change ("one is plain, one residual") before any number prints. "its 64 features flatten sandals, sneakers, and boots into nearly the same point" sits beside a 70.6% probe mean on three classes. "because this chapter's whole subject is training models it did not just construct" overstates the section. Exercise 4's "the bn-drift cell" names an internal cell label.
 - **Ch 9.** "That converter is pooling." has no earlier *converter*, and it casts pooling as
   producing invariance where the pooling panel says "Not invariance". "Under the
   predeclared two-pixel shift, the gap becomes 41.8% versus 62.3%" gives two accuracies for
@@ -744,9 +1144,9 @@ each until its chapter's own pass.
 - **Ch 19.** Exercise 6 asks for "sealed-test reliability diagrams" on the 600-image
   benchmark the page calls already opened. The same exercise's "training-time γ" collides
   with EfficientNet's γ = 1.15 on this page.
-- **Scene text** (for the scene owners, not this pass): Ch 9's what-where panel "The
-  chapter's prose rounds the size path to 28, 14, 5"; Ch 16's residual panel says a turn
-  lasts two and a half seconds "ending at ten seconds" after starting at five; Ch 16's
+- **Scene text** (for the scene owners, not this pass): Ch 8's box-average panel cites the figure's `t[4:-4]` plotting line, which sits in a drawing cell the page does not show, and its colour note ("the book keeps orange for weights that are learned") is repeated in the sobel-split panel; Ch 9's lenet-flow panel "The
+  chapter's prose rounds the size path to 28, 14, 5"; Ch 16's layernorm-axis panel says a
+  turn lasts two and a half seconds "ending at ten seconds" after starting at five; Ch 16's
   both-axes palette note spells "grey"; Ch 18's pair-recount panel notes.
 
 ### B3. Decisions pending, each with a default
@@ -758,8 +1158,8 @@ Line numbers in this section are those of `4828b2e`, where the readings were tak
 
    | device | where | literal statement |
    |---|---|---|
-   | Pooling's tolerance trade | Ch 8 heading "The property we paid for: equivariance" (l.214) with l.216, 260, 362; Ch 9 "buy tolerance" (l.388, 419–420, 426, 688), callout title "Tolerance has a price tag" (l.424), recap "It is a purchase, and position is the currency." (l.794); arc-seeds row 33 | pooling gains local shift tolerance by discarding some position |
-   | LeNet's report card | Ch 9 "two demerits and one IOU … batch normalization is still owed" (l.804–806) ↔ Ch 10's opener ("And one IOU: batch normalization, promised for this chapter.") | one open promise: batch normalization, still to come |
+   | Pooling's tolerance trade | Ch 8 heading "The property we paid for: equivariance" (l.214) with l.216, 260, 362; Ch 9 "buy tolerance" (l.388, 419–420, 426, 688), callout title "Tolerance has a price tag" (l.424), recap "It is a purchase, and position is the currency." (l.794); Ch 10 "shift tolerance may be bought with positional information" (l.493); arc-seeds row 33 | pooling gains local shift tolerance by discarding some position |
+   | LeNet's report card | Ch 9 "two demerits and one IOU … batch normalization is still owed" (l.804–806) ↔ Ch 10's opener ("And one IOU: batch normalization, promised for this chapter.", l.21, which now links the BN paper) and heading "The stabilizer we owe you: batch normalization" (l.171) | one open promise: batch normalization, still to come; "The stabilizer Chapter 9 deferred" |
    | The price list | Ch 14 "derives that price list" (l.173) ↔ interlude "### The price list", "Now we know the price list". The reader also found no antecedent for *that price list* on the Chapter 14 page | derives what each memory method keeps, what it costs, and what it guarantees |
    | Transfer's decision rule | Ch 18 "Transfer should pay when" (l.22) ↔ Ch 10 "transfer pays when" (l.1071); arc-seeds row 39 | transfer is worth its cost when; "help" drops the cost-versus-return sense Chapter 18 uses at l.622 and l.1536 |
    | The inductive-bias trade | Ch 19 l.19, 285, 287, 300 ("paid for in code"), 303 ("That freedom has a computational price", also the attention-bill scene's first literal), heading "Three places to buy back useful bias" (l.760), recap item 3 (l.1246); arc-seeds rows 29 and 61 | built-in structure is exchanged for flexibility |
@@ -775,6 +1175,7 @@ Line numbers in this section are those of `4828b2e`, where the readings were tak
    abstraction has earned a real rematch." (l.601), "Notice what changed relative to
    @sec-11…" (l.876). Ch 16: "A precise proof is more useful than the slogan." (l.177),
    "“Visibility is a modeling decision” is the seed this chapter hands forward." (l.1596).
+   Ch 8: "Read the markers and one thing stands out: …" (l.116), "Now collect the reward that @sec-06…'s MLP could never have." (l.216, tied to the gated heading), "One more pair of glasses." (l.265). Ch 10: "…gets the most honest experiment in this book." (l.36), "Why that matters is the subject of the second section." (l.120; the reader also marked it as naming the book's structure), "This is the point about VGG versus its hand-tuned predecessors: …" (l.274), "Pause on what that is: …" (l.335, a pixel-skewer literal follows), "that dip is worth more attention than the win" (l.410, paired with l.487), "You now own both parts of that skeleton." (l.754).
    Ch 18: "Let us pin the idea to shapes before writing code." (l.190), "The limits are
    concrete: …" (l.1535), "The separation in @tbl-pretraining-families matters during
    execution too." (l.1649). Ch 19: "The operation has a useful exact identity." (l.126),
@@ -782,27 +1183,43 @@ Line numbers in this section are those of `4828b2e`, where the readings were tak
    one-number leaderboard; …" (l.714), "The historical comparison makes the allocation
    tangible." (l.1179).
 3. **Ledger words in a panel.** Chapter 18's figure caption and its Plan step now say
-   "five Boolean rows" (the Plan step change is the one declared I11 failure). The
+   "five Boolean rows" (one of the two declared I11 failures; Chapter 10's Plan step is the other). The
    bert-ledger replay just below still says *ledger* ("Inspect the five Boolean ledgers",
    its `aria-label`, "The ledger and routes are readable without playback", "the selection
-   ledger decides", "“Chosen” is our bookkeeping"), and `scripts/test_mechanism_excerpts.cjs`
-   asserts that wording. Default: rename the panel's words to *rows* in the scene wave,
+   ledger decides", "“Chosen” is our bookkeeping"); `scripts/test_mechanism_excerpts.cjs`
+   reads the panel's `data-ledgers` attribute, so a rename touches that name too. Default: rename the panel's words to *rows* in the scene wave,
    keeping the scene id `bert-ledger` and the code names `ledger_tokens`, `ledger_rows` (a
-   fixture literal and figure code).
+   fixture literal and figure code). Chapter 10's stacked-sight replay still speaks of "the two
+   weight bills" and its pixel-skewer replay of "Its bill" (whose test reads the `bill` value element),
+   next to prose that now says *parameter counts*;
+   default: the same scene wave.
 4. **I18's two flags.** (a) Chapter 14's Sources entry for *Beyond Test-Time Memory* moves
    from the project page to arXiv:2603.09221 (the W7 correction; I18 reads it as a removed
    link). (b) Chapter 18's closing paragraph: dropping "The chapter closes with three
    forward seeds." removes its shortest sentence, so the mean sentence length rises from 19
    to 23 words while the three planted sentences stay verbatim. Default: accept both.
-5. **Chapters 8 and 10 wait for #13 and #14.** Their readings are taken; their edits
-   touch the two chapters those PRs re-freeze, so they land on this branch after each
-   merge. Chapter 10's "Recall the receptive-field ledger of @sec-08-cnn" (l.126, also a
-   stacked-sight fixture literal) must follow Chapter 9's new "the count runs" in the same
-   PR. This PR stays a draft until then.
-6. **Later passes.** The PCA interlude's "Here is one shape ledger." and Chapter 20's "The
-   separate cost ledger below" are outside Parts II and IV; the epilogue's and the
-   test-time-regression interlude's *Beyond Test-Time Memory* entries should also move to
-   arXiv:2603.09221.
+5. **One new Sources entry, and a choice about Fashion-MNIST.** W7 requires every work named
+   in prose to be in its chapter's Sources. Chapter 10 names GoogLeNet's Inception block and
+   gains Szegedy et al., *Going Deeper with Convolutions* (CVPR 2015, DOI
+   10.1109/CVPR.2015.7298594), linked at its first mention. Chapters 8 (l.131, "a boot from
+   our Fashion-MNIST subset") and 19 (l.73) also name Fashion-MNIST with no Sources entry, as
+   Chapter 9 (in a Plan step) and the interludes do. Adding both entries was tried and
+   reverted: the two entries carry the same paper title, and I17 counts that as a shared
+   four-word run between added sentences. That blocks `audit_voice_ledger.py --check`,
+   which the publish job runs. Default: add the entry (Xiao, Rasul and Vollgraf,
+   arXiv:1708.07747, Chapter 10's URL) to each chapter that names the dataset, together with
+   an I17 rule that skips Sources entries. Otherwise leave the book's mixed practice as it
+   is.
+6. **Two more I18 flags are artifacts.** I18 reports nominalizations rising in Chapter 8's
+   opening paragraph (2 → 3) and Chapter 10's shoe-task paragraph (1 → 2). The raw counts
+   do not rise (3 → 3 and 2 → 2). The audit's exemption filter drops a baseline sentence that
+   an earlier exempt record replaced (Chapter 8: the B0 restoration 07-B0-C11a; Chapter 10:
+   09-T5-1), which lowers the "before" side. Default:
+   accept.
+7. **Later passes.** The PCA interlude's "Here is one shape ledger." and Chapter 20's "The
+   separate cost ledger below" are outside Parts II and IV. The epilogue's running-prose
+   link to *Beyond Test-Time Memory* (`chapters/epilogue.qmd` l.315) still points at the
+   TTC-Net project page; its Sources entry already uses arXiv:2603.09221.
 
 ### B4. Reader marks on edited sentences, as resolved
 
@@ -817,3 +1234,5 @@ Line numbers in this section are those of `4828b2e`, where the readings were tak
 | Ch 9 | the F.mse_loss reduction sentence after an edited sentence reads as a different voice | overruled: the reduction sets the gradient scale the paragraph explains |
 | Ch 18 | the planted "Pretraining is a regime, not an architecture; …" repeats §18.7 and names Chapter 19 twice | overruled: the three planted sentences stay verbatim (arc-seeds rows 64, 65, 68) |
 | Ch 19 | "A student can outgrow its teacher …" after the new DeiT link | baseline, kept, counted |
+| Ch 10 | "The chapter's small-data studies isolated mechanisms." in the paragraph that gained the Fashion-MNIST link | baseline; listed in B2 |
+| Ch 10 | "Why that matters is the subject of the second section." after the recast "The recipe has two small novelties" | baseline borderline; listed in B3.2 |
