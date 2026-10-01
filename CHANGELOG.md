@@ -1,3 +1,14 @@
+# Rolling post-v1.4: chapter openers without rhetorical framing (October 1, 2026)
+
+- **Six opener sentences in Chapters 1, 3, 4, 6 and 13 now state the problem plainly.**
+  Chapter 4's opener read "We now have models worth training … the question every practitioner
+  faces daily: *how, exactly, do you run the descent* … no longer a friendly bowl?". It now gives
+  the scale problem itself: a million examples, millions of knobs, an exact gradient that costs a
+  pass over every example per step, and a nonconvex loss. The other five lose grading and
+  dramatizing language: "workhorse", "you will know exactly why", "This chapter is about what one
+  small bend does to everything", "the standard toolkit … gradients for anything", and "poisonous
+  bookkeeping". All links and claims are kept. No code, math or printed output changed.
+
 # Rolling post-v1.4: clarity pass (October 1, 2026)
 
 - **232 clarity edits, from the rows the author approved.** They replace stiff or misleading words, resolve ambiguities, unpack nested asides, make opaque callbacks explicit, and remove flourishes, while keeping each paragraph's emphasis, orientation and rhythm.
