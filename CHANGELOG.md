@@ -1,3 +1,24 @@
+# Rolling post-v1.4: the book PDFs are retired (September 30, 2026)
+
+- **No more book PDFs.** The print, continuous and press editions are no longer built.
+  The print edition moves to a separate Springer SNmono manuscript. Removed: the screen
+  and press profiles (`_quarto-screen.yml`, `_quarto-press.yml`), the outline-fixpoint
+  renderer (`scripts/render_pdf_profiles.py`), the PDF audit (`scripts/audit_pdf.py`) and
+  the frozen-figure helper (`scripts/materialize_frozen_pdf_assets.py`). The contract audit
+  fails if any of them returns, and it no longer requires the PDF cover hook or the PDF
+  title-page date. The website was already HTML-only; nothing a reader sees changes.
+- **What stays.** Each chapter's TeX freeze (`tex.json` and `figure-pdf/`) stays, because
+  the Springer manuscript is converted from it. The `pdf` format in `_quarto.yml` stays
+  only so that rendering a chapter keeps that freeze current, and the frozen-stdout audit
+  still compares the HTML and TeX freezes. It now also fails when the two come from
+  different source (their hashes differ), which an `--to html` chapter render after a
+  prose edit would leave behind. `tex/macros.tex` stays for the TikZ figures and
+  that render. The `when-profile="press"` markers and the independence audit stay. They
+  still say what the publisher's edition omits.
+- **Docs.** `CLAUDE.md`, `README.md`, `docs/CONTINUING.md`, `docs/NEW-CHAT-PROMPT.md`,
+  `docs/NEW-MACHINE-SETUP.md`, `docs/compatibility.md`, `docs/style-guide.md` and
+  `docs/press-program.md` drop the local print-proof steps.
+
 # Rolling post-v1.4: prose that now matches its printouts (September 30, 2026)
 
 Twelve sentences in Chapters 8, 9, 10, 15, 16, 18 and 19 disagreed with the output or

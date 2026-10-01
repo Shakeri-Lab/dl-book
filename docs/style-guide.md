@@ -8,9 +8,10 @@
 
 The **HTML edition is the book's source of truth**. Author and review the reading
 order, wording, equations, code surfaces, figures, cross-references, and responsive
-behavior in HTML first. The two PDF editions are derived conversions: the default
-two-sided PDF is for print, while the one-sided, open-any edition is for continuous
-screen reading. Both must preserve the HTML edition's content, semantics, and order,
+behavior in HTML first. The two Quarto PDF editions were derived conversions (the
+two-sided print edition and the one-sided, open-any continuous edition); they were retired
+on September 30, 2026, and the print edition is now a separate Springer manuscript converted from
+each chapter's TeX freeze. Both had to preserve the HTML edition's content, semantics, and order,
 while allowing only format-required differences such as pagination, line breaking,
 float placement, and print-safe sizing. Never solve a PDF layout problem by changing, omitting, or
 reordering substantive content only in PDF. When the formats appear to disagree,
@@ -532,14 +533,10 @@ misdiagnosis deserves to be made explicit.
   source alternative.
 - Decorative callout icons carry empty replacement text in PDF extraction. Meaning
   lives in the callout title and prose, never in the icon.
-- A release PDF must reach the LaTeX reference fixpoint. Use the configured minimum
-  of three passes, then require every reader-visible outline destination to land
-  exactly on the page containing its heading. `scripts/render_pdf_profiles.py`
-  retries each profile to a bounded fixpoint and fails rather than publishing a
-  stale outline; do not replace the complete invariant with late-book sentinels.
-  Scan geometry with a capture rectangle larger than the media box; any text beyond
-  the physical page is a hard failure, while smaller text-block intrusions are soft
-  warnings that require visual review.
+- Retired with the book PDFs on September 30, 2026: a release PDF had to reach the
+  LaTeX reference fixpoint (at least three passes, with every reader-visible outline
+  destination on the page of its heading), and text beyond the media box was a hard
+  failure. `scripts/render_pdf_profiles.py` and `scripts/audit_pdf.py` enforced this.
 - The title page identifies rolling versus stable status. The title verso records
   copyright, licenses, the canonical HTML URL, stable citation guidance, and
   institutional affiliation. `dlbook-edition-status` controls the derived PDF,

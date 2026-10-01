@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 """Independence audit (press program W2, rules I1 and I2).
 
-The press manuscript must read without the course it grew from and without the second
+The publisher's edition must read without the course it grew from and without the second
 volume: no course vocabulary anywhere its reader sees, and the second volume only as a
 cited outside work. This audit builds the press view of every chapter in the reading
 order (prose, captions, alt text, and the comments of printed code, minus everything
-the sources hide from the `press` profile or show only in HTML), and the press title
-matter (the title-page macros in tex/macros.tex and the book metadata of _quarto.yml and
-_quarto-press.yml), and fails on any term that is not an allowed use.
+the sources hide from the `press` profile or show only in HTML), and the title matter
+(the title-page macros in tex/macros.tex and the book metadata of _quarto.yml), and
+fails on any term that is not an allowed use. The Quarto press PDF is retired; the
+`when-profile="press"` markers still say what the publisher's edition omits.
 
 The author's ruling 2 (September 28, 2026): the publish run warns (--warn), while the
-weekly execution audit and the press build (a pre-render step of _quarto-press.yml) fail.
+weekly execution audit fails.
 
 Usage: audit_independence.py            scan; exit 1 on a hit
        audit_independence.py --warn     scan; report hits as warnings and exit 0
@@ -79,7 +80,7 @@ def braced(text: str, start: int) -> str:
 
 
 def title_matter() -> list[tuple[str, str]]:
-    """(place, text) of what the press PDF prints as title matter."""
+    """(place, text) of the title matter."""
     out = []
     macros = ROOT / "tex" / "macros.tex"
     lines = [re.sub(r"(?<!\\)%.*$", "", line) for line in macros.read_text().split("\n")]
@@ -89,7 +90,7 @@ def title_matter() -> list[tuple[str, str]]:
             line = text[:match.start()].count("\n") + 1
             argument = re.sub(r"\\[A-Za-z]+(\{\})?|[{}]", " ", braced(text, match.end() - 1))
             out.append((f"tex/macros.tex:{line} (\\{name})", re.sub(r"\s+", " ", argument)))
-    for config in ("_quarto.yml", "_quarto-press.yml"):
+    for config in ("_quarto.yml",):
         book = (yaml.safe_load((ROOT / config).read_text()) or {}).get("book", {})
         for key in ("title", "subtitle", "author", "description"):
             if isinstance(book.get(key), str):

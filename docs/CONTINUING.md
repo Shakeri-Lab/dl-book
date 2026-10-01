@@ -1006,8 +1006,8 @@ continue the project without the original conversation history. Read `CLAUDE.md`
 
 ## 1. Where the project stands
 
-**Live:** https://shakeri-lab.github.io/dl-book/ (canonical HTML edition plus its
-derived PDF conversion, auto-deployed from `main` via GitHub Actions → `gh-pages`).
+**Live:** https://shakeri-lab.github.io/dl-book/ (canonical HTML edition, auto-deployed
+from `main` via GitHub Actions → `gh-pages`; the book PDFs are retired).
 
 **Cross-book interface:** v1.2.1 protects the ten anchors consumed by
 *Deep Learning: Making It Trainable* in `docs/public-anchors.md` and CI. Five bounded
@@ -1326,10 +1326,12 @@ failed their first design (see §5 case law). The loop that works:
    `docs/style-guide.md`. Keep the provenance comment. Wire the arc seeds
    (`docs/arc-seeds.md`) — both harvesting due seeds and planting contracted ones.
 5. **Render the chapter — BOTH formats**: `quarto render chapters/…/XX.qmd`
-   (NO `--to html` flag! An HTML-only render leaves the PDF freeze (`tex.json`)
-   stale and the book PDF ships without your chapter — this bit us in ch. 8).
-   Review HTML first because it is canonical; then verify that the derived PDF
-   preserves it subject only to print-format constraints.
+   (NO `--to html` flag! An HTML-only render leaves the TeX freeze (`tex.json`)
+   stale, and the Springer manuscript is converted from it; the frozen-stdout audit
+   fails on the mismatched source hash). Because `pdf` is a single-file book format,
+   this re-executes only the chapter but also compiles a whole-book PDF into `_book`;
+   delete it, or render `--to html` again, before auditing. Review HTML first because
+   it is canonical.
 6. **Verify**: extract every printed output from
    `_freeze/…/execute-results/html.json` and check each against the prose; `Read`
    every generated figure PNG and check it against its caption (mis-captioned
@@ -1338,10 +1340,10 @@ failed their first design (see §5 case law). The loop that works:
    wrong). Batch all fixes, then re-render once — *any* qmd edit invalidates the
    freeze and forces full re-execution (5–15 min for training-heavy chapters).
 8. **Full book render**: export
-   `QUARTO_PYTHON="$HOME/.venvs/dl-book/bin/python"`, run
-   `"$QUARTO_PYTHON" scripts/render_pdf_profiles.py`, then render the canonical
-   HTML last with `quarto render --to html --no-clean`. Verify that both PDFs picked
-   up the chapter (`pdftotext … | grep <distinctive phrase>`).
+   `QUARTO_PYTHON="$HOME/.venvs/dl-book/bin/python"` and render the canonical HTML with
+   `quarto render --to html`. The book PDFs are retired (September 30, 2026); the chapter's TeX
+   freeze must still match its HTML freeze in source hash and outputs
+   (`scripts/audit_frozen_stdout.py`).
 9. **Commit** chapter + `_freeze/<chapter>/` + any new `sources/` snapshot
    together. Push; watch CI (`gh run list`); confirm the live URL (CDN caches —
    use a `?v=N` query to bust; if Pages serves stale content for >10 min, check
@@ -1437,7 +1439,7 @@ These are precedents; when a new experiment misbehaves, check here first.
   `ignore_index=PAD` the loss. Symptom: seq2seq stuck at 40–60% for no visible
   reason. Two whole task designs were nearly abandoned before this diagnosis.
 - **Freeze staleness (ch. 8):** `--to html` single-file renders leave `tex.json`
-  stale → book PDF ships old content. Render single files with no `--to` flag.
+  stale, and the TeX freeze the Springer manuscript is converted from goes stale. Render single files with no `--to` flag.
 - **A benchmark cannot depend on live prose (chs. 10/14):** both character-LM cells
   once globbed the current Chapter 1–9 sources. Copyedits then changed the corpus only
   when those chapters happened to re-execute, leaving frozen output and pinned prose
@@ -2018,8 +2020,8 @@ colour alone. Selective use is preferred over colouring every variable.
 - **Captions carry measured numbers only** — a standalone pre-test is not
   RNG-identical to the chapter's own cell.
 - **Renders are slow** (heavy chapter 20–40 min, full book ~40 min). Run in the
-  background; never use `--to html` alone for a chapter you intend to ship, or the
-  PDF ships stale.
+  background; never use `--to html` alone for a chapter you intend to ship, or
+  the TeX freeze the Springer manuscript is converted from goes stale.
 
 ### Open decisions — waiting on the author
 

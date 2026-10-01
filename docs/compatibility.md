@@ -128,12 +128,10 @@ real changes.
   this build; expect different choices on other devices or releases.
 - **Editable install**: `pip install -e ./code` provides `dlbook`; CI installs it
   via `requirements.txt`. If imports fail in a fresh clone, run that line.
-- **Frozen PDF assets:** Quarto records executed PDF figures under `_freeze`, while
-  LuaLaTeX resolves them through ignored `*_files/figure-latex` directories. Run
-  `python scripts/materialize_frozen_pdf_assets.py` immediately before each PDF
-  profile on a clean checkout. `scripts/render_pdf_profiles.py` does this before each
-  local print proof because one profile may prune another profile's transient
-  directories. CI builds no PDF.
+- **Frozen PDF figures:** Quarto records each chapter's executed PDF figures under
+  `_freeze/**/figure-pdf/`, beside its `tex.json`. The book PDFs are retired (September 30, 2026),
+  and with them the PDF profiles and the helper that copied these figures into a book
+  build; the Springer manuscript reads them from `_freeze` directly. CI builds no PDF.
 - **Audited publication bundle:** the Pages publish step uses `render: false`. Rendering
   after the audits can silently replace the artifacts that were checked, so deployment
   must publish the existing `_book` directory unchanged.
@@ -151,7 +149,8 @@ real changes.
   applies `display: none !important` to hidden content; browsers without `beforematch`
   retain the ordinary collapsed panel. The first content image in each document stays
   eager and all later images carry `loading="lazy"` plus `decoding="async"`.
-  `figures/cover.png` remains the cover of local print proofs.
+  `figures/cover.png` stays, because `tex/macros.tex` names it and a chapter's TeX-freeze
+  render compiles that header.
 - **Public notebook pipeline:** `scripts/notebook_manifest.json` is the sole map for
   the 26 exported units and their required assets. The generated bootstrap pins Python
   3.12's numerical stack through `scripts/notebook_requirements.txt`, embeds a full Git

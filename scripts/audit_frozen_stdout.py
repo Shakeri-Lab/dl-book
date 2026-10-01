@@ -214,6 +214,11 @@ def main() -> int:
                 failures.append(f"{unit_dir}: HTML/TeX stdout differs")
             if display_records(tex_path.read_text()) != html_displays:
                 failures.append(f"{unit_dir}: HTML/TeX display results differ")
+            # The Springer manuscript is converted from tex.json, so its prose must come
+            # from the same source as the HTML: an `--to html` render after a prose edit
+            # leaves the TeX freeze on the old source hash.
+            if json.loads(tex_path.read_text()).get("hash") != json.loads(html_path.read_text()).get("hash"):
+                failures.append(f"{unit_dir}: HTML/TeX freezes come from different source (hash)")
 
     if args.units:
         base_paths = [

@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-from datetime import date
 import json
 import re
 import sys
@@ -89,9 +88,6 @@ SUPPORT_INVITATION = (
     "corrections, new figures, and open releases, you may make an optional contribution\n"
     "here:"
 )
-COVER_PATH = ROOT / "figures/cover.png"
-PDF_ASSET_MATERIALIZER = ROOT / "scripts/materialize_frozen_pdf_assets.py"
-PDF_FIXPOINT_RENDERER = ROOT / "scripts/render_pdf_profiles.py"
 PUBLISH_WORKFLOW = ROOT / ".github/workflows/publish.yml"
 VOICE_CONTRACT = ROOT / "VOICE.md"
 VOICE_LEDGER = ROOT / "scripts/audit_voice_ledger.py"
@@ -106,6 +102,17 @@ RETIRED_DOWNLOAD_FILES = (
     ROOT / "download.html",
     ROOT / "download.css",
     ROOT / "figures/cover.webp",
+)
+# The book PDFs (print, continuous and press) are retired: the print edition is a
+# separate Springer manuscript. Their profiles and tooling must not return. The `pdf`
+# format in _quarto.yml stays only to write each chapter's TeX freeze, which that
+# manuscript is converted from.
+RETIRED_PDF_FILES = (
+    ROOT / "_quarto-screen.yml",
+    ROOT / "_quarto-press.yml",
+    ROOT / "scripts/render_pdf_profiles.py",
+    ROOT / "scripts/audit_pdf.py",
+    ROOT / "scripts/materialize_frozen_pdf_assets.py",
 )
 NOT_FOUND_PAGE = ROOT / "404.html"
 QUARTO_VERSION = "1.10.18"
@@ -130,7 +137,7 @@ FORBIDDEN_PDF_SITE_CONFIG = (
     "download.css",
     "figures/cover.",
 )
-# CI steps that would build or audit a PDF. PDFs are local print proofs only.
+# CI steps that would build or audit a PDF.
 FORBIDDEN_PDF_CI_STEPS = (
     "render_pdf_profiles.py",
     "audit_pdf.py",
@@ -623,12 +630,6 @@ def main() -> None:
     ):
         if index_text.count(contract) != 1:
             fail(errors, f"index.qmd: Phase B front-door contract missing: {contract}")
-    if not COVER_PATH.is_file():
-        fail(errors, "figures/cover.png: PDF cover asset is missing")
-    if not PDF_ASSET_MATERIALIZER.is_file():
-        fail(errors, "scripts/materialize_frozen_pdf_assets.py: helper is missing")
-    if not PDF_FIXPOINT_RENDERER.is_file():
-        fail(errors, "scripts/render_pdf_profiles.py: fixpoint helper is missing")
     workflow_text = PUBLISH_WORKFLOW.read_text()
     execution_workflow_text = EXECUTION_WORKFLOW.read_text()
     quarto_text = (ROOT / "_quarto.yml").read_text()
@@ -777,6 +778,9 @@ def main() -> None:
                 f"{retired.relative_to(ROOT)}: retired PDF download-page file "
                 "must not return",
             )
+    for retired in RETIRED_PDF_FILES:
+        if retired.exists():
+            fail(errors, f"{retired.relative_to(ROOT)}: retired book-PDF file must not return")
     # A frozen HTML result that lists its whole `<stem>_files` folder as supporting
     # carries the restored print figures (`figure-pdf`) into the website. Quarto
     # writes that form when execution starts with no other figure folder present;
@@ -943,23 +947,6 @@ def main() -> None:
     ):
         if required not in workflow_text:
             fail(errors, f"publish workflow is missing notebook contract {required!r}")
-    if PDF_FIXPOINT_RENDERER.is_file():
-        renderer_text = PDF_FIXPOINT_RENDERER.read_text()
-        for required in (
-            "scripts/materialize_frozen_pdf_assets.py",
-            '"--outline-only"',
-            "max_attempts",
-            "previous_signature",
-            "st_mtime_ns",
-            "toc_checksum",
-            '"print"',
-            '"continuous"',
-        ):
-            if required not in renderer_text:
-                fail(
-                    errors,
-                    f"scripts/render_pdf_profiles.py: missing contract {required}",
-                )
     if not VOICE_CONTRACT.is_file():
         fail(errors, "VOICE.md: the narrator contract is missing")
     if not VOICE_LEDGER.is_file():
@@ -978,16 +965,13 @@ def main() -> None:
     if quarto_config.get("execute", {}).get("freeze") is not True:
         fail(errors, "_quarto.yml: execute.freeze must be true (CI never executes; render locally)")
     # The author's ruling 2 (September 28, 2026): independence warns in the publish run and
-    # fails in the execution audit and the press build; pull requests run the source audits.
+    # fails in the execution audit; pull requests run the source audits.
     if "python scripts/audit_independence.py --warn" not in workflow_job(workflow_text, "build-deploy"):
         fail(errors, "publish workflow must run the independence audit in warning mode")
     if re.search(r"audit_independence\.py --warn", execution_workflow_text) or not re.search(
         r"python scripts/audit_independence\.py\s*$", execution_workflow_text, re.MULTILINE
     ):
         fail(errors, "execution audit must run the independence audit so that a hit fails it")
-    press_profile = (ROOT / "_quarto-press.yml").read_text()
-    if "scripts/audit_independence.py" not in press_profile.split("pre-render:", 1)[-1] or "pre-render:" not in press_profile:
-        fail(errors, "_quarto-press.yml must run the independence audit before the press build")
     source_job = workflow_job(workflow_text, "manuscript_audits")
     if (
         "if: github.event_name == 'pull_request'" not in source_job
@@ -1008,48 +992,12 @@ def main() -> None:
             "publish workflow must check external links in the chapters, Preface, "
             "and README",
         )
-    tex_macros = (ROOT / "tex/macros.tex").read_text()
-    if tex_macros.count("\\extratitle{") != 1:
-        fail(errors, "tex/macros.tex: KOMA PDF cover hook is missing or duplicated")
-    if tex_macros.count("figures/cover.png") != 1:
-        fail(errors, "tex/macros.tex: PDF cover asset reference must appear once")
-    date_match = re.search(
+    if re.search(
         r'^\s{2}date:\s*["\']?([0-9]{4}-[0-9]{2}-[0-9]{2})["\']?\s*$',
         quarto_text,
         re.MULTILINE,
-    )
-    if date_match is None:
+    ) is None:
         fail(errors, "_quarto.yml: deterministic content-revision date is missing")
-    else:
-        content_date = date.fromisoformat(date_match.group(1))
-        display_date = (
-            f"{content_date.strftime('%B')} {content_date.day}, {content_date.year}"
-        )
-        version_match = re.search(
-            r"^\s{2}version:\s*[\"']?([^\s\"']+)[\"']?\s*$",
-            index_text,
-            re.MULTILINE,
-        )
-        compact_macros = " ".join(tex_macros.split())
-        if edition_status_match is None or version_match is None:
-            pass
-        elif edition_status_match.group(1) == "stable":
-            expected_date = (
-                f"Version {version_match.group(1)} "
-                f"\\textperiodcentered{{}} {display_date}"
-            )
-            if expected_date not in compact_macros:
-                fail(
-                    errors,
-                    "tex/macros.tex: stable PDF edition/date is out of sync with "
-                    "index.qmd and _quarto.yml",
-                )
-        elif f"content updated {display_date}" not in compact_macros:
-            fail(
-                errors,
-                "tex/macros.tex: PDF content-revision date is out of sync with "
-                "_quarto.yml",
-            )
     chapter4_text = (ROOT / "chapters/part1/04-training-loss-sgd.qmd").read_text()
     if chapter4_text.count(RMSPROP_PROVENANCE) != 1:
         fail(errors, "Chapter 4: RMSProp provenance must appear exactly once")
@@ -1084,7 +1032,7 @@ def main() -> None:
         "display-only figures, interlude "
         "figure/table namespaces, the epilogue namespace and source contract, the Part III "
         "learnability callback, the complete temperature arc, and canonical-edition "
-        "metadata, print cover, HTML-only site (no PDF offered or built in CI), "
+        "metadata, HTML-only site (no PDF offered or built in CI, book-PDF tooling retired), "
         "optional-support, and collapsed-disclosure contracts; 30 non-Part HTML tool "
         "manifests (27 specific, 3 playlist-only)"
     )
