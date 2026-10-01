@@ -49,4 +49,4 @@ Blue input cells, dashed grey zeros, a neutral window and ruler, green outputs.
 
 | Source | SHA-256 |
 |---|---|
-| `chapters/part2/08-cnn.qmd` | `b57ede84575567b61c93300117acaf3a28eb580797c60d828223f048c36f286f` |
+| `chapters/part2/08-cnn.qmd` | `ad0727c619e37eea4f424bd40dbba62063122eeadff1a3e6dbf2e63c2ac8a103` |
