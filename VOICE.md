@@ -172,7 +172,7 @@ section we will", no emoji.
   remarks on the exposition or on editorial choices, no flourishes, no assurances that an
   experiment is honest, and no arc vocabulary (promise, seed, harvest, IOU, debt, bill,
   ledger, price list, report card, figurative "contracts"). An image stays only if the author's
-  own lecture transcripts or notes use it. The author's 30 rewrites and the book-wide pass are in
+  own lecture transcripts or notes use it. The author's 51 rewrites and the book-wide pass are in
   `audits/voice/stage_p25_report.md`. D11 overrides R9's old note on announcements and
   the V1 metaphor list.
 
