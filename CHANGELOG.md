@@ -1,7 +1,37 @@
+# Rolling post-v1.4: correcting the voice pass where it overcorrected (October 1, 2026)
+
+- **The author's corrections.** The author read the merged voice pass and found places where it
+  removed useful emphasis or changed a technical claim. Six are corrected:
+  - MLM corrupts the input and scores the original selected tokens; it does not use "corrupted
+    targets".
+  - The ViT recap again says an architecture's brand name does not specify its training recipe,
+    instead of "architecture and recipe cannot be separated".
+  - The two-parameter loop is again said to illustrate gradient descent, not only to draw.
+  - The rejected BERT pilot's conclusion stays local: the pilot did not isolate what pretraining
+    contributed.
+  - Chapter 1's "The loss is the guiding principle of training" sentence and "That second clause is
+    the whole game." are restored.
+- **A paragraph-level reading.** Every paragraph the voice pass changed (408) was read whole against
+  its original, under the author's principle: remove commentary that substitutes for explanation,
+  and keep brief orientation, earned emphasis and callbacks that help the reader reason. 44
+  verified fixes restore what the pass had flattened:
+  - pauses where something important becomes visible ("Bumps are the whole secret", "The line that
+    changes everything is the $\vect{c}_t$ update");
+  - orientation (what the rest of the chapter answers);
+  - callbacks (the scores-to-weights reminder, "the small constant multiple promised at the
+    start");
+  - six claims whose scope had drifted.
+  A fix that would have undone an author-approved rewrite was dropped.
+- **Records.** `VOICE.md` D11 now states the author's principle; the lecture notes inform the voice
+  rather than limiting it. The author's earlier rows are labelled author-approved. Every change in
+  this correction is in `audits/voice/stage_p25b_changes.md`, beside its original. The cumulative
+  list for the whole voice pass, against the book before it, is `audits/voice/stage_p25_changes.md`.
+- **Unchanged.** No code, math, printed output, figure or label changed.
+
 # Rolling post-v1.4: the author's voice, book-wide (October 1, 2026)
 
-- **The author's rewrites.** The author flagged 51 sentences, in four batches, as language that
-  "reads as AI-generated and not mine" or as unclear English, and wrote their replacements. Examples: "Before computing the
+- **Author-approved rewrites.** The author flagged 51 sentences, in four batches, as language that
+  "reads as AI-generated and not mine" or as unclear English, and approved their replacements. Examples: "Before computing the
   solution, we need to check rank, conditioning, and cost"; "We can estimate the gradient without
   evaluating every training example"; "DPO solves the optimal-policy relation for the reward, then
   substitutes that reward into the preference model"; "Only the correction is constrained to rank at
@@ -18,7 +48,7 @@
   Each sentence now puts the problem in front of the reader, says what changes, and follows the
   consequence.
 - **What stays.** Every candidate image was first looked up in the author's own lecture
-  transcripts and LaTeX notes. Images found there stay: the CNN chapter's detectives, the gradient
+  transcripts and LaTeX notes. Images found there stay, among them the CNN chapter's detectives, the gradient
   superhighway, trade-offs, a model's input and output "contract", and "The beautiful gradient".
 - **Unchanged.** No code, math, printed output, figure or label changed, and every printed number
   is byte-identical. Changed section headings keep their old URL anchors. The attention-bill
@@ -27,7 +57,8 @@
   `audits/voice/stage_p25_changes.md` lists every changed sentence beside its original. The report shows every sentence
   before and after, what stays and why, and 22 decisions left to the author, among them two
   chapter titles and the Statistical Learning appendix's title. `VOICE.md` gains D11, the author's
-  ruling, which overrides its old note that announcements are the author's voice.
+  ruling: remove commentary that substitutes for explanation, and keep brief orientation, earned
+  emphasis and callbacks that help the reader reason.
 
 # Rolling post-v1.4: the book PDFs are retired (September 30, 2026)
 

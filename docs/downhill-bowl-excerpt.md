@@ -301,5 +301,5 @@ Lecture paths are relative to
 
 | Source | SHA-256 |
 |---|---|
-| `chapters/part1/01-linear-regression.qmd` | `7573abb512f84a98b80dab7c7deede0fbba8f2ea3a234afbd9c388b180d511fb` |
+| `chapters/part1/01-linear-regression.qmd` | `9b0e8556030b1fb5f6babbaa3d0db39f00f95fdd180522c431c3f619a3510b7a` |
 | `6050-Ch1-enhanced/STORYBOARD.md` | `061e5954970c22dcb4dae6a353271e3e33237d31c90b6525577c1d01bcf0e28e` |

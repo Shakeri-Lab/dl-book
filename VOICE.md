@@ -26,10 +26,9 @@ A device that recurs as the same words becomes a template, and a template is the
 two-narrators problem again: the reader hears a formula instead of a person.
 
 - **V1 Local vocabulary.** Every added sentence is built from the chapter's own objects
-  and its own images, where the author's own lectures use them (the CNN chapter's detectives,
-  the gradient superhighway, a model's input and output contract). A sentence that could
-  be pasted into another chapter is not written yet. Under D11, bills, ledgers, report
-  cards, IOUs and currencies are not the author's images.
+  and its own images (the CNN chapter's detectives, the gradient superhighway, a model's
+  input and output contract). A sentence that could be pasted into another chapter is not
+  written yet.
 - **V2 No shared phrasing among added sentences.** No four-word sequence in two added
   sentences from different chapters. No two added promise sentences (T1) share their
   first three words; that rule exists to stop "By the end" and "you will be able to".
@@ -166,15 +165,17 @@ section we will", no emoji.
 - **D10** Transplant rules (T1 to T5) apply to Chapters 1 to 20 and the three
   interludes. The Preface, Part pages, Epilogue, and Appendices receive mechanical and
   subtraction rules only.
-- **D11 The author's voice (author's ruling, October 1, 2026).** "My voice is strongest when
-  I put a problem in front of the reader, identify what changes, and follow the
-  consequences." Prose never describes the book itself: no payoff announcements, no
-  remarks on the exposition or on editorial choices, no flourishes, no assurances that an
-  experiment is honest, and no arc vocabulary (promise, seed, harvest, IOU, debt, bill,
-  ledger, price list, report card, figurative "contracts"). An image stays only if the author's
-  own lecture transcripts or notes use it. The author's 51 rewrites and the book-wide pass are in
-  `audits/voice/stage_p25_report.md`. D11 overrides R9's old note on announcements and
-  the V1 metaphor list.
+- **D11 The author's voice (author's ruling, October 1, 2026).** The voice puts a problem
+  before the reader, follows its consequences, and pauses where something important becomes
+  visible. Remove commentary that substitutes for explanation. Retain brief orientation,
+  earned emphasis, and callbacks when they help the reader reason. So "That second clause is
+  the whole game" and the scores-to-weights reminder stay, while inflated "harvest",
+  "payoff" and "honesty" announcements go, as do remarks on the book's own plans, habits
+  and editorial choices. The author's lecture transcripts and notes inform the voice; they
+  are not a whitelist, and the voice may develop in the book beyond them. Unchanged code and
+  numerical output cannot certify unchanged claims in prose, so every prose edit gets a
+  paragraph-level reading for meaning. The author-approved rewrites and the book-wide pass
+  are in `audits/voice/stage_p25_report.md`. D11 overrides R9's old note on announcements.
 
 ## Rules
 
@@ -226,7 +227,7 @@ the invariants, then S, R, T.
 - **R9 Slips.** An unambiguous typo or punctuation slip in baseline text may be fixed,
   each with a receipt: a hyphen after an -ly adverb, a comma splice, a stray comma, a
   line break that Pandoc misreads as a list marker. Never a fragment: that is this
-  author's voice. Announcements are not (D11).
+  author's voice. Announcements that substitute for explanation are not (D11).
 - **N1** Never change code, outputs, math, figures, plan steps, front matter, licenses,
   citations, exercise tasks, numbers, claims, or replay fixture literals.
 - **N2** Edit sentences, not paragraphs. **N3** No device outside the kit.
