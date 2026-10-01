@@ -1,3 +1,26 @@
+# Rolling post-v1.4: prose that now matches its printouts (September 30, 2026)
+
+Twelve sentences in Chapters 8, 9, 10, 15, 16, 18 and 19 disagreed with the output or
+code printed beside them (Section B1 of `audits/voice/stage_p24_report.md`). Each takes
+the report's default fix. No cell was re-executed and every printed output is unchanged.
+
+- **Chapter 8.** Figure 8.3's caption now says half the entries of the drawn $4\times6$
+  matrix are zero (and nearly all would be for a real image); the alt text says "half
+  zeros". The equivariance check prints its difference with `:.1f`, so the prose now
+  says the difference prints as 0.0 instead of claiming exactly zero.
+- **Chapter 9.** The MLP's clean score in the rematch paragraph is 75.5%, as printed.
+- **Chapter 10.** The NiN comparison differs in its trunks, not its training recipe. The
+  full-data rematch's 0.22-point gap is larger than either arm's seed spread (0.08 for
+  scratch, 0.12 for fine-tuning) but too small, across three seeds, for a family-level
+  claim. Chapter 9 promised batch normalization and deferred it; it never used it.
+- **Chapter 15.** The packed encoder returns three things (state, memory and validity
+  mask). The scaled maximum weight stays between 0.24 and 0.25.
+- **Chapter 16.** Both the 0.4214 and the 0.0309 gaps are single-seed case studies. The
+  causal maps obey the contract to float precision, so "exactly" goes.
+- **Chapter 18.** The corrupted sequence ends in `[PAD]`, the slot the next paragraph's
+  padding mask blocks.
+- **Chapter 19.** The five paired seeds give ten result rows, all in one analysis.
+
 # Rolling post-v1.4: Parts II and IV prose pass (September 30, 2026)
 
 - **Colon leads and announcements (W1).** In Chapters 8, 9, 10, 14, 15, 16, 18 and 19, a
