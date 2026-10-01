@@ -17,12 +17,11 @@
            (running translator v2, the counterpart of Assignment 3's GRU seq2seq;
            a research bridge to sequence-level training). -->
 
-@sec-10-sequences-rnn ended with a promise: if one recurrent cell can read a sequence *into* a
-state, two cells can translate: one reads, one writes. This chapter builds that
+If one recurrent cell can read a sequence *into* a state, as in @sec-10-sequences-rnn,
+two cells can translate: one reads, one writes. This chapter builds that
 machine and the craft around it: how to train it fast (teacher forcing), what
 poisonous bookkeeping to avoid (padding), and how to get answers back out of it
-(greedy versus beam search). It ends where Part III must: staring at the fixed-size
-recurrent state in the middle.
+(greedy versus beam search).
 
 The components are not new. In the autoencoder interlude, an encoder compressed a fixed
 object and a decoder reconstructed it. Here both maps become recurrent processes. The
@@ -62,7 +61,7 @@ An **encoder** RNN reads the source sequence and
 keeps only its final state, the entire input compressed into fixed-size memory,
 the **context**. A **decoder** RNN starts *from* that state and generates the
 output token by token, feeding each token back in, exactly like the
-character model. A language model, in other words, but one with something to say.
+character model. A language model, in other words, conditioned on a source.
 
 Our laboratory task keeps the core mechanics of translation:
 **date normalization**. The source language is human-written dates in several
@@ -172,9 +171,8 @@ table with one trainable row per vocabulary entry. There is no new math: an
 embedding is exactly a one-hot vector times a weight matrix, a linear
 map wearing a lookup table's clothes, but the reading matters: *the address is
 hard, the content is learned*. Row 17 is fetched by index, rigidly; what lives in
-row 17 is whatever training decides that token should mean. Keep the phrase "hard
-address, learned content" nearby: attention softens the address too,
-and that will be the whole story.
+row 17 is whatever training decides that token should mean. Attention later softens
+the address too.
 
 :::: {.plan-code}
 ::: {.plan}
@@ -413,9 +411,8 @@ print(f"packed (true lengths): validation exact match "
 ::::
 Validation exact match jumps from 37.3% to 95.7%, a 58.4-point gap. Not from a better
 architecture, optimizer, or dataset; from telling the encoder where the sentences
-actually end. Let the gap sink in, because this is the cheapest lesson in the book:
-the two runs are identical except for bookkeeping, and the bookkeeping was worth more
-than every design decision in Part III so far. The sealed test set remains untouched
+actually end. The two runs are identical except for bookkeeping, and that bookkeeping was worth
+more than every design decision in Part III so far. The sealed test set remains untouched
 until both training-mode designs below are fixed.
 
 Take the naive model and one short validation
@@ -533,15 +530,14 @@ Packing is the masked update, minus the padded steps it never computes.
 Nothing in the tensor marks `<pad>` as meaningless; meaning is something *you*
 enforce, in two places: `ignore_index` for the loss, `pack_padded_sequence` (or an
 explicit mask) for the encoder. When a sequence model underperforms mysteriously,
-audit the padding before touching the architecture. And file the general shape of
-this tool away: telling a model *which positions it may not look at* is called
-**masking**, and it returns center-stage with the transformer,
-where a *causal* mask is what turns a transformer into a language model.
+audit the padding before touching the architecture. Telling a model *which positions it may not look at* is called
+**masking**. In a transformer, a *causal* mask is what turns the model into a
+language model.
 :::
 
 ## Teacher forcing: training on the gold rail
 
-Look back at the two `mode` branches in the training loop; they are this section.
+The two `mode` branches in the training loop above answer one question.
 When the decoder is trained, what should it see as *its own previous output*?
 
 **Free-running** ("fr") is the straightforward answer: feed the model's own predictions
@@ -629,7 +625,7 @@ for s, t, g in errs[:3]:
 The errors are plausible-looking digit substitutions and order slips. The decoder
 has learned a date-shaped language, but no hard mechanism forces each output field to
 copy the corresponding source fact. Off the gold rail, one wrong character can alter
-the context for every character after it. Hold that thought for two sections.
+the context for every character after it.
 
 ::: {.callout-note}
 ## Scheduled sampling: renting the rail
@@ -645,8 +641,8 @@ training lets consecutive errors amplify. Exercise 3 has you build it.
 
 ## Getting answers out: search
 
-Training is settled; now the neglected half. At inference the decoder defines a
-probability for every possible output sequence, and we want the best one. That is
+Given a trained decoder, we want to find the output sequence with the highest
+probability. That is
 a *search problem* over a tree where every node branches $V_{\text{tgt}}$ ways;
 exhaustive search is $V^{T}$, hopeless. Everything practical is a heuristic walk
 through that tree.
@@ -745,7 +741,7 @@ def beam_search(model: Seq2Seq, src: str, k: int = 5,
 
 ### Search exposes alternatives
 
-Now the payoff, and it is exactly where we buried it: the ambiguous dates. For
+The ambiguous dates give us a reason to keep more than one candidate. For
 `03/05/2021`, "the one best answer" is the wrong question. The training world
 itself was split 70/30 between two readings. Greedy silently hands you one
 sequence; beam search shows which complete alternatives the model ranks highly:
@@ -780,7 +776,7 @@ matches neither convention, a reminder that beam search searches the model;
 it does not install a rule that copies each source field. The ranking still exposes alternatives
 that greedy search hides.
 
-Honesty requires the other half of the report:
+Count how often beam search changes the greedy answer.
 
 :::: {.plan-code}
 ::: {.plan}
@@ -817,21 +813,20 @@ check the remaining error cases); in free-length generation it matters enormousl
 
 ## The fixed-size state in the middle
 
-Time to stare at the handoff. Every property of the source that the decoder will
+Every property of the source that the decoder will
 ever use crossed one bridge: $(\vect{h},\vect{c})$, two 128-dimensional vectors
 and therefore 256 scalars. Our task fits because a date is three facts, yet its
 residual digit and order errors are consistent with a decoder reconstructing from a
 compressed summary rather than consulting source positions directly. They do not,
 by themselves, prove that compression caused each error. Now scale the ambition: a
 forty-word sentence, clause structure, names, negations,
-all crammed through the same fixed pipe, *regardless of length*. The recurrence's
-Markov claim named this price; here the bill arrives itemized.
+all crammed through the same fixed pipe, *regardless of length*. That pipe is the finite
+memory of the recurrence's Markov claim.
 
 And notice what the architecture throws away: the encoder *had* a state at every
 step, a whole trajectory of summaries, one per source position, and we kept
-only the last. The fix that defines Part IV is almost embarrassingly direct: keep
-them all, and let the decoder *look back* at whichever ones matter for the token
-it is writing right now. Choosing where to look, by similarity, on the fly: the
+only the last. Keep them all, and let the decoder *look back* at whichever ones matter for the
+token it is writing right now. Choosing where to look, by similarity, on the fly: the
 primitive is a dot product, and a softmax turns it into a "soft lookup" that stays
 differentiable. @sec-12-kernel-regression
 builds the classical version; @sec-13-attention makes it learnable and comes back
@@ -869,7 +864,7 @@ Close the book for one minute and reconstruct the sequence pipeline from memory.
    carries $k$ rails for $O(k V T)$ and surfaces high-scoring alternatives. Its
    raw joint log scores are rankings, not a normalized posterior, and a beam can
    contain invalid hybrids. Length normalization ($L^{\alpha}$) keeps long outputs competitive.
-5. **The bottleneck is now the story.** One fixed-size $(\vect{h},\vect{c})$ pair,
+5. **The handoff is the bottleneck.** One fixed-size $(\vect{h},\vect{c})$ pair,
    256 scalars here, connects reader and writer regardless of input length. The
    encoder's per-step states were there all along. Part IV is what
    happens when we stop throwing them away.
@@ -878,7 +873,7 @@ Close the book for one minute and reconstruct the sequence pipeline from memory.
 
 - [Sutskever, Vinyals, & Le, *Sequence to Sequence Learning with Neural Networks*](https://proceedings.neurips.cc/paper_files/paper/2014/hash/5a18e133cbf9f257297f410bb7eca942-Abstract.html): the canonical fixed-state LSTM encoder–decoder and source-reversal result.
 - [Bengio et al., *Scheduled Sampling for Sequence Prediction with Recurrent Neural Networks*](https://proceedings.neurips.cc/paper/2015/hash/e995f98d56967d946471af29d7bf99f1-Abstract.html): the original exposure-bias intervention used in Exercise 3.
-- [Bahdanau, Cho, & Bengio, *Neural Machine Translation by Jointly Learning to Align and Translate*](https://arxiv.org/abs/1409.0473): removes the single-state bottleneck by learning where to look; @sec-13-attention performs the full harvest.
+- [Bahdanau, Cho, & Bengio, *Neural Machine Translation by Jointly Learning to Align and Translate*](https://arxiv.org/abs/1409.0473): removes the single-state bottleneck by learning where to look; @sec-13-attention builds that mechanism.
 - [Papineni et al., *BLEU: a Method for Automatic Evaluation of Machine
   Translation*](https://aclanthology.org/P02-1040/) (2002): modified $n$-gram
   precision, clipping, and the corpus-level brevity penalty used in Exercise 6.
@@ -917,15 +912,15 @@ For Exercise 8's research bridge, training on a sequence-level score:
    then score the ambiguous-date task's 70/30 output distribution with seed 6050.
    Compute corpus BLEU and the mean of sentence BLEU separately, verify the clipped
    counts on two hand-worked examples, and state which aggregation the evaluation
-   contract names. *Named wrong answer:* “average the sentence BLEUs”: corpus
+   should report. *Named wrong answer:* “average the sentence BLEUs”: corpus
    clipping and the brevity penalty do not commute with that mean.
-7. **(Code.)** **Running translator, v2.** Keep the corpus, split, and evaluation of
-   your ledger, and replace version 1's slot decoder with a recurrent decoder that
+7. **(Code.)** **Running translator, v2.** Keep version 0's corpus, split, and
+   evaluation, and replace version 1's slot decoder with a recurrent decoder that
    starts from the encoder's final state. Add `<bos>` and `<eos>` to the target
    vocabulary, pad targets per batch and exclude that padding from the loss with
    `ignore_index`, pack or mask the encoder, and train with teacher forcing. Decode
    the validation split greedily and with a beam of width 5, score both with your
-   BLEU from Exercise 6, and add the rows to your ledger. **(Audit.)** Break
+   BLEU from Exercise 6, and record them in your results log. **(Audit.)** Break
    validation BLEU down by source-length bucket for versions 1 and 2. Which version
    loses more on the longest bucket, and what does the curve say about asking one
    fixed-size handoff to carry a whole sentence?

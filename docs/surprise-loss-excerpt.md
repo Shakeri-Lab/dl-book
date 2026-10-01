@@ -102,8 +102,8 @@ Manuscript literals mirrored (verbatim, `chapters/part1/02-logistic-softmax.qmd`
 | `\loss_{\text{BCE}} = -\bigl[\, y \log \hat{p} + (1 - y)\log(1 - \hat{p}) \,\bigr].` | 89 |
 
 Three more strings the scene is built to make visible, bound by the suite rather than by
-the manifest: "exploding as the model's belief goes to zero." (93), "confident wrong
-answer is punished without mercy" (93–94), and `\frac{\partial \loss}{\partial o} =
+the manifest: "exploding as the model's belief goes to zero." (93), "confidently wrong
+the model is, the larger the loss" (the author's rewrite, October 1, 2026), and `\frac{\partial \loss}{\partial o} =
 \hat{p} - y` (103) — the last one because the suite checks it is in the chapter and
 *not* in this panel.
 
@@ -284,7 +284,7 @@ Lecture paths are relative to
 
 | Source | SHA-256 |
 |---|---|
-| `chapters/part1/02-logistic-softmax.qmd` | `2d3699d07de75db5bed590b39c28834cffda7ec5304276f0a1a3748a601b016f` |
+| `chapters/part1/02-logistic-softmax.qmd` | `65be2b942ec7dd7e5e18d577aabb131b18bcfc5142431fa2197ae98fcbe66e80` |
 | `6050-Ch2/STORYBOARD.md` | `16022632a6a90c8cb8f202ed8d51bd60490e040914fd732ef1e7090af9333e77` |
 | `6050-Ch2/lecture.jsx` | `025b275df2150cd71963358e332ff14d73d2a610d481b9606f6cc66ce5824eeb` |
 

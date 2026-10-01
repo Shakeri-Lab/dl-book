@@ -1,3 +1,32 @@
+# Rolling post-v1.4: the author's voice, book-wide (October 1, 2026)
+
+- **The author's rewrites.** The author flagged 30 sentences as language that "reads as
+  AI-generated and not mine" and wrote their replacements. Examples: "Before computing the
+  solution, we need to check rank, conditioning, and cost"; "We can estimate the gradient without
+  evaluating every training example"; "DPO solves the optimal-policy relation for the reward, then
+  substitutes that reward into the preference model". All 30 are in, with the small knock-on fixes
+  their neighbours needed.
+- **The same register, removed everywhere.** 560 more sentences across the Preface, the Part
+  openers, every chapter, the interludes, the epilogue and the appendices lose the editorial
+  language the author named:
+  - sentences that describe the book, its plans or its exposition;
+  - payoff announcements and flourishes;
+  - assurances that an experiment is honest;
+  - arc vocabulary: promise, seed, harvest, IOU, report card, rematch;
+  - figurative contracts, bills, ledgers and price lists.
+  Each sentence now puts the problem in front of the reader, says what changes, and follows the
+  consequence.
+- **What stays.** Every candidate image was first looked up in the author's own lecture
+  transcripts and LaTeX notes. Images found there stay: the CNN chapter's detectives, the gradient
+  superhighway, trade-offs, a model's input and output "contract", and "The beautiful gradient".
+- **Unchanged.** No code, math, printed output, figure or label changed, and every printed number
+  is byte-identical. Changed section headings keep their old URL anchors. The attention-bill
+  excerpt follows its renamed heading, and two excerpt tests follow the new Chapter 2 sentence.
+- **Records.** The gate report is `audits/voice/stage_p25_report.md`. It shows every sentence
+  before and after, what stays and why, and 22 decisions left to the author, among them two
+  chapter titles and the Statistical Learning appendix's title. `VOICE.md` gains D11, the author's
+  ruling, which overrides its old note that announcements are the author's voice.
+
 # Rolling post-v1.4: the book PDFs are retired (September 30, 2026)
 
 - **No more book PDFs.** The print, continuous and press editions are no longer built.

@@ -16,23 +16,21 @@
      not reproduced. Numerical claims from the lecture notes were re-derived against
      the primary papers before use. -->
 
-@sec-14-self-attention-transformer promised that **global routing trades away locality bias**. @sec-15-bert-pretraining
+@sec-14-self-attention-transformer warned that **global routing trades away locality bias**. @sec-15-bert-pretraining
 added two pieces: a learned summary token can gather a sequence for a downstream
-head, and **pretraining is a regime, not an architecture**. Let us collect those
-promises in one image. If a Transformer can read a sentence of words, what must
-change before it can read a photograph?
+head, and **pretraining is a regime, not an architecture**. A Transformer reads
+vectors in a sequence. How do we turn a photograph into such a sequence?
 
-Surprisingly little. Cut the image into patches, project each patch to a vector,
+Cut the image into patches, project each patch to a vector,
 and let the Transformer encoder read those vectors as tokens. That minimalist
-transplant is the [**Vision Transformer (ViT)**](https://arxiv.org/abs/2010.11929). Its simplicity, and the freedom it
-creates, is also the source of the interesting question. A convolutional network
+transplant is the [**Vision Transformer (ViT)**](https://arxiv.org/abs/2010.11929). A convolutional network
 arrives knowing that nearby pixels belong together and that one local detector
 should slide across the image.
-ViT arrives with a much weaker image-specific prescription. Which learner wins
+ViT arrives knowing much less about images. Which learner wins
 therefore depends not just on architecture, but on data, training, and scale.
 
-That word, *scale*, will change jobs halfway through the chapter. First it will mean
-making an image model deeper, wider, or higher-resolution. Then it will mean
+The word *scale* has two meanings. It can mean
+making an image model deeper, wider, or higher-resolution, or it can mean
 fitting empirical laws that connect loss to parameters, tokens, and training
 compute. The bridge between the two meanings is resource allocation: what should
 we enlarge, and what must grow with it?
@@ -204,8 +202,8 @@ axes[2].set_title("50 tokens × width 32")
 plt.tight_layout()
 plt.show()
 ```
-This identity is more than a coding shortcut. The patch projection is a learned,
-shared local operator: a thin residue of image structure at ViT's front door. What
+The identity means that ViT's patch projection is a learned,
+shared local operator, so some image structure survives at the input. What
 changes is what happens next: instead of stacking local feature maps, we hand the
 patch sequence to global self-attention.
 
@@ -241,7 +239,7 @@ $\matr{E}\in\mathbb{R}^{CP^2\times d}$ is the shared patch projection, and
 $\matr{E}_{\mathrm{pos}}\in\mathbb{R}^{(N+1)\times d}$ contains learned absolute
 position vectors.
 
-`[CLS]` is not a summary by birth. As in @sec-15-bert-pretraining, it is a
+`[CLS]` does not start as a summary. As in @sec-15-bert-pretraining, it is a
 **learned meeting place** whose downstream loss teaches it what to gather. Every
 encoder layer lets that row query the patch rows; after the final layer, a linear
 head reads its $d$ coordinates and produces class logits. The original ViT
@@ -279,12 +277,11 @@ decoder. Pre-LayerNorm gives gradients a cleaner residual path; it does not make
 optimization automatic. The original ViT training recipe still used learning-rate
 warmup.
 
-## Inductive bias strikes again
+## Locality: built in or learned {#inductive-bias-strikes-again}
 
-@sec-06-generalization-inductive-bias called constraints a form of knowledge. **Inductive bias strikes again,
-this time as a trade.** Convolution spends flexibility to buy locality and
-translation equivariance; ViT gives back much of that image-specific prior and
-must purchase useful geometry with data, optimization, or a new architectural
+@sec-06-generalization-inductive-bias called constraints a form of knowledge. Convolution trades flexibility for locality and
+translation equivariance; ViT gives back much of that image-specific prior, so
+useful geometry must come from data, optimization, or a new architectural
 constraint.
 
 | Convolutional network | Vision Transformer |
@@ -297,7 +294,7 @@ constraint.
 ViT carries less image-specific bias, not none. Patchification is
 local, the same projection is shared over the grid, positions identify slots, and the usual
 optimizer and architecture choices contribute biases of their own. ViT did not
-remove assumptions. It changed which assumptions were paid for in code and which
+remove assumptions. It changed which assumptions were built into code and which
 had to be learned from examples.
 
 That freedom has a computational price. Ignoring `[CLS]` for the cleanest count,
@@ -312,7 +309,7 @@ costs $O(N^2d)$, while the projections and feedforward layers contribute terms
 like $O(Nd^2)$. Which term dominates depends on both token count and width. The
 quadratic term becomes especially painful when resolution rises or patches shrink.
 
-## A Fashion rematch, not a referendum
+## CNN and ViT on 1,000 Fashion images {#a-fashion-rematch-not-a-referendum}
 
 The original ViT paper warns us that regime matters. Before looking at its large
 pretraining experiments, let us deliberately choose the opposite regime: 1,000
@@ -326,9 +323,6 @@ sequence. The convolutional baseline uses four $3\times3$ layers, two max pools,
 and global average pooling. Their parameter counts differ by about 3%. Both use
 the same initialization family, optimizer, update count, seed, and explicit
 minibatch order.
-
-The implementations below are derived independently from the chapter equations.
-There is no imported ViT package hiding extra training machinery.
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
@@ -451,7 +445,7 @@ The training protocol uses AdamW for 120 epochs, a cosine learning-rate schedule
 and batches of 100. For each seed, one explicit list of permutations is handed to
 both architectures. Resetting the seed before each model makes initialization
 reproducible; sharing the permutation list makes minibatch order exactly equal.
-The schedule hash makes that equality inspectable rather than aspirational.
+The printed schedule hash lets us check that equality.
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
@@ -561,8 +555,7 @@ cnn_macs = (
 print(f"dot-product/MAC proxy — CNN: {cnn_macs:,}; ViT: {vit_macs:,}")
 ```
 ::::
-The five paired runs use one cell per seed so that each training cell stays within
-the chapter's execution budget. The split is only operational: all ten rows enter
+Each seed trains in its own cell; all ten rows enter
 one analysis.
 
 :::: {.plan-code}
@@ -711,22 +704,21 @@ for axis in axes:
 plt.tight_layout()
 plt.show()
 ```
-The result is sharper than a one-number leaderboard; it separates fitting from
-generalization. The ViT interpolates the
+Training and validation accuracy rank the two models in
+opposite orders. The ViT interpolates the
 fitting set in every run (100.0% mean training accuracy) but averages 70.1% on clean
 validation images. The CNN fits only 87.9% of the training labels under the shared
 recipe yet averages 73.9% on validation, winning all five paired comparisons. On
 the already-opened 600-image benchmark, the same means are 73.3% and 77.9%.
 
 Under a four-pixel shift, the validation means separate much more: 25.2% for ViT
-and 58.9% for CNN. The zero-filled shift also clips garment content (a reminder
-that the right edge is lost) so neither curve measures pure translation
-equivariance. Still, the contrast
-is consistent across the five fitted pairs with what Chapters [-@sec-07-filters-convolution]–[-@sec-09-modern-cnns-transfer] built into the
+and 58.9% for CNN. The zero-filled shift also pushes garment content off the right edge, so neither curve measures pure translation
+equivariance. Still, across the five fitted pairs the contrast
+is consistent with what Chapters [-@sec-07-filters-convolution]–[-@sec-09-modern-cnns-transfer] built into the
 CNN: local sharing, pooling, and a position-discarding global-average head.
 
 ::: {.callout-warning}
-## Trap: a rematch is a regime, not a referendum
+## Trap: one regime, not a general ranking
 
 These runs match the data split, parameter scale, optimizer, update count,
 minibatch order, and seeds. Their dot-product counts are close as well. They do
@@ -739,7 +731,7 @@ experiment tells us what happened here; it does not rank CNNs and ViTs in genera
 
 ## Scale changes the comparison
 
-Now harvest @sec-15-bert-pretraining's second promise: **pretraining is a regime, not an
+Now test the claim of @sec-15-bert-pretraining that **pretraining is a regime, not an
 architecture**. ViT keeps the encoder pattern but changes the tokens, source data,
 and task. In the original work, the decisive source task was supervised image
 classification, not BERT-style masked prediction, and the amount of source data
@@ -757,7 +749,7 @@ prior. It demonstrates something narrower: the architecture
 ranking can reverse when the training regime changes. Our 1,000-example scratch
 run and the paper's large-source-pretraining run answer different questions.
 
-### Three places to buy back useful bias
+### Three places a prior can re-enter {#three-places-to-buy-back-useful-bias}
 
 Pure global attention is not the only possible endpoint. Later designs put useful
 image structure back in at different places.
@@ -768,15 +760,15 @@ image structure back in at different places.
 | Routing | [Swin Transformer](https://openaccess.thecvf.com/content/ICCV2021/html/Liu_Swin_Transformer_Hierarchical_Vision_Transformer_Using_Shifted_Windows_ICCV_2021_paper.html) | Shifted local windows and a hierarchy constrain attention and control resolution cost |
 | Training signal | DeiT | Strong augmentation and a convolutional teacher improve data efficiency without changing the student's basic patch encoder |
 
-[DeiT](https://proceedings.mlr.press/v139/touvron21a.html) makes a particularly human point. A teacher provides another target, but it
-does not replace the ground-truth label. A student can outgrow its
-teacher: it listens, sees other evidence, and decides for itself. In DeiT's
+[DeiT](https://proceedings.mlr.press/v139/touvron21a.html) adds a teacher. The teacher provides another target, but it
+does not replace the ground-truth label, so a student can outgrow its
+teacher. In DeiT's
 hard-distillation version, a distillation token learns from the teacher's predicted
 class while `[CLS]` learns from the true class; the two heads are combined at
 inference. The teacher changes supervision, not the identity of the student.
 
 [ConvNeXt](https://openaccess.thecvf.com/content/CVPR2022/html/Liu_A_ConvNet_for_the_2020s_CVPR_2022_paper.html)
-prevents a lazy conclusion in the opposite direction. Its study first
+approaches the comparison from the CNN side. Its study first
 modernized the training recipe, then progressively changed a ResNet toward design
 choices associated with contemporary Transformers. The training recipe alone
 raised the reported ResNet-50 ImageNet-1K accuracy from 76.1% to 78.8% before the
@@ -784,9 +776,9 @@ architectural sequence was complete. Architecture, augmentation, optimization,
 and data interact: “CNN versus Transformer” is rarely a comparison between two
 isolated operators.
 
-## The word “scaling” changes jobs
+## Scaling as design, scaling as forecast {#the-word-scaling-changes-jobs}
 
-We have now used *scaling* in two different ways. [EfficientNet](https://proceedings.mlr.press/v97/tan19a.html) asks how to enlarge
+*Scaling* names two different questions. [EfficientNet](https://proceedings.mlr.press/v97/tan19a.html) asks how to enlarge
 one architecture family under a compute multiplier.
 [Kaplan](https://arxiv.org/abs/2001.08361) and
 [Chinchilla](https://arxiv.org/abs/2203.15556) ask how
@@ -882,8 +874,8 @@ plt.tight_layout()
 plt.show()
 ```
 The constants are an empirical design choice from a particular search and model
-family, not a law that every network must obey. The budget discipline outlasts
-the constants: when several resources jointly limit performance, scaling one while
+family, not a law that every network must obey. The budget argument holds for any
+constants: when several resources jointly limit performance, scaling one while
 freezing the others can spend compute badly.
 
 ## A fitted power law, not a promise
@@ -1021,7 +1013,7 @@ three ways.
 
 The exact answers differ, especially under long extrapolation, but all three move
 much more of the growing budget toward data than Kaplan's $0.73/0.27$ allocation.
-That agreement is the central result, not one immortal ratio.
+That shift toward data is the central result, not one ratio.
 
 The third approach fits a joint loss surface:
 
@@ -1176,10 +1168,9 @@ $$
 
 That arithmetic is close to the actual Chinchilla design, but it is **not** the
 minimum of the rounded joint fit drawn above. Different fitting methods produced a
-broad range, and the authors made an engineering choice within it. Hiding that
-difference would make a heuristic look more exact than the evidence.
+broad range, and the authors made an engineering choice within it.
 
-The historical comparison makes the allocation tangible. Gopher used about 280
+Gopher used about 280
 billion parameters and 300 billion training tokens. Chinchilla used 70 billion
 parameters and 1.4 trillion tokens: four times fewer parameters and about 4.7
 times more tokens, at approximately the same reported training budget. The smaller,
@@ -1200,8 +1191,8 @@ the analysis.
 
 ## Where the forecast stops
 
-Scaling laws are powerful precisely because they compress many expensive runs into
-a small predictive object. That compression has boundaries.
+A scaling law compresses many expensive runs into
+a few fitted constants. That compression has limits.
 
 **Loss is not a capability map.** A smoother aggregate cross-entropy curve does
 not tell us that every downstream skill appears smoothly, or exactly when a
@@ -1214,15 +1205,15 @@ $D$ counts processed tokens; it does not measure novelty or truth.
 **The law is local to a recipe and range.** Change the architecture, optimizer,
 data mixture, context length, or evaluation distribution and the fitted constants
 can move. Extrapolation beyond the measured range adds uncertainty even when the
-line looks immaculate on log–log axes.
+line looks straight on log–log axes.
 
 **Training-optimal is not serving-optimal.** Chinchilla allocates a training
 budget; it does not make the resulting backbone cheap to store, run, or adapt.
-@sec-17-peft-quantization will harvest that mismatch: what can we change when
+That mismatch leads to @sec-17-peft-quantization: what can we change when
 moving every pretrained weight is no longer affordable?
 
-This closes Part IV's route from fixed lookup to global learned routing. We began
-with a memory bank, learned how to score it, let every token query every other
+We began
+with a memory bank in @sec-12-kernel-regression, learned how to score it, let every token query every other
 token, changed the visibility to pretrain representations, and finally let images
 enter as tokens. The operator was only half the story. The data and budget that
 train it are part of the model too.
@@ -1230,10 +1221,10 @@ train it are part of the model too.
 ::: {.callout-note}
 ## Check yourself
 
-Close the book for one minute and retrieve the chapter's three scales.
+Close the book for one minute and try each question below unaided.
 
 - For a 28×28 image with 4×4 patches, how many patch tokens appear before `[CLS]`?
-- Why does a matched toy CNN–ViT rematch describe a regime rather than declare a winner?
+- Why does a matched toy CNN–ViT comparison describe a regime rather than declare a winner?
 - Under fixed training compute, why must parameter count and token count be chosen together?
 :::
 
@@ -1246,11 +1237,11 @@ Close the book for one minute and retrieve the chapter's three scales.
    `[CLS]` meeting place, learned positions, pre-LayerNorm blocks, and a linear
    head reuse the Transformer pattern while retaining a small set of image and
    optimization biases.
-3. **Inductive bias is a trade.** The five-seed Fashion rematch favors the CNN on
-   clean validation and much more strongly under shift, but it is a tiny scratch
-   regime, not an architecture referendum. Large supervised pretraining changed
+3. **Inductive bias is a trade.** The five-seed Fashion comparison favors the CNN on
+   clean validation and much more strongly under shift, but it covers one tiny scratch
+   regime and ranks no architecture in general. Large supervised pretraining changed
    the comparison in the original ViT study.
-4. **Architecture and recipe cannot be cleanly collapsed into a brand name.**
+4. **Architecture and recipe cannot be cleanly separated.**
    Hybrid stems, windowed routing, distillation, and ConvNeXt put priors in
    different places. Data, optimization, and operator design interact.
 5. **Scaling has two meanings here.** EfficientNet's compound rule coordinates
