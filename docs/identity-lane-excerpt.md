@@ -55,8 +55,8 @@ carries both, and the dial then shows that every slope simply adds to the lane's
 | `data-range` | −1 to 1 | declared: the dial's range |
 | `data-evidence-class` | `declared-toy` | the chapter prints no Jacobian |
 
-The chapter literals bound in the manifest are the one-change sentence ("The one change: each
-block computes $F(x)$ and outputs $F(x) + x$."), `H(x) = F(x) + x`, the gradient line of the
+The chapter literals bound in the manifest are the one-change sentence ("The one change is
+that each block computes $F(x)$ and outputs $F(x) + x$."), `H(x) = F(x) + x`, the gradient line of the
 residual equation, the two sentences of the "not magical" caveat, and "to represent: $F = 0$."
 The panel's formula is the chapter's gradient line with its two bracketed terms wrapped in
 `\class{il-branch}` and `\class{il-lane}`; the suite strips the wrappers and finds the chapter's
@@ -122,8 +122,8 @@ branch's weights and nothing else: only the outline of F wears it. Ink is the id
 the sum, the slope written on F, the dial and the head-to-tail ties; blue is x and H(x), and the
 forward pass in the first beat; the wires and the scale are grey. The formula washes, in ink,
 the term each copy is travelling through, and only the branch's term while its slope moves.
-The chapter's matplotlib figure draws the identity path and the sum in its house orange; the
-panel follows the book palette and keeps orange for the learned weights.
+The chapter's matplotlib figure, redrawn at the author's request, now draws the identity path
+and the sum in ink as well; both follow the book palette and keep orange for the learned weights.
 
 ## Teaching boundary
 
@@ -136,8 +136,8 @@ chapter's block applies a ReLU after the sum, which the equation and this pictur
 that a stack multiplies these per-block factors, so many blocks keep a gradient near its size
 only while their learned slopes stay small, and that the chapter's measurement, residual
 gradients within one order of magnitude, is of whole networks rather than of any one factor
-drawn here; the key to the arrows, the rings and the colours; and that the chapter's figure
-draws the identity path in its house orange.
+drawn here; the key to the arrows, the rings and the colours; and that the chapter's figure,
+like this panel, draws the identity path in ink.
 
 Deliberately left out: the depth sweep of stem gradients (the `fig-gradient-highway` chart, its
 depth-48 values and the float32 note), the plain-versus-residual training experiment and its
@@ -185,6 +185,6 @@ Lecture paths are relative to the lecture repository root.
 
 | Source | SHA-256 |
 |---|---|
-| `chapters/part2/09-modern-cnns-transfer.qmd` | `864504f45d12b5d736b5af154cc9f85891a1b01e3241ef4e30feec9dfa0d29a8` |
+| `chapters/part2/09-modern-cnns-transfer.qmd` | `ebb477399efdfe14c60715434e09ee7af68dbe5f3bfc77ad6c570b07fe9c49c1` |
 | `6050-Ch9/lecture.jsx` | `446a5c3f889149b46f5fe275c37414d3240bb1b4dc27b347e9212d9f0527402a` |
-| `6050-Ch9/STORYBOARD.md` | `159fdb5484a5c8877ff04e1b7f7981bbf8bf4987b31d75c57a0019be95143da8` |
+| `6050-Ch9/STORYBOARD.md` | `ebe6a9b53bd79c911bb967e84538a8c2a261d3db4db439313de291fc78f2ee5e` |

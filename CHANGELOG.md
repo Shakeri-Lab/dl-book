@@ -1,3 +1,54 @@
+# Rolling post-v1.4: Parts II and IV prose pass (September 30, 2026)
+
+- **Colon leads and announcements (W1).** In Chapters 8, 9, 10, 14, 15, 16, 18 and 19, a
+  label or verbless gloss before a colon becomes a clause ("So: declare the kernel" →
+  "So we declare the kernel"; "Out-channels: more detectives" → "Out-channels add
+  detectives"), and frames that only announce the next sentence go ("is worth stating
+  precisely", "This distinction matters", "Remember the question"). Where a frame
+  carried a reason, the reason stays and the frame goes. "Here is …" openers stay.
+- **Accounting words (W6).** "Ledger" is gone from the reader text of these pages
+  (shape, receptive-field, multiply–accumulate, byte, dot-product and Boolean ledgers
+  become counts, rows or shapes; the bert-ledger replay keeps its wording for the scene
+  wave). Two Chapter 9 seeds and their harvests are rewritten together. Pooling's
+  discarded *where* now has to be "put back in explicitly" (harvested in Chapters 15 and
+  16; the Section 16.1 subsection "The position debt" now reads "Self-attention does not
+  see order", and its old anchor `#the-position-debt` still resolves). The CNN now
+  "reaches" global sight through depth instead of buying it (harvested in Chapter 15).
+  Chapter 10's "Recall the receptive-field ledger" follows Chapter 9's new "the count
+  runs", and its "bills", "the deal", "the promised payoff", "pay rent" and "tax the
+  donation" give way to parameter counts, the saving, the promised benefit, "help" and
+  "shrink". `docs/arc-seeds.md` rows 34 and 36 follow. Organizing devices (Chapter 9's tolerance
+  trade and IOU, Chapter 14's price list, the transfer rule's "transfer pays when" in
+  Chapters 10 and 18, Chapter 19's inductive-bias trade) are listed for the author, not
+  rewritten.
+- **Links at first mention (W7).** Each work a chapter names in its running prose now
+  links there, to the same URL as its Sources entry: LeNet (LeCun et al.) in Chapter 9;
+  batch normalization, VGG, ResNet, NiN, GoogLeNet, DenseNet, Fashion-MNIST, SqueezeNet
+  and ImageNet in Chapter 10, whose Sources gain Szegedy et al., *Going Deeper with
+  Convolutions*;
+  Nadaraya, Watson and the six test-time-regression works in Chapter 14; Luong,
+  Vaswani and Bahdanau in Chapter 15; the Transformer, RoPE, LayerNorm, RMSNorm and
+  nucleus sampling in Chapter 16; BERT, ELMo, ULMFiT, GPT, RoBERTa, BPE, the released
+  BERT code and T5 in Chapter 18; ViT, Swin, DeiT, ConvNeXt, EfficientNet, Kaplan et
+  al. and Chinchilla in Chapter 19. Chapter 14's *Beyond Test-Time Memory* entry now
+  points at arXiv:2603.09221.
+- **A worked instance for the correspondence table (W8).** After Chapter 14's
+  kernel-regression/sequence-memory table, one paragraph walks the opening example
+  ($q=3.5$, keys 1, 3, 5, weights $(0.0002, 0.9413, 0.0585)$, output $2.7412$)
+  through the roles and points to Chapter 13's date task for the other column.
+- **The author's figure and wording requests.**
+  - Figure 9.3 is titled "Receptive fields by depth" and gains the 6×6 field after the first pool (the chapter's 5 → 6 → 14 → 16 count). Ink and blue replace orange, which the palette keeps for learnable parameters, and pooling stages are dotted.
+  - Figure 10.3 now draws the residual block as `Block` builds it: the identity stream is the straight line, the learned branch $F(x)$ runs below it, and the output is ReLU$(x+F(x))$. The caption says the final ReLU still gates the shortcut and cites pre-activation ResNets (He et al., 2016, added to Sources).
+  - Both figures were redrawn with a standalone pipeline that first reproduced the committed PNGs byte for byte and their PDFs pixel for pixel.
+  - Chapter 8's equivariant/invariant definitions become a two-item list.
+  - Chapter 9 names the MLP layer instead of pointing to Chapter 3.
+  - Chapter 10's BN sentence matches its printout ("at every printed depth"), and the DenseNet aside moves after the residual block.
+  - Figure 9.5's colour bar waits for the next reference-machine run.
+- **Scene fixtures.** The `what-where`, `sobel-split`, `stacked-sight` and
+  `identity-lane` scenes' bound literals follow the Chapter 8, 9 and 10 sentences they
+  quote; the `both-axes` scene anchors on the renamed subsection heading in Section 16.1.
+  No printed output changes: `audit_frozen_stdout.py --base 4828b2e` passes.
+
 # Rolling post-v1.4: Chapter 22 exposition (September 30, 2026)
 
 - **The variational family is a choice.** The sentence before Equation 22.2 names the

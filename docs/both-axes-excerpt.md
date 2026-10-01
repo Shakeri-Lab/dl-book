@@ -4,7 +4,7 @@
 
 An optional, HTML-only mechanism excerpt for `chapters/part4/14-self-attention-transformer.qmd`
 (file-prefix Chapter 14, printed Chapter 16), in the section "Let the sequence query itself"
-(printed §16.1). It is anchored `before-heading` "The position debt": after the paragraph
+(printed §16.1). It is anchored `before-heading` "Self-attention does not see order": after the paragraph
 ending "one new token at a time.", about twelve source lines below the
 `fig-self-attention-read` cell, and above the slogan and the proof. The PDF is untouched:
 `filters/mechanism-excerpts.lua` returns `{}` for any non-HTML format on its first
@@ -292,7 +292,8 @@ involution whose diagonal needs rows readers never see) stay out of the check.
 
 ## Placement
 
-`before-heading` "The position debt" (l.174; an exact, unique H3 with no `{#…}`; the filter
+`before-heading` "Self-attention does not see order" (l.174; an exact, unique H3, renamed from "The position debt" in the
+Parts II + IV prose pass and pinned to its old `{#the-position-debt}` id; the filter
 places panels before level-2 and level-3 headings). It lands after the paragraph ending "one
 new token at a time." (l.169–172), about twelve source lines below the
 `fig-self-attention-read` cell (which ends at l.162), and above the slogan (l.176) and the
@@ -445,7 +446,7 @@ the author's Box folder `Teaching/6050/`) before changing anything.
   - a browser check of the anchor at 1280 and 375 px.
 - **If the chapter changes**, the digest below goes stale and the fixture audit fails. Re-read the
   twenty literals against the new text, then run `scripts/refresh_excerpt_receipts.py`. The anchor
-  depends on the H3 "The position debt" keeping its exact text.
+  depends on the H3 "Self-attention does not see order" keeping its exact text.
 
 ## Source digests
 
@@ -454,7 +455,7 @@ from that tree itself on 2026-09-29.
 
 | Source | SHA-256 |
 |---|---|
-| `chapters/part4/14-self-attention-transformer.qmd` | `3fd63a0d28e38d3c44b7479d73e254b885efc64784ab98eac4157c79821bd41a` |
+| `chapters/part4/14-self-attention-transformer.qmd` | `930032b18b611956da49d68dc51fa0971ad7e1505dde193c28faf65587faca63` |
 | `6050-Ch14/lecture.jsx` | `ac103ade3aecf01355955a24a1a2042cd9c58d6a434b39dd7ef6e680ee0fce93` |
 | `6050-Ch14/STORYBOARD.md` | `cd493a87b78f9f2fcd705bd2385bf4f8651bb3a9472e44b120838fffa81b1324` |
 | `6050-Ch14/ch14-data.js` | `df6cfab3b0b92b5e9eaf634ae82a229f42dfa32030600bc0016ef90d7b11ff39` |

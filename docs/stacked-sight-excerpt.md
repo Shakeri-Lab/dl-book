@@ -9,8 +9,8 @@ more nonlinearity." and before the `kernel-economics` cell. The PDF is untouched
 > Two 3 × 3 convolutions are stacked. How much of the input can one output of the second
 > layer see, and what does that sight cost against a single kernel?
 
-The chapter asserts the equal receptive field by recalling Chapter 8's ledger; the motion
-shows why. Traced back from one output pixel, the second convolution reads a 3 × 3 window
+The chapter asserts the equal receptive field by recalling from Chapter 8 that stacking grows
+the field; the motion shows why. Traced back from one output pixel, the second convolution reads a 3 × 3 window
 of the hidden map, and each of those nine hidden pixels read its own 3 × 3 window of the
 input. Their union, swept one window at a time, is 5 × 5: 3 + (3 − 1). The single 5 × 5
 kernel then lands on the same patch. Only after that does the cost question come.
@@ -55,4 +55,4 @@ stack.
 
 | Source | SHA-256 |
 |---|---|
-| `chapters/part2/09-modern-cnns-transfer.qmd` | `864504f45d12b5d736b5af154cc9f85891a1b01e3241ef4e30feec9dfa0d29a8` |
+| `chapters/part2/09-modern-cnns-transfer.qmd` | `ebb477399efdfe14c60715434e09ee7af68dbe5f3bfc77ad6c570b07fe9c49c1` |

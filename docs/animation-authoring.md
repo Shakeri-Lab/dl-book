@@ -47,7 +47,7 @@ records what changed and what was declined.
 **Prior source state (September 29, 2026, morning):** forty-seven scenes are registered in
 `interactives/manifest.json`. The two newest come from the author's request for the next two
 chapters with films. [A weight moves with its query's row and its key's
-column](both-axes-excerpt.md) sits in Chapter 16 before "The position debt". [Every round counts
+column](both-axes-excerpt.md) sits in Chapter 16 before "Self-attention does not see order". [Every round counts
 the pairs again](pair-recount-excerpt.md) sits in Chapter 18 before the BPE code. An assessor and
 three critics judged all 28 unshipped scenes of films `6050-Ch14` and `6050-Ch15`; see the
 September 29 section of `docs/backlog.md`. Both receipts end with notes for a future edit.
