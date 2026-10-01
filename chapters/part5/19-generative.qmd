@@ -130,7 +130,7 @@ plt.show()
 
 The first answer is to put an explicit probability law around the code.
 
-## Put probability around the code
+## Variational autoencoders (VAEs): put probability around the code {#put-probability-around-the-code}
 
 A **variational autoencoder (VAE)** begins by defining generation, not reconstruction.
 Let $\vect{z}\in\mathbb{R}^{k}$ be a latent variable with a chosen prior, commonly
@@ -161,7 +161,9 @@ on this path; it belongs to inference and training.
 Training is harder because the posterior
 $p_\theta(\vect{z}\mid\vect{x})$ in Bayes' rule contains the integral in
 @eq-vae-marginal. A VAE introduces an **approximate posterior**, or inference model,
-whose parameters come from an encoder:
+whose parameters come from an encoder. The distribution family for $q_\phi$ is a
+modeling choice; we use the common diagonal Gaussian, with its own mean and variance for
+each latent coordinate:
 
 $$
 q_\phi(\vect{z}\mid\vect{x})
@@ -441,6 +443,20 @@ Randomness has not disappeared; it has moved into a parameter-independent input,
 the path from $\vect{\mu}_\phi$ and $\vect{\sigma}_\phi$ to $\vect{z}$ is now
 differentiable.
 
+The move does not need a Gaussian. [Kingma and Welling](https://arxiv.org/abs/1312.6114)
+state it for any draw that can be written as
+
+$$
+\vect{z}=g_\phi(\vect{x},\vect{\epsilon}),
+\qquad \vect{\epsilon}\sim r,
+$$
+
+where the base distribution $r$ does not depend on the learned parameters and $g_\phi$
+is differentiable in them. Any location–scale family with a fixed standardized base
+qualifies, since each of its draws is a shift and a scale of one base draw. What does
+not carry over is the closed form in @eq-vae-diagonal-kl: another family needs its own
+KL, or a Monte Carlo estimate of it.
+
 ::: {.callout-tip}
 ## Reparameterization hygiene
 
@@ -457,13 +473,14 @@ also make $q_\phi(\vect{z}\mid\vect{x})$ ignore $\vect{x}$, a failure called
 **posterior collapse**. A VAE supplies a probability contract; its fit and coverage
 still need evaluation.
 
-## An adversarial detour: let the judge move
+## Generative adversarial networks (GANs): let the judge move {#an-adversarial-detour-let-the-judge-move}
 
 A VAE writes down a latent-variable likelihood and optimizes a lower bound. A
 **generative adversarial network (GAN)** takes a different route: a generator
 $G_\theta$ turns noise $\vect{z}\sim p_z$ into samples. A discriminator
-$D_\phi(\vect{x})\in[0,1]$ tries to separate data from generated samples (a finite
-sigmoid parameterization stays inside that interval):
+$D_\phi(\vect{x})\in[0,1]$ (a finite sigmoid parameterization stays inside that
+interval) is a binary classifier: it tries to separate data from generated samples, and
+its output is the probability it assigns to $\vect{x}$ being real data:
 
 $$
 \min_\theta\max_\phi
@@ -473,6 +490,9 @@ $$
 \E_{\vect{z}\sim p_z}\log\left(1-D_\phi(G_\theta(\vect{z}))\right)
 \right\}.
 $$ {#eq-gan-minimax}
+
+Write $V(D_\phi,G_\theta)$ for the expression inside the braces and $V(D,G)$ for the
+same sum when $D$ is any function into $[0,1]$ rather than a network.
 
 Here the @sec-18-alignment distinction returns with a twist: the judge and generator both
 move. The discriminator is not a fixed reward model, and its score is not a stationary
@@ -484,7 +504,25 @@ while gradients pass through the current $D_\phi$ to update $G_\theta$. Each pla
 learns against a moving opponent.
 
 For fixed generator density $p_g$ and an unrestricted discriminator, the maximizer can
-be found point by point:
+be found point by point. When $\vect{z}\sim p_z$, the sample
+$\vect{x}=G_\theta(\vect{z})$ has density $p_g$, so the second expectation in $V$ is an
+expectation over $\vect{x}\sim p_g$:
+
+$$
+V(D,G)
+=\int\Big[p_{\mathrm{data}}(\vect{x})\log D(\vect{x})
++p_g(\vect{x})\log\big(1-D(\vect{x})\big)\Big]\,d\vect{x}.
+$$
+
+At each $\vect{x}$, write $a=p_{\mathrm{data}}(\vect{x})$, $b=p_g(\vect{x})$, and
+$u=D(\vect{x})$. For positive $a$ and $b$, the integrand $a\log u+b\log(1-u)$ is concave
+in $u\in(0,1)$, so its maximum is the stationary point where
+
+$$
+\frac{a}{u}-\frac{b}{1-u}=0,
+$$
+
+namely
 
 $$
 D^*(\vect{x})
@@ -492,21 +530,36 @@ D^*(\vect{x})
 {p_{\mathrm{data}}(\vect{x})+p_g(\vect{x})}.
 $$ {#eq-gan-optimal-discriminator}
 
-This expression applies where $p_{\mathrm{data}}(\vect{x})+p_g(\vect{x})>0$.
-Outside their combined support, the objective does not identify $D^*$.
+This expression applies where $p_{\mathrm{data}}(\vect{x})+p_g(\vect{x})>0$; where
+only one of the two is zero, the maximum is the endpoint $u=1$ or $u=0$, which the same
+formula gives. Outside their combined support, the objective does not identify $D^*$.
 
-Substituting $D^*$ into the value gives
+Substituting $D^*$ into $V$, with the mixture
+$m=\tfrac12(p_{\mathrm{data}}+p_g)$, so that $D^*=p_{\mathrm{data}}/(2m)$ and
+$1-D^*=p_g/(2m)$, splits a $-\log 2$ off each logarithm; each density integrates to
+one, so
 
 $$
 V(D^*,G)
 =-\log 4
-+2D_{\mathrm{JS}}(p_{\mathrm{data}}\,\|\,p_g),
++D_{\mathrm{KL}}(p_{\mathrm{data}}\,\|\,m)
++D_{\mathrm{KL}}(p_g\,\|\,m).
+$$
+
+The Jensen--Shannon divergence is the average of those two KL terms,
+$D_{\mathrm{JS}}(p_{\mathrm{data}}\,\|\,p_g)
+=\tfrac12D_{\mathrm{KL}}(p_{\mathrm{data}}\,\|\,m)
++\tfrac12D_{\mathrm{KL}}(p_g\,\|\,m)$, so their sum is twice it:
+
+$$
+V(D^*,G)
+=-\log 4
++2D_{\mathrm{JS}}(p_{\mathrm{data}}\,\|\,p_g).
 $$ {#eq-gan-js}
 
-where $D_{\mathrm{JS}}$ is Jensen--Shannon divergence. The ideal function-space
-minimum occurs at $p_g=p_{\mathrm{data}}$, where $D^*=1/2$, an observed neural
-discriminator near one half does not certify that equilibrium; it may also be weak,
-undertrained, or locally confused.
+The ideal function-space minimum occurs at $p_g=p_{\mathrm{data}}$, where $D^*=1/2$.
+An observed neural discriminator near one half does not certify that equilibrium; it
+may also be weak, undertrained, or locally confused.
 
 <!-- NOVEL: needs sign-off -->
 
@@ -619,10 +672,13 @@ can be delicate; a generator may map many inputs into only a few data modes. Tha
 **mode collapse** is a coverage failure. A discriminator loss alone will not tell us
 which modes are missing.
 
-## Destroy data on purpose
+## Diffusion models: corrupt, then generate {#diffusion-models-corrupt-then-generate}
+
+### Destroy data on purpose {#destroy-data-on-purpose}
 
 Diffusion begins with a procedure that looks backward: add noise until structure is
-almost gone. The **forward process** is fixed, not learned. Choose a schedule
+almost gone. In the formulation used here, the **forward, or noising, process** is
+fixed, not learned. Choose a schedule
 $0<\beta_t<1$ for $t=1,\ldots,T$, and define
 
 $$
@@ -810,7 +866,7 @@ detail matters when generation starts from $p(\vect{x}_T)=\mathcal{N}(\vect{0},
 \matr{I})$: the schedule must make this starting law a good approximation to the
 actual forward marginal $q(\vect{x}_T)$.
 
-## Learn the path back
+### Learn the path back {#learn-the-path-back}
 
 If the clean $\vect{x}_0$ were known, Gaussian conditioning would give the exact
 posterior for one reverse step:
@@ -1027,7 +1083,7 @@ fixed or learned. State the schedule, parameterization, variance choice, and sta
 law before treating “diffusion loss” as one universal object.
 :::
 
-### Why the denoiser needs time
+#### Why the denoiser needs time {#why-the-denoiser-needs-time}
 
 The same observed value can mean different things at different noise levels. Near the
 first noising step, a point beside $+2$ is probably a lightly perturbed right-mode
