@@ -539,7 +539,7 @@ window.Quarto = {
   <span class="chapter-tools__label">Chapter tools</span>
   <span class="chapter-tools__items"><a class="chapter-tools__link" data-kind="specific" href="https://www.youtube.com/watch?v=-R64Wg5Sgsc">Lecture 5 · Modern CNN Architectures and Transfer Learning</a><span class="chapter-tools__separator" aria-hidden="true">·</span><a class="chapter-tools__link" data-kind="notebook-download" href="../../notebooks/09-modern-cnns-transfer.ipynb" download="">Download notebook</a><span class="chapter-tools__separator" aria-hidden="true">·</span><a class="chapter-tools__link" data-kind="colab" href="https://colab.research.google.com/github/Shakeri-Lab/dl-book/blob/gh-pages/notebooks/09-modern-cnns-transfer.ipynb" target="_blank" rel="noopener">Open in Colab<span class="visually-hidden"> (opens in a new tab)</span></a></span>
 </aside>
-<p><a href="08-cnn.html" class="quarto-xref"><span>Chapter 9</span></a> ended with a working machine and a report card. LeNet reads garments at 82.5% with 61,706 parameters; graceful under shift where the MLP cliff-dived. But the card has two demerits we wrote down explicitly: 96% of those parameters sit in the dense head rather than in the convolutions that do the seeing, and the shift cliff was softened, not abolished. And one IOU: batch normalization, promised for this chapter.</p>
+<p><a href="08-cnn.html" class="quarto-xref"><span>Chapter 9</span></a> ended with a working machine and a report card. LeNet reads garments at 82.5% with 61,706 parameters; graceful under shift where the MLP cliff-dived. But the card has two demerits we wrote down explicitly: 96% of those parameters sit in the dense head rather than in the convolutions that do the seeing, and the shift cliff was softened, not abolished. And one IOU: <a href="https://proceedings.mlr.press/v37/ioffe15.html">batch normalization</a>, promised for this chapter.</p>
 <p>What happened after LeNet is a decade of architecture research, and it can drown you in named networks. Four design questions will keep the mechanism visible; we let them drive:</p>
 <ol type="1">
 <li><strong>Why <span class="math inline">\(5 \times 5\)</span>?</strong> Could smaller filters do the same job with fewer parameters?</li>
@@ -547,7 +547,7 @@ window.Quarto = {
 <li><strong>Where do the parameters actually live</strong>, and how do we evict them?</li>
 <li><strong>Can we design reusable blocks</strong>: optimized layer combinations we stack, keeping a bird’s-eye view instead of re-designing what already works?</li>
 </ol>
-<p>Each question has a famous answer (VGG, ResNet, NiN’s <span class="math inline">\(1\times1\)</span> + global pooling, and the block habit itself), and each answer is a constraint-shaped idea we can test on our own data. At the end, the practical superpower this sequence builds to, reusing a pretrained backbone, gets the most honest experiment in this book.</p>
+<p>Each question has a famous answer (<a href="https://arxiv.org/abs/1409.1556">VGG</a>, <a href="https://openaccess.thecvf.com/content_cvpr_2016/html/He_Deep_Residual_Learning_CVPR_2016_paper.html">ResNet</a>, <a href="https://arxiv.org/abs/1312.4400">NiN</a>’s <span class="math inline">\(1\times1\)</span> + global pooling, and the block habit itself), and each answer is a constraint-shaped idea we can test on our own data. At the end, the practical superpower this sequence builds to, reusing a pretrained backbone, gets the most honest experiment in this book.</p>
 <div id="fig-cnn-building-blocks" class="responsive-wide-opt-in quarto-float quarto-figure quarto-figure-center anchored" alt="A diagram with one row per block design and three columns: compose a block, repeat it, add a head. VGG-style row: a 3-by-3 convolution, batch normalization, and ReLU, heavily outlined as a unit and applied twice, then 2-by-2 max pooling; the block repeats twice, with 16 and then 32 channels; the head is flatten, linear 1568 to 128, ReLU, linear 128 to 10. NiN row: a 3-by-3 convolution, batch normalization, and ReLU, then two heavily outlined 1-by-1 convolutions, each followed by ReLU; the block repeats three times, with 16, 32, and 64 channels and max pooling between; the head is a heavily outlined global average pooling, then flatten and linear 64 to 10. Residual row: a 3-by-3 convolution, batch normalization, ReLU, a second 3-by-3 convolution, and batch normalization lead into a heavily outlined sum; a heavily outlined identity route carries the block input forward, above the branch, into the same sum, and a ReLU follows; the block repeats twenty times with 12 channels, after a convolution stem and max pooling; the head is global average pooling, flatten, and linear 12 to 10.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-cnn-building-blocks-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -621,16 +621,16 @@ Figure&nbsp;10.1: The chapter’s construction grammar, one row per block design
 </div>
 </div>
 <p><a href="08-cnn.html" class="quarto-xref"><span>Chapter 9</span></a> already opened the 600-image holdout, and this chapter queries it repeatedly while comparing architectures, so we keep the familiar <code>X_te</code> name but treat it as the book’s fixed <strong>benchmark</strong>. These comparisons are descriptive, not an unbiased estimate after model selection; a final claim would require a fresh, untouched test set.</p>
-<p>Two small novelties in the recipe, both because this chapter’s networks contain batch normalization: <code>model.train()</code> before each step and <code>model.eval()</code> before each evaluation. Why that matters is the subject of the second section.</p>
+<p>The recipe has two small novelties, both because this chapter’s networks contain batch normalization: <code>model.train()</code> before each step and <code>model.eval()</code> before each evaluation. Why that matters is the subject of the second section.</p>
 <section id="question-1-why-5-times-5-stack-small-kernels-instead" class="level2" data-number="10.1">
 <h2 data-number="10.1" class="anchored" data-anchor-id="question-1-why-5-times-5-stack-small-kernels-instead"><span class="header-section-number">10.1</span> Question 1: why <span class="math inline">\(5 \times 5\)</span>? Stack small kernels instead</h2>
-<p>VGG’s answer (Simonyan &amp; Zisserman, 2014): never use a <span class="math inline">\(5 \times 5\)</span> kernel; stack <span class="math inline">\(3 \times 3\)</span>s until the field is as wide as you need. Recall the receptive-field ledger of <a href="08-cnn.html" class="quarto-xref"><span>Chapter 9</span></a>: stacking grows the field. Two stacked <span class="math inline">\(3 \times 3\)</span> convolutions let the second layer see <span class="math inline">\(5 \times 5\)</span> of the input, the <em>same</em> receptive field as one <span class="math inline">\(5 \times 5\)</span> kernel. But compare the bills, for a layer with <span class="math inline">\(C\)</span> channels in and <span class="math inline">\(C\)</span> out:</p>
+<p>VGG (Simonyan &amp; Zisserman, 2014) answers with a rule: never use a <span class="math inline">\(5 \times 5\)</span> kernel; stack <span class="math inline">\(3 \times 3\)</span>s until the field is as wide as you need. Recall from <a href="08-cnn.html" class="quarto-xref"><span>Chapter 9</span></a> that stacking grows the receptive field. Two stacked <span class="math inline">\(3 \times 3\)</span> convolutions let the second layer see <span class="math inline">\(5 \times 5\)</span> of the input, the <em>same</em> receptive field as one <span class="math inline">\(5 \times 5\)</span> kernel. But compare the parameter counts, for a layer with <span class="math inline">\(C\)</span> channels in and <span class="math inline">\(C\)</span> out:</p>
 <p><span class="math display">\[
 \underbrace{25\,C^2}_{\text{one } 5\times5}
 \qquad\text{versus}\qquad
 \underbrace{2 \times 9\,C^2 = 18\,C^2}_{\text{two } 3\times3\text{s}},
 \]</span></p>
-<p>a 28% saving. The stacked pair also fires a ReLU <em>twice</em> where the big kernel fires once. Same sight, fewer parameters, more nonlinearity. Three <span class="math inline">\(3\times3\)</span>s reach a <span class="math inline">\(7\times7\)</span> field for <span class="math inline">\(27C^2\)</span> against <span class="math inline">\(49C^2\)</span>: the deeper you take the idea, the better the deal gets.</p>
+<p>a 28% saving. The stacked pair also fires a ReLU <em>twice</em> where the big kernel fires once. Same sight, fewer parameters, more nonlinearity. Three <span class="math inline">\(3\times3\)</span>s reach a <span class="math inline">\(7\times7\)</span> field for <span class="math inline">\(27C^2\)</span> against <span class="math inline">\(49C^2\)</span>: the deeper you take the idea, the larger the saving.</p>
 <style>
 .mechanism-excerpt { color: #263445; background: #fff; border: 1px solid #d5dde5; border-radius: .4rem; margin: 1.4rem 0; }
 .mechanism-excerpt > summary { font-weight: 600; padding: .85rem 1rem; cursor: pointer; }
@@ -796,7 +796,7 @@ Figure&nbsp;10.1: The chapter’s construction grammar, one row per block design
 <div class="plan">
 <ol type="1">
 <li>Set <code>C = 32</code> and build <code>one_5x5</code>, one 5×5 convolution, and <code>two_3x3</code>, two 3×3s with a ReLU between.</li>
-<li>Implement the parameter bill, C = 32.</li>
+<li>Count both designs’ parameters at C = 32.</li>
 </ol>
 </div>
 <div id="kernel-economics" class="cell" data-execution_count="2">
@@ -814,7 +814,7 @@ two 3x3s: 18,496 parameters, 2 ReLUs</code></pre>
 </div>
 </div>
 </div>
-<p>One caveat before you re-derive the field equations of vision from this: the <span class="math inline">\(18C^2 &lt; 25C^2\)</span> arithmetic assumes the channel width stays <span class="math inline">\(C\)</span> through the stack. When a layer <em>grows</em> channels (as LeNet’s <span class="math inline">\(6 \rightarrow 16\)</span> did), splitting it into two growing <span class="math inline">\(3\times3\)</span>s can cost more, not less. VGG’s design sidesteps this by keeping width constant inside each block and changing it only between blocks, which is exactly the shape our code will take. (Exercise 1 makes you find the break-even point.)</p>
+<p>The <span class="math inline">\(18C^2 &lt; 25C^2\)</span> arithmetic assumes the channel width stays <span class="math inline">\(C\)</span> through the stack. When a layer <em>grows</em> channels (as LeNet’s <span class="math inline">\(6 \rightarrow 16\)</span> did), splitting it into two growing <span class="math inline">\(3\times3\)</span>s can cost more, not less. VGG’s design sidesteps this by keeping width constant inside each block and changing it only between blocks, which is exactly the shape our code will take. (Exercise 1 makes you find the break-even point.)</p>
 </section>
 <section id="the-stabilizer-we-owe-you-batch-normalization" class="level2" data-number="10.2">
 <h2 data-number="10.2" class="anchored" data-anchor-id="the-stabilizer-we-owe-you-batch-normalization"><span class="header-section-number">10.2</span> The stabilizer we owe you: batch normalization</h2>
@@ -871,7 +871,7 @@ with BN    layer stds: 0.344  0.404  0.395  0.385  0.432  0.384</code></pre>
 \qquad
 y = \gamma\,\hat{x} + \beta .
 \tag{10.1}\]</span></span></p>
-<p>The <span class="math inline">\(\gamma, \beta\)</span> pair matters: normalization is a <em>reset to a healthy scale</em>, not a straitjacket. The network can learn to restore any mean and spread that helps, but it starts every layer from sane numbers. In the printout above, the BN row holds a near-constant spread through all twelve layers: every layer trains from day one. The standard placement we adopt is conv <span class="math inline">\(\rightarrow\)</span> BN <span class="math inline">\(\rightarrow\)</span> ReLU, with <code>bias=False</code> on the convolution, since <span class="math inline">\(\beta\)</span> already provides the shift.</p>
+<p>The <span class="math inline">\(\gamma, \beta\)</span> pair matters: normalization is a <em>reset to a healthy scale</em>, not a straitjacket. The network can learn to restore any mean and spread that helps, but it starts every layer from sane numbers. In the printout above, the BN row holds a near-constant spread at every printed depth: the signal reaches each layer at a usable scale from the first step. The standard placement we adopt is conv <span class="math inline">\(\rightarrow\)</span> BN <span class="math inline">\(\rightarrow\)</span> ReLU, with <code>bias=False</code> on the convolution, since <span class="math inline">\(\beta\)</span> already provides the shift.</p>
 <style>
 /* Batch ruler: one picture, one formula line, one caption (docs/animation-authoring.md,
    "Visual grammar"). Colour = meaning, in the book's macro colours: the values, your
@@ -1013,7 +1013,7 @@ y = \gamma\,\hat{x} + \beta .
 </div>
 </div>
 <div class="callout-body-container callout-body">
-<p>At training time BN normalizes by the <em>current batch’s</em> statistics. At evaluation time there may be no batch (one image), so it uses running averages collected during training. <code>model.train()</code> and <code>model.eval()</code> switch between the two. Forgetting the switch is the classic BN bug: evaluate in train mode and your predictions depend on whatever else happens to be in the batch; train in eval mode and BN never learns its statistics. Our <code>train_model</code> recipe flips the switch in both directions; look for it. Corollary: BN needs real batches to estimate statistics, so it gets unreliable at tiny batch sizes.</p>
+<p>At training time BN normalizes by the <em>current batch’s</em> statistics. At evaluation time there may be no batch (one image), so it uses running averages collected during training. <code>model.train()</code> and <code>model.eval()</code> switch between the two. Forgetting the switch is the classic BN bug: evaluate in train mode and your predictions depend on whatever else happens to be in the batch; train in eval mode and BN never learns its statistics. Our <code>train_model</code> recipe flips the switch in both directions; look for it. It follows that BN needs real batches to estimate statistics, so it gets unreliable at tiny batch sizes.</p>
 </div>
 </div>
 <div class="callout callout-style-default callout-note callout-titled">
@@ -1073,7 +1073,7 @@ test accuracy 86.7%</code></pre>
 </div>
 </div>
 </div>
-<p>Two readings again. The good: this VGG-style recipe reaches 86.7%, four points above LeNet in this run. Because depth, width, normalization, kernel sizes, parameter count, and training duration all changed together, this comparison does not isolate which ingredient earned the gain. The bad: 218,586 parameters, <em>three and a half times</em> LeNet’s total, and the head’s share got worse: 92% of the network is a dense layer reading a flattened grid. The convolutional diet succeeded and the total got fatter anyway. Which forces the third question: where do the parameters live, and where can we do the most damage to the count?</p>
+<p>Two readings again. On the good side, this VGG-style recipe reaches 86.7%, four points above LeNet in this run. Because depth, width, normalization, kernel sizes, parameter count, and training duration all changed together, this comparison does not isolate which ingredient earned the gain. On the bad side, it carries 218,586 parameters, <em>three and a half times</em> LeNet’s total, and the head’s share got worse: 92% of the network is a dense layer reading a flattened grid. The convolutional diet succeeded and the total got fatter anyway. Which forces the third question: where do the parameters live, and where can we do the most damage to the count?</p>
 </section>
 <section id="question-3-1-times-1-convolutions-and-firing-the-flatten-head" class="level2" data-number="10.4">
 <h2 data-number="10.4" class="anchored" data-anchor-id="question-3-1-times-1-convolutions-and-firing-the-flatten-head"><span class="header-section-number">10.4</span> Question 3: <span class="math inline">\(1 \times 1\)</span> convolutions, and firing the flatten head</h2>
@@ -1315,7 +1315,7 @@ test accuracy 76.2%</code></pre>
 </div>
 </div>
 </div>
-<p>The parameter story is a rout: 35,034 total, a 650-parameter head, six times smaller than VGGSmall. The accuracy is 76.2%, and that dip is worth more attention than the win. First, though, collect the promised payoff. <a href="08-cnn.html" class="quarto-xref"><span>Chapter 9</span></a> said the remaining shift-cliff was the flatten head’s fault: it reads the final grid <em>positionally</em>. GAP averages over positions, so the head no longer assigns a different weight to every location. What remains is <a href="../part1/02-logistic-softmax.html" class="quarto-xref"><span>Chapter 2</span></a>’s classification head in its plainest form: one linear layer reading one averaged number per channel. The rematch of the rematch:</p>
+<p>The parameter story is a rout: 35,034 total, a 650-parameter head, six times smaller than VGGSmall. The accuracy is 76.2%, and that dip is worth more attention than the win. First, though, check the promised benefit. <a href="08-cnn.html" class="quarto-xref"><span>Chapter 9</span></a> said the remaining shift-cliff was the flatten head’s fault: it reads the final grid <em>positionally</em>. GAP averages over positions, so the head no longer assigns a different weight to every location. What remains is <a href="../part1/02-logistic-softmax.html" class="quarto-xref"><span>Chapter 2</span></a>’s classification head in its plainest form: one linear layer reading one averaged number per channel. The rematch of the rematch:</p>
 <div class="plan-code plan-code-wide">
 <div class="plan">
 <ol type="1">
@@ -1405,27 +1405,14 @@ Figure&nbsp;10.2: <a href="08-cnn.html" class="quarto-xref"><span>Chapter 9</spa
 </div>
 </div>
 <div class="callout-body-container callout-body">
-<p>GoogLeNet’s Inception block (2014) answers “which kernel size?” with “all of them”: parallel <span class="math inline">\(1\times1\)</span>, <span class="math inline">\(3\times3\)</span>, <span class="math inline">\(5\times5\)</span>, and pooling branches, concatenated. Its enabling trick is the <span class="math inline">\(1\times1\)</span> <em>bottleneck</em>: compress channels before the expensive spatial kernels. For one <span class="math inline">\(5\times5\)</span> branch at 256 channels: direct, <span class="math inline">\(5^2 \times 256 \times 128 \approx 819\)</span>k parameters; with a <span class="math inline">\(1\times1\)</span> squeeze to 32 first, <span class="math inline">\(256 \times 32 + 5^2 \times 32 \times 128 \approx 111\)</span>k, an 86% cut for the same nominal operation. We will not build Inception here (the principle, channel compression before spatial expense, is the transferable part), but Exercise 2 walks the arithmetic.</p>
-</div>
-</div>
-<div class="callout callout-style-default callout-note callout-titled">
-<div class="callout-header d-flex align-content-center">
-<div class="callout-icon-container">
-<i class="callout-icon"></i>
-</div>
-<div class="callout-title-container flex-fill">
-<span class="screen-reader-only">Note</span>Architecture bridge (optional): DenseNet concatenates the history
-</div>
-</div>
-<div class="callout-body-container callout-body">
-<p>The residual block below preserves an old representation by <strong>addition</strong>: <span class="math inline">\(x_{\ell+1}=x_\ell+F_\ell(x_\ell)\)</span>. A DenseNet block makes a different connectivity choice. If <span class="math inline">\(x_j\)</span> denotes layer <span class="math inline">\(j\)</span>’s output feature map, layer <span class="math inline">\(\ell\)</span> receives the channel-wise concatenation <span class="math inline">\([x_0,x_1,\ldots,x_{\ell-1}]\)</span> and contributes a small new group of feature maps for later layers. Earlier features therefore remain directly available instead of being recreated, while the channel axis grows; transition blocks compress channels and downsample between dense blocks. In Appendix B’s language, the defining operation is concatenation along the feature-channel axis, not another kind of residual addition (<a href="../appendices/a2-tensors.html" class="quarto-xref"><span>Appendix B</span></a>).</p>
+<p><a href="https://openaccess.thecvf.com/content_cvpr_2015/html/Szegedy_Going_Deeper_With_2015_CVPR_paper.html">GoogLeNet</a>’s Inception block (2014) answers “which kernel size?” with “all of them”: parallel <span class="math inline">\(1\times1\)</span>, <span class="math inline">\(3\times3\)</span>, <span class="math inline">\(5\times5\)</span>, and pooling branches, concatenated. Its enabling trick is the <span class="math inline">\(1\times1\)</span> <em>bottleneck</em>: compress channels before the expensive spatial kernels. For one <span class="math inline">\(5\times5\)</span> branch at 256 channels: direct, <span class="math inline">\(5^2 \times 256 \times 128 \approx 819\)</span>k parameters; with a <span class="math inline">\(1\times1\)</span> squeeze to 32 first, <span class="math inline">\(256 \times 32 + 5^2 \times 32 \times 128 \approx 111\)</span>k, an 86% cut for the same nominal operation. We will not build Inception here (the principle, channel compression before spatial expense, is the transferable part), but Exercise 2 walks the arithmetic.</p>
 </div>
 </div>
 </section>
 <section id="question-2-going-deeper-and-the-wall-you-hit" class="level2" data-number="10.5">
 <h2 data-number="10.5" class="anchored" data-anchor-id="question-2-going-deeper-and-the-wall-you-hit"><span class="header-section-number">10.5</span> Question 2: going deeper, and the wall you hit</h2>
 <p>VGG says depth is the direction. So push it: stack twenty of our two-conv blocks (with BN, per the recipe, on a <span class="math inline">\(14\times14\)</span> grid so the experiment fits a laptop) and compare against the <em>identical</em> stack with one change we will reveal after the numbers.</p>
-<p>Predict before running: two networks, identical parameter counts, twenty blocks each: one plain, one residual. Will the plain net merely trail, or fail to fit the <em>training</em> set at all?</p>
+<p>Predict before running. Two networks have identical parameter counts and twenty blocks each; one is plain, one residual. Will the plain net merely trail, or fail to fit the <em>training</em> set at all?</p>
 <div class="plan-code">
 <div class="plan">
 <ol type="1">
@@ -1488,8 +1475,8 @@ Figure&nbsp;10.2: <a href="08-cnn.html" class="quarto-xref"><span>Chapter 9</spa
 </div>
 </div>
 </div>
-<p>Look at the <em>training</em> column first, because it carries the whole lesson. The plain 40-conv-layer network cannot even fit the 1,200 images it sees every epoch: 61% train accuracy, while its residual twin memorizes them and generalizes twenty-seven points better. This is an <strong>optimization failure</strong> in the same family as the degradation problem He et al.&nbsp;reported in 2015, where their 56-layer plain net trained worse than their 20-layer one. Our experiment isolates the residual rescue at one depth; a strict demonstration that adding depth degrades a plain network would also require a shallower plain control.</p>
-<p>The one change: each block computes <span class="math inline">\(F(x)\)</span> and outputs <span class="math inline">\(F(x) + x\)</span>. A <strong>residual connection</strong> lets the input skip over the block and adds it back.</p>
+<p>Look at the <em>training</em> column first. The plain 40-conv-layer network cannot even fit the 1,200 images it sees every epoch: 61% train accuracy, while its residual twin memorizes them and generalizes twenty-seven points better. This is an <strong>optimization failure</strong> in the same family as the degradation problem He et al.&nbsp;reported in 2015, where their 56-layer plain net trained worse than their 20-layer one. Our experiment isolates the residual rescue at one depth; a strict demonstration that adding depth degrades a plain network would also require a shallower plain control.</p>
+<p>The one change is that each block computes <span class="math inline">\(F(x)\)</span> and outputs <span class="math inline">\(F(x) + x\)</span>. A <strong>residual connection</strong> lets the input skip over the block and adds it back.</p>
 <p><span id="eq-residual"><span class="math display">\[
 H(x) = F(x) + x
 \qquad\Longrightarrow\qquad
@@ -1498,13 +1485,13 @@ H(x) = F(x) + x
 \tag{10.2}\]</span></span></p>
 <div id="cell-fig-residual-stream" class="cell" data-execution_count="10">
 <div class="cell-output cell-output-display">
-<div id="fig-residual-stream" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Flow diagram in which input x splits into two paths. The learned path passes through conv-BatchNorm-ReLU and conv-BatchNorm boxes; an orange identity path bypasses both. The paths meet at an addition node, followed by ReLU and output H of x.">
+<div id="fig-residual-stream" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Flow diagram of a residual block. Input x runs along a straight identity line to an addition node. Below it, a learned branch leaves the line, passes through conv-BatchNorm-ReLU and conv-BatchNorm boxes grouped as F of x, and rejoins at the addition. The sum H of x equals x plus F of x and passes through a final ReLU to the output.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-residual-stream-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<img src="09-modern-cnns-transfer_files/figure-html/fig-residual-stream-output-1.png" loading="lazy" decoding="async" alt="Flow diagram in which input x splits into two paths. The learned path passes through conv-BatchNorm-ReLU and conv-BatchNorm boxes; an orange identity path bypasses both. The paths meet at an addition node, followed by ReLU and output H of x." width="682" height="230" class="figure-img">
+<img src="09-modern-cnns-transfer_files/figure-html/fig-residual-stream-output-1.png" loading="lazy" decoding="async" alt="Flow diagram of a residual block. Input x runs along a straight identity line to an addition node. Below it, a learned branch leaves the line, passes through conv-BatchNorm-ReLU and conv-BatchNorm boxes grouped as F of x, and rejoins at the addition. The sum H of x equals x plus F of x and passes through a final ReLU to the output." width="681" height="269" class="figure-img">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-residual-stream-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;10.3: A residual block has two routes. The learned branch computes a correction <span class="math inline">\(F(x)\)</span>; the identity branch carries <span class="math inline">\(x\)</span> unchanged to the addition. Even when the learned branch has a difficult Jacobian, the shortcut leaves a direct route for activations and gradients.
+Figure&nbsp;10.3: A residual block in the original ResNet form, which <code>Block</code> implements. The identity stream carries <span class="math inline">\(x\)</span> straight to the sum. The learned branch adds a correction <span class="math inline">\(F(x)\)</span>, so <span class="math inline">\(H(x)=x+F(x)\)</span>, and a ReLU follows. The sum has no weights, so the shortcut is a direct route for activations and gradients wherever <span class="math inline">\(H(x)\)</span> is positive. <a href="https://doi.org/10.1007/978-3-319-46493-0_38">Pre-activation ResNets</a> move that ReLU into the branch and leave the route clean.
 </figcaption>
 </figure>
 </div>
@@ -1651,7 +1638,7 @@ Figure&nbsp;10.3: A residual block has two routes. The learned branch computes a
         <p>The chapter's block also applies a ReLU after the sum. The equation and this picture leave it out, so H(x) here is F(x) + x itself.</p>
         <p>A stack multiplies these per-block factors, each 1 plus its own slope, so many blocks keep a gradient near its size only while their learned slopes stay small. The chapter's measurement, residual gradients within one order of magnitude across its depths, is of whole networks, not of any one factor drawn here.</p>
         <p>Each copy of the gradient is an arrow whose length is its value on one shared scale and whose direction is its sign: a positive copy points along its route toward x, a negative one points back toward the output, and an open ring is a copy of exactly 0. Wine is the gradient and its copies, orange the learned branch's weights (the outline of F), ink the identity lane, the sum, the slope and the dial, and blue the input x and the output H(x).</p>
-        <p>The chapter's figure draws the identity path in its house orange; this panel keeps orange for the learned weights and draws the lane in ink. The slope is the branch's local derivative, not a weight, so its dial wears ink as well.</p>
+        <p>The chapter's figure and this panel both draw the identity lane in ink; orange stays with the learned weights. The slope is the branch's local derivative, not a weight, so its dial wears ink as well.</p>
       </details>
     </div>
     <details class="mechanism-check"><summary><strong>Check yourself.</strong> Two residual blocks in a row have learned slopes 0.5 and then −0.5. What reaches the first block's input from a gradient of 1 at the output, and what would the same blocks pass without shortcuts?</summary>
@@ -1809,6 +1796,19 @@ Figure&nbsp;10.4: Gradient magnitude reaching the stem (first layer) at initiali
 </div>
 </div>
 <p>The final no-BN row also exposes a numerical trap: its components remain nonzero, but squaring them in float32 can underflow before the norm is summed. The range, resolution, and accumulator roles behind that distinction are gathered in <a href="../appendices/a3-precision-performance.html" class="quarto-xref"><span>Appendix C</span></a>.</p>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Note</span>Architecture bridge (optional): DenseNet concatenates the history
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>The residual block above preserves an old representation by <strong>addition</strong>: <span class="math inline">\(x_{\ell+1}=x_\ell+F_\ell(x_\ell)\)</span>. A <a href="https://openaccess.thecvf.com/content_cvpr_2017/html/Huang_Densely_Connected_Convolutional_CVPR_2017_paper.html">DenseNet</a> block makes a different connectivity choice. If <span class="math inline">\(x_j\)</span> denotes layer <span class="math inline">\(j\)</span>’s output feature map, layer <span class="math inline">\(\ell\)</span> receives the channel-wise concatenation <span class="math inline">\([x_0,x_1,\ldots,x_{\ell-1}]\)</span> and contributes a small new group of feature maps for later layers. Earlier features therefore remain directly available instead of being recreated, while the channel axis grows; transition blocks compress channels and downsample between dense blocks. In Appendix B’s language, the defining operation is concatenation along the feature-channel axis, not another kind of residual addition (<a href="../appendices/a2-tensors.html" class="quarto-xref"><span>Appendix B</span></a>).</p>
+</div>
+</div>
 <div class="callout callout-style-default callout-tip callout-titled">
 <div class="callout-header d-flex align-content-center">
 <div class="callout-icon-container">
@@ -1819,13 +1819,13 @@ Figure&nbsp;10.4: Gradient magnitude reaching the stem (first layer) at initiali
 </div>
 </div>
 <div class="callout-body-container callout-body">
-<p>Residual connections are not only a CNN trick. They became a central design device in many deep architectures; when we assemble a transformer in <a href="../part4/14-self-attention-transformer.html" class="quarto-xref"><span>Chapter 16</span></a>, every attention layer and every feedforward layer will be wrapped as <span class="math inline">\(x + F(x)\)</span>, and the freshly met layer normalization will sit beside each skip. The picture to carry forward: a <em>residual stream</em> with direct additive routes through the network, each block reading from it and writing a correction back. Those routes improve conditioning without making the stream immune to learned-branch interactions. Attention will be one kind of correction. You now own both parts of that skeleton.</p>
+<p>Residual connections are not only a CNN trick. They became a central design device in many deep architectures; when we assemble a transformer in <a href="../part4/14-self-attention-transformer.html" class="quarto-xref"><span>Chapter 16</span></a>, every attention layer and every feedforward layer will be wrapped as <span class="math inline">\(x + F(x)\)</span>, and the freshly met layer normalization will sit beside each skip. The picture to carry forward is a <em>residual stream</em> with direct additive routes through the network, each block reading from it and writing a correction back. Those routes improve conditioning without making the stream immune to learned-branch interactions. Attention will be one kind of correction. You now own both parts of that skeleton.</p>
 </div>
 </div>
 </section>
 <section id="the-scorecard-what-a-decade-of-design-bought" class="level2" data-number="10.6">
 <h2 data-number="10.6" class="anchored" data-anchor-id="the-scorecard-what-a-decade-of-design-bought"><span class="header-section-number">10.6</span> The scorecard: what a decade of design bought</h2>
-<p>The chapter’s small-data studies isolated mechanisms. The architecture comparison deserves the full task: all 60,000 Fashion-MNIST training images, split once into 50,000 for fitting and 10,000 for validation, with the official 10,000-image test set opened only after validation selected the checkpoint. We ran LeNet, NiN, VGG, and a nine-block residual network for three end-to-end seeds on Rivanna:</p>
+<p>The chapter’s small-data studies isolated mechanisms. The architecture comparison deserves the full task: all 60,000 <a href="https://arxiv.org/abs/1708.07747">Fashion-MNIST</a> training images, split once into 50,000 for fitting and 10,000 for validation, with the official 10,000-image test set opened only after validation selected the checkpoint. We ran LeNet, NiN, VGG, and a nine-block residual network for three end-to-end seeds on Rivanna:</p>
 <div class="plan-code plan-code-wide">
 <div class="plan">
 <ol type="1">
@@ -1871,7 +1871,7 @@ Figure&nbsp;10.5: The full-data Part II scorecard on Rivanna. Points show mean o
 </div>
 </div>
 </div>
-<p>The scale changes the verdict from the 1,200-image mechanism studies. NiN’s global head no longer pays a large clean-accuracy penalty, and all four architectures clear 92%. The residual network leads this declared recipe, but the plot still has one horizontal axis too few: parameters measure storage, not optimizer steps, activation memory, or total training work.</p>
+<p>The scale changes the verdict from the 1,200-image mechanism studies. NiN’s global head no longer costs much clean accuracy, and all four architectures clear 92%. The residual network leads this declared recipe, but the plot still has one horizontal axis too few: parameters measure storage, not optimizer steps, activation memory, or total training work.</p>
 </section>
 <section id="transfer-learning-the-mechanics-and-an-honest-experiment" class="level2" data-number="10.7">
 <h2 data-number="10.7" class="anchored" data-anchor-id="transfer-learning-the-mechanics-and-an-honest-experiment"><span class="header-section-number">10.7</span> Transfer learning: the mechanics, and an honest experiment</h2>
@@ -1880,11 +1880,11 @@ Figure&nbsp;10.5: The full-data Part II scorecard on Rivanna. Points show mean o
 <li><strong>Linear probe</strong>: freeze the pretrained trunk entirely (<code>requires_grad = False</code>), extract its features, train only a new linear head on your labels.</li>
 <li><strong>Fine-tuning</strong>: additionally unfreeze the last block or two, training them at a <em>much</em> smaller learning rate than the fresh head, so the pretrained features adapt gently instead of being trampled.</li>
 </ul>
-<p>We will test the idea properly. The task: classify the three shoe classes (sandal, sneaker, ankle boot) from <strong>ten labeled examples each</strong>. The 30-image regime is exactly where transfer should shine: too few labels to learn features, goes the story, so imported features should dominate. Three contenders:</p>
+<p>The task is to classify the three shoe classes (sandal, sneaker, ankle boot) from <strong>ten labeled examples each</strong>. The 30-image regime is exactly where transfer should shine: too few labels to learn features, goes the story, so imported features should dominate. Three contenders:</p>
 <ol type="1">
-<li><strong>From scratch</strong>: our VGG-style trunk trained on the 30 images alone.</li>
-<li><strong>Our own pretrained trunk</strong>: the same trunk pretrained on the seven <em>non-shoe</em> classes (863 images), frozen, linear probe.</li>
-<li><strong>A real pretrained backbone</strong>: SqueezeNet 1.1 trained on ImageNet (1.2 million photographs, 1,000 classes) loaded from weights committed with this book, frozen, linear probe on its 512-dimensional features. (Fashion images get upsampled to 96×96 and repeated to three channels to fit its expectations. That awkwardness is part of the experiment, and part of the lesson.)</li>
+<li><strong>From scratch</strong>, our VGG-style trunk trains on the 30 images alone.</li>
+<li><strong>Our own pretrained trunk</strong> is the same trunk pretrained on the seven <em>non-shoe</em> classes (863 images), then frozen under a linear probe.</li>
+<li><strong>A real pretrained backbone</strong> is <a href="https://arxiv.org/abs/1602.07360">SqueezeNet</a> 1.1 trained on <a href="https://doi.org/10.1109/CVPR.2009.5206848">ImageNet</a> (1.2 million photographs, 1,000 classes), loaded from weights committed with this book, frozen, and read by a linear probe on its 512-dimensional features. (Fashion images get upsampled to 96×96 and repeated to three channels to fit its expectations. That awkwardness is part of the experiment.)</li>
 </ol>
 <p>Rank the three contenders before you run them, and write down how far ahead you expect the ImageNet backbone to finish.</p>
 <div class="plan-code plan-code-wide">
@@ -2014,11 +2014,11 @@ mean     86.6%       70.6%           87.2%</code></pre>
 </div>
 </div>
 </div>
-<p>Read that table slowly, because it does <em>not</em> say what the textbook story predicts, and the discrepancy is the best lesson in this chapter. Training from scratch on thirty images fights the mighty ImageNet backbone to a dead heat: the means differ by less than a point, well inside seed noise. And our own pretrained trunk, perfectly competent on its source task per the printout above, transfers <em>worse than nothing</em>. Three reasons, each a general principle:</p>
+<p>Read those numbers slowly, because they do <em>not</em> say what the textbook story predicts. Training from scratch on thirty images fights the mighty ImageNet backbone to a dead heat: the means differ by less than a point, well inside seed noise. And our own pretrained trunk, perfectly competent on its source task per the printout above, transfers <em>worse than nothing</em>. Three reasons, each a general principle:</p>
 <ol type="1">
 <li><strong>A trunk can only donate what its data taught it.</strong> Our own trunk saw 863 shirts, bags, and trousers. Nothing in that curriculum required foot-shaped detectors, so its 64 features flatten sandals, sneakers, and boots into nearly the same point. Pretraining is not magic; it is <em>curriculum</em>.</li>
-<li><strong>Domain and resolution gaps tax the donation.</strong> SqueezeNet’s filters expect 224-pixel color photographs; we feed it 28-pixel grayscale icons inflated to 96. Its early layers hunt for detail that simply is not there. (The matching recipe, resize and normalize <em>to match the pretraining pipeline</em>, is doing real work; we complied as far as the data allows.)</li>
-<li><strong>Transfer wins when the target is big relative to your labels, not small.</strong> This is the quiet one. Three shoe silhouettes at <span class="math inline">\(28 \times 28\)</span> is a <em>small</em> problem: thirty images genuinely suffice, so the scratch baseline is strong and there is little room for imported knowledge to pay rent. The full ten-class task below is different: 50,000 fitting labels, 224-pixel inputs, and a ResNet-18-sized feature extractor.</li>
+<li><strong>Domain and resolution gaps shrink the donation.</strong> SqueezeNet’s filters expect 224-pixel color photographs; we feed it 28-pixel grayscale icons inflated to 96. Its early layers hunt for detail that simply is not there. (The matching recipe, resize and normalize <em>to match the pretraining pipeline</em>, is doing real work; we complied as far as the data allows.)</li>
+<li><strong>Transfer wins when the target is big relative to your labels, not small.</strong> Three shoe silhouettes at <span class="math inline">\(28 \times 28\)</span> is a <em>small</em> problem: thirty images genuinely suffice, so the scratch baseline is strong and there is little room for imported knowledge to help. The full ten-class task below is different: 50,000 fitting labels, 224-pixel inputs, and a ResNet-18-sized feature extractor.</li>
 </ol>
 <section id="the-full-data-rematch" class="level3">
 <h3 class="anchored" data-anchor-id="the-full-data-rematch">The full-data rematch</h3>
@@ -2079,7 +2079,7 @@ Figure&nbsp;10.6: ImageNet transfer on full Fashion-MNIST at 224 pixels. Across 
 <p>The decision rule is this: transfer pays when (your labels are scarce) <em>and</em> (the target task is feature-hungry) <em>and</em> (the pretraining data plausibly covers the target’s features at a matched scale). Picture a landmark task: 224-pixel photographs, 18 classes, a few hundred labels each. There all three hold, and transfer should win by a wide margin. At 28 pixels and 3 silhouettes, the conditions fail, and on this page scratch fights the superpower to a draw. Knowing <em>which regime you are in</em> is the skill; the mechanics (<code>requires_grad</code>, learning-rate splits) are the easy part.</p>
 </div>
 </div>
-<p>The mechanics, for completeness, since you will use them constantly from Part V onward: fine-tuning SqueezeNet’s last block with a two-learning-rate recipe (fresh head fast, pretrained layers slow):</p>
+<p>You will use the mechanics constantly from Part V onward: fine-tuning SqueezeNet’s last block with a two-learning-rate recipe (fresh head fast, pretrained layers slow):</p>
 <div class="plan-code plan-code-wide">
 <div class="plan">
 <ol type="1">
@@ -2160,9 +2160,9 @@ Figure&nbsp;10.6: ImageNet transfer on full Fashion-MNIST at 224 pixels. Across 
 <ol type="1">
 <li><strong>Small kernels, stacked</strong>: two <span class="math inline">\(3\times3\)</span>s see what a <span class="math inline">\(5\times5\)</span> sees, for <span class="math inline">\(18C^2\)</span> against <span class="math inline">\(25C^2\)</span>, with twice the nonlinearity, provided width holds constant through the stack. Design in blocks, repeat the block.</li>
 <li><strong>BatchNorm</strong> re-standardizes every channel over the batch and spatial axes, then hands back two knobs (<span class="math inline">\(\gamma, \beta\)</span>); conv→BN→ReLU with <code>bias=False</code>; <em>train and eval are different machines</em>, so flip the switch. Its per-token cousin, LayerNorm, awaits in <a href="../part4/14-self-attention-transformer.html" class="quarto-xref"><span>Chapter 16</span></a>. Readers who want normalization treated as a choice of invariance, finite-sample state, and derivative path will find that treatment in <em>Deep Learning: Making It Trainable</em> (Shakeri, 2026), Chapter 15, <a href="https://shakeri-lab.github.io/opt-book/chapters/act2/15-normalization.html#c15"><em>Normalization Chooses an Invariance</em></a>.</li>
-<li><strong><span class="math inline">\(1\times1\)</span> convolutions</strong> run <a href="../part1/01-linear-regression.html" class="quarto-xref"><span>Chapter 1</span></a>’s linear model across channels at every pixel: summarize channels, do not discard them. With <strong>global average pooling</strong> they fire the flatten head: parameters collapse (218k <span class="math inline">\(\rightarrow\)</span> 35k) and position-specific weights leave the head, at a clean-accuracy price our small dataset makes visible. Boundaries and downsampling still prevent exact invariance.</li>
+<li><strong><span class="math inline">\(1\times1\)</span> convolutions</strong> run <a href="../part1/01-linear-regression.html" class="quarto-xref"><span>Chapter 1</span></a>’s linear model across channels at every pixel: summarize channels, do not discard them. With <strong>global average pooling</strong> they fire the flatten head: parameters collapse (218k <span class="math inline">\(\rightarrow\)</span> 35k) and position-specific weights leave the head, at a cost in clean accuracy that our small dataset makes visible. Boundaries and downsampling still prevent exact invariance.</li>
 <li><strong>Depth can hit an optimization wall</strong>: our plain 40-layer net could not fit its own training set. The residual connection <span class="math inline">\(H(x) = F(x) + x\)</span> adds an identity lane to the Jacobian, <a href="../part1/05-backpropagation.html" class="quarto-xref"><span>Chapter 5</span></a>’s gradient superhighway as infrastructure, and the same-depth twin trains to 100%. Transformer stacks will reuse this residual pattern around each attention and feedforward sublayer.</li>
-<li><strong>Transfer learning</strong> = freeze + probe, or gently fine-tune. Our experiment found scratch and the ImageNet probe in a near tie across three seeds at 28-pixel scale. Pretraining is curriculum, gaps are taxed, and small targets may leave little room for imports. The pinned full-scale Rivanna runs report <span class="math inline">\(88.79\% \pm 0.08\%\)</span> for the frozen probe, <span class="math inline">\(93.92\% \pm 0.12\%\)</span> for fine-tuning, and <span class="math inline">\(94.14\% \pm 0.08\%\)</span> for scratch with ResNet-18. They illustrate a richer regime where adaptation repairs most of the feature mismatch. Diagnosing the regime is the skill.</li>
+<li><strong>Transfer learning</strong> = freeze + probe, or gently fine-tune. Our experiment found scratch and the ImageNet probe in a near tie across three seeds at 28-pixel scale. Pretraining is curriculum, gaps shrink what transfers, and small targets may leave little room for imports. The pinned full-scale Rivanna runs report <span class="math inline">\(88.79\% \pm 0.08\%\)</span> for the frozen probe, <span class="math inline">\(93.92\% \pm 0.12\%\)</span> for fine-tuning, and <span class="math inline">\(94.14\% \pm 0.08\%\)</span> for scratch with ResNet-18. They illustrate a richer regime where adaptation repairs most of the feature mismatch. Diagnosing the regime is the skill.</li>
 </ol>
 </section>
 <section id="sources-and-further-reading" class="level2 unnumbered">
@@ -2172,9 +2172,11 @@ Figure&nbsp;10.6: ImageNet transfer on full Fashion-MNIST at 224 pixels. Across 
 <li><a href="https://doi.org/10.1109/CVPR.2009.5206848">Deng et al., <em>ImageNet: A Large-Scale Hierarchical Image Database</em></a>: the source benchmark behind the pretrained visual features used here.</li>
 <li><a href="https://arxiv.org/abs/1602.07360">Iandola et al., <em>SqueezeNet: AlexNet-level accuracy with 50x fewer parameters and &lt;0.5MB model size</em></a>: the compact pretrained architecture used in the chapter’s first transfer experiment.</li>
 <li><a href="https://arxiv.org/abs/1409.1556">Simonyan &amp; Zisserman, <em>Very Deep Convolutional Networks for Large-Scale Image Recognition</em></a>: the small-kernel, repeated-block argument behind VGG.</li>
+<li><a href="https://openaccess.thecvf.com/content_cvpr_2015/html/Szegedy_Going_Deeper_With_2015_CVPR_paper.html">Szegedy et al., <em>Going Deeper with Convolutions</em></a>: GoogLeNet’s Inception block, parallel branches of several kernel sizes joined by channel concatenation.</li>
 <li><a href="https://arxiv.org/abs/1312.4400">Lin, Chen, &amp; Yan, <em>Network In Network</em></a>: introduces the <span class="math inline">\(1\times1\)</span> channel mixer and global-average-pooling classifier.</li>
 <li><a href="https://proceedings.mlr.press/v37/ioffe15.html">Ioffe &amp; Szegedy, <em>Batch Normalization</em></a>: the original normalization method, its train/evaluation distinction, and the backward pass through the batch statistics that Exercise 7 audits.</li>
 <li><a href="https://openaccess.thecvf.com/content_cvpr_2016/html/He_Deep_Residual_Learning_CVPR_2016_paper.html">He et al., <em>Deep Residual Learning for Image Recognition</em></a>: the degradation experiment and residual-block solution.</li>
+<li><a href="https://doi.org/10.1007/978-3-319-46493-0_38">He et al., <em>Identity Mappings in Deep Residual Networks</em></a>: pre-activation residual blocks, which place BatchNorm and ReLU before each convolution in the learned branch and drop the ReLU after the sum, so the sum passes straight through.</li>
 <li><a href="https://openaccess.thecvf.com/content_cvpr_2017/html/Huang_Densely_Connected_Convolutional_CVPR_2017_paper.html">Huang et al., <em>Densely Connected Convolutional Networks</em></a>: dense connectivity through feature-map concatenation and transition layers.</li>
 <li><a href="https://proceedings.neurips.cc/paper_files/paper/2014/hash/532a2f85b6977104bc93f8580abbb330-Abstract.html">Yosinski et al., <em>How Transferable Are Features in Deep Neural Networks?</em></a>: a careful empirical account of when transferred features remain useful.</li>
 <li><a href="https://mlstory.org/data.html">Hardt and Recht, <em>Patterns, Predictions, and Actions: Datasets</em></a>: a framework for treating a benchmark as a measured artifact rather than an unquestionable oracle.</li>
@@ -2187,10 +2189,10 @@ Figure&nbsp;10.6: ImageNet transfer on full Fashion-MNIST at 224 pixels. Across 
 <ol type="1">
 <li><strong>(Pencil.)</strong> Generalize the kernel-stacking arithmetic: <span class="math inline">\(n\)</span> stacked <span class="math inline">\(3\times3\)</span> layers versus one <span class="math inline">\((2n{+}1)\times(2n{+}1)\)</span> kernel, at constant width <span class="math inline">\(C\)</span>. Then redo it for a layer that grows channels <span class="math inline">\(C \rightarrow 2C\)</span>: split into two <span class="math inline">\(3\times3\)</span>s (<span class="math inline">\(C \rightarrow C \rightarrow 2C\)</span> and <span class="math inline">\(C \rightarrow 2C \rightarrow
 2C\)</span>) and find when the split stops saving parameters.</li>
-<li><strong>(Pencil.)</strong> Verify the Inception bottleneck arithmetic from the callout (<span class="math inline">\(819{,}200\)</span> versus <span class="math inline">\(110{,}592\)</span>), then design the cheapest <span class="math inline">\(1\times1\)</span>-plus- <span class="math inline">\(5\times5\)</span> pipeline from 128 channels to 64 output channels that keeps the squeeze width at least a quarter of the input width.</li>
+<li><strong>(Pencil.)</strong> Verify the Inception bottleneck arithmetic from the callout (<span class="math inline">\(819{,}200\)</span> versus <span class="math inline">\(110{,}592\)</span>), then design the cheapest <span class="math inline">\(1\times1\)</span>-plus-<span class="math inline">\(5\times5\)</span> pipeline from 128 channels to 64 output channels that keeps the squeeze width at least a quarter of the input width.</li>
 <li><strong>(Code.)</strong> Make VGGSmall’s blocks <em>depthwise separable</em>: replace each <span class="math inline">\(3\times3\)</span> conv with a per-channel <span class="math inline">\(3\times3\)</span> (<code>groups=c_in</code>) followed by a <span class="math inline">\(1\times1\)</span> mixer. Count parameters, retrain, and report the accuracy-per-parameter ratio against the original. (This is MobileNet’s depthwise-separable construction.)</li>
 <li><strong>(Code.)</strong> Ablate BatchNorm: retrain VGGSmall with the BN layers removed, same budget. Compare final accuracy <em>and</em> the first ten epochs’ training accuracy. Then repeat the <code>bn-drift</code> cell’s measurement on both trained networks. Does training itself fix the activation scales?</li>
-<li><strong>(Code.)</strong> Data augmentation as a third road: on the 30-image shoe task, train from scratch with random horizontal flips and ±3-pixel shifts (<a href="../part1/06-generalization-inductive-bias.html" class="quarto-xref"><span>Chapter 6</span></a>’s exercise, now as a tool). Does augmentation close the gap to the pinned full-data results further than transfer did? Why might augmentation and transfer help in <em>different</em> regimes?</li>
+<li><strong>(Code.)</strong> Try data augmentation as a third road: on the 30-image shoe task, train from scratch with random horizontal flips and ±3-pixel shifts (<a href="../part1/06-generalization-inductive-bias.html" class="quarto-xref"><span>Chapter 6</span></a>’s exercise, now as a tool). Does augmentation close the gap to the pinned full-data results further than transfer did? Why might augmentation and transfer help in <em>different</em> regimes?</li>
 <li><strong>(Audit.)</strong> Retrain <code>VGGSmall</code> and <code>NINSmall</code> under seed 6050, then collect the 20 Fashion-MNIST test items on which the models disagree with each other or with the supplied label while at least one model assigns its prediction probability above 0.9. Preserve the images, supplied labels, predictions, and confidences before adjudication. Have a second reader independently label the 20 items, report agreement and a binomial interval for the suspected-label-error share, and list ambiguous cases separately. Explain why confident disagreement is a biased sample of the full test set, in which direction that selection can distort prevalence, and what the audit can still reveal.</li>
 <li><strong>(Pencil.)</strong> Derive <span class="math inline">\(\partial\loss/\partial x\)</span> through <a href="#eq-batchnorm" class="quarto-xref">Equation&nbsp;<span>10.1</span></a>’s batch mean and variance. Mark the direct normalized-input term and the two terms created by coupling every example through those statistics. <strong>(Code.)</strong> Verify all three terms against autograd on the experimentation interlude’s BatchNorm module. Then delete the two coupling terms deliberately, compare the gradient error, and rerun the interlude’s training curve under the same data, initialization, minibatch schedule, and seed panel.</li>
 </ol>
