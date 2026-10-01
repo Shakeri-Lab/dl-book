@@ -3,7 +3,7 @@
 **Approved for publication, September 11, 2026.** The author approved score field
 for publication (`ec2e0f6`), requested this scene separately, then approved its
 linked-patch revision with “push. Do next.” It follows Chapter 16's computational-price paragraph,
-immediately before “A Fashion rematch, not a referendum,” without a QMD edit:
+immediately before “CNN and ViT on 1,000 Fashion images” (until October 1, 2026, “A Fashion rematch, not a referendum”), without a QMD edit:
 `16-vit-scaling.html#attention-bill-excerpt`.
 
 ## One mechanism and one question
@@ -124,7 +124,7 @@ Lecture paths are relative to
 
 | Source | SHA-256 |
 |---|---|
-| `chapters/part4/16-vit-scaling.qmd` | `a94a57dcf4878f46b5937e8df34f3254fc8879753336f6c53049d24e37d51ead` |
+| `chapters/part4/16-vit-scaling.qmd` | `b6c51c33f706b2e002f7adf3c2d4f6e7b993870e8f2faf7060e7e1c951f292a7` |
 | `6050-Ch16/lecture.jsx` | `6b9cedc6ab0e407e9e62dfc3278ef35205cc0e9e7c61c9c64ff3093864cce057` |
 | `6050-Ch16/STORYBOARD.md` | `7657e0372b2aa1861ae1bf7fa6f0a8bdcda7edb807ce0b6e1042ee9c3990d9a4` |
 | `6050-Ch16/ch16-data.js` | `68881c89c2e85d85b821b7addb606bb11651dc4dd7a0fbcd45f07539dc5501ee` |

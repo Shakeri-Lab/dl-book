@@ -14,10 +14,9 @@ question every practitioner faces daily: *how, exactly, do you run the descent* 
 dataset has a million examples, the model has millions of knobs, and the loss landscape
 is no longer a friendly bowl?
 
-This chapter is about the workhorse answer, stochastic gradient descent, and the small
-set of refinements (step size, minibatch noise, momentum, and adaptive per-parameter
-scaling) that turn it from a theoretical idea into the algorithm that trains essentially
-everything in this book.
+The workhorse answer is stochastic gradient descent, with a small set of refinements
+(step size, minibatch noise, momentum, and adaptive per-parameter scaling) that turn it
+from a theoretical idea into the algorithm that trains essentially everything in this book.
 
 ## Where losses come from, one more time
 
@@ -56,8 +55,7 @@ $\rightarrow$ we need to change strategy to scale up.
 
 ## Stochastic gradient descent
 
-The idea is almost cheeky: we do not need the exact gradient. A good approximation is
-enough. Instead of the expensive sum over all $n$ examples, average over a small random
+We can estimate the gradient without evaluating every training example. Instead of the expensive sum over all $n$ examples, average over a small random
 **minibatch** $\mathcal{B}$: think 32 examples against a million:
 
 $$
@@ -81,9 +79,9 @@ around batched matrix multiplication, the GEMM of the Preface. A dense layer app
 $B$ examples is one matrix product in which every weight, once read from memory, is
 reused for all $B$ examples. For small $B$ the step's cost is dominated by moving
 weights rather than by arithmetic, so a batch of 32 often takes little more wall-clock
-time than a batch of one, and $B=1$ leaves most of an accelerator idle. Batch size is a
-negotiation between statistics and silicon; @sec-04-estimator-cases and the batch-size
-section below return to both sides.
+time than a batch of one, and $B=1$ leaves most of an accelerator idle. Batch size therefore
+trades gradient noise against hardware efficiency, and we return to both sides below and
+in @sec-04-estimator-cases.
 
 In practice the algorithm is:
 
@@ -93,7 +91,7 @@ In practice the algorithm is:
 4. One pass through all batches is an **epoch**; repeat for multiple epochs.
 
 ::: {.callout-note}
-## Honest fine print
+## Sampling without replacement
 
 There are two different facts hiding under the word "without replacement." A single
 uniform subset, evaluated at a fixed $\vect{w}$, is still unbiased and has *less*
@@ -225,13 +223,11 @@ plt.tight_layout()
 plt.show()
 ```
 ::::
-Here is the surprise: the bouncing is not merely tolerable; in some regimes it is a
-**feature**. A noisy step may perturb the iterate away from a saddle, a narrow basin, or
+In some regimes the bouncing is not merely tolerable but a **feature**. A noisy step may perturb the iterate away from a saddle, a narrow basin, or
 a shallow trap that exact descent would follow more predictably. Minibatch noise can
 also bias training toward different solutions, and smaller batches sometimes improve
 generalization. None of these outcomes is guaranteed: the effect depends on the model,
-data, learning rate, and batch size. We will give that evidence its proper treatment in
-@sec-06-generalization-inductive-bias. For now, treat noise as part of the algorithm,
+data, learning rate, and batch size. @sec-06-generalization-inductive-bias returns to that evidence. For now, treat noise as part of the algorithm,
 not automatically as a defect or a cure.
 
 ## The learning rate
@@ -284,8 +280,8 @@ Adam, unnormalized features, and very deep models can require very different val
 Read the training curves: crawling $\rightarrow$ consider raising it; oscillating or
 exploding $\rightarrow$ lower it. Later in training it often pays to *decay* the
 learning rate so the fine-tuning steps get smaller; that is a **learning-rate
-schedule**. One exotic-sounding relative, *warmup* (starting tiny and ramping up), will
-matter enormously when we train Transformers in @sec-14-self-attention-transformer.
+schedule**. *Warmup* starts with a small learning rate and gradually increases it. We will return to
+it when training Transformers in @sec-14-self-attention-transformer.
 :::
 
 ## The batch size
@@ -309,13 +305,13 @@ best setting here, only a dial linking statistics and hardware.
 
 <!-- NOVEL: needs sign-off — the three-case estimator discipline (Plan v2, Phase 4). -->
 
-The license behind everything above deserves one paragraph of fine print, because
-the rest of the book will lean on it in three different ways.
+The minibatch argument applies to averages of per-example losses. Other objectives
+need a separate check.
 
 **Case 1: decomposable objectives.** When the loss is a mean of per-example terms,
 $\loss(\vect{w}) = \E_{x}[\ell(x; \vect{w})]$, a minibatch average is an unbiased
 estimator of the full objective, and its gradient an unbiased estimator of the full
-gradient. That is the license SGD runs on, and it is why $B$ is a compute-and-noise
+gradient. SGD rests on this unbiasedness, which is why $B$ is a compute-and-noise
 dial, not a correctness dial. Cross-entropy, squared error, and every loss in Parts
 I–III are Case 1.
 
@@ -325,9 +321,8 @@ $R(\bar{s}_B)$ is generally **biased** (Jensen's inequality gives the direction 
 $R$ is convex or concave), and averaging per-batch values of $R$ does not converge to
 the true quantity as training runs longer; only larger batches shrink the bias.
 Log-of-mean, KL between *aggregate* distributions, and correlation-style diagnostics
-live here. When the book meets one (@sec-19-generative's aggregate-posterior trap is
-the flagship), it names the case and either restructures the estimand or declares the
-bias.
+live here. For such quantities, either restructure the estimand or declare the bias.
+The aggregate-posterior trap of @sec-19-generative is one example.
 
 **Case 3: batch-defined objectives.** Sometimes the batch is not estimating
 anything: it is *part of the objective's definition*. A contrastive loss whose
@@ -337,11 +332,9 @@ other, and $B$ becomes **protocol**, to be reported like any other design choice
 Decoding-side analogues exist too: beam width in @sec-11-encoder-decoder defines the
 search, it does not estimate it.
 
-The audit habit, whenever a loss line reduces over anything: name the target, the
-estimator, the reduction axes, the case, and the boundary where the license fails.
-Chapters that meet cases 2 and 3 repeat this in one sentence; the full statement
-lives only here. @sec-a5-statistical-learning places these cases beside the population
-quantity, distribution, and uncertainty that complete the statistical contract.
+Whenever a loss line reduces over anything, name the target, the estimator, the
+reduction axes, the case, and the boundary where that case stops applying. @sec-a5-statistical-learning places these cases beside the population
+quantity, distribution, and uncertainty that a statistical claim must also name.
 
 ## Momentum: give the ball some mass
 
@@ -413,15 +406,15 @@ models; **Adam** is the good default that works out of the box.
 
 ## The race, on a problem where we know the truth
 
-Claims about optimizers deserve a test you can rerun. We build a least-squares problem
+We build a least-squares problem
 with a deliberately *ill-conditioned* landscape; the second feature is ten times the
 scale of the first, so the loss surface is a long narrow valley. We give all three
 optimizers the same 120-step, 16-example-batch budget, while using learning rates chosen
 for this toy: $0.003$ for SGD and momentum, $0.1$ for Adam. This is a mechanism
 comparison, not a controlled claim that one optimizer wins at a shared learning rate.
 
-The cell also uses `backward()` as the framework instrument previewed in @sec-01-linear-regression. It
-supplies gradients for the race; @sec-05-backpropagation opens that box next.
+The cell gets the race's gradients from `backward()`,
+as in @sec-01-linear-regression; @sec-05-backpropagation opens that box next.
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
@@ -471,21 +464,20 @@ plt.xlabel("step"); plt.ylabel("full-batch loss (log scale)")
 plt.legend(); plt.tight_layout(); plt.show()
 ```
 ::::
-Read the result honestly. This is one problem, chosen to expose conditioning; it is not
+This is one problem, chosen to expose conditioning; it is not
 proof that Adam always wins (it does not: plain SGD with momentum, well tuned, still
 trains many of the best vision models). What the race does show is *mechanism*: when
 different directions of the landscape have wildly different steepness, per-direction
-memory (momentum) and per-parameter scaling (Adam) buy you orders of magnitude. It also
-whispers a practical lesson: much of this valley's narrowness came from unscaled
-features $\rightarrow$ *normalize your inputs* and you fight the optimizer less
-(Exercise 5).
+memory (momentum) and per-parameter scaling (Adam) buy you orders of magnitude. Much of
+the valley's narrowness comes from unscaled features. Normalizing the inputs makes the
+optimizer's job easier (Exercise 5).
 
 <!-- NOVEL: needs sign-off -->
 ## Three regularizers that live inside training
 
 Regularization can act on the update, the hidden computation, or the duration of
-training. Ridge from @sec-01-linear-regression returns as a training-loop citizen; the
-other two mechanisms make their contracts explicit here.
+training. Ridge from @sec-01-linear-regression returns as weight decay on the update;
+dropout and early stopping act on the other two.
 
 ### Weight decay: intervening on the update
 
@@ -569,7 +561,7 @@ print(f"max |mean - h|: {(mean_output - h).abs().max():.4f}")
 print("evaluation:", inverted_dropout(h, p=0.25, training=False).tolist())
 ```
 ::::
-There is a useful **ensemble intuition** here, with an important calibration. Training
+There is a useful **ensemble intuition** here. Training
 shares weights across many masked subnetworks; evaluation uses one full network whose
 activation scale matches their mean. That can resemble averaging many related
 predictors. It is not an exact ensemble identity, because nonlinear layers and shared
@@ -604,7 +596,7 @@ Close the book for one minute and reconstruct one update.
 ## Okay, so: the training loop
 
 <!-- NOVEL: needs sign-off -->
-Assemble the chapter into the loop you will run, in some form, for the rest of the book:
+The pieces above fit into one training loop:
 
 1. Instantiate the parameters $\vect{w}^{(0)}$: PyTorch layers initialize their weights
    automatically when they are created (@sec-05-backpropagation analyzes why that
@@ -617,9 +609,8 @@ Assemble the chapter into the loop you will run, in some form, for the rest of t
 4. Switch to evaluation mode for validation; watch the curve, schedule the learning
    rate, and stop early when it turns.
 
-That recipe, as code. The book keeps it as a tested function: **Listing 4.1**,
-printed here once and imported by later chapters, which then show only what
-they change (their model builder and their budget):
+Here is that recipe as a tested function, **Listing 4.1**. Later chapters import it
+and show only their model builder and their budget:
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
@@ -635,11 +626,11 @@ they change (their model builder and their budget):
 ::::
 
 Two reading notes. Seeding *precedes* construction, so one `(model_fn, seed)`
-pair always trains from the same starting tensors: later chapters' paired
-comparisons lean on that. And the loss line is the estimator licensed earlier in
-this chapter: a per-example objective averaged over a shuffled minibatch is an
-unbiased estimate of the full-data loss, which is precisely why the minibatch
-size is a compute knob rather than a correctness knob (@sec-04-estimator-cases).
+pair always trains from the same starting tensors, which a paired comparison
+requires. And the loss line is a Case 1 estimator: a per-example objective averaged over a
+shuffled minibatch is an unbiased estimate of the full-data loss, which is precisely
+why the minibatch size is a compute knob rather than a correctness knob
+(@sec-04-estimator-cases).
 
 One box in that loop is still magic: "backward pass for the gradients." Computing
 millions of partial derivatives at the cost of roughly one extra forward pass is the

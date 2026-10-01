@@ -23,13 +23,13 @@
 @sec-09-modern-cnns-transfer left us a transfer rule: importing a representation is most promising
 when **labels are scarce, the target is feature-hungry, and the source supplies
 useful coverage at a matched scale**. BERT's recipe showed the conventional next
-step: fine-tuning changes every encoder weight. @sec-16-vit-scaling then planted a second
+step: fine-tuning changes every encoder weight. @sec-16-vit-scaling then added a second
 warning: **training-optimal is not serving-optimal**. Chinchilla's allocation can
 spend a pretraining budget well while leaving us with a backbone that is expensive
 to copy, update, or store once per downstream task.
 
-Put those promises on one ledger. A pretrained model creates three different
-bills:
+Reusing a pretrained model has three different
+costs:
 
 1. the **backbone storage**: a base shared across tasks, or a full task-specific copy
    when sharing is abandoned;
@@ -38,8 +38,8 @@ bills:
 3. the **transient work**: context tokens, activations, gradients, optimizer state,
    and caches needed while adapting or running the model.
 
-These bills are related, but they are not interchangeable: every lever can affect more
-than one bill, and none removes all backbone storage or transient work. Freezing a billion
+These costs are related, but they are not interchangeable: every lever can affect more
+than one cost, and none removes all backbone storage or transient work. Freezing a billion
 weights removes their gradients; it does not make the billion weights disappear.
 Packing each weight into fewer bits reduces a storage lower bound; it does not prove
 that a particular kernel will run faster. Adding demonstrations changes no weight; it
@@ -47,8 +47,8 @@ still lengthens the sequence the model must process. A merged LoRA or fully tune
 checkpoint can collapse base and delta into one artifact, but then each task carries
 a full backbone-sized copy instead of sharing the original.
 
-The useful organizing questions are therefore not simply “How many parameters?”
-They are **where does task-specific information live, and which object does the
+So we ask not simply “How many parameters?” but
+**where does task-specific information live, and which object does the
 method change?** Hard prompts and retrieved documents place task information in
 context. Parameter-efficient fine-tuning (PEFT) places it in a restricted set of
 learned values. Quantization need not add task information at all; it changes the numerical
@@ -75,7 +75,7 @@ navy, orange, green, wine = "#232D4B", "#E57200", "#2E7D32", "#722F37"
 ```{python}
 #| label: fig-adaptation-map
 #| echo: false
-#| fig-cap: "Three levers act on three different objects. Prompting changes the context presented to a fixed model; PEFT lets only a small learned state receive gradient updates; quantization changes how fixed values are represented. QLoRA combines a quantized frozen base with a trainable low-rank branch. The separate cost ledger below is deliberately not column-matched."
+#| fig-cap: "Three levers act on three different objects. Prompting changes the context presented to a fixed model; PEFT lets only a small learned state receive gradient updates; quantization changes how fixed values are represented. QLoRA combines a quantized frozen base with a trainable low-rank branch. The dashed row of costs below is deliberately not column-matched."
 #| fig-alt: "Three top boxes label context, trainable state, and representation. A separate dashed ledger below lists backbone storage, incremental state, and transient work, explicitly marked as not column-matched."
 #| fig-width: 10
 #| fig-height: 4.6
@@ -428,7 +428,7 @@ plt.show()
 ```
 The 39,268-parameter network lands at mean accuracies
 $0.252,0.500,0.749,1.000,1.000$ for $k=0,1,2,3,4$, respectively. The analytic
-ceilings are $0.25,0.50,0.75,1,1$. More revealingly, unseen-query accuracy rises
+ceilings are $0.25,0.50,0.75,1,1$. Unseen-query accuracy rises
 from $0.252$ to $0.330$, $0.499$, and $1.000$. The model is not only copying a
 matching demonstration; at $k=3$ it identifies the remaining label.
 
@@ -452,7 +452,7 @@ then places retrieved passages beside the instruction and query before generatio
 The generator's weights may remain fixed; the task-specific state lives partly in
 the index and partly in the retrieved context.
 
-This reconnects to @sec-12-kernel-regression. A retriever computes query–document
+As in @sec-12-kernel-regression, a retriever computes query–document
 similarities, selects neighbors, and hands their content to a downstream weighted
 computation. Modern systems can learn the retriever, the generator, or both, but
 the basic context-augmentation move is distinct from PEFT.
@@ -466,8 +466,8 @@ retrieval and generation stages must be evaluated separately.
 
 ## What if the prompt itself were learnable?
 
-Hard prompts spend human effort and context tokens. The chapter's familiar refrain
-now applies: **what if the prompt itself were learnable?** Let
+Hard prompts spend human effort and context tokens. **What if the prompt itself were
+learnable?** Let
 $\matr{P}\in\mathbb{R}^{m\times d}$ be $m$ continuous vectors with the same width
 as token embeddings. For an $n$-token input, define
 $\operatorname{Embed}(x)\in\mathbb{R}^{n\times d}$. Prompt tuning prepends the
@@ -504,7 +504,7 @@ inference. Lester and colleagues found that prompt tuning approached full tuning
 T5 scale grew in their SuperGLUE study; that result is not a universal size
 threshold.
 
-Two other PEFT families complete the map. **Adapters** insert a small bottleneck
+Two other PEFT families act inside frozen blocks. **Adapters** insert a small bottleneck
 inside each frozen Transformer block. For bottleneck width $d_b$, let
 $\matr{W}_{\mathrm{down}}\in\mathbb{R}^{d_b\times d}$,
 $\vect{b}_{\mathrm{down}}\in\mathbb{R}^{d_b}$,
@@ -559,8 +559,8 @@ $$ {#eq-lora-forward}
 
 $\matr{A}$ compresses to $r$ coordinates and $\matr{B}$ expands back to the output
 width. Because $\operatorname{rank}(\matr{B}\matr{A})\le r$, task updates can use
-at most $r$ independent linear directions in that matrix. The merged matrix is not
-therefore rank $r$; the constraint applies only to the correction.
+at most $r$ independent linear directions in that matrix. Only the correction is
+constrained to rank at most $r$. The merged matrix need not be low rank.
 
 The trainable count is
 
@@ -594,13 +594,12 @@ phrase. Inspect the selected module names and shapes, sum @eq-lora-count over ex
 that set, and print the parameters that still have `requires_grad=True`. Then apply
 the four-part freeze audit below: the base stays unchanged, only permitted factors
 receive gradients, and merged and unmerged outputs agree within a declared numerical
-tolerance. Package calls and model identifiers can evolve; these algebraic checks are
-the stable contract.
+tolerance. Package calls and model identifiers can evolve; these algebraic checks do
+not.
 
 When the base is also stored on a quantization grid, the result is QLoRA, not a
 different LoRA equation. Keep the frozen base's storage and compute dtypes separate
-from the factors' trainable dtype, as @sec-a3-precision-performance requires. The
-QLoRA section later in this chapter makes that composition explicit.
+from the factors' trainable dtype, as @sec-a3-precision-performance requires.
 :::
 <!-- /NOVEL -->
 
@@ -695,8 +694,8 @@ problem and optimizer schedule.
 
 Write the six planted magnitudes as $\sigma_1\ge\cdots\ge\sigma_6$. Their values are
 $1.20,0.90,0.65,0.40,0.22,0.10$. A rank-$r$ correction below six must leave some
-directions behind. This design deliberately favors the LoRA assumption; that is what
-makes the capacity claim falsifiable before we run it.
+directions behind. Because the target is exactly low rank, we can compute the error each rank
+must leave before we train.
 
 Because the six diagonal basis directions are mutually orthogonal, their squared
 correction energy is $\sum_{j=1}^{6}\sigma_j^2$. A rank-$r$ correction can retain at
@@ -932,11 +931,10 @@ is bitwise intact, and the largest merged–unmerged discrepancy is below
 $2\times10^{-6}$.
 
 In this toy $32\times32$ layer, rank 6 still trains 384 values, 37.5% of a full
-matrix. The point is inspectability rather than an impressive compression ratio; real
+matrix. The saving is small because the layer is small; real
 LoRA savings depend on wide matrices, small ranks, and which layers are targeted. The
-experiment was also built from a low-rank shift; a task whose useful
-correction is not well captured at the chosen rank will retain error no matter how
-fashionable the adapter is.
+experiment was also built from a low-rank shift. If the chosen rank cannot capture the
+correction the task needs, some error will remain.
 
 ## Quantization: put weights on a smaller grid
 
@@ -953,11 +951,10 @@ One billion FP16 weights therefore require 2 GB in decimal units; an ideal packe
 checkpoints or working-memory forecasts. Scales, zero-points, unquantized tensors,
 packing alignment, activations, and caches remain.
 
-This is where a tensor's *dtype* becomes more than a software label.
-@sec-a2-tensors will gather dtype, shape, stride, and physical layout in one place;
-@sec-a3-precision-performance connects FP16, BF16, rounding, and mixed precision to the
-finite representations first encountered in @sec-05-backpropagation. Here we need one narrower
-fact: fewer nominal bits change both representable values and storage arithmetic.
+Here a tensor's *dtype* becomes more than a software label: fewer nominal bits change both
+representable values and storage arithmetic. @sec-a2-tensors covers dtype, shape, stride,
+and physical layout; @sec-a3-precision-performance connects FP16, BF16, rounding, and mixed
+precision to the finite representations first encountered in @sec-05-backpropagation.
 
 Start with signed **symmetric uniform quantization** of a real-valued tensor
 $\matr{W}$. For $b$ bits, let
@@ -1202,9 +1199,8 @@ Bit count does not determine latency by itself. Real speed depends on supported
 kernels, hardware, packing, dequantization, memory bandwidth, batch shape, and which
 tensors remain in higher precision. Dettmers and colleagues even reported cases
 where LLM.int8() overhead made smaller models slower than FP16. Measure the target
-system; do not turn a file-size ratio into a runtime claim. The Roofline and
-measurement contracts in @sec-a3-precision-performance make that distinction
-explicit.
+system; do not turn a file-size ratio into a runtime claim. @sec-a3-precision-performance draws that distinction with the Roofline model
+and matched evidence.
 :::
 
 ### What a quantization workflow protects
@@ -1350,7 +1346,7 @@ rewarded. A parameter-efficient route can optimize a poor objective just as
 efficiently as a good one.
 :::
 
-## Choose by the bill you need to reduce
+## Choose by the cost you need to reduce {#choose-by-the-bill-you-need-to-reduce}
 
 | Method | Task state and permitted writes | Main consequence |
 |---|---|---|
@@ -1369,8 +1365,9 @@ is available. Treat that as a search heuristic, not a law. A stable format chang
 may fit a small adapter; genuinely new knowledge may belong in retrieval or further
 training; a severe source-coverage mismatch may defeat all of them.
 
-That last point harvests @sec-09-modern-cnns-transfer's full promise. PEFT changes the cost **after**
-we choose transfer; it does not repeal the coverage condition. A frozen foundation
+PEFT changes the cost **after**
+we choose transfer; it does not repeal the coverage condition of @sec-09-modern-cnns-transfer.
+A frozen foundation
 cannot guarantee a reliable representation absent from source coverage, and a
 low-rank update does not guarantee that scarce target labels can build the missing
 feature. Quantization preserves or damages an existing computation; it does not add
@@ -1381,7 +1378,7 @@ coverage.
 
 During PEFT, the frozen base still occupies memory and backpropagation still stores
 or recomputes activations through it. During generation, context and key/value caches
-can dominate different regimes. Optimizer dtype and implementation change the bill.
+can dominate different regimes. Optimizer dtype and implementation change the total.
 Report trainable state, base storage, transient training memory, context length, and
 measured runtime separately. One percentage cannot stand in for all five.
 :::
@@ -1393,7 +1390,7 @@ preserves. Evaluation must include the target task,
 retained capabilities that matter, calibration or distribution shifts, and the
 actual deployment representation.
 
-## The next question: what deserves the update?
+## What should the update optimize? {#the-next-question-what-deserves-the-update}
 
 **Where the update lives is not what the update optimizes.** Prompt vectors,
 low-rank matrices, and full fine-tuning decide where task gradients may write.
@@ -1408,16 +1405,16 @@ objectives, not automatic consequences of choosing LoRA or a full checkpoint.
 ::: {.callout-note}
 ## Check yourself
 
-Close the book for one minute and separate the adaptation bills.
+Close the book for one minute and separate adaptation's three costs.
 
 - Where can task-specific state live when the backbone is frozen?
 - What does LoRA's rank constrain, and what does quantization change instead?
 - Why can a method reduce stored bits without reducing every inference cost?
 :::
 
-## Okay, so: adaptation has three separate bills
+## Okay, so: adaptation has three separate costs {#okay-so-adaptation-has-three-separate-bills}
 
-1. **Adaptation has three bills.** Backbone storage, incremental task state, and transient
+1. **Adaptation has three costs.** Backbone storage, incremental task state, and transient
    work must be reported separately. Zero trainable weights and fewer stored bits
    do not mean zero inference or training cost.
 2. **Prompting changes context, not weights.** The five-seed permutation study closely
@@ -1428,7 +1425,7 @@ Close the book for one minute and separate the adaptation bills.
    interchangeable labels for “small fine-tuning.”
 4. **LoRA learns a low-rank correction.** Its trainable count is
    $r(d_{\mathrm{in}}+d_{\mathrm{out}})$ per targeted matrix, and its rank is a real
-   capacity limit. The planted rank-six experiment fails exactly where it should.
+   capacity limit. The planted rank-six experiment leaves error only below rank six.
 5. **Quantization is a grid, a granularity, and a workflow.** Per-row scales rescue
    quiet rows in the controlled audit, but consume metadata. Payload size does not
    predict runtime without kernels and hardware.
@@ -1436,8 +1433,7 @@ Close the book for one minute and separate the adaptation bills.
    dequantized for compute while higher-precision LoRA factors train. Storage dtype,
    compute dtype, and trainable dtype are distinct.
 7. **Transfer coverage still governs the choice.** None of these methods creates
-   source knowledge for free. The next chapter will ask what the permitted update
-   should optimize.
+   source knowledge for free.
 
 ## Sources and further reading {.unnumbered}
 
@@ -1483,6 +1479,6 @@ Close the book for one minute and separate the adaptation bills.
 5. **(Audit.)** For each of three cases (fresh facts with citations, a stable
    output format, and a target domain absent from the source data) choose a first
    experiment among prompting/RAG, PEFT, full tuning, and quantization. State where
-   task state lives, which bill it reduces, what it cannot repair, and one retained
+   task state lives, which cost it reduces, what it cannot repair, and one retained
    behavior you would evaluate. Finally explain why none of those choices answers
    the @sec-18-alignment question of which behavior deserves reward.

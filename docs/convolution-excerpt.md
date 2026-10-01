@@ -109,7 +109,7 @@ and `scripts/audit_excerpt_fixtures.py` enforces both.
 
 | Manuscript source | SHA-256 |
 |---|---|
-| `chapters/part2/07-filters-convolution.qmd` | `91618e3ec31b1ab6b4249c681326e32f383c84cd0d07a3dbf2677b55a616538c` |
+| `chapters/part2/07-filters-convolution.qmd` | `ab7f72e81be4ebc93d46044248a44cbc65be091a6b0f6b2db44b30028e4c2589` |
 
 ## Integration and PDF boundary
 

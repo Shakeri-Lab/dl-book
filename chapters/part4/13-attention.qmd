@@ -26,15 +26,14 @@ could tune the bandwidth; it could not invent a better notion of relevance.
 An embedding can learn what lives at row 17, but fetching row 17 is still a rigid act
 of indexing: learned content behind a hard address. Replace the one address with a distribution over addresses, let the
 gradient reach every score, and the model can learn which rows deserve weight.
-Compare one request with every stored candidate, normalize the scores, and
-blend the stored values with the resulting weights. That is @sec-02-logistic-softmax's softmax. This content-dependent
-weighted read is **attention**. By the end of the chapter you will have built it twice,
-masked it correctly, and watched it carry a date's year to the front of the output.
+Compare one request with every stored candidate, normalize the scores with
+@sec-02-logistic-softmax's softmax, and blend the stored values with the resulting weights. This content-dependent
+weighted read is **attention**.
 
 ```{python}
 #| label: fig-attention-lookup
 #| echo: false
-#| fig-cap: "The lookup table, softened. A hard lookup would follow exactly one arrow to one row. Attention scores the query against every key, softmax turns the scores into row weights (arrow thickness; the numbers here are illustrative), and the output is the weighted blend of all values. Every arrow is differentiable, so the loss can teach the scoring itself: this diagram is the entire chapter."
+#| fig-cap: "The lookup table, softened. A hard lookup would follow exactly one arrow to one row. Attention scores the query against every key, softmax turns the scores into row weights (arrow thickness; the numbers here are illustrative), and the output is the weighted blend of all values. Every arrow is differentiable, so the loss can teach the scoring itself."
 #| fig-alt: "A query box on the left sends arrows of different thickness to four key rows; each key row pairs with a value row whose shading matches the arrow weight; all values merge into a single output box labeled weighted blend of all rows."
 import matplotlib.pyplot as plt
 from matplotlib.patches import FancyBboxPatch
@@ -97,7 +96,7 @@ taught the model where useful information lived.
 
 <!-- /NOVEL -->
 
-## The scores-to-weights machine, one more time
+## Learn the score, keep the softmax {#the-scores-to-weights-machine-one-more-time}
 
 Let the encoder retain its full memory
 
@@ -124,9 +123,8 @@ $$
 \vect{c}_t=\sum_{i=1}^{n}\alpha_{t,i}\vect{h}_i.
 $$ {#eq-learned-cross-attention}
 
-This is @sec-12-kernel-regression's fixed matrix $\matr{A}\matr{V}$ with a learned score. It is
-also @sec-02-logistic-softmax's **scores $\rightarrow$ weights** machine in exactly the form that
-chapter advertised. A hard source-position choice would use argmax and one-hot
+This is @sec-12-kernel-regression's fixed matrix $\matr{A}\matr{V}$ with a learned score. The
+softmax is unchanged; we now learn the scoring rule. A hard source-position choice would use argmax and one-hot
 indexing. The soft weights move continuously when the scores move, so backpropagation
 can tell the scorer how each valid address affected the loss. We have
 **softened the hard**.
@@ -136,11 +134,11 @@ is **cross-attention**. It bridges two sequences. The model still initializes th
 decoder from the encoder's final state, but that fixed bridge is no longer the only
 path from source to output: every decoder step receives its own context
 $\vect{c}_t$. The old handoff was a **finite-state
-bottleneck**. @sec-12-kernel-regression kept the memory bank; this chapter completes that relay by
-learning its access rule.
+bottleneck**. @sec-12-kernel-regression kept the memory bank; cross-attention now learns the rule that
+reads it.
 
-@sec-08-cnn made one other promise. A CNN sees globally only by stacking local
-operations until its receptive field spans the input. One cross-attention read can
+In @sec-08-cnn, a CNN saw globally only by stacking local
+operations until its receptive field spanned the input. One cross-attention read can
 score every encoder position in a single layer. It reaches the whole input directly,
 at the cost of all query--key comparisons and, for now, of the RNNs that created those
 states sequentially.
@@ -406,8 +404,7 @@ $$
 $$
 
 The score's standard deviation grows as $\sqrt{d_k}$. Dividing by that quantity
-returns the idealized variance to one. This is a variance-control rationale, not a
-promise that trained projections remain independent or unit variance.
+returns the idealized variance to one. Trained projections need not stay independent or unit variance.
 
 <!-- NOVEL: needs sign-off - seeded sqrt(d_k) variance/softmax audit and results. -->
 
@@ -485,8 +482,8 @@ plt.show()
 Raw variance rises from $8.02$ to $510.35$ as $d_k$ grows from 8 to 512. Scaled
 variance stays between $0.997$ and $1.004$. Over the same range, the average
 largest unscaled softmax weight climbs from $0.564$ to $0.944$; the scaled value
-stays between $0.24$ and $0.25$. This is @sec-02-logistic-softmax's **temperature dial** returning with a
-dimension-dependent setting. Scaling corrects the dimension-induced spread; it does
+stays between $0.24$ and $0.25$. This is @sec-02-logistic-softmax's **temperature dial**, set by the
+dimension. Scaling corrects the dimension-induced spread; it does
 not normalize the vectors.
 
 <!-- /NOVEL -->
@@ -500,7 +497,7 @@ its score to zero is wrong because $\exp(0)=1$ still earns weight.
 
 <!-- NOVEL: needs sign-off - independent mask implementation and all-masked guard. -->
 
-Here is an independently written scaled-dot operator. It accepts already projected
+The scaled-dot operator below accepts already projected
 queries, keys, and values, then audits a batch whose second example has two padded
 keys:
 
@@ -599,8 +596,8 @@ real key, as the function does above.
 
 ## Return to @sec-11-encoder-decoder's date task {#return-to-chapter-11s-date-task}
 
-The abstraction has earned a real rematch. We will change one architectural idea and
-keep the experimental contract fixed:
+We rerun the date task, change one architectural idea, and keep these settings
+fixed:
 
 - the same date generator and duplicate-source rejection;
 - the same 8,000/500/500 train/validation/test split;
@@ -610,8 +607,8 @@ keep the experimental contract fixed:
 - the same first 400 unambiguous validation sources for every learning curve;
 - one final scalar audit on the same 437 unambiguous test sources.
 
-The generator and split below are deliberately byte-for-byte copies of @sec-11-encoder-decoder.
-Changing them would end the running benchmark:
+The generator and split below are byte-for-byte copies of @sec-11-encoder-decoder's, so
+both models see the same examples:
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
@@ -881,13 +878,12 @@ step at a time because its next context depends on its previous state. Teacher f
 still supplies the true previous token, but it no longer permits one fused decoder
 call.
 
-### The matched-schedule rematch
+### Attention on the matched schedule {#the-matched-schedule-rematch}
 
-The full @sec-11-encoder-decoder validation curve below is frozen from a byte-identical
-re-execution of that chapter's published baseline. We do not retrain it here. We
-train the attentive model once and inspect only validation alignments. @sec-11-encoder-decoder's
-test endpoint is not globally sealed here because that chapter has already reported
-it; for this rematch it remains decision-inert, and we request one final scalar only
+The @sec-11-encoder-decoder validation curve below comes from a byte-identical
+re-execution of that chapter's baseline; we do not retrain it here. We
+train the attentive model once and inspect only validation alignments. @sec-11-encoder-decoder
+already reported its test score, so the test set is not fresh; we evaluate it once,
 after the attention choices are fixed:
 
 :::: {.plan-code .plan-code-wide}
@@ -1032,7 +1028,7 @@ computation, or minibatch order: constructing models with different parameter co
 consumes different random draws before their first permutation. The attentive model
 has 269,550 parameters versus 169,326, an increase of 59.2%, and its input-feeding
 decoder uses a Python step loop where @sec-11-encoder-decoder's teacher-forced baseline uses one
-fused target-sequence call. This one seeded synthetic rematch shows that the
+fused target-sequence call. This one seeded synthetic run shows that the
 attention-equipped model reaches higher accuracy in fewer epochs and optimizer
 updates, not in less wall-clock time. It does not isolate bottleneck removal as the
 only possible cause.
@@ -1048,20 +1044,18 @@ top-weighted state is indexed inside that region 99.7% of the time.
 Columns are indexed by source characters, but their values are encoder states. Each
 state summarizes a recurrent prefix, so a delimiter can legitimately carry
 information about a field that just ended. Attention weights are internal allocation
-weights, not calibrated confidence and not a causal explanation of the model. The
-quantitative audit and the visual alignment complement each other; neither substitutes
-for the other.
+weights, not calibrated confidence and not a causal explanation of the model.
 :::
 
 <!-- /NOVEL -->
 
-## One learned view, for now
+## One head in the date model {#one-learned-view-for-now}
 
 One attention head learns one set of query, key, and value projections. Multi-head
 attention repeats that operator with several projection sets, concatenates the reads,
 and learns an output projection. It works for cross-attention as well as
 self-attention, and different heads *can* learn different relationships without any
-guarantee that they will. We keep one head in the date rematch so its alignment stays
+guarantee that they will. We keep one head here so its alignment stays
 easy to inspect. @sec-14-self-attention-transformer derives the multi-head shapes and implements the full
 operator in its self-attention setting.
 
@@ -1094,8 +1088,8 @@ Close the book for one minute and reconstruct the soft lookup.
 ## Okay, so: attention softens the address
 
 1. **Attention softens the address.** @sec-11-encoder-decoder learned embedding content while
-   keeping lookup indices hard. @sec-02-logistic-softmax's differentiable-lookup promise is now
-   kept: learned scores become a distribution over memory locations.
+   keeping lookup indices hard. @sec-02-logistic-softmax's softmax makes the lookup
+   differentiable: learned scores become a distribution over memory locations.
 2. **Additive attention learns the compatibility function.** Query and key enter a
    shared alignment space, tanh creates match features, and one selector produces
    each score. The same scorer is reused across all decoder/source pairs.
@@ -1106,7 +1100,7 @@ Close the book for one minute and reconstruct the soft lookup.
 4. **Masking is part of the operator.** Padding is excluded before softmax; zero is
    not a mask. Cross-attention sees all real source positions, while causal masking
    belongs to the self-attentive decoder in @sec-14-self-attention-transformer.
-5. **The date rematch exposes learned access.** Under the shared schedule, attention
+5. **On dates, attention learns where to read.** Under the shared schedule, attention
    reaches 93.25% validation exact match at epoch 6 and 100.0% on the final test
    audit. Its year rows route 97.5% of validation weight to states indexed by the
    source-year region. Parameter count and compute were not matched: the attentive

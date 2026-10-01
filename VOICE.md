@@ -26,9 +26,10 @@ A device that recurs as the same words becomes a template, and a template is the
 two-narrators problem again: the reader hears a formula instead of a person.
 
 - **V1 Local vocabulary.** Every added sentence is built from the chapter's own objects
-  and its own metaphor (Chapter 17's bills and ledger, Chapter 9's report card and IOU,
-  Chapter 8's knobs, detectives, and currency, Chapter 13's addresses, memory, and
-  relay). A sentence that could be pasted into another chapter is not written yet.
+  and its own images, where the author's own lectures use them (the CNN chapter's detectives,
+  the gradient superhighway, a model's input and output contract). A sentence that could
+  be pasted into another chapter is not written yet. Under D11, bills, ledgers, report
+  cards, IOUs and currencies are not the author's images.
 - **V2 No shared phrasing among added sentences.** No four-word sequence in two added
   sentences from different chapters. No two added promise sentences (T1) share their
   first three words; that rule exists to stop "By the end" and "you will be able to".
@@ -165,6 +166,15 @@ section we will", no emoji.
 - **D10** Transplant rules (T1 to T5) apply to Chapters 1 to 20 and the three
   interludes. The Preface, Part pages, Epilogue, and Appendices receive mechanical and
   subtraction rules only.
+- **D11 The author's voice (author's ruling, October 1, 2026).** "My voice is strongest when
+  I put a problem in front of the reader, identify what changes, and follow the
+  consequences." Prose never describes the book itself: no payoff announcements, no
+  remarks on the exposition or on editorial choices, no flourishes, no assurances that an
+  experiment is honest, and no arc vocabulary (promise, seed, harvest, IOU, debt, bill,
+  ledger, price list, report card, figurative "contracts"). An image stays only if the author's
+  own lecture transcripts or notes use it. The author's 51 rewrites and the book-wide pass are in
+  `audits/voice/stage_p25_report.md`. D11 overrides R9's old note on announcements and
+  the V1 metaphor list.
 
 ## Rules
 
@@ -215,8 +225,8 @@ the invariants, then S, R, T.
   words (D7); pronouns as above.
 - **R9 Slips.** An unambiguous typo or punctuation slip in baseline text may be fixed,
   each with a receipt: a hyphen after an -ly adverb, a comma splice, a stray comma, a
-  line break that Pandoc misreads as a list marker. Never a fragment or an announcement:
-  those are this author's voice.
+  line break that Pandoc misreads as a list marker. Never a fragment: that is this
+  author's voice. Announcements are not (D11).
 - **N1** Never change code, outputs, math, figures, plan steps, front matter, licenses,
   citations, exercise tasks, numbers, claims, or replay fixture literals.
 - **N2** Edit sentences, not paragraphs. **N3** No device outside the kit.
