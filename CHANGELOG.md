@@ -1,3 +1,10 @@
+# Rolling post-v1.4: clarity pass (October 1, 2026)
+
+- **232 clarity edits, from the rows the author approved.** They replace stiff or misleading words, resolve ambiguities, unpack nested asides, make opaque callbacks explicit, and remove flourishes, while keeping each paragraph's emphasis, orientation and rhythm.
+- **Adjusted in implementation, at the author's request.** The edition note now separates expandable experiment code from concept-diagram source kept in the repository. The PPO warning keeps "favorable incentive". The bare positional vectors differ "in magnitude, not in direction". Truncated BPTT's Markov property is stated for the forward pass, so carrying state values stays distinct from truncating gradients.
+- **Skipped.** C6-30 (MLM "without bias") is deferred: selection is a random 15%, so the batch mean is a ratio estimator, and its unbiasedness needs a separate check. C4-22, C3-23 and C3-33 keep memorable phrasing ("Architecture proposes, initialization disposes"; "general vibe").
+- **Records.** The approval list is `audits/voice/clarity_proposals.md`. Every change beside its original is in `audits/voice/stage_p25c_changes.md`. No code, math, printed output, figure or label changed.
+
 # Rolling post-v1.4: correcting the voice pass where it overcorrected (October 1, 2026)
 
 - **The author's corrections.** The author read the merged voice pass and found places where it

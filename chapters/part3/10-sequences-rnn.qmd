@@ -256,7 +256,8 @@ plt.tight_layout(); plt.show()
 
 ## Gradients through time
 
-Tied depth means backpropagation applies verbatim. To train on a sequence, run the
+The unrolled network is a deep network with tied weights, so backpropagation
+applies unchanged. To train on a sequence, run the
 loop forward, collect losses at the readouts, and backpropagate through the
 *unrolled* network, a procedure called **backpropagation through time** (BPTT). A gradient that lands on
 $\vect{h}_T$ must travel back through every application of @eq-rnn-cell to reach an
@@ -348,8 +349,8 @@ vanishing. You cannot clip your way to a longer memory.
 ### Training with a finite horizon
 
 Full BPTT requires memory and compute for the entire sequence at each training
-update. The standard fix leans on the Markov claim
-from the callout above. In **truncated BPTT**, contiguous chunks carry the recurrent
+update. The standard fix relies on the Markov property of the forward
+pass: the carried state and the next input are all the next step needs to compute. In **truncated BPTT**, contiguous chunks carry the recurrent
 state forward but detach it at each boundary. The values cross the boundary; the
 gradient graph does not. This bounds memory while preserving running context.
 
@@ -387,7 +388,7 @@ residual networks and add controls for what the memory keeps. We want a memory p
    $\rightarrow$ make the carried state **additive**:
    $\vect{c}_t = \vect{c}_{t-1} + \Delta_t$. A conveyor belt: information rides
    along untouched unless something deliberately intervenes. This is the residual
-   connection's maneuver, $H(x) = F(x) + x$, whose Jacobian's identity term let
+   connection's maneuver, $H(x) = F(x) + x$: the identity term in its Jacobian let
    gradients cross forty layers. Same trick, laid across time.
 2. **Forgettable on command.** Memory is finite; some of it should expire. Install
    a valve: $\vect{f}_t \in (0,1)$ multiplying $\vect{c}_{t-1}$.
@@ -571,8 +572,8 @@ $\vect{z}_t$ weight the candidate instead; compare the interpolation equation,
 not the gate's name alone.
 
 Two gates instead of three, one state instead of two, comparable performance in
-most settings. The memory test below enters PyTorch's version beside the LSTM, and
-Exercise 3 builds one by hand. @fig-gru-cell draws the cell on the conveyor's layout.
+most settings. The memory test below puts PyTorch's version beside the LSTM, and
+Exercise 3 builds one by hand. @fig-gru-cell draws the cell on the conveyor layout of @fig-lstm-conveyor.
 
 ```{python}
 #| label: fig-gru-cell
@@ -749,9 +750,9 @@ seed aside. That sorting holds for these six rows on this task.^[@sec-a3-precisi
 separates this mathematical attenuation from the later question of whether a chosen
 dtype can still represent the resulting value or update.]
 Initialized to remember, the gates buy **reliability**, not raw capability: the
-outcome stops depending on the seed. (At the shorter lag of 20, the vanilla RNN and both LSTM setups solve
+outcome stops depending on the seed. At the shorter lag of 20, the vanilla RNN and both LSTM setups solve
 the task under this budget. The gates earn their keep precisely where @eq-bptt says
-the vanilla cell should fail.)
+the vanilla cell should fail.
 
 
 ### Watching the valves
@@ -897,7 +898,7 @@ class CharLSTM(nn.Module):
 ::::
 The training loop below is the **canonical next-token trainer**: Listing
 12.1. Chunk sampling *is* fixed-window training: fresh random
-100-character windows every step, gradients clipped, no state carried across
+100-character windows at every training update, gradients clipped, no state carried across
 chunk boundaries. The listing is included from tested source in the support module
 (`code/dlbook/training.py`), and the cell after it imports and runs that same file.
 
@@ -959,8 +960,8 @@ held_out_loss = fixed_window_loss(model, valid_data, vocab=len(chars))
 print(f"held-out fixed-window loss {held_out_loss:.2f}")
 ```
 ::::
-The loss falls from $\ln(V) \approx 4.6$ for the printed vocabulary size (uniform guessing)
-to 1.42 on the last sampled training minibatch. The deterministic held-out
+The loss falls from the uniform-guessing value $\ln(V) \approx 4.6$ for the printed
+vocabulary size to 1.42 on the last sampled training minibatch. The deterministic held-out
 tail is harder, at 1.89, but both are far below uniform guessing. The model has
 learned a great deal about what this book's next character tends to be. To *hear*
 what it learned, generate: feed a prompt, divide the last step's logits by a
@@ -1083,8 +1084,8 @@ and data must scale together.
 ## What a fixed-size state cannot hold
 
 Check each design against the list. The window met the first four requirements
-and failed reach; a function per timestep failed any length and length-free parameters
-at once. One shared recurrence met the first five on paper. The vanilla cell failed the
+and failed reach; a function per timestep failed two at once: any length and parameters
+independent of length. One shared recurrence met the first five on paper. The vanilla cell failed the
 sixth, and the gated cells, initialized to remember, met it at lag 80 on our task. Two
 needs the list never asked for have surfaced along the way.
 
@@ -1094,7 +1095,7 @@ an **encoder** reads the source sentence into its final state, a **decoder** spi
 that state back out as words in another language. That architecture, plus its
 training tricks, is @sec-11-encoder-decoder. But notice what the design asks of
 one fixed-size state: the *entire sentence*, compressed into $(\vect{h},\vect{c})$, no
-matter how long the sentence runs. The char-LM's trailing clauses were this
+matter how long the sentence runs. The character model's trailing clauses were this
 bottleneck in miniature. The fix is not a bigger vector: the decoder should be allowed to
 *look back at all of the encoder's states*, not just the last. Choosing where to look, on the fly, is a similarity
 computation built from dot products.
@@ -1104,8 +1105,8 @@ step: $\vect{h}_t$ cannot be computed before $\vect{h}_{t-1}$, so a sequence's l
 also its training's critical path. Research has attacked this from two sides: replace
 the recurrence with a mechanism that lets every position consult every other at once,
 or keep a recurrence simple enough to compute in parallel (Exercise 8 builds the second
-in miniature). Much later the fixed-size state returns as a deliberate point on a memory
-tradeoff whose costs we can then compare.
+in miniature). Much later a fixed-size state returns by choice, and we compare its costs
+with those of a memory that grows with the sequence.
 
 ::: {.callout-note}
 ## Check yourself
@@ -1145,7 +1146,7 @@ Close the book for one minute and unroll the recurrence.
 6. **A one-layer character LSTM learns this book's accent** (words, rhythm,
    LaTeX tics) but not its meaning: part scale, part the finite-state
    bottleneck. Two limits remain: a whole sequence crammed into 256
-   recurrent-state scalars, and a loop that cannot run ahead of itself.
+   recurrent-state scalars, and a loop that must finish each step before starting the next.
 
 ## Sources and further reading {.unnumbered}
 
@@ -1242,7 +1243,7 @@ For Exercise 8's research bridge, recurrences that compute in parallel:
    @fig-vanishing-time's measurement. Then record the gradient norm that
    `clip_grad_norm_` returns in the memory test: what fraction of updates does it
    rescale for the vanilla RNN and for the forget-bias LSTM, and which cell trains
-   at the clip?
+   mostly on clipped gradients?
 3. **(Code.)** Implement the reset-before GRU in @eq-gru as a manual loop. Then
    change only the candidate update to PyTorch's reset-after convention and verify
    that version against `nn.GRU`. **(Audit.)** The memory test left the GRU at chance

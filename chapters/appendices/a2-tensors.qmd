@@ -128,7 +128,7 @@ $$
 
 PyTorch writes the same broadcast compactly as `X @ W.T + b`. The bias matches the
 trailing output-feature axis: it is reused across the batch.
-Let us pin that convention against `nn.Linear` rather than trusting memory.
+Check that convention against `nn.Linear` itself rather than trusting memory.
 
 <!-- NOVEL: needs sign-off -->
 :::: {.plan-code}
@@ -190,7 +190,7 @@ For example, `(B, D_out) + (D_out,)` is exactly the dense-layer bias operation. 
 bias's only axis aligns with the final feature axis. PyTorch knows sizes; it
 does not know that one axis means channels and another means image width.
 
-Let us build the more dangerous version of that bug. This NCHW image batch
+Now build the more dangerous version of that bug. This NCHW image batch
 has three channels *and* width three. A bare `(3,)` channel mean can therefore attach
 to the wrong axis and still return the expected overall shape.
 
@@ -232,8 +232,8 @@ print("wrong channel means:  ", wrong_check.tolist())
 ::::
 Both subtractions return shape `(1, 3, 2, 3)`; only the invariant reveals the bug:
 the correct result has channel means `[0, 0, 0]`, while the accidental width
-subtraction leaves `[-1, 0, 1]`. The mistake ran because `C=W=3`: a symmetric test
-shape hid the axis meaning.
+subtraction leaves `[-1, 0, 1]`. The wrong code ran without complaint because `C=W=3`: equal axis
+sizes hid which axis was which.
 
 ::: {.callout-warning}
 ## Broadcasting hygiene
@@ -287,7 +287,7 @@ The expanded view has stride `(1, 0)`: moving along its second axis does not mov
 storage. That aliasing is why an expanded view should not receive in-place writes.
 Clone it first if independent writable entries are required. Use `repeat` only when
 you genuinely intend to materialize copies; using it merely to make elementwise
-arithmetic work wastes the abstraction that broadcasting already provides.
+arithmetic work stores duplicate values that broadcasting would have avoided.
 
 ::: {.callout-warning}
 ## Trap: shape is not layout
@@ -295,7 +295,7 @@ arithmetic work wastes the abstraction that broadcasting already provides.
 A tensor can keep the same shape and values while its strides and storage layout
 change. `transpose` and `permute` normally return views, so a result can be
 non-contiguous even when it looks ordinary. Audit the strides before assuming that
-`view` is legal; use `reshape` or `contiguous` according to the consumer's contract.
+`view` is legal; use `reshape` or `contiguous` according to what the next operation requires.
 :::
 
 ## Shape, stride, and contiguity
@@ -355,8 +355,8 @@ The permutation changes `(2, 3, 4)` with stride `(12, 4, 1)` into `(2, 4, 3)` wi
 stride `(12, 1, 4)`. No values moved, but the desired flattening no longer follows one
 compatible run through storage, so `view` fails. `reshape` may
 return a view when strides permit it or a copy when they do not; code should never
-depend on which one it chooses. `contiguous` makes the copy explicit when a contiguous
-consumer requires one.
+depend on which one it chooses. `contiguous` makes the copy explicit when the next
+operation requires contiguous memory.
 
 The pointer comparison above is a diagnostic for this fixed example, not a control
 flow technique. Program logic should depend on values and documented contracts, not on
@@ -388,7 +388,7 @@ Elementwise multiplication and matrix multiplication answer different questions.
 - when both operands have at least two axes, `@` treats the final two as matrix axes
   and broadcasts compatible leading batch axes.
 
-For the geometry of these products, see @sec-a1-linear-algebra. Here our concern is executable bookkeeping. Consider the
+For the geometry of these products, see @sec-a1-linear-algebra. Here the concern is which axes each product keeps and which it sums away. Consider the
 multi-head attention product from @sec-14-self-attention-transformer. Let
 
 $$
@@ -580,9 +580,9 @@ floating-point dtype can actually represent.
 When a shape error (or worse, a suspicious result) appears, resist the urge to add
 `squeeze` and `reshape` until the exception disappears. Walk the contract instead.
 
-The impossible downstream shape was a clue, not the place to patch. The
-diagnosis traced upstream, stated the expected matrix product, applied the
-right-alignment rules, reshaped the intended column explicitly, and asserted its
+In the opening bug, the impossible downstream shape was a clue, not the place to
+patch. The diagnosis traced the error upstream, stated the expected matrix product, applied
+the right-alignment rules, reshaped the intended column explicitly, and asserted its
 shape. That order matters: the downstream failure was only the symptom.
 
 ::: {.callout-tip}

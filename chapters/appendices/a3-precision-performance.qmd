@@ -72,8 +72,8 @@ can update an FP32 parameter even when selected forward operations use BF16. The
 not edge cases; they are the point of mixed precision.
 
 This extends the distinction in @sec-17-peft-quantization: **storage precision is not
-compute precision, and neither one identifies the trainable state**. It also prevents
-a performance shortcut. A two-byte tensor is smaller than a four-byte tensor, but
+compute precision, and neither one identifies the trainable state**. It also rules out
+a shortcut in reasoning about performance. A two-byte tensor is smaller than a four-byte tensor, but
 that alone does not prove a twofold speedup. The device needs an efficient kernel for
 the operation, and the operation needs to be limited by something those saved bytes
 actually relieve.
@@ -172,7 +172,7 @@ point on its coarse grid.
 
 The spacing is not constant across the number line. Within one exponent bin it is
 fixed; when the exponent grows by one, the spacing doubles. Near 1, subtracting
-$10^{-8}$ from an FP32 value can therefore disappear, even though FP32 can represent
+$10^{-8}$ from an FP32 value can therefore leave it unchanged, even though FP32 can represent
 $10^{-8}$ perfectly well near zero. Representability depends on the value's
 neighborhood, not just on the isolated update.
 
@@ -182,17 +182,17 @@ neighborhood, not just on the isolated update.
 The all-zero exponent field represents zero and **subnormal** values, which fill part
 of the gap below the smallest normal number with reduced precision. The all-one
 exponent field represents infinities and NaNs in the IEEE formats used here. Hardware
-and kernel behavior around subnormals can vary (some accelerator paths flush them to
-zero) so `tiny` is a portable normal-range landmark, not a promise about the smallest
+and kernel behavior around subnormals can vary, and some accelerator paths flush them to
+zero. For that reason `tiny` is a portable normal-range landmark, not a promise about the smallest
 value every execution path preserves.
 :::
 
-Two other names appear frequently in deep learning: **TF32** is a matrix-compute mode,
+Two other names appear frequently in deep learning. **TF32** is a matrix-compute mode,
 not a tensor storage dtype: supported operations keep FP32 storage and range while
 using reduced input precision for multiplication and wider accumulation. **FP8** is a
 family rather than one universal format; E4M3 and E5M2 allocate their few exponent and
 fraction bits differently and are normally used with scales and wider accumulators.
-@sec-17-peft-quantization treats those choices as quantization policies rather than magical calls to
+Those choices become quantization policies in @sec-17-peft-quantization, not single calls to
 `tensor.to(...)`.
 
 ## Rounding is part of the algorithm
@@ -284,8 +284,8 @@ $$
 p_i=\frac{e^{z_i-m}}{\sum_j e^{z_j-m}}.
 $$ {#eq-a3-stable-softmax}
 
-This is the log-sum-exp trick from @sec-02-logistic-softmax. Let us separate what it
-can repair from information already lost at storage time.
+This is the log-sum-exp trick from @sec-02-logistic-softmax. The code below separates what the trick
+can repair from information already lost when the logits are stored.
 
 <!-- NOVEL: needs sign-off -->
 :::: {.plan-code}
@@ -324,8 +324,7 @@ The same principle appears across the book:
   `0/0`.
 - @sec-10-sequences-rnn's default forget-gate factor compounds to
   $0.5^{80}=8.27\times10^{-25}$. That value is still nonzero
-  in FP32; the architectural signal can be unusably attenuated before representation
-  turns it into zero.
+  in FP32; the architecture can make the signal too weak to use before rounding turns it into zero.
 - Long products such as the diffusion schedule in @sec-19-generative are often more
   legible as sums of logarithms. A coefficient can be tiny without being zero; inspect
   the chosen dtype before replacing mathematics with a special case.
@@ -338,8 +337,8 @@ The same principle appears across the book:
 
 A wider dtype postpones some failures. It does not repair a poor formulation, make
 subtraction well conditioned, or guarantee finite intermediate values. First choose a
-stable algorithm (log-sum-exp, a direct solve, a protected denominator) then choose
-dtypes that preserve the scales the algorithm must carry.
+stable algorithm, such as log-sum-exp, a direct solve, or a protected denominator. Then
+choose dtypes that preserve the scales the algorithm must carry.
 :::
 
 ## Mixed precision is a policy
@@ -365,7 +364,7 @@ Backward propagation on $SL$ moves small gradients into FP16's representable ran
 Before the optimizer update, division by $S$ restores their intended scale. Dynamic
 loss scaling lowers $S$ after detected overflow and may grow it after successful
 steps. It cannot restore a forward activation that already overflowed or an optimizer
-update that was rounded away in narrow master state.
+update that was rounded away in low-precision master weights.
 
 The next check uses no accelerator timing; it isolates the arithmetic, then asks CPU
 autocast which dtypes it chose for one linear layer in this environment.
@@ -456,9 +455,9 @@ I_* = \frac{P_{\max}}{\beta}.
 $$ {#eq-a3-ridge}
 
 A kernel left of $I_*$ is bandwidth-bound relative to these two roofs; a kernel right
-of it is compute-bound relative to them. “Relative to” matters: another ceiling (an
+of it is compute-bound relative to them. “Relative to” matters, because another ceiling may sit lower: an
 unsupported shape, launch overhead, synchronization, instruction mix, or a different
-memory level) may sit lower.
+memory level.
 
 The following figure uses an invented machine with a 100-TFLOP/s compute roof and a
 2-TB/s bandwidth roof. It is a worked coordinate system, not a benchmark of this
@@ -554,13 +553,13 @@ This is why matrix multiplication is such a valuable computational primitive. La
 dense products can reuse values many times after paying to move them. A simple
 elementwise transform with about two operations, one FP32 read, and one FP32 write has
 an intensity near $2/8=0.25$ FLOP/byte; little arithmetic is available to hide the
-doorway cost.
+cost of moving data through the door.
 
 Lower precision can change both axes of this analysis. Fewer bytes can raise
 operational intensity, while specialized low-precision instructions can raise the
 compute roof. The ridge moves when either roof moves. Scales, casts, wider outputs,
 optimizer state, alignment, and unsupported shapes also consume resources. “Half the
-bytes” is therefore an input to a model, not a timing conclusion.
+bytes” is therefore an input to a performance model, not a timing conclusion.
 
 ::: {.callout-warning}
 ## A Roofline is a bound, not a stopwatch
@@ -843,8 +842,8 @@ FlashAttention reorganizes the **same
 nonparametric solve** to reduce traffic: it changes the schedule, not the statistics,
 and the KV dataset still grows. Linear-attention and delta-style solvers make a
 different bargain. They change the statistics by compressing history into
-a fixed-size state, accepting loss or restriction for constant storage in the prefix
-length.
+a fixed-size state: storage stays constant as the prefix grows, at the price of lost
+information or a restricted model.
 :::
 
 ## Match the evidence to the claim {#a-measurement-contract}
@@ -884,7 +883,7 @@ the full quadratic intermediates to slow memory.
 - [PyTorch, `torch.finfo`](https://docs.pytorch.org/docs/stable/type_info.html): dtype-specific bit counts, spacing, normal range, and finite range used in the executable audit.
 - [Kalamkar et al., *A Study of BFLOAT16 for Deep Learning Training*](https://arxiv.org/abs/1905.12322): BF16's range-resolution design and mixed-precision training study.
 - [NVIDIA, *Accelerating AI Training with NVIDIA TF32 Tensor Cores*](https://developer.nvidia.com/blog/?p=23724): TF32 as a compute path over FP32 operands rather than a storage dtype; the product-specific speed claims are not reused here.
-- [Micikevicius et al., *FP8 Formats for Deep Learning*](https://arxiv.org/abs/2209.05433): the E4M3/E5M2 range-resolution trade and the need for wider roles around eight-bit inputs.
+- [Micikevicius et al., *FP8 Formats for Deep Learning*](https://arxiv.org/abs/2209.05433): the E4M3/E5M2 range-resolution trade and the need for scales and wider accumulators around eight-bit inputs.
 - [Micikevicius et al., *Mixed Precision Training*](https://arxiv.org/abs/1710.03740): the FP16 master-weight, wider-accumulation, and loss-scaling recipe.
 - [PyTorch, *Automatic Mixed Precision*](https://docs.pytorch.org/docs/stable/amp.html) and [AMP examples](https://docs.pytorch.org/docs/stable/notes/amp_examples.html): current operation-specific autocast and gradient-scaling contracts.
 - [PyTorch, *Numerical accuracy*](https://docs.pytorch.org/docs/stable/notes/numerical_accuracy.html): finite precision, extremal values, reduced-precision reductions, and backend-dependent behavior.
