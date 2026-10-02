@@ -692,7 +692,7 @@ Table&nbsp;B.1: The book’s recurring tensor shapes and axis meanings.
 \qquad
 \matr{Y}\in\mathbb{R}^{B\times D_{\mathrm{out}}}.
 \]</span></p>
-<p>PyTorch writes the same broadcast compactly as <code>X @ W.T + b</code>. The bias matches the trailing output-feature axis: it is reused across the batch. Let us pin that convention against <code>nn.Linear</code> rather than trusting memory.</p>
+<p>PyTorch writes the same broadcast compactly as <code>X @ W.T + b</code>. The bias matches the trailing output-feature axis: it is reused across the batch. Check that convention against <code>nn.Linear</code> itself rather than trusting memory.</p>
 <div class="plan-code">
 <div class="plan">
 <ol type="1">
@@ -744,7 +744,7 @@ output (3, 2), max gap 0.0</code></pre>
 <h2 data-number="B.3" class="anchored" data-anchor-id="broadcasting-convenient-but-not-semantic"><span class="header-section-number">B.3</span> Broadcasting: convenient, but not semantic</h2>
 <p>Broadcasting lets an elementwise operation combine different shapes without manually copying the smaller tensor. Compare shapes from the trailing axis toward the left. At each position, two sizes are compatible when they are equal, one is 1, or one axis is missing. The result takes the larger compatible size.</p>
 <p>For example, <code>(B, D_out) + (D_out,)</code> is exactly the dense-layer bias operation. The bias’s only axis aligns with the final feature axis. PyTorch knows sizes; it does not know that one axis means channels and another means image width.</p>
-<p>Let us build the more dangerous version of that bug. This NCHW image batch has three channels <em>and</em> width three. A bare <code>(3,)</code> channel mean can therefore attach to the wrong axis and still return the expected overall shape.</p>
+<p>Now build the more dangerous version of that bug. This NCHW image batch has three channels <em>and</em> width three. A bare <code>(3,)</code> channel mean can therefore attach to the wrong axis and still return the expected overall shape.</p>
 <div class="plan-code">
 <div class="plan">
 <ol type="1">
@@ -782,7 +782,7 @@ wrong channel means:   [-1.0, 0.0, 1.0]</code></pre>
 </div>
 </div>
 </div>
-<p>Both subtractions return shape <code>(1, 3, 2, 3)</code>; only the invariant reveals the bug: the correct result has channel means <code>[0, 0, 0]</code>, while the accidental width subtraction leaves <code>[-1, 0, 1]</code>. The mistake ran because <code>C=W=3</code>: a symmetric test shape hid the axis meaning.</p>
+<p>Both subtractions return shape <code>(1, 3, 2, 3)</code>; only the invariant reveals the bug: the correct result has channel means <code>[0, 0, 0]</code>, while the accidental width subtraction leaves <code>[-1, 0, 1]</code>. The wrong code ran without complaint because <code>C=W=3</code>: equal axis sizes hid which axis was which.</p>
 <div class="callout callout-style-default callout-warning callout-titled">
 <div class="callout-header d-flex align-content-center">
 <div class="callout-icon-container">
@@ -837,7 +837,7 @@ after editing base: [99.0, 99.0, 99.0] [10.0, 10.0, 10.0]</code></pre>
 </div>
 </div>
 </div>
-<p>The expanded view has stride <code>(1, 0)</code>: moving along its second axis does not move in storage. That aliasing is why an expanded view should not receive in-place writes. Clone it first if independent writable entries are required. Use <code>repeat</code> only when you genuinely intend to materialize copies; using it merely to make elementwise arithmetic work wastes the abstraction that broadcasting already provides.</p>
+<p>The expanded view has stride <code>(1, 0)</code>: moving along its second axis does not move in storage. That aliasing is why an expanded view should not receive in-place writes. Clone it first if independent writable entries are required. Use <code>repeat</code> only when you genuinely intend to materialize copies; using it merely to make elementwise arithmetic work stores duplicate values that broadcasting would have avoided.</p>
 <div class="callout callout-style-default callout-warning callout-titled">
 <div class="callout-header d-flex align-content-center">
 <div class="callout-icon-container">
@@ -848,7 +848,7 @@ after editing base: [99.0, 99.0, 99.0] [10.0, 10.0, 10.0]</code></pre>
 </div>
 </div>
 <div class="callout-body-container callout-body">
-<p>A tensor can keep the same shape and values while its strides and storage layout change. <code>transpose</code> and <code>permute</code> normally return views, so a result can be non-contiguous even when it looks ordinary. Audit the strides before assuming that <code>view</code> is legal; use <code>reshape</code> or <code>contiguous</code> according to the consumer’s contract.</p>
+<p>A tensor can keep the same shape and values while its strides and storage layout change. <code>transpose</code> and <code>permute</code> normally return views, so a result can be non-contiguous even when it looks ordinary. Audit the strides before assuming that <code>view</code> is legal; use <code>reshape</code> or <code>contiguous</code> according to what the next operation requires.</p>
 </div>
 </div>
 </section>
@@ -900,7 +900,7 @@ reshape copied in this case: True</code></pre>
 </div>
 </div>
 </div>
-<p>The permutation changes <code>(2, 3, 4)</code> with stride <code>(12, 4, 1)</code> into <code>(2, 4, 3)</code> with stride <code>(12, 1, 4)</code>. No values moved, but the desired flattening no longer follows one compatible run through storage, so <code>view</code> fails. <code>reshape</code> may return a view when strides permit it or a copy when they do not; code should never depend on which one it chooses. <code>contiguous</code> makes the copy explicit when a contiguous consumer requires one.</p>
+<p>The permutation changes <code>(2, 3, 4)</code> with stride <code>(12, 4, 1)</code> into <code>(2, 4, 3)</code> with stride <code>(12, 1, 4)</code>. No values moved, but the desired flattening no longer follows one compatible run through storage, so <code>view</code> fails. <code>reshape</code> may return a view when strides permit it or a copy when they do not; code should never depend on which one it chooses. <code>contiguous</code> makes the copy explicit when the next operation requires contiguous memory.</p>
 <p>The pointer comparison above is a diagnostic for this fixed example, not a control flow technique. Program logic should depend on values and documented contracts, not on whether one particular <code>reshape</code> happened to share storage.</p>
 <table class="caption-top table">
 <colgroup>
@@ -968,7 +968,7 @@ reshape copied in this case: True</code></pre>
 <li><code>(M, D) @ (D, N)</code> produces <code>(M, N)</code>;</li>
 <li>when both operands have at least two axes, <code>@</code> treats the final two as matrix axes and broadcasts compatible leading batch axes.</li>
 </ul>
-<p>For the geometry of these products, see <a href="a1-linear-algebra.html" class="quarto-xref"><span>Appendix A</span></a>. Here our concern is executable bookkeeping. Consider the multi-head attention product from <a href="../part4/14-self-attention-transformer.html" class="quarto-xref"><span>Chapter 16</span></a>. Let</p>
+<p>For the geometry of these products, see <a href="a1-linear-algebra.html" class="quarto-xref"><span>Appendix A</span></a>. Here the concern is which axes each product keeps and which it sums away. Consider the multi-head attention product from <a href="../part4/14-self-attention-transformer.html" class="quarto-xref"><span>Chapter 16</span></a>. Let</p>
 <p><span class="math display">\[
 \matr{Q}\in\mathbb{R}^{B\times N_h\times T\times D_h},
 \qquad
@@ -1122,7 +1122,7 @@ semantic dtypes: torch.bool torch.int64</code></pre>
 <section id="a-debugging-routine" class="level2" data-number="B.8">
 <h2 data-number="B.8" class="anchored" data-anchor-id="a-debugging-routine"><span class="header-section-number">B.8</span> A debugging routine</h2>
 <p>When a shape error (or worse, a suspicious result) appears, resist the urge to add <code>squeeze</code> and <code>reshape</code> until the exception disappears. Walk the contract instead.</p>
-<p>The impossible downstream shape was a clue, not the place to patch. The diagnosis traced upstream, stated the expected matrix product, applied the right-alignment rules, reshaped the intended column explicitly, and asserted its shape. That order matters: the downstream failure was only the symptom.</p>
+<p>In the opening bug, the impossible downstream shape was a clue, not the place to patch. The diagnosis traced the error upstream, stated the expected matrix product, applied the right-alignment rules, reshaped the intended column explicitly, and asserted its shape. That order matters: the downstream failure was only the symptom.</p>
 <div class="callout callout-style-default callout-tip callout-titled">
 <div class="callout-header d-flex align-content-center">
 <div class="callout-icon-container">

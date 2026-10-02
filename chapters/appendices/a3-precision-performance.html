@@ -589,7 +589,7 @@ window.Quarto = {
 </tbody>
 </table>
 <p>A matrix multiply can therefore read two FP16 tensors, then form products from those inputs, accumulate the dot products in FP32, and store an FP16 output. An optimizer can update an FP32 parameter even when selected forward operations use BF16. These are not edge cases; they are the point of mixed precision.</p>
-<p>This extends the distinction in <a href="../part5/17-peft-quantization.html" class="quarto-xref"><span>Chapter 20</span></a>: <strong>storage precision is not compute precision, and neither one identifies the trainable state</strong>. It also prevents a performance shortcut. A two-byte tensor is smaller than a four-byte tensor, but that alone does not prove a twofold speedup. The device needs an efficient kernel for the operation, and the operation needs to be limited by something those saved bytes actually relieve.</p>
+<p>This extends the distinction in <a href="../part5/17-peft-quantization.html" class="quarto-xref"><span>Chapter 20</span></a>: <strong>storage precision is not compute precision, and neither one identifies the trainable state</strong>. It also rules out a shortcut in reasoning about performance. A two-byte tensor is smaller than a four-byte tensor, but that alone does not prove a twofold speedup. The device needs an efficient kernel for the operation, and the operation needs to be limited by something those saved bytes actually relieve.</p>
 </section>
 <section id="what-a-binary-float-can-represent" class="level2" data-number="C.2">
 <h2 data-number="C.2" class="anchored" data-anchor-id="what-a-binary-float-can-represent"><span class="header-section-number">C.2</span> What a binary float can represent</h2>
@@ -717,7 +717,7 @@ FP64: eps=2.22044605e-16, tiny=2.22507386e-308, max=1.79769313e+308
 </div>
 </div>
 <p>The printed spacings are <span class="math inline">\(9.765625\times10^{-4}\)</span> for FP16, <span class="math inline">\(7.8125\times10^{-3}\)</span> for BF16, and about <span class="math inline">\(1.19\times10^{-7}\)</span> for FP32. The range-resolution trade is visible in the last two lines. FP16 sends 70,000 to infinity and <span class="math inline">\(2^{-26}\)</span> to zero; BF16 stores them as 70,144 and <span class="math inline">\(1.4901161\times10^{-8}\)</span>. BF16 reached both scales, but 70,000 moved to the nearest point on its coarse grid.</p>
-<p>The spacing is not constant across the number line. Within one exponent bin it is fixed; when the exponent grows by one, the spacing doubles. Near 1, subtracting <span class="math inline">\(10^{-8}\)</span> from an FP32 value can therefore disappear, even though FP32 can represent <span class="math inline">\(10^{-8}\)</span> perfectly well near zero. Representability depends on the value’s neighborhood, not just on the isolated update.</p>
+<p>The spacing is not constant across the number line. Within one exponent bin it is fixed; when the exponent grows by one, the spacing doubles. Near 1, subtracting <span class="math inline">\(10^{-8}\)</span> from an FP32 value can therefore leave it unchanged, even though FP32 can represent <span class="math inline">\(10^{-8}\)</span> perfectly well near zero. Representability depends on the value’s neighborhood, not just on the isolated update.</p>
 <div class="callout callout-style-default callout-note callout-titled">
 <div class="callout-header d-flex align-content-center">
 <div class="callout-icon-container">
@@ -728,10 +728,10 @@ FP64: eps=2.22044605e-16, tiny=2.22507386e-308, max=1.79769313e+308
 </div>
 </div>
 <div class="callout-body-container callout-body">
-<p>The all-zero exponent field represents zero and <strong>subnormal</strong> values, which fill part of the gap below the smallest normal number with reduced precision. The all-one exponent field represents infinities and NaNs in the IEEE formats used here. Hardware and kernel behavior around subnormals can vary (some accelerator paths flush them to zero) so <code>tiny</code> is a portable normal-range landmark, not a promise about the smallest value every execution path preserves.</p>
+<p>The all-zero exponent field represents zero and <strong>subnormal</strong> values, which fill part of the gap below the smallest normal number with reduced precision. The all-one exponent field represents infinities and NaNs in the IEEE formats used here. Hardware and kernel behavior around subnormals can vary, and some accelerator paths flush them to zero. For that reason <code>tiny</code> is a portable normal-range landmark, not a promise about the smallest value every execution path preserves.</p>
 </div>
 </div>
-<p>Two other names appear frequently in deep learning: <strong>TF32</strong> is a matrix-compute mode, not a tensor storage dtype: supported operations keep FP32 storage and range while using reduced input precision for multiplication and wider accumulation. <strong>FP8</strong> is a family rather than one universal format; E4M3 and E5M2 allocate their few exponent and fraction bits differently and are normally used with scales and wider accumulators. <a href="../part5/17-peft-quantization.html" class="quarto-xref"><span>Chapter 20</span></a> treats those choices as quantization policies rather than magical calls to <code>tensor.to(...)</code>.</p>
+<p>Two other names appear frequently in deep learning. <strong>TF32</strong> is a matrix-compute mode, not a tensor storage dtype: supported operations keep FP32 storage and range while using reduced input precision for multiplication and wider accumulation. <strong>FP8</strong> is a family rather than one universal format; E4M3 and E5M2 allocate their few exponent and fraction bits differently and are normally used with scales and wider accumulators. Those choices become quantization policies in <a href="../part5/17-peft-quantization.html" class="quarto-xref"><span>Chapter 20</span></a>, not single calls to <code>tensor.to(...)</code>.</p>
 </section>
 <section id="rounding-is-part-of-the-algorithm" class="level2" data-number="C.3">
 <h2 data-number="C.3" class="anchored" data-anchor-id="rounding-is-part-of-the-algorithm"><span class="header-section-number">C.3</span> Rounding is part of the algorithm</h2>
@@ -798,7 +798,7 @@ p_i=\frac{e^{z_i}}{\sum_j e^{z_j}}.
 <p><span id="eq-a3-stable-softmax"><span class="math display">\[
 p_i=\frac{e^{z_i-m}}{\sum_j e^{z_j-m}}.
 \tag{C.2}\]</span></span></p>
-<p>This is the log-sum-exp trick from <a href="../part1/02-logistic-softmax.html" class="quarto-xref"><span>Chapter 2</span></a>. Let us separate what it can repair from information already lost at storage time.</p>
+<p>This is the log-sum-exp trick from <a href="../part1/02-logistic-softmax.html" class="quarto-xref"><span>Chapter 2</span></a>. The code below separates what the trick can repair from information already lost when the logits are stored.</p>
 <div class="plan-code">
 <div class="plan">
 <ol type="1">
@@ -829,7 +829,7 @@ FP32 stored logits: [1000.0, 1001.0, 1002.0]
 <p>The same principle appears across the book:</p>
 <ul>
 <li>Kernel regression in <a href="../part4/12-kernel-regression.html" class="quarto-xref"><span>Chapter 14</span></a> subtracts a maximum before exponentiating so a tiny bandwidth does not turn every weight into zero and produce <code>0/0</code>.</li>
-<li><a href="../part3/10-sequences-rnn.html" class="quarto-xref"><span>Chapter 12</span></a>’s default forget-gate factor compounds to <span class="math inline">\(0.5^{80}=8.27\times10^{-25}\)</span>. That value is still nonzero in FP32; the architectural signal can be unusably attenuated before representation turns it into zero.</li>
+<li><a href="../part3/10-sequences-rnn.html" class="quarto-xref"><span>Chapter 12</span></a>’s default forget-gate factor compounds to <span class="math inline">\(0.5^{80}=8.27\times10^{-25}\)</span>. That value is still nonzero in FP32; the architecture can make the signal too weak to use before rounding turns it into zero.</li>
 <li>Long products such as the diffusion schedule in <a href="../part5/19-generative.html" class="quarto-xref"><span>Chapter 22</span></a> are often more legible as sums of logarithms. A coefficient can be tiny without being zero; inspect the chosen dtype before replacing mathematics with a special case.</li>
 <li>Linear systems should be solved directly rather than by explicitly forming an inverse (<a href="a1-linear-algebra.html" class="quarto-xref"><span>Appendix A</span></a>). Higher precision can reduce rounding error, but it does not cure an ill-conditioned question.</li>
 </ul>
@@ -843,7 +843,7 @@ FP32 stored logits: [1000.0, 1001.0, 1002.0]
 </div>
 </div>
 <div class="callout-body-container callout-body">
-<p>A wider dtype postpones some failures. It does not repair a poor formulation, make subtraction well conditioned, or guarantee finite intermediate values. First choose a stable algorithm (log-sum-exp, a direct solve, a protected denominator) then choose dtypes that preserve the scales the algorithm must carry.</p>
+<p>A wider dtype postpones some failures. It does not repair a poor formulation, make subtraction well conditioned, or guarantee finite intermediate values. First choose a stable algorithm, such as log-sum-exp, a direct solve, or a protected denominator. Then choose dtypes that preserve the scales the algorithm must carry.</p>
 </div>
 </div>
 </section>
@@ -856,7 +856,7 @@ FP32 stored logits: [1000.0, 1001.0, 1002.0]
 <p><span class="math display">\[
 \nabla_{\theta}(SL)=S\nabla_{\theta}L.
 \]</span></p>
-<p>Backward propagation on <span class="math inline">\(SL\)</span> moves small gradients into FP16’s representable range. Before the optimizer update, division by <span class="math inline">\(S\)</span> restores their intended scale. Dynamic loss scaling lowers <span class="math inline">\(S\)</span> after detected overflow and may grow it after successful steps. It cannot restore a forward activation that already overflowed or an optimizer update that was rounded away in narrow master state.</p>
+<p>Backward propagation on <span class="math inline">\(SL\)</span> moves small gradients into FP16’s representable range. Before the optimizer update, division by <span class="math inline">\(S\)</span> restores their intended scale. Dynamic loss scaling lowers <span class="math inline">\(S\)</span> after detected overflow and may grow it after successful steps. It cannot restore a forward activation that already overflowed or an optimizer update that was rounded away in low-precision master weights.</p>
 <p>The next check uses no accelerator timing; it isolates the arithmetic, then asks CPU autocast which dtypes it chose for one linear layer in this environment.</p>
 <div class="plan-code">
 <div class="plan">
@@ -927,7 +927,7 @@ P_{\mathrm{attainable}}(I)
 <p><span id="eq-a3-ridge"><span class="math display">\[
 I_* = \frac{P_{\max}}{\beta}.
 \tag{C.5}\]</span></span></p>
-<p>A kernel left of <span class="math inline">\(I_*\)</span> is bandwidth-bound relative to these two roofs; a kernel right of it is compute-bound relative to them. “Relative to” matters: another ceiling (an unsupported shape, launch overhead, synchronization, instruction mix, or a different memory level) may sit lower.</p>
+<p>A kernel left of <span class="math inline">\(I_*\)</span> is bandwidth-bound relative to these two roofs; a kernel right of it is compute-bound relative to them. “Relative to” matters, because another ceiling may sit lower: an unsupported shape, launch overhead, synchronization, instruction mix, or a different memory level.</p>
 <p>The following figure uses an invented machine with a 100-TFLOP/s compute roof and a 2-TB/s bandwidth roof. It is a worked coordinate system, not a benchmark of this computer or a claim about any product.</p>
 <div class="plan-code plan-code-wide">
 <div class="plan">
@@ -1014,8 +1014,8 @@ I_{\mathrm{GEMM,ideal}}
 =\frac{2mkn}{s(mk+kn+mn)},
 \tag{C.6}\]</span></span></p>
 <p>where <span class="math inline">\(s\)</span> is bytes per stored element. For square <span class="math inline">\(n\times n\)</span> matrices this reduces to <span class="math inline">\(2n/(3s)\)</span>. At <span class="math inline">\(n=128\)</span>, the estimate is 21.3 FLOP/byte for FP32 and 42.7 for a two-byte format. On the synthetic machine in <a href="#fig-a3-roofline" class="quarto-xref">Figure&nbsp;<span>C.1</span></a>, both remain left of the 50-FLOP/byte ridge. At <span class="math inline">\(n=2048\)</span>, the ideal estimates rise to 341.3 and 682.7; reuse is now high enough to reach the flat roof if the implementation realizes the ideal traffic.</p>
-<p>This is why matrix multiplication is such a valuable computational primitive. Larger dense products can reuse values many times after paying to move them. A simple elementwise transform with about two operations, one FP32 read, and one FP32 write has an intensity near <span class="math inline">\(2/8=0.25\)</span> FLOP/byte; little arithmetic is available to hide the doorway cost.</p>
-<p>Lower precision can change both axes of this analysis. Fewer bytes can raise operational intensity, while specialized low-precision instructions can raise the compute roof. The ridge moves when either roof moves. Scales, casts, wider outputs, optimizer state, alignment, and unsupported shapes also consume resources. “Half the bytes” is therefore an input to a model, not a timing conclusion.</p>
+<p>This is why matrix multiplication is such a valuable computational primitive. Larger dense products can reuse values many times after paying to move them. A simple elementwise transform with about two operations, one FP32 read, and one FP32 write has an intensity near <span class="math inline">\(2/8=0.25\)</span> FLOP/byte; little arithmetic is available to hide the cost of moving data through the door.</p>
+<p>Lower precision can change both axes of this analysis. Fewer bytes can raise operational intensity, while specialized low-precision instructions can raise the compute roof. The ridge moves when either roof moves. Scales, casts, wider outputs, optimizer state, alignment, and unsupported shapes also consume resources. “Half the bytes” is therefore an input to a performance model, not a timing conclusion.</p>
 <div class="callout callout-style-default callout-warning callout-titled">
 <div class="callout-header d-flex align-content-center">
 <div class="callout-icon-container">
@@ -1192,7 +1192,7 @@ Figure&nbsp;C.2: Materialized attention and tiled online attention evaluate the 
 </div>
 <div class="callout-body-container callout-body">
 <p>The attention rule, causal or padding mask semantics, and dense quadratic arithmetic remain. “Exact” means no modeling approximation; floating-point order still changes. Longer context is not free, and an implementation that is faster for one shape or device may not be faster for another.</p>
-<p>In the <a href="../../chapters/interludes/attention-as-test-time-regression.html">test-time-regression interlude</a>’s terms, FlashAttention reorganizes the <strong>same nonparametric solve</strong> to reduce traffic: it changes the schedule, not the statistics, and the KV dataset still grows. Linear-attention and delta-style solvers make a different bargain. They change the statistics by compressing history into a fixed-size state, accepting loss or restriction for constant storage in the prefix length.</p>
+<p>In the <a href="../../chapters/interludes/attention-as-test-time-regression.html">test-time-regression interlude</a>’s terms, FlashAttention reorganizes the <strong>same nonparametric solve</strong> to reduce traffic: it changes the schedule, not the statistics, and the KV dataset still grows. Linear-attention and delta-style solvers make a different bargain. They change the statistics by compressing history into a fixed-size state: storage stays constant as the prefix grows, at the price of lost information or a restricted model.</p>
 </div>
 </div>
 </section>
@@ -1249,7 +1249,7 @@ Figure&nbsp;C.2: Materialized attention and tiled online attention evaluate the 
 <li><a href="https://docs.pytorch.org/docs/stable/type_info.html">PyTorch, <code>torch.finfo</code></a>: dtype-specific bit counts, spacing, normal range, and finite range used in the executable audit.</li>
 <li><a href="https://arxiv.org/abs/1905.12322">Kalamkar et al., <em>A Study of BFLOAT16 for Deep Learning Training</em></a>: BF16’s range-resolution design and mixed-precision training study.</li>
 <li><a href="https://developer.nvidia.com/blog/?p=23724">NVIDIA, <em>Accelerating AI Training with NVIDIA TF32 Tensor Cores</em></a>: TF32 as a compute path over FP32 operands rather than a storage dtype; the product-specific speed claims are not reused here.</li>
-<li><a href="https://arxiv.org/abs/2209.05433">Micikevicius et al., <em>FP8 Formats for Deep Learning</em></a>: the E4M3/E5M2 range-resolution trade and the need for wider roles around eight-bit inputs.</li>
+<li><a href="https://arxiv.org/abs/2209.05433">Micikevicius et al., <em>FP8 Formats for Deep Learning</em></a>: the E4M3/E5M2 range-resolution trade and the need for scales and wider accumulators around eight-bit inputs.</li>
 <li><a href="https://arxiv.org/abs/1710.03740">Micikevicius et al., <em>Mixed Precision Training</em></a>: the FP16 master-weight, wider-accumulation, and loss-scaling recipe.</li>
 <li><a href="https://docs.pytorch.org/docs/stable/amp.html">PyTorch, <em>Automatic Mixed Precision</em></a> and <a href="https://docs.pytorch.org/docs/stable/notes/amp_examples.html">AMP examples</a>: current operation-specific autocast and gradient-scaling contracts.</li>
 <li><a href="https://docs.pytorch.org/docs/stable/notes/numerical_accuracy.html">PyTorch, <em>Numerical accuracy</em></a>: finite precision, extremal values, reduced-precision reductions, and backend-dependent behavior.</li>
