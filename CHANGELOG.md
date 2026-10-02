@@ -1,7 +1,9 @@
 # Rolling post-v1.4: chapter openers without rhetorical framing (October 1, 2026)
 
 - **Six opener sentences in Chapters 1, 3, 4, 6 and 13 now state the problem plainly.**
-  Chapter 4's opener read "We now have models worth training … the question every practitioner
+  (Chapter 4's opener was then replaced by the author's own wording: "The mathematical pieces are in
+  place … The friction is scale. How, exactly, do you run that descent …"; the earlier rewrite gave
+  away the point of the SGD section.) Chapter 4's opener read "We now have models worth training … the question every practitioner
   faces daily: *how, exactly, do you run the descent* … no longer a friendly bowl?". It now gives
   the scale problem itself: a million examples, millions of knobs, an exact gradient that costs a
   pass over every example per step, and a nonconvex loss. The other five lose grading and
