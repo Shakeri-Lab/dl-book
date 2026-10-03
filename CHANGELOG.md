@@ -1,3 +1,12 @@
+# Rolling post-v1.4: Figure 10.1 names when the shortcut needs a 1×1 convolution (October 3, 2026)
+
+- **Figure 10.1, residual row.** The shortcut label now reads "identity (1×1 if shapes change)",
+  and the caption and alt text say the same. In ResNets the shortcut becomes a 1×1 convolution only
+  when a block changes the channel count or the resolution. The chapter's `Block` keeps both (12
+  channels, stride 1), so its shortcut stays a pure identity, as the code and the residual-stream
+  figure show. The figure was rebuilt with `scripts/build_tikz.sh cnn-building-blocks` (SVG and
+  PDF; same page size). No other figure, code or output changed.
+
 # Rolling post-v1.4: chapter openers without rhetorical framing (October 1, 2026)
 
 - **Six opener sentences in Chapters 1, 3, 4, 6 and 13 now state the problem plainly.**

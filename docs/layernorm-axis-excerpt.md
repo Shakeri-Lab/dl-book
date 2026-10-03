@@ -186,7 +186,7 @@ policy; source composition was inspected without routing around that restriction
 | Source | SHA-256 |
 |---|---|
 | `chapters/part4/14-self-attention-transformer.qmd` | `8f88635f3635d281195cf20d57edd433b4d7e1667dacb74afa4e088a1cc559e6` |
-| `chapters/part2/09-modern-cnns-transfer.qmd` | `b12bf9fe43bcc54f279238758496e99831e7f08c6f44b90c7d55d02e0d61273c` |
+| `chapters/part2/09-modern-cnns-transfer.qmd` | `90bc1d27ed8b1c816b6c171cdcc178663640e2fe49414e207c09f2b741ecf51f` |
 | `6050-Ch14/lecture.jsx` | `ac103ade3aecf01355955a24a1a2042cd9c58d6a434b39dd7ef6e680ee0fce93` |
 | `6050-Ch14/STORYBOARD.md` | `cd493a87b78f9f2fcd705bd2385bf4f8651bb3a9472e44b120838fffa81b1324` |
 | `6050-Ch14/ch14-data.js` | `df6cfab3b0b92b5e9eaf634ae82a229f42dfa32030600bc0016ef90d7b11ff39` |
