@@ -185,6 +185,6 @@ Lecture paths are relative to the lecture repository root.
 
 | Source | SHA-256 |
 |---|---|
-| `chapters/part2/09-modern-cnns-transfer.qmd` | `b12bf9fe43bcc54f279238758496e99831e7f08c6f44b90c7d55d02e0d61273c` |
+| `chapters/part2/09-modern-cnns-transfer.qmd` | `90bc1d27ed8b1c816b6c171cdcc178663640e2fe49414e207c09f2b741ecf51f` |
 | `6050-Ch9/lecture.jsx` | `446a5c3f889149b46f5fe275c37414d3240bb1b4dc27b347e9212d9f0527402a` |
 | `6050-Ch9/STORYBOARD.md` | `ebe6a9b53bd79c911bb967e84538a8c2a261d3db4db439313de291fc78f2ee5e` |
