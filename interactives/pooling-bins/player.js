@@ -370,8 +370,8 @@
       previousKey = stateKey;
       drawing.innerHTML = draw({stage, dr, dc, moving, ray, out, ask, ghost, sign, changed, pool, candidates, paths, crossed});
       const where = clues.map(clue => `${clue.value} at row ${clue.row + Math.round(dr)}, column ${clue.col + Math.round(dc)}`).join(' and ');
-      svg.setAttribute('aria-label', `${STAGES[stage]}. Clues ${where}.`
-        + (landed ? ` Pooled ${out.join(', ')}.` : moving ? ' The clues are moving; the pooled map is unwritten.' : '')
+      svg.setAttribute('aria-label', `${STAGES[stage]}. Activations ${where}.`
+        + (landed ? ` Pooled ${out.join(', ')}.` : moving ? ' The activations are moving; the pooled map is unwritten.' : '')
         + (sign ? ` ${sign === '=' ? 'Equal to' : 'Not equal to'} the record ${record.join(', ')}.` : ''));
     }
 
@@ -382,11 +382,11 @@
     const nChanged = differs(POOL.down.values).filter(Boolean).length;
     const words = ['Zero', 'One', 'Two', 'Three', 'Four'][nChanged] || String(nChanged);
     const sentence = [
-      `Two clues sit in fixed <span class="bin-role">2×2 bins</span>. Slide them: does pooling notice?`,
+      `Two activations sit in fixed <span class="bin-role">2×2 bins</span>. Slide them: does pooling notice?`,
       `Each <span class="bin-role">bin</span> keeps only its largest value.`,
-      `Both clues slide one pixel right, staying inside their own <span class="bin-role">bins</span>.`,
+      `Both activations slide one pixel right, staying inside their own <span class="bin-role">bins</span>.`,
       `Same four values. This shift is invisible to pooling.`,
-      `Both clues come home. Now slide one pixel down instead.`,
+      `Both activations come home. Now slide one pixel down instead.`,
       `Both slide one pixel down. The ${name(crossers(DOWN))} leaves its <span class="bin-role">bin</span>.`,
       `<span class="error-role">${words} pooled values changed:</span> tolerance ends at the <span class="bin-role">bin edge</span>. Not invariance.`][stage];
     // A polite live region must be written only when it changes; render() runs every frame.
@@ -394,7 +394,7 @@
 
     // Scrubber-only wording: the caption sentence is already spoken by the live region, so
     // aria-valuetext names the stage and the pooled values instead of repeating it.
-    return `${STAGES[stage]}. Clues shifted ${Math.round(dr)} down, ${Math.round(dc)} right.${landed ? ` Pooled ${out.join(', ')}.` : ''}`;
+    return `${STAGES[stage]}. Activations shifted ${Math.round(dr)} down, ${Math.round(dc)} right.${landed ? ` Pooled ${out.join(', ')}.` : ''}`;
   }
 
   // One typeset call after mount, guarded. MathJax's lazyAlwaysTypeset list already covers
@@ -422,7 +422,7 @@
   // no second copy of the witness numbers: moving the fixture moves this sentence too.
   const title = `A ${SIZE} × ${SIZE} grid of zeros with ${clues.map(clue => `${clue.value} at row ${clue.row}, column ${clue.col}`).join(' and ')}, `
     + `cut into ${BINS * BINS} fixed ${WINDOW} × ${WINDOW} bins drawn as heavy squares; every other cell is 0. `
-    + `Each clue is a white box with an ink outline carrying two candidate moves, right and down, and it slides one pixel right, home, then one pixel down. `
+    + `Each activation is a white box with an ink outline carrying two candidate moves, right and down, and it slides one pixel right, home, then one pixel down. `
     + `Beside it the ${BINS} × ${BINS} pooled map, and under that a dashed record of the first pooled map, ${record.join(', ')}, labelled equal to the map after the one-pixel move right; `
     + `the bins whose value changed are ringed in wine on both maps, and the sign between the two maps reads equal or not equal.`;
   const named = svg.querySelector('title');

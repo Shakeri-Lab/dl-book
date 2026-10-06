@@ -31,7 +31,7 @@
   const beats = pane.dataset.beats.trim().split(/\s+/).map(Number);
   const duration = Number(pane.dataset.duration || beats[beats.length - 1]);
   const stageAt = time => beats.reduce((stage, beat, index) => (time >= beat ? index : stage), 0);
-  const STAGES = ['Ask', 'Valves', 'Retain', 'Write', 'Read', 'Close', 'Two states', 'Hold'];
+  const STAGES = ['Ask', 'Gates', 'Retain', 'Write', 'Read', 'Close', 'Two states', 'Hold'];
   const clamp = value => Math.max(0, Math.min(1, value));
   const lerp = (a, b, u) => a + (b - a) * u;
   // The film's easings (6050-Ch10/lecture.jsx: `enter` for a mark arriving, `smooth` for a
@@ -290,8 +290,8 @@
       previousKey = stateKey;
       drawing.innerHTML = draw({stage, shown: stage >= 1, appear, packet, carried, ghostIn, write, f, i, o, h, hGhost, named, unchanged});
       svg.setAttribute('aria-label', `${STAGES[stage]}.`
-        + (stage >= 1 ? ` Forget ${two(f)}, write ${two(i)}, read ${two(o)}.` : ' The belt alone.')
-        + ` The belt carries ${two(carried)}`
+        + (stage >= 1 ? ` Forget ${two(f)}, input ${two(i)}, output ${two(o)}.` : ' The cell-state path alone.')
+        + ` The cell-state path carries ${two(carried)}`
         + (stage >= 1 ? `; the cell state is ${two(ct)} and the hidden state ${two(h)}.` : '.'));
     }
 
@@ -300,20 +300,20 @@
     const carry = word => `<span class="lv-carry-role">${word}</span>`;
     const gate = word => `<span class="lv-gate-role">${word}</span>`;
     const sentence = [
-      `The old ${carry('cell state')} rides in at ${two(CARRY)}. What can a ${gate('valve')} do to it?`,
-      `Three ${gate('valves')}: forget, write, read. Forget stands wide open, so nothing intervenes.`,
-      `The ${gate('forget valve')} closes halfway: the ${carry('carried value')} falls from ${two(CARRY)} to ${two(STOPS.f[1] * CARRY)}.`,
-      `The ${gate('write valve')} opens: the ${carry('candidate')} ${two(CAND)} joins at the sum, and the belt reads ${two(cellState(STOPS.f[1], STOPS.i[1]))}.`,
-      `The ${gate('read valve')} opens halfway: the ${carry('hidden state')} is ${two(hidden(STOPS.o[1], STOPS.f[1], STOPS.i[1]))}, half of tanh of the belt.`,
-      `The ${gate('read valve')} shuts: ${carry('h')} falls to ${two(0)} while the belt still holds ${two(cellState(STOPS.f[1], STOPS.i[1]))}.`,
+      `The old ${carry('cell state')} rides in at ${two(CARRY)}. What can a ${gate('gate')} do to it?`,
+      `Three ${gate('gates')}: forget, input, output. Forget stands wide open, so nothing intervenes.`,
+      `The ${gate('forget gate')} closes halfway: the ${carry('carried value')} falls from ${two(CARRY)} to ${two(STOPS.f[1] * CARRY)}.`,
+      `The ${gate('input gate')} opens: the ${carry('candidate')} ${two(CAND)} joins at the sum, and the cell state reads ${two(cellState(STOPS.f[1], STOPS.i[1]))}.`,
+      `The ${gate('output gate')} opens halfway: the ${carry('hidden state')} is ${two(hidden(STOPS.o[1], STOPS.f[1], STOPS.i[1]))}, half of tanh of the cell state.`,
+      `The ${gate('output gate')} shuts: ${carry('h')} falls to ${two(0)} while the cell state still holds ${two(cellState(STOPS.f[1], STOPS.i[1]))}.`,
       `Two states travel: the ${carry('cell state')} ${two(ct)}, long-term; the ${carry('hidden state')} ${two(h)}, working.`,
-      `The ${gate('valves')} are learned; the ${carry('belt')} is not erased by closing the one that reads.`][stage];
+      `The ${gate('gates')} are learned; the ${carry('cell state')} is not erased by closing the output gate.`][stage];
     // A polite live region must be written only when it changes; render() runs every frame.
     if (captionKey !== sentence) { captionKey = sentence; caption.innerHTML = sentence; }
 
     // Scrubber-only wording: the caption sentence is already spoken by the live region, so
     // aria-valuetext names the stage and the openings instead of repeating it.
-    return `${STAGES[stage]}. Valves ${two(f)}, ${two(i)}, ${two(o)}. Cell state ${two(ct)}, hidden state ${two(h)}.`;
+    return `${STAGES[stage]}. Gates ${two(f)}, ${two(i)}, ${two(o)}. Cell state ${two(ct)}, hidden state ${two(h)}.`;
   }
 
   // One typeset call after mount, guarded. MathJax's lazyAlwaysTypeset list already covers
@@ -339,10 +339,10 @@
 
   // The picture's accessible name is composed from the declared fixture, so the panel holds no
   // second copy of the witness numbers: moving the fixture moves this sentence too.
-  const title = `A conveyor belt running left to right. The previous cell state stands on it at the inlet, ${two(CARRY)} high, and rides through the forget valve, `
-    + `across a sum where the write valve admits the candidate ${two(CAND)}, to the outlet as the cell state. A branch leaves the belt through tanh and the read valve `
-    + `to become the hidden state. Each valve is a port with a vane, open along the flow and shut across it, with its opening written beneath it: the three openings shown, `
-    + `${OPENINGS.map(two).join(', ')}, are illustrative, not measured. At the end the forget valve stands at ${two(STOPS.f[1])}, the write valve at ${two(STOPS.i[1])} and the read valve at ${two(STOPS.o[2])}: `
+  const title = `A cell-state path running left to right. The previous cell state stands on it at the inlet, ${two(CARRY)} high, and passes through the forget gate, `
+    + `across a sum where the input gate admits the candidate ${two(CAND)}, to the outlet as the cell state. A branch leaves the path through tanh and the output gate `
+    + `to become the hidden state. Each gate is drawn as a port with a vane, open along the flow and shut across it, with its opening written beneath it: the three openings shown, `
+    + `${OPENINGS.map(two).join(', ')}, are illustrative, not measured. At the end the forget gate stands at ${two(STOPS.f[1])}, the input gate at ${two(STOPS.i[1])} and the output gate at ${two(STOPS.o[2])}: `
     + `the hidden state has fallen to ${two(0)} while the cell state still reads ${two(cellState(STOPS.f[1], STOPS.i[1]))}, with a dashed mark where the hidden state stood.`;
   const named = svg.querySelector('title');
   if (named && named.textContent !== title) named.textContent = title;
