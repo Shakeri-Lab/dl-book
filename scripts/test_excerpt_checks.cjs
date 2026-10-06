@@ -174,7 +174,7 @@ const expected = {
     const bins = size / win, pooled = Array(bins * bins).fill(0);
     for (let i = 0; i < t.length; i += 3) {
       const r = t[i] - 1, c = t[i + 1];
-      assert(r >= 0, 'one pixel up keeps every clue inside the grid');
+      assert(r >= 0, 'one pixel up keeps every activation inside the grid');
       const k = Math.floor(r / win) * bins + Math.floor(c / win); pooled[k] = Math.max(pooled[k], t[i + 2]);
     }
     return [`[${pooled.join(', ')}]`];

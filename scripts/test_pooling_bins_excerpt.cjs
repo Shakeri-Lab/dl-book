@@ -545,7 +545,7 @@ test('pooling: the intro and every caption are inside this revision\'s word budg
   for (const claim of [
     'no kernel is learned',
     'not translation invariance in general',
-    'made by applying the same 2 × 2 max-pool to the same two clues; the chapter does not print it',
+    'made by applying the same 2 × 2 max-pool to the same two activations; the chapter does not print it',
     'the 9 crosses from the upper-left bin into the lower-left one and the 3 does not, so exactly two of the four pooled values change',
     'Tolerance is local and alignment-dependent, not invariance',
     'measured at the end of this chapter, not assumed here'
@@ -756,8 +756,8 @@ test('pooling: captions are prose within the budget, coloured by meaning, and th
   f.seek(scene.beats[5]); assert.match(caption(f).textContent, /The 9 leaves its bin/);
   // The scrubber's own wording never repeats the caption.
   const range = f.$('[data-controls] input[type=range]');
-  f.seek(scene.beats[3]); assert.match(range.getAttribute('aria-valuetext'), /Same map\. Clues shifted 0 down, 1 right\. Pooled 9, 0, 0, 3\./);
-  f.seek(scene.duration); assert.match(range.getAttribute('aria-valuetext'), /Changed\. Clues shifted 1 down, 0 right\. Pooled 0, 0, 9, 3\./);
+  f.seek(scene.beats[3]); assert.match(range.getAttribute('aria-valuetext'), /Same map\. Activations shifted 0 down, 1 right\. Pooled 9, 0, 0, 3\./);
+  f.seek(scene.duration); assert.match(range.getAttribute('aria-valuetext'), /Changed\. Activations shifted 1 down, 0 right\. Pooled 0, 0, 9, 3\./);
 });
 
 test('pooling: below 600 px the same picture reflows into smaller cells, record still under the output', t => {
@@ -819,7 +819,7 @@ test('pooling: the panel is the only fixture copy -- moving it moves every numbe
   f.seek(scene.duration); assert.deepEqual(pooled(f), [7, 0, 2, 0]);
   assert.match(caption(f).textContent, /One pooled values changed/);
   f.seek(scene.beats[5]); assert.match(caption(f).textContent, /The 2 leaves its bin/);
-  f.seek(scene.beats[0]); assert.match(caption(f).textContent, /Two clues sit in fixed 2×2 bins/);
+  f.seek(scene.beats[0]); assert.match(caption(f).textContent, /Two activations sit in fixed 2×2 bins/);
   // The closing paths follow the clue that crosses, not a hard-coded cell.
   f.seek(scene.duration);
   const cross = f.root.querySelector('[data-path="cross"]');
@@ -852,12 +852,14 @@ test('integration: the excerpt is HTML-only, manifest-driven, and declared in th
   assert(!section('  resources:', config).includes(`${scene.scene}/panel.html`));
   // The chapter is anchored on a level-2 heading -- the `pool-invariance` cell is labelled
   // but Quarto gives a non-figure cell no cell-<label> div -- so the heading must exist
-  // exactly once, and the fixture cell must sit above it.
+  // exactly once, and the fixture cell must sit above it. The retitled heading keeps its
+  // old anchor as an explicit id, so the line may end in that {#...} attribute.
   assert.equal(scene.anchor.type, 'before-heading');
   const chapter = chapterSource(NAME);
-  const headings = chapter.split('\n').filter(line => line === `## ${scene.anchor.target}`);
+  const headingLine = line => line === `## ${scene.anchor.target}` || line.startsWith(`## ${scene.anchor.target} {#`);
+  const headings = chapter.split('\n').filter(headingLine);
   assert.equal(headings.length, 1, 'the anchor heading appears exactly once');
-  assert(chapter.indexOf('#| label: pool-invariance') < chapter.indexOf(`## ${scene.anchor.target}`), 'the fixture cell precedes the anchor');
+  assert(chapter.indexOf('#| label: pool-invariance') < chapter.indexOf(headings[0]), 'the fixture cell precedes the anchor');
   assert.equal(read(`${scene.scene}/panel.html`).includes('data-playback='), scene.transport === 'shared');
   assert(manifest.scenes.some(other => other.id === NAME));
   assert.deepEqual(scene.beats, [0, 4, 11, 17, 22, 26, 34]);

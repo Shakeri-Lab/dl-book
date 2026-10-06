@@ -6,8 +6,8 @@
 //     (time, reduced) that never measures the DOM.
 //   layout() -> the only place that measures.
 //
-// One picture: the chapter's square, the two edge detectives' reports stacked as two
-// channels, and each report max-pooled on its own. The tracked object is the probe: one
+// One picture: the chapter's square, the two edge detectors' maps stacked as two
+// channels, and each map max-pooled on its own. The tracked object is the probe: one
 // spot, read through the depth of the stack. Before pooling it reads (4, 0) on the
 // square's side and (0, 4) on its top; after pooling each map separately it still does,
 // while one maximum across both maps would read 4 at both. The motion is the two windows
@@ -54,12 +54,12 @@
   const beats = pane.dataset.beats.trim().split(/\s+/).map(Number);
   const duration = Number(pane.dataset.duration || beats.at(-1));
   const stageAt = time => beats.reduce((stage, beat, index) => (time >= beat ? index : stage), 0);
-  const STAGES = ['Ask', 'Two detectives', 'One spot, two readings', 'Pool each map', 'Hold',
+  const STAGES = ['Ask', 'Two detectors', 'One spot, two readings', 'Pool each map', 'Hold',
     'Still told apart', 'The shapes', 'What and where'];
   const CAPTIONS = [
-    'Two detectives, one square. After pooling, can the network still tell its side from its top?',
-    'One window sweeps the image; at every stop both detectives write into their own map.',
-    'Read one spot through the stack: each detective’s reading sits at the same place in its own map.',
+    'Two edge detectors, one square. After pooling, can the network still tell its side from its top?',
+    'One window sweeps the image; at every stop both detectors write into their own map.',
+    'Read one spot through the stack: each detector’s reading sits at the same place in its own map.',
     'Pooling runs a 2 × 2 window through each map in step, keeping each map’s own maximum.',
     'The probe sits on the pooled side and the pooled top. Can the pair still tell them apart?',
     'Yes: pooled map by map, the side still reads vertical and the top horizontal.',
@@ -131,7 +131,7 @@
     MAPS.forEach((map, o) => {
       const [x, y] = g.maps[o];
       parts.push(mapMarkup(map, x, y, s, 'ww-report', convAt, `map-${NAMES[o]}`));
-      text(g.labels[o][0], g.labels[o][1], `${NAMES[o]} detective`, 'ww-ink', 'start', '', g.font - 1);
+      text(g.labels[o][0], g.labels[o][1], `${NAMES[o]} detector`, 'ww-ink', 'start', '', g.font - 1);
       const [px, py] = g.pooled[o];
       if (poolAt > 0) parts.push(mapMarkup(POOLED[o], px, py, ps, 'ww-report', poolAt, `pooled-${NAMES[o]}`));
       else parts.push(`<rect class="ww-map ww-pending" data-mark="pooled-${NAMES[o]}" x="${num(px)}" y="${num(py)}" width="${num(M * ps)}" height="${num(M * ps)}"></rect>`);
@@ -172,7 +172,7 @@
       });
     }
     if (pooledSpots) {
-      // The pooled readout is laid out as the stack reads it: one row per detective, one
+      // The pooled readout is laid out as the stack reads it: one row per channel, one
       // column per probed block, and, once revealed, the row pooling across maps would give.
       const cols = [R.x + R.labels, R.x + R.labels + R.col];
       text(R.x, R.y, 'pooled blocks', 'ww-scenery', 'start');
