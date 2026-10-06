@@ -408,13 +408,14 @@ const expected = {
     const k = Number(root.dataset.k), n = 28, p = 1, s = 2, travel = n + 2 * p - k;
     return [`${Math.floor(travel / s) + 1}:`, `travel ${travel}`, `⌊${travel} / ${s}⌋ + 1 = ${Math.floor(travel / s)} + 1 = ${Math.floor(travel / s) + 1}`];
   },
-  // The check moves the layer to a sequence at the chapter's own compression, 64 maps into
-  // 32: a 1 x 1 convolution is the same linear layer at every step, whatever the length.
+  // The check moves the layer to a sequence at the chapter's own compression, the Inception
+  // box's 1 x 1 squeeze of 256 channels to 32: a 1 x 1 convolution is the same linear layer at
+  // every step, whatever the length.
   'pixel-skewer': () => {
     const chapter = fs.readFileSync(path.join(ROOT, 'chapters/part2/09-modern-cnns-transfer.qmd'), 'utf8');
-    const [, inC, outC] = /compressing (\d+) feature maps into (\d+)/.exec(chapter).map(Number);
+    const [, outC, inC] = /squeeze to (\d+) first, \$(\d+) \\times \1 \+/.exec(chapter).map(Number);
     return [(inC * outC + outC).toLocaleString('en-US'), `${outC} × ${inC} weight matrix and ${outC} biases`,
-      `nn.Linear(${inC}, ${outC})`, `${inC} feature maps compressed into ${outC}`];
+      `nn.Linear(${inC}, ${outC})`, `${inC} channels squeezed to ${outC}`];
   },
   // The check reorders to the, river, by, bank, a 4-cycle the panel never shows: bank's row
   // takes bank's new slot, and each weight follows its key's column to that key's new slot.

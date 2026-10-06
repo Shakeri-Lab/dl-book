@@ -470,12 +470,12 @@ test('integration: the excerpt follows the gamma and beta paragraph and precedes
   assert.equal(prose.split(scene.anchor.target).length, 2, 'the anchor phrase occurs once');
   const at = prose.indexOf(scene.anchor.target);
   const end = prose.indexOf('since $\\beta$ already provides the shift.');
-  const warning = prose.indexOf('## BN is two different machines');
+  const warning = prose.indexOf('## BN uses different statistics in training and evaluation');
   assert(prose.indexOf('## The stabilizer we owe you: batch normalization') < at);
   assert(at < end && end < warning, 'the panel lands after the paragraph and before the warning');
   // The anchor's paragraph is the last block before the warning: the reader predicts first.
   const tail = 'since $\\beta$ already provides the shift.';
-  assert.equal(chapter.slice(chapter.indexOf(tail) + tail.length, chapter.indexOf('::: {.callout-warning}\n## BN is two different machines')).trim(), '');
+  assert.equal(chapter.slice(chapter.indexOf(tail) + tail.length, chapter.indexOf('::: {.callout-warning}\n## BN uses different statistics in training and evaluation')).trim(), '');
   // Other panels share the chapter; none uses this paragraph.
   const neighbours = require('./html-tests/excerpt-harness.cjs').manifest.scenes.filter(other => other.qmd === scene.qmd && other.id !== scene.id);
   assert(neighbours.length >= 2, 'the chapter carries other panels');
