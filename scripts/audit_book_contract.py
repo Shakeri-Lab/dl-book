@@ -435,14 +435,14 @@ def main() -> None:
             fail(errors, f"{relative}: expected one level-1 title {title!r}")
         body = re.sub(r"^#\s+.+$", "", text, count=1, flags=re.MULTILINE).strip()
         sentence_count = len(re.findall(r"[.!?](?=\s|$)", body))
-        if not 4 <= sentence_count <= 6:
+        # The part pages carry the author's print texts (ledger 2026-10-05); the
+        # route table in index.qmd names each part's learnable move.
+        if not 4 <= sentence_count <= 16:
             fail(
                 errors,
-                f"{relative}: expected 4–6 transition sentences, found "
+                f"{relative}: expected 4–16 transition sentences, found "
                 f"{sentence_count}",
             )
-        if "learnable" not in body.casefold():
-            fail(errors, f"{relative}: part page must name its learnable move")
         if any(token in body for token in ("```", "![", "#|", "|---")):
             fail(errors, f"{relative}: part page must contain prose only")
 
@@ -683,6 +683,14 @@ def main() -> None:
         fail(errors, "index.qmd: could not read the five-part route table")
     else:
         route_table = route_match.group("body")
+        # The part pages no longer each name their learnable move; the route
+        # table's column carries it instead (ledger 2026-10-05, Q9).
+        if route_table.count("| What becomes learnable |") != 1:
+            fail(
+                errors,
+                "index.qmd: route table must name each part's learnable move "
+                "in its 'What becomes learnable' column",
+            )
         for relative, title in PART_PAGES.items():
             if route_table.count(f"]({relative})") != 1 or title not in route_table:
                 fail(
