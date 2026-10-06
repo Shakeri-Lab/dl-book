@@ -29,36 +29,37 @@ absurdly fast.
 
 ## Why now {.unnumbered}
 
-The ingredients of this book are decades old: linear maps, nonlinear bends, gradient
-descent, and likelihood-based losses. Three things changed around them.
+For many readers trained in statistics, the foundational lesson was to keep the model
+small relative to the data. Too many adjustable parameters would fit noise as readily
+as signal, and high-dimensional estimation demanded defensive care. Deep learning steps
+squarely into the regime classical intuition warned against: overparameterized models
+with millions or billions of parameters, optimized across vast, non-convex loss
+landscapes. Yet on unseen data, these models routinely generalize.
 
-1. **Scale became a design decision.** Across the regimes measured so far, the same
-   architecture given more parameters, data, and compute improves predictably, and it
-   sometimes acquires behaviors nobody programmed. Engineered systems rarely behave
-   that way, which is why scaling laws are an architectural topic in this book rather
-   than an operational footnote.
-2. **We stopped training from scratch.** A representation is pretrained once on broad
-   data and then adapted cheaply, many times.
-3. **One representation space serves many senses.** Text, images, and audio are mapped
-   into shared vector spaces and compared with the same geometric operations.
+Hardware specialized for matrix multiplication makes this regime accessible. Linear
+algebra organizes the computation into operations that accelerators execute with high
+efficiency, while backpropagation computes exact gradients for all those parameters in
+a single reverse sweep.
 
-None of this required a new kind of mathematics. It required a small set of moves, and
-hardware that makes one of them very fast: the batched general matrix multiplication
-(GEMM). A dense layer applied to a batch of $B$ examples is one GEMM followed by an
-elementwise bend:
+The deeper surprise, however, is that additional capacity can improve out-of-sample
+prediction. In many measured regimes, increasing parameters, data, and compute in a
+balanced ratio produces continuing power-law reductions in held-out loss. Generalization
+does not collapse when a network interpolates its training sample. Architecture, data
+distribution, and training dynamics still govern success, but parameter count alone no
+longer marks where useful learning must stop.
 
-$$
-\matr{Z} = \featurepart{\matr{X}}\,\parameterpart{\matr{W}}^{\top}
-+ \vect{1}\,\parameterpart{\vect{b}}^{\top},
-\qquad
-\matr{H} = \sigma(\matr{Z}),
-$$
+We will encounter this surprise in @sec-06-generalization-inductive-bias and fit its
+empirical scaling laws in @sec-16-vit-scaling. A complete theoretical accounting of why
+high-dimensional learners generalize remains an active research frontier. Our task here
+is to understand the mechanics: how to design the architecture, how to wire the
+computation, and how to audit what it has learned.
 
-where $\featurepart{\matr{X}}\in\R^{B\times D_{\mathrm{in}}}$ holds one example per row
-and $\parameterpart{\matr{W}}\in\R^{D_{\mathrm{out}}\times D_{\mathrm{in}}}$ is stored the
-way PyTorch stores it. From convolution to attention, most of the arithmetic in this
-book's models is spent in products like this one. The systems in the headlines are not
-an adjacent subject: they are this subject, scaled.
+As my math PhD advisor used to remind me: *sometimes you just have to follow your nose.*
+When a model or an objective feels overwhelming, you do not wait for an epiphany. You
+pick up a pencil, work through the derivations line by line, check the shapes, and trust
+the mathematical mechanics to carry you forward. The intuition is earned through the
+work, not before it. Understanding the computation should make its success more
+interesting, not make that success seem inevitable.
 
 ## What the mechanics explain, and what they do not {.unnumbered}
 
@@ -137,8 +138,8 @@ time on how learning works. Treat a network as an engine to assemble, tune, and 
 *Forward, data flows left to right; backward, sensitivities flow right to left. Every layer holds learnable parameters (orange), and the loss compares the prediction (green) with the target (purple).*
 :::
 
-- **Forward, left to right.** Data flows through linear maps, one batched GEMM per
-  layer, each followed by a nonlinear bend.
+- **Forward, left to right.** Data flows through linear maps, one batched matrix
+  multiplication (GEMM) per layer, each followed by a nonlinear bend.
 - **Backward, right to left.** Reverse-mode differentiation carries the loss's
   sensitivity back to every parameter, one vector–Jacobian product per layer.
 - **The design goal.** As much representational power as possible from as few
@@ -149,33 +150,70 @@ When training stalls, we do not guess. We check shapes and strides, gradient nor
 by layer, what each position is allowed to see, and whether the numbers are well
 conditioned.
 
+## Who this book is for {.unnumbered}
+
+This book is for builders and auditors:
+engineers[, students,]{.content-hidden when-profile="press"} and researchers who want to
+understand deep learning well enough to implement it from scratch, diagnose why it
+fails, and evaluate its claims with clear eyes.
+
+You do not need previous deep learning experience, but working fluency with multivariable
+calculus, linear algebra, basic probability, and standard Python will let you focus on
+the architecture rather than the background math. The opening chapters revisit the
+necessary optimization and loss mechanics, while the appendices provide self-contained
+reference contracts: linear algebra and the SVD
+([Appendix A](chapters/appendices/a1-linear-algebra.qmd)), tensors and PyTorch layout
+([Appendix B](chapters/appendices/a2-tensors.qmd)), numerical precision and the Roofline
+model ([Appendix C](chapters/appendices/a3-precision-performance.qmd)), notation
+([Appendix D](chapters/appendices/a4-notation.qmd)), and statistical learning contracts
+([Appendix E](chapters/appendices/a5-statistical-learning.qmd)).
+
+While our executable code uses PyTorch, the principles are strictly framework-independent.
+Tensor shapes, vector–Jacobian products, memory hierarchies, and broadcasting rules apply
+identically whether you write PyTorch, JAX, or TensorFlow. (And should you prefer another
+dialect, modern AI coding assistants are remarkably adept at translating clean syntax.)
+
 ## How to read this book {.unnumbered}
 
-Every chapter follows one loop: **read → predict → run → audit**. Before running a cell,
-write down the direction, shape, or trend you expect. After running it, audit the code
-and its output the way you would review a colleague's pull request, or an AI
-assistant's. Assistants now write plausible PyTorch in seconds, so syntax is no longer
-the bottleneck; auditing is. Five questions cover most audits:
+Use the same loop throughout: **read → predict → run → audit**. Before executing an
+example, write down the shape, direction, or trend you expect. Then compare the result
+with your prediction. When they disagree, reduce the problem to one batch or one example
+and find where your mental model of the computation broke down.
+
+Five questions organize every audit:
 
 1. **Function class.** What family of functions does the code implement, and what
-   structure does it build in: locality, weight sharing, order, causality?
-2. **Objective.** What does the loss reward? When it is a negative log-likelihood, what
-   noise model does it assume: Gaussian, Bernoulli, or categorical?
-3. **Estimator.** What does each batch estimate? [Chapter 4](chapters/part1/04-training-loss-sgd.qmd#sec-04-estimator-cases)
-   separates three cases: a decomposable per-example mean, a nonlinear functional of an
-   aggregate, and a batch-defined objective.
-4. **Visibility.** What can the model see? Check padding, causal masks, and leakage
-   across data splits.
-5. **Claim.** What does the output actually support, and which tempting conclusion does
-   it leave unproven?
+   structure is built in (locality, weight sharing, order, causality)?
+2. **Objective.** What does the loss reward, and which conditional noise model justifies
+   it?
+3. **Estimator.** What does each batch actually estimate, i.e., an unbiased per-example
+   mean, a biased plug-in of an aggregate, or an objective defined by the batch itself?
+   [Chapter 4](chapters/part1/04-training-loss-sgd.qmd#sec-04-estimator-cases) separates
+   the three cases.
+4. **Visibility.** What information can the model see? Check padding, causal masks, and
+   leakage across data splits.
+5. **Claim.** What does the experiment actually establish, and which tempting conclusions
+   remain unproven?
 
-An assistant that writes code you cannot audit has cost you the competence you came here
-for. The standard throughout is that you own every line you run. The code is plain
-Python and PyTorch and runs on an ordinary laptop CPU because the data are small.
-[If you are taking the course, the
+Apply these questions whether you wrote the code by hand, borrowed it from a repository,
+or generated it with an AI assistant. Assistants now write plausible PyTorch in seconds,
+so syntax is no longer the bottleneck → **auditing is**. An assistant that writes code
+you cannot audit costs you the very competence you came here to build.
+
+The code is plain Python and PyTorch and runs on an ordinary laptop CPU because the data
+are small. [If you are taking the course, the
 [lecture videos](https://www.youtube.com/playlist?list=PLwZv_wzaKu3vzW88m6ASKemCTb70ukycH)
 and [course-site self-checks](https://shakeri-lab.github.io/dl-course-site/)
 complement this loop.]{.content-hidden when-profile="press"}
+
+For a first pass, read the opening problem, study the figures, run the single cell that
+tests the central claim, and answer the *Check yourself* prompts without looking back.
+Then return for the derivations, code, and exercises. The *Trap* and tip boxes help
+diagnose common bugs.
+
+When you encounter an unfamiliar architecture in a newly published paper, you should be
+able to identify what it changes, trace its computation, and design a decisive test of
+its claims. That is the fluency this book asks you to build.
 
 ### Why this book {.unnumbered}
 
