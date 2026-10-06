@@ -138,4 +138,4 @@ configuration.
 
 | Source | SHA-256 |
 |---|---|
-| `chapters/interludes/learning-by-experiment.qmd` | `2c80af511ac93ee7bc2a8fd306c3f8af68da92d43d6fc0e76d516795c6e7ec61` |
+| `chapters/interludes/learning-by-experiment.qmd` | `9dacb9b288d6b974bb31f902dde1f5f0331133d5c391aa7b62cca1e9e4b5c213` |

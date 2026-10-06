@@ -147,7 +147,7 @@ test('quant: the declared attributes reproduce the chapter literals they mirror'
   assert(chapter.includes('Q=2^{b-1}-1,'), 'Q = 2^(b-1) - 1 is the chapter\'s');
   assert(chapter.includes('s=\\frac{\\max_{ij}|W_{ij}|}{Q}.'), 's = max|W| / Q is the chapter\'s');
   assert(chapter.includes('\\operatorname{round}(W_{ij}/s),-Q,Q'), 'round(W/s) clipped to +-Q is the chapter\'s');
-  assert(chapter.includes('$|W_{ij}-\\widehat W_{ij}|\\le s/2$'), '|error| <= s/2 is the chapter\'s sentence');
+  assert(chapter.includes('$|W_{ij}-\\hat W_{ij}|\\le s/2$'), '|error| <= s/2 is the chapter\'s sentence');
   assert(chapter.includes('{#eq-symmetric-quantization}') && chapter.includes('{#eq-quant-payload}'));
   // The chapter's grid IS the rule at b = 3: codes -3..3 over Q = 3, s = 1 / 3 because max|values| = 1.
   const q3 = quant(fx, fx.timeline[1]);
