@@ -26,8 +26,8 @@ A device that recurs as the same words becomes a template, and a template is the
 two-narrators problem again: the reader hears a formula instead of a person.
 
 - **V1 Local vocabulary.** Every added sentence is built from the chapter's own objects
-  and its own images (the CNN chapter's detectives, the gradient superhighway, a model's
-  input and output contract). A sentence that could be pasted into another chapter is not
+  and its own images (the CNN chapter's edge detectors, the descent's knobs, a model's
+  input and output contract). Images that personify an object are retired (D12). A sentence that could be pasted into another chapter is not
   written yet.
 - **V2 No shared phrasing among added sentences.** No four-word sequence in two added
   sentences from different chapters. No two added promise sentences (T1) share their
@@ -108,7 +108,7 @@ lands in, write the one that does, or write nothing.
 | Device | Job | Budget |
 |---|---|---|
 | K1 verdict (T2) | Right after a display, output, or figure, one sentence of at most twelve words that names what the thing buys, what it costs, or which earlier object it is. No new symbol, no new claim, no "whole", local vocabulary. | One to three per chapter, at load-bearing displays |
-| K2 metaphor (T3) | One concrete image from the book's lexicon, held for one paragraph | At least one per chapter |
+| K2 metaphor (T3) | One concrete image from the book's lexicon, held for one paragraph; never a personification or a lecture punchline (D12) | Optional; at most one per section |
 | K3 promise (T1) | Optional. In the opener, what the reader will see or do, in the chapter's objects; never where in the book it happens (the delivering section is cited in the receipt only) | At most one per chapter, and none where the opener already orients the reader (Chapter 8, Chapter 9) |
 | K4 aside | A short parenthetical naming the stakes ("the cruel part") | At most one per section |
 | K5 show-then-name | The figure or experiment precedes the name of what it shows | Only where it costs one sentence |
@@ -126,7 +126,7 @@ section we will", no emoji.
 
 | Position | Warmth | Allowed |
 |---|---|---|
-| Chapter opener (before the first `##`) | highest | K3 promise, one K2 metaphor, at most two "Chapter N" mentions outside a roadmap sentence |
+| Chapter opener (before the first `##`) | highest | K3 promise, at most one K2 metaphor, at most two "Chapter N" mentions outside a roadmap sentence |
 | Section transitions | medium | one orienting sentence: what was fixed, what becomes learnable, or why this next step |
 | Derivations and definitions | none until the result | then one K1 verdict |
 | Experiments | medium | a K6 reader turn before or after the run; the experiment ends with its one limitation |
@@ -140,7 +140,9 @@ section we will", no emoji.
 ## Decisions
 
 - **D1 Recap headings.** `Okay, so: ` plus a phrase or a claim of at most ten words.
-  The 23 existing headings comply; change none. Give them explicit ids
+  The 23 headings comply; change one only on the author's ruling (the print revisions of
+  October 5, 2026 retitled two, in Chapters 3 and 20, and each kept its old slug as an
+  explicit id). Give them explicit ids
   (`{#sec-NN-recap}`) so wording never moves an anchor (Stage B3; the course site links
   by URL only).
 - **D2** No "Let us" in prose: a plain "we" statement or an imperative.
@@ -176,6 +178,32 @@ section we will", no emoji.
   numerical output cannot certify unchanged claims in prose, so every prose edit gets a
   paragraph-level reading for meaning. The author-approved rewrites and the book-wide pass
   are in `audits/voice/stage_p25_report.md`. D11 overrides R9's old note on announcements.
+- **D12 The print edition's house rules (author's rulings, October 4 and 5, 2026).** The
+  Springer edition's revisions were carried into this edition on October 5, 2026, and its
+  house rules now govern both. They are later than D11 and the images kept on October 1
+  and 2; where the two conflict, D12 wins.
+  - No wording taken from lectures or slides: catchy headings, punchlines, exclamations,
+    empty intensifiers such as "exactly".
+  - No personification of objects: parameters do not "live", convolutions do not "see",
+    and channels are detectors, not detectives or experts. Name the mechanism instead: the
+    gradient through ReLU's open half, the additive cell-state update and its
+    multiplicative gates, ground-truth prefixes for teacher forcing. Retired: the gradient
+    superhighway, detectives, experts and clues, "general vibe", the conveyor belt and
+    its valves, the gold rail, the learned meeting place, "Architecture proposes,
+    initialization disposes". Old anchors that carry these words stay as explicit ids.
+  - Experiment setups in the active "we", with precise terms (initialization, unbiased
+    estimate). Pointers are plain ("is the subject of @sec-06-generalization").
+  - A look-ahead that interrupts the argument goes to a footnote, and so does a technical
+    caveat that the rest of the book and the code do not need.
+  - A claim is scoped to the runs that support it; a printed diagnostic is associated with
+    an outcome in this experiment, not a threshold.
+  - Minimal code syntax in the running text.
+  - `\hat` over a single symbol; `\widehat` only over a multi-symbol expression.
+  - This edition keeps three things print does not: the reinforcement-learning material in
+    the main text, its caption style without **a)** panel letters, and the question
+    "What if the template were learnable?".
+  The ledger and the per-entry decisions are in
+  `audits/voice/print_revisions_2026-10-05.md`.
 
 ## Rules
 
@@ -315,8 +343,9 @@ python scripts/audit_voice_ledger.py --grades _book --markdown audits/voice/grad
 ```
 
 `--check` blocks on R1 to R6 for the pages in `VOICE_SCOPE`, and on the V3 caps and I17
-for the whole book; band misses print as warnings. When a page is revised, add it to
-`VOICE_SCOPE` in the same commit.
+for the whole book; band misses print as warnings. Since October 5, 2026, `VOICE_SCOPE`
+holds every chapter, interlude and the epilogue; the appendices stay out because Quarto's
+"Appendix A — Title" heading would trip R6.
 
 Each batch ends at a gate: invariants after every page, I17 and I18 book-wide, a full
 render, the P5 report, and a push of `voice-coherence` so the author can read the branch.

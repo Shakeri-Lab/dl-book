@@ -43,19 +43,35 @@ from bs4 import BeautifulSoup, Comment, NavigableString, Tag
 
 ROOT = Path(__file__).resolve().parents[1]
 
-# Pages whose register rules R1 to R6 block CI. The voice-coherence sweep adds pages
-# here as each one is revised; VOICE.md records the same list.
+# Pages whose register rules R1 to R6 block CI: every chapter, interlude and the epilogue
+# in reading order (the print revisions of October 5, 2026 brought the rest in). The
+# appendices stay out because Quarto titles them "Appendix A \u2014 ...", which R6 reads as an
+# em dash; VOICE.md records the same scope.
 VOICE_SCOPE: tuple[str, ...] = (
     "chapters/part1/01-linear-regression.qmd",
+    "chapters/part1/02-logistic-softmax.qmd",
+    "chapters/part1/03-nonlinearity-mlp.qmd",
+    "chapters/part1/04-training-loss-sgd.qmd",
+    "chapters/part1/05-backpropagation.qmd",
     "chapters/part1/06-generalization-inductive-bias.qmd",
+    "chapters/interludes/learning-by-experiment.qmd",
+    "chapters/part2/07-filters-convolution.qmd",
     "chapters/part2/08-cnn.qmd",
     "chapters/part2/09-modern-cnns-transfer.qmd",
     "chapters/interludes/making-pca-learnable.qmd",
     "chapters/part3/10-sequences-rnn.qmd",
     "chapters/part3/11-encoder-decoder.qmd",
+    "chapters/part4/12-kernel-regression.qmd",
     "chapters/part4/13-attention.qmd",
+    "chapters/part4/14-self-attention-transformer.qmd",
     "chapters/interludes/attention-as-test-time-regression.qmd",
+    "chapters/part4/15-bert-pretraining.qmd",
+    "chapters/part4/16-vit-scaling.qmd",
     "chapters/part5/17-peft-quantization.qmd",
+    "chapters/part5/18-alignment.qmd",
+    "chapters/part5/19-generative.qmd",
+    "chapters/part5/20-multimodal.qmd",
+    "chapters/epilogue.qmd",
 )
 
 # Frozen Part I reference profile (medians of Chapters 1 to 6 in the baseline ledger,
