@@ -115,9 +115,14 @@ test('column space: the manuscript owns the geometry while the vectors are decla
   const equation = chapter.indexOf('{#eq-normal}');
   assert(equation > 0 && figure > equation && anchor > figure, 'normal equations, figure, then the heading');
   assert.match(f.$('.mechanism-intro').textContent, /projection figure above/);
-  // The two facts this scene declines to draw are the chapter's own, named in the scope.
-  assert.match(chapter, /\*\*Rank deficiency: one prediction, many weights\.\*\*[\s\S]*?The fitted prediction is still unique; the weights are not/);
-  assert.match(chapter, /\*\*Conditioning: factor [\s\S]*?\*\* Forming the normal equations\n\s+squares the spectral condition number/);
+  // The two facts this scene declines to draw are the chapter's own, named in the scope:
+  // without full column rank many weights reach one minimum (the exercises name it rank
+  // deficient), and forming X^T X squares the condition number (the chapter's footnote).
+  assert.match(chapter, /requires full column rank \(\$n \\ge d\$, with no\s+redundant features\)\.[\s\S]*?infinitely many\s+weight vectors achieve the exact same minimum error\./);
+  assert.match(chapter, /First, forming\s+\$\\featurepart\{\\matr\{X\}\}\^\\top\\featurepart\{\\matr\{X\}\}\$ explicitly squares the condition\s+number/);
+  assert.match(chapter, /rank deficient \(rank below \$d\$/);
+  assert.match(read('column-space/panel.html'), /rank deficiency, from redundant features or more parameters than examples, where infinitely many weight vectors reach the same minimum error/);
+  assert.match(read('column-space/panel.html'), /conditioning, where forming the normal equations squares the condition number/);
   // The panel links the equation by anchor, never by a guessed number, and never with @eq-.
   assert.match(read('column-space/panel.html'), /href="#eq-normal"/);
   assert.doesNotMatch(read('column-space/panel.html'), /@eq-/);
