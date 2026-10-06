@@ -237,7 +237,9 @@ test('integration: the excerpt precedes the zoo\'s whole Plan -> Code panel, nev
   const label = chapter.indexOf('#| label: fig-filter-zoo');
   assert(label > 0 && chapter.indexOf('#| label: fig-filter-zoo', label + 1) < 0, 'the zoo cell is labelled once');
   const wrapper = chapter.lastIndexOf(':::: {.plan-code', label);
-  assert(wrapper > chapter.indexOf('## The filter zoo'), 'the zoo cell sits in a Plan -> Code wrapper inside the zoo section');
-  assert(chapter.lastIndexOf('*does intensity change here, in my direction?*', wrapper) > chapter.indexOf('## The filter zoo'),
+  const zoo = chapter.indexOf('## Examples of fixed filters {#the-filter-zoo}');
+  assert(zoo > 0, 'the zoo section keeps its heading and its old anchor');
+  assert(wrapper > zoo, 'the zoo cell sits in a Plan -> Code wrapper inside the zoo section');
+  assert(chapter.lastIndexOf("whether intensity changes there along the kernel's direction.", wrapper) > zoo,
     'so the panel lands after the zoo\'s three bullets and before its code');
 });

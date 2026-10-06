@@ -1055,16 +1055,16 @@ test("the panel names its fixed weights as the manuscript's vertical Sobel detec
   const intro = context.query(".conv-excerpt__intro").textContent;
   // Read before any script runs: the static fallback carries the name.
   assert.match(intro, /vertical Sobel edge detector/);
-  assert.match(intro, /filter zoo below/, "the panel is injected above that section's heading");
+  assert.match(intro, /examples of fixed filters below/, "the panel is injected above that section's heading");
   assert.match(kernelCard.querySelector(".conv-excerpt__label").textContent, /vertical Sobel/);
   assert.match(context.query('[data-matrix="kernel"]').getAttribute("aria-label"), /vertical Sobel/);
   assert.doesNotMatch(intro + kernelCard.textContent, /learn|train/i,
     "naming the detector must not imply the weights were learned");
-  // True to the manuscript: these are the nine weights the filter zoo prints.
+  // True to the manuscript: these are the nine weights the examples of fixed filters print.
   const chapter = fs.readFileSync(path.join(__dirname, "..", "chapters", "part2", "07-filters-convolution.qmd"), "utf8");
   assert(chapter.includes('"Sobel (vert.)": torch.tensor([[-1., 0., 1.], [-2., 0., 2.], [-1., 0., 1.]])'));
   assert.deepEqual(context.values("kernel"), ["−1", "0", "1", "−2", "0", "2", "−1", "0", "1"]);
-  assert.match(chapter, /^## The filter zoo$/m);
+  assert.match(chapter, /^## Examples of fixed filters \{#the-filter-zoo\}$/m);
   // The player never rewrites either name while it runs.
   const running = await initialized(t);
   const label = () => running.query('[data-matrix="kernel"]').closest(".conv-excerpt__card")
@@ -1080,7 +1080,7 @@ test("integration: the excerpt is HTML-only, keyed on one heading, and declared 
   assert.match(filter, /^(?:--[^\n]*\n)+if not FORMAT:match\("\^html"\) then return \{\} end/,
     "the non-HTML guard is the first executable line, so the PDF is untouched");
   assert.match(filter, /07%-filters%-convolution%.qmd\$/);
-  assert.match(filter, /== "The filter zoo"/);
+  assert.match(filter, /== "Examples of fixed filters"/);
   assert.match(filter, /pandoc\.RawBlock\("html",[\s\S]*?\), header\}/,
     "the panel is inserted above the heading it names");
   assert.match(filter, /assert\(inserted == 1/);

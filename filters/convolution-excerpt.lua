@@ -15,7 +15,7 @@ return {{Pandoc = function(doc)
   if not input:match("07%-filters%-convolution%.qmd$") then return doc end
   local inserted = 0
   doc = doc:walk({Header = function(header)
-    if header.level == 2 and pandoc.utils.stringify(header.content) == "The filter zoo" then
+    if header.level == 2 and pandoc.utils.stringify(header.content) == "Examples of fixed filters" then
       inserted = inserted + 1
       return {pandoc.RawBlock("html", "<style>\n" .. read("player.css") ..
         "\n</style>\n" .. read("panel.html") .. "\n<script>\n" ..

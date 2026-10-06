@@ -4,36 +4,38 @@
      seeds: sources/4.1-CNN.tex (§Solution/Two Principles, §Sliding Window,
             §Cross-Correlation, §Limitations of Hand-Crafted Kernels) -->
 
-Part I ended with a diagnosis and a prescription. The diagnosis was that our MLP's
-templates span the whole frame, so they are blind to adjacency and brittle to position
-(@sec-06-generalization-inductive-bias). The prescription was *make the template
-local, and slide it.*
+As @sec-06-generalization-inductive-bias showed, our fitted
+MLP was sensitive to small changes in image position. Its dense
+parameterization imposed neither locality nor weight sharing.
+After the experimental interlude, we return to these two design
+choices: restrict a detector to a local patch and apply the same
+weights at every position.
 
-We build that machine by hand, with no learning anywhere. It is a
-piece of classical engineering, decades older than deep learning, and computer-vision
-experts spent careers designing its templates manually. The convolutional network
-of @sec-08-cnn keeps this machine and changes one thing: it learns the kernel's
-numbers.
+We first construct this operation with fixed kernels, choosing their
+coefficients by hand. This lets us inspect what the spatial structure
+provides independently of training. The convolutional network
+of @sec-08-cnn will retain the operation and learn the kernel
+coefficients from data.
 
-Recall the primitive from @sec-01-linear-regression: a dot product scores an input
-against a template. When their norms are controlled, its angle component measures
-similarity. Everything below is that one primitive, applied locally, everywhere.
+Recall the primitive from @sec-01-linear-regression: a dot
+product scores an input against a template. Here the input is a local
+patch, and the same template is applied throughout the image.
 
 ## Two principles, one strategy
 
 The MLP's [failures](../part1/06-generalization-inductive-bias.qmd#sec-06-generalization-inductive-bias) point to two properties we should build into an
 image model:
 
-1. **Spatial locality.** Nearby pixels are more related than distant ones. Edges,
-   textures, and patterns emerge from *local neighborhoods*, not global pixel
-   arrangements.
-2. **Translation equivariance.** The same feature detector should work regardless of
-   position: a cat's ear is a cat's ear whether it appears top-left or bottom-right.
+1. **Spatial locality.** Local neighborhoods contain useful
+   relationships, including edges and textures. A local detector
+   restricts each response to one such neighborhood.
+2. **Translation equivariance.** When an input pattern shifts,
+   the detector's response should shift with it, wherever the
+   boundary treatment permits the same computation.
 
-They suggest a strategy: instead of one massive network staring at the entire image,
-use a *small* detector that analyzes one patch at a time, and **slide it across the
-image** to look for its feature everywhere. To understand what such detectors do, we
-first look at how vision experts used to design them by hand.
+These principles suggest a small detector applied to each image
+patch with the same weights. We begin with hand-designed kernels
+whose responses are easy to interpret.
 
 ## Start in 1D: the moving average
 
@@ -69,12 +71,28 @@ smooth = F.conv1d(noisy[None, None], kernel[None, None]).squeeze()
 ```{python}
 #| echo: false
 #| label: fig-moving-average
-#| fig-alt: "A jagged noisy signal fluctuates around a smooth periodic trend. The nine-point moving-average curve removes the high-frequency variation while following the central oscillation."
-#| fig-cap: "A window of uniform weights, slid along a noisy signal, averaging as it goes: the simplest sliding-window operation, and already recognizably a denoiser."
-plt.figure(figsize=(6.4, 3))
+#| fig-alt: "Two panels. Top: a jagged noisy signal fluctuates around a smooth periodic trend, and the nine-point moving-average curve follows the central oscillation without the high-frequency variation; a small box near t equal to 2 marks one window of nine samples, with a dot on the curve at its center. Bottom: the nine samples of that window drawn as stems at offsets minus four to plus four, with a dashed line at their mean and a dot at offset zero, labeled as the output at the center."
+#| fig-cap: "A window of uniform weights, slid along a noisy signal, averaging as it goes. Top: the noisy signal and its nine-point moving average; the box marks one window, and the dot on the curve is that window's output. Bottom: the nine samples inside the box, each weighted $1/9$; their mean is the output at the window's center. This simplest sliding-window operation is already recognizably a denoiser."
+fig, (top, bottom) = plt.subplots(2, 1, figsize=(6.4, 5.2), height_ratios=[3, 2])
+plt.sca(top)
 plt.plot(t, noisy, color="#B8B8A8", lw=0.8, label="noisy signal")
 plt.plot(t[4:-4], smooth, color="#E57200", lw=2, label="moving average (9-wide)")
-plt.xlabel("$t$"); plt.legend()
+c = 48                                                 # one window, centered near t = 2
+window, mean = noisy[c - 4:c + 5], smooth[c - 4].item()
+top.add_patch(plt.Rectangle((t[c - 4] - 0.03, window.min() - 0.12),
+                            t[c + 4] - t[c - 4] + 0.06, window.max() - window.min() + 0.24,
+                            fill=False, edgecolor="#232D4B", lw=1, zorder=4))
+top.plot(t[c], mean, "o", color="#E57200", mec="white", ms=6, zorder=5)
+plt.xlabel("$t$"); plt.legend(loc="lower center", bbox_to_anchor=(0.5, 1.0), ncol=2, frameon=False)
+offsets = range(-4, 5)
+bottom.axhline(0, color="#B8B8A8", lw=0.6)
+bottom.vlines(offsets, 0, window, color="#B8B8A8", lw=1.5, label="the nine samples, each weighted $1/9$")
+bottom.plot(offsets, window, "o", color="#B8B8A8", ms=5)
+bottom.axhline(mean, color="#E57200", lw=1.2, ls="--", label="their mean, the output at the center")
+bottom.plot(0, mean, "o", color="#E57200", mec="white", ms=8, zorder=5)
+bottom.set_xticks(offsets, [f"{o:+d}".replace("-", "\u2212") if o else "0" for o in offsets])
+bottom.set_xlabel("sample offset from the window's center")
+bottom.legend(loc="lower center", bbox_to_anchor=(0.5, 1.0), ncol=2, frameon=False, fontsize=9)
 plt.tight_layout(); plt.show()
 ```
 ## To 2D: the recipe
@@ -113,30 +131,31 @@ print(f"recipe vs. torch.conv2d: max |diff| = {gap:.1e}")
 ```
 ::::
 
-Read the markers and one thing stands out: steps 2 and 5 share a line. The plan
+As the markers show, steps 2 and 5 share a line. The plan
 moves one window at a time; `unfold` places *every* window at once, and the next
-line scores them all in parallel. That gap between a sequential plan and
-vectorized code is where most tensor bugs live, which is why the last line
-checks this implementation against the framework's own.
+line scores them all in parallel. Translating a sequential plan into vectorized code can
+introduce indexing and shape errors, so we check the result
+against the framework implementation.
 
 The output is smaller than the input. A $k
 \times k$ kernel on an $n \times n$ image produces $(n - k + 1) \times (n - k + 1)$
-outputs, because the window must stay inside the frame. What to do about that (and
-about sliding in bigger steps) is @sec-08-cnn's business.
+outputs, because the window must stay inside the frame. Padding, which controls this
+shrinkage, and stride, which slides the window in bigger steps, are treated
+in @sec-08-cnn.
 
-## The filter zoo
+## Examples of fixed filters {#the-filter-zoo}
 
 The sliding dot product stays the same. Changing the kernel weights changes what it
-detects. Three
-classics, applied to a synthetic test scene and to a boot from our Fashion-MNIST
+detects. We apply three
+classic kinds of kernel to a synthetic test scene and to a boot from our Fashion-MNIST
 subset:
 
 - **Blur** uses uniform positive weights summing to 1, the 2-D moving average.
 - **Sharpen** amplifies each pixel's difference from its neighbors.
 - **Edge detection** (Sobel) uses positive and negative weights summing to *zero*.
   Over any flat region the products cancel and the output is silent; over an edge, a
-  sharp change in values, the sum swings large. It answers one question:
-  *does intensity change here, in my direction?*
+  sharp change in values, the sum swings large. Its response at each position indicates
+  whether intensity changes there along the kernel's direction.
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
@@ -203,9 +222,9 @@ plt.tight_layout(); plt.show()
 ::::
 Study the two Sobel columns for a moment. The vertical-edge detector lights up on the
 rectangle's sides and stays silent on its top and bottom; the horizontal detector does
-the reverse; the diagonal stripes excite both. Nine numbers, and we have built a
-primitive *feature detector*, precisely the small detector of our strategy that
-analyzes one patch at a time, except nobody has learned anything yet.
+the reverse; the diagonal stripes excite both. With nine numbers we have built a
+primitive *feature detector*, the patch-by-patch detector that the two principles
+suggest, and none of its coefficients was learned.
 
 ## Naming the operation
 
@@ -219,10 +238,12 @@ $$ {#eq-crosscorr}
 ::: {.callout-note}
 ## Why we call it "convolution"
 
-The deep learning community universally calls this operation a **convolution**, and so
-will we. A mathematician's convolution flips the kernel before sliding; since our
-kernels will soon be *learned* parameters, a flipped kernel is just another kernel, and
-the distinction is inconsequential in practice (Exercise 4 makes you confirm this).
+In deep learning, this cross-correlation operation is commonly
+called a **convolution**, and we follow that convention.
+Mathematical convolution flips the kernel before applying it.
+For a fixed kernel, the flip can change the output, as Exercise 4
+demonstrates. For an unrestricted learned kernel, it amounts to
+a reparameterization of the same family of operations.
 :::
 
 ## Translation equivariance {#the-property-we-paid-for-equivariance}
@@ -260,19 +281,20 @@ interior = (A - B_shifted)[:, s + 2:]         # compare away from the blank bord
 print(f"filter(shift(x)) vs shift(filter(x)): max |diff| = {interior.abs().max():.1f}")
 ```
 ::::
-The difference prints as 0.0 on the compared interior. The detector's report moves with the scene.
-Contrast @sec-06-generalization-inductive-bias: the MLP's global templates degraded under a 2-pixel shift because
-position was baked into every weight. Here, position cannot matter to *what* is detected
-on the interior, only to *where* the detection lands. At the frame boundary, cropping,
-padding, or fill rules can break exact equality; that is why the code excludes the
-blank-border region.
+The difference prints as 0.0 on the compared interior. The detector's response moves with the scene.
+The distinction from @sec-06-generalization-inductive-bias is structural:
+the dense layer did not impose this relation between shifted
+inputs and outputs. Here, applying the same local weights at
+each position gives the relation directly. At the frame boundary,
+cropping, padding, or fill rules can break exact equality;
+that is why the code excludes the blank-border region.
 
 Before going further, keep these two distinct:
 
 - **Equivariant** means the output moves along with the input (what convolution
   gives us).
-- **Invariant** means the output does not change at all (what a classifier
-  ultimately wants: "boot", regardless of position).
+- **Invariant** means the output does not change at all (a classifier should
+  output "boot" regardless of position).
 
 Equivariance is the raw material; in @sec-08-cnn, pooling will discard some position
 information to gain local shift tolerance. Exact invariance is a stronger property and must be tested, not presumed.
@@ -287,8 +309,8 @@ one patch), and the same nine numbers repeat along its diagonals (sharing means 
 row is the same template, relocated).
 
 That view makes the economics explicit. A dense layer from our 28×28 images to an
-equal-sized output would own $784 \times 784 \approx 615{,}000$ weights. The Sobel
-detector owns **nine**, reused at every position. This is @sec-06-generalization-inductive-bias's
+equal-sized output would have $784 \times 784 \approx 615{,}000$ weights. The Sobel
+detector has **nine**, reused at every position. This is @sec-06-generalization-inductive-bias's
 constraints-as-knowledge idea made concrete: locality zeroes out most of the
 matrix, equivariance ties the survivors together, and what remains is a linear map
 with almost nothing left to specify.
@@ -335,13 +357,14 @@ plt.tight_layout(); plt.show()
 ```
 ## The bottleneck: someone has to design the kernel
 
-So why did this classical machinery not solve vision decades ago? Because the kernels
+Why did this classical machinery not solve vision decades ago? The kernels
 are only as good as their designers, and hand-crafted kernels have three limitations:
 
-1. **Limited expressiveness.** They detect simple, predefined patterns: gradients,
-   blobs, corners. Nobody can write down nine numbers for "cat ear" or "car wheel."
+1. **Predefined features.** These kernels were selected for
+   specific low-level operations, such as smoothing or detecting
+   intensity changes, rather than fitted to the classification task.
 2. **Manual feature engineering.** Choosing which kernels to use, and how to combine
-   them, takes deep domain expertise and endless experimentation for every new task.
+   them, takes deep domain expertise and extensive experimentation for every new task.
 3. **No adaptation.** A fixed kernel cannot adjust to a dataset. What works for one
    task fails for another.
 
@@ -350,10 +373,13 @@ hand-engineered filters into multi-stage heuristic pipelines. The architectural
 geometry (local receptive fields with shared spatial weights) was sound; the manually
 tuned coefficients formed the bottleneck.
 
-A $3 \times 3$ kernel contains nine scalar coefficients. If we treat the kernel as a
-parameter tensor $\matr{V} \in \mathbb{R}^{3 \times 3}$ and fit it to a task loss
-with reverse-mode automatic differentiation, instead of hand-crafting it to match
-analytical edge profiles, we get the convolutional neural network.
+A $3 \times 3$ kernel contains nine scalar coefficients. We can
+treat them as a parameter tensor
+$\matr{V} \in \mathbb{R}^{3 \times 3}$ and optimize a task loss using
+the gradients from @sec-05-backpropagation. Locality and
+weight sharing remain fixed; the coefficients become learnable.
+This gives a trainable convolutional layer. @sec-08-cnn
+combines such layers into a classifier.
 
 ::: {.callout-note}
 ## Check yourself
@@ -367,16 +393,16 @@ Close the book for one minute and reconstruct the sliding operation.
 
 ## Okay, so: the machine before the learning
 
-1. **One operation, many specialists**: slide a small template, take a dot product at
+1. **One operation, many kernels**: slide a small template, take a dot product at
    every position (@eq-crosscorr). Blur, sharpen, and edge detection differ only in
    the kernel's numbers.
 2. **Locality and sharing are built in**: as a matrix, convolution is almost-all-zero
    with nine numbers repeating: 615,000 weights collapsed to 9.
 3. **Equivariance is exact on the interior**, not approximate: filter-then-shift equals
-   shift-then-filter wherever both operations see the same pixels. Boundary handling
+   shift-then-filter wherever both operations use the same pixels. Boundary handling
    must be specified separately. Pooling in @sec-08-cnn adds some local shift tolerance
    on top of that equivariance.
-4. **Hand-crafting is the bottleneck**: expressiveness, engineering cost, no
+4. **Hand-crafting is the bottleneck**: predefined features, engineering cost, no
    adaptation. Gradient descent can learn the kernel's numbers instead.
 
 ## Sources and further reading {.unnumbered}
@@ -410,4 +436,4 @@ Close the book for one minute and reconstruct the sliding operation.
 5. **(Code.)** The box blur is *separable*: show that convolving with the $3\times3$
    uniform kernel equals convolving with a $3\times1$ column of $\tfrac13$s and then a
    $1\times3$ row of $\tfrac13$s. Count multiplications per output pixel for each
-   route. This trick mattered enormously in the hand-crafted era.
+   route. This trick mattered in the hand-crafted era.
