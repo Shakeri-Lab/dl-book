@@ -21,9 +21,9 @@ const {staticFrame} = require('./render_static_frames.cjs');
 
 const NAME = 'gate-product-excerpt';
 const scene = entry(NAME);
-// Chapter 10 prints the order of magnitude; the appendix prints the value. The audit
-// checks a scene's literals only against its own chapter, so this scene's second chapter
-// is bound here instead.
+// Chapter 10 writes the direct cell-state product of forget gates and prints no constant-gate
+// power; the appendix prints the value 0.5^80 = 8.27e-25. The audit checks a scene's literals
+// only against its own chapter, so this scene's second chapter is bound here instead.
 const APPENDIX = 'chapters/appendices/a3-precision-performance.qmd';
 const appendixSource = () => fs.readFileSync(path.join(ROOT, APPENDIX), 'utf8');
 // The harness lays nothing out, so the figure's width is declared: the wide layout, which
@@ -220,14 +220,18 @@ test('gate-product: the declared attributes reproduce the chapter literals they 
   // scripts/audit_excerpt_fixtures.py.
   assert.equal(values.half, 0.5);
   assert.equal(values.half, sigma(0), 'the declared half-open gate is not sigma(0)');
-  assert(chapter.includes(`$0.5^{${values.horizon}} \\approx 10^{-24}$`),
-    'the declared gate and horizon do not spell the chapter\'s 0.5^80 claim');
+  assert(chapter.includes(`sequences of ${values.horizon} random tokens`),
+    'the declared horizon is not the recall task\'s lag');
   assert(chapter.includes('near $\\sigma(0) = \\tfrac12$'),
-    'the chapter no longer says a fresh LSTM sits at sigma(0) = 1/2');
-  assert(chapter.includes(`forget-gate bias positive* (say $+${values.bias}$)`),
-    'the declared bias does not spell the chapter\'s +1 recommendation');
-  assert(chapter.includes('astronomically attenuated, not exactly zero'),
-    'the chapter no longer says "not exactly zero", which the arrival caption quotes');
+    'the chapter no longer says a default-initialized forget gate sits near sigma(0) = 1/2');
+  assert(chapter.includes(`The code sets their **sum** to $+${values.bias}$`),
+    'the declared bias does not spell the chapter\'s +1 forget-gate bias');
+  assert(chapter.includes('A positive forget-gate bias increases retention at\ninitialization'),
+    'the chapter no longer says what a positive forget-gate bias does along the direct path');
+  assert(chapter.includes('Forget-gate values near one reduce\nattenuation along this direct path'),
+    'the chapter no longer says the direct-path product attenuates, which the arrival caption shows');
+  assert(chapter.includes('the displayed contribution is not the complete recurrent\nJacobian'),
+    'the chapter no longer bounds the direct-path product, which the boundary repeats');
   for (const level of values.measured) assert(chapter.includes(String(level)),
     `the diagnostic caption no longer reports a mean gate of ${level}`);
   assert(chapter.includes(`holds its gates flat around ${values.measured[0]} for all eighty steps`));
@@ -340,8 +344,10 @@ test('gate-product: the count is attributed in both roundings, and every printed
   const appendixRounding = scientific(atHalf, 2);
   assert.equal(chapterRounding, '10⁻²⁴');
   assert.equal(appendixRounding, '8.27 × 10⁻²⁵');
-  assert(chapterSource(NAME).includes(`$0.5^{${values.horizon}} \\approx 10^{${exponent}}$`),
-    'chapter 10 no longer rounds this product to the order of magnitude the transcript quotes');
+  // Chapter 10 no longer prints this constant-gate power, so the transcript's order of
+  // magnitude is the panel's own rounding and its value is attributed to the appendix alone.
+  assert(!chapterSource(NAME).includes(`0.5^{${values.horizon}}`),
+    'chapter 10 prints 0.5^80 again, so the transcript should attribute its rounding to the chapter');
   const sciExponent = Math.floor(Math.log10(atHalf));
   const mantissa = (atHalf / Math.pow(10, sciExponent)).toFixed(2);
   assert.equal(`${mantissa} × 10${superscript(sciExponent)}`, appendixRounding);
@@ -514,7 +520,7 @@ test('gate-product: the readout is monotone in f, and strictly so across the ope
   // The sweep really covers the interval between the two anchors, in order, and then the
   // excursion to the slider's maximum and back.
   const opening = samples.filter(([gate]) => gate > HALF && gate < OPEN);
-  assert(opening.length > 20, `the valve barely opened: ${opening.length} intermediate gates`);
+  assert(opening.length > 20, `the gate barely opened: ${opening.length} intermediate gates`);
   const beyond = samples.filter(([gate]) => gate > OPEN && gate < sigma(spec.max));
   assert(beyond.length > 20, `the sweep barely left +1: ${beyond.length} gates beyond it`);
   assert.equal(Math.min(...samples.map(s => s[0])), HALF);
@@ -818,7 +824,7 @@ test('gate-product: dragging the slider pauses, takes over, and recomputes every
     assert.equal(bandLabel(w, 1), `b_f = +${spec.max}`, label); assert.equal(gateLabel(w, 1), `f = ${g.toFixed(3)}`, label);
     assert.match(w.$('[data-bias-readout]').textContent, /= \+2\.00/);
     assert.equal(w.root.dataset.formulaLit, 'gp-fk gp-bias');
-    assert.match(caption(w).textContent, /^Drag bf yourself: the valve’s resting position decides what survives\.$/);
+    assert.match(caption(w).textContent, /^Drag bf yourself: the gate’s resting value decides what survives\.$/);
     // The endpoint dot, its label, the bracket and the badge box follow the dragged curve's
     // last point, not the timeline's.
     assert.equal(endpointsOnCurves(w, `${label} drag +2`).apart, true);
@@ -1087,7 +1093,7 @@ test('gate-product: the measured means are quoted as the chapter\'s measurement,
   // The figure's measured "ten orders" at lag 60 is a different quantity, and the boundary says so.
   assert.match(boundary, /about ten orders of magnitude stronger/);
   assert.match(boundary, /not this fk and is not reproduced here/);
-  assert(chapterSource(NAME).includes('attenuated but alive, about ten orders of magnitude stronger'));
+  assert(chapterSource(NAME).includes('arrives at lag 60 attenuated, about ten orders of magnitude stronger'));
 });
 
 test('gate-product: reduced motion holds b_f at the three declared values and the word at its beat position', t => {
@@ -1223,21 +1229,21 @@ test('gate-product: captions are within budget, coloured by meaning, honest at a
   }
   assert(orange > 200, `${orange} orange captions`);
   // The arrival sentence: the ratio in words, the other anchor's order of magnitude, the
-  // chapter's "not exactly zero", and the honesty about the log axis -- at beats 5 and 7.
+  // panel's "not exactly zero", and the honesty about the log axis -- at beats 5 and 7.
   const openOrder = `10${superscript(Math.round(Math.log10(held(OPEN, values.horizon))))}`;
   for (const time of [scene.beats[4], scene.beats[4] + 5.9, scene.beats[6], scene.duration]) {
     f.seek(time);
     assert.equal(caption(f).textContent, `Sixteen trillion times larger, yet ${openOrder} of the gradient: attenuated, not exactly zero. Legible only on a log axis.`);
   }
-  assert(chapterSource(NAME).includes('not exactly zero'));
+  assert(chapterSource(NAME).includes('Forget-gate values near one reduce\nattenuation along this direct path'));
   assert.doesNotMatch(f.root.textContent, /\bintact\b(?! —)/i.source ? /remains intact|arrives intact|is intact/ : /x/);
   // The sweep beat and any drag carry the sentence that is true at every b_f.
   f.seek(scene.beats[5] + 1);
-  assert.equal(caption(f).innerHTML, 'Drag <span class="gate-product-parameter"><i>b</i><sub><i>f</i></sub></span> yourself: the valve’s resting position decides what survives.');
+  assert.equal(caption(f).innerHTML, 'Drag <span class="gate-product-parameter"><i>b</i><sub><i>f</i></sub></span> yourself: the gate’s resting value decides what survives.');
   f.seek(scene.beats[4] + 2); drag(f, -2);
   assert.match(caption(f).textContent, /^Drag bf yourself/);
   f.seek(0); drag(f, 2); assert.match(caption(f).textContent, /^Drag bf yourself/);
-  f.seek(scene.beats[1] + 1); assert.match(caption(f).textContent, /^bf = 0: the valve rests half open/);
+  f.seek(scene.beats[1] + 1); assert.match(caption(f).textContent, /^bf = 0: the gate rests half open/);
 });
 
 test('gate-product: colour is meaning -- orange on b_f only, blue on the word only, wine on the signal', t => {
@@ -1354,13 +1360,14 @@ test('gate-product: the boundary states the approximation, the non-claim, the ma
   const f = fixture(t, NAME);
   const boundary = f.root.querySelector('.mechanism-boundary').textContent;
   assert.match(boundary, /from unit to unit and from step to step/);
-  assert.match(boundary, /writes ≈, not =/);
+  assert.match(boundary, /gives only the direct cell-state contribution, with the previous hidden state and the input held fixed/);
+  assert.match(boundary, /the full gradient also follows paths through hidden states and gates/);
   assert.match(boundary, /one constant .{0,3}f.{0,3}, multiplied 80 times/);
   assert.match(boundary, /Nothing here is trained, and nothing here is a claim about training/);
   // The log mapping and its floor, said plainly; legibility is on the mapping, never "intact".
   assert.match(boundary, /floor of 10⁻²⁵/);
   assert.match(boundary, /legible on that mapping, not intact/);
-  assert.match(boundary, /attenuated, not exactly zero, which is the chapter's own wording/);
+  assert.match(boundary, /about 10¹¹ times smaller than it was, attenuated, not exactly zero\./);
   assert.match(boundary, /recall experiment/);
   assert.match(boundary, /remains the chapter's evidence/);
   const frozen = JSON.stringify(JSON.parse(fs.readFileSync(path.join(ROOT,
@@ -1560,7 +1567,7 @@ test('integration: the excerpt is HTML-only, manifest-driven, and declared in th
   assert(scene.fixture.computedVariants.some(text => /1\.580 x 10\^13/.test(text) && /not the 10\^14/.test(text)), 'the manifest declares the computed ratio and the rounding trap');
   assert(scene.fixture.computedVariants.some(text => /one-parameter-control amendment/.test(text)), 'the manifest records the slider as the one parameter control');
   assert(scene.fixture.computedVariants.some(text => /1 \+ log10\(f\^k\)\/25/.test(text)), 'the manifest declares the log ink mapping');
-  assert(scene.fixture.literals.includes('astronomically attenuated, not exactly zero'));
+  assert(scene.fixture.literals.includes('the displayed contribution is not the complete recurrent\nJacobian'));
   assert.deepEqual(scene.beats, [0, 4, 12, 18, 24, 30, 36]);
   // The amendment is written into the authoring contract, and the receipt records it.
   const contract = fs.readFileSync(path.join(ROOT, 'docs', 'animation-authoring.md'), 'utf8').replace(/\s+/g, ' ');
