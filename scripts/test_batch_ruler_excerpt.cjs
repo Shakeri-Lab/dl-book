@@ -471,7 +471,8 @@ test('integration: the excerpt follows the gamma and beta paragraph and precedes
   const at = prose.indexOf(scene.anchor.target);
   const end = prose.indexOf('since $\\beta$ already provides the shift.');
   const warning = prose.indexOf('## BN uses different statistics in training and evaluation');
-  assert(prose.indexOf('## The stabilizer we owe you: batch normalization') < at);
+  const heading = prose.indexOf('{#the-stabilizer-we-owe-you-batch-normalization}');
+  assert(heading >= 0 && heading < at, 'the panel follows the batch-normalization heading');
   assert(at < end && end < warning, 'the panel lands after the paragraph and before the warning');
   // The anchor's paragraph is the last block before the warning: the reader predicts first.
   const tail = 'since $\\beta$ already provides the shift.';
