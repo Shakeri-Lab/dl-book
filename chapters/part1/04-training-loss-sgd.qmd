@@ -6,15 +6,18 @@
      seeds: sources/1_3_sgd_lecture_notes.tex, sources/1LS-2_loss_SGD.tex, sources/misc_1-SGD.tex
      additional reference: ../Resources/Gil Strang/SGD.pdf, §VI.5, especially pp. 361–365 -->
 
-The mathematical pieces are in place: models worth training (Chapters [-@sec-01-linear-regression]–[-@sec-03-nonlinearity-mlp]),
-losses that quantify failure, and calculus assuring us that the negative gradient points
-downhill. The friction is scale. How, exactly, do you run that descent when the dataset
-has a million examples, the model has millions of knobs, and the loss landscape is no
-longer a friendly bowl?
+We now have models ready for practical tasks: linear regressors (@sec-01-linear-regression),
+classifiers (@sec-02-logistic-softmax), and multilayer perceptrons
+(@sec-03-nonlinearity-mlp). We have losses that score their predictions against truth, and we
+know the direction of improvement is the negative gradient. What remains is the central
+engineering challenge: *how, exactly, do you execute the descent* when the dataset has a
+million examples, the model has millions of parameters, and the loss landscape is no longer
+a friendly bowl?
 
-The answer is stochastic gradient descent, with a small set of refinements: step size,
-minibatch noise, momentum, and adaptive per-parameter scaling. Together they train
-essentially every model in this book.
+The standard engine is stochastic gradient descent, strengthened by a handful of
+essential mechanisms: minibatching, momentum, and adaptive per-parameter scaling.
+These refinements turn a simple theoretical concept into the practical algorithm
+that trains every network in this book.
 
 ## Where losses come from, one more time
 
@@ -24,18 +27,19 @@ maximum likelihood collapse into least squares; in @sec-02-logistic-softmax the 
 argument with a categorical distribution produced cross-entropy. This is the general
 pattern: **a loss function is a noise model in disguise.** Choose how you believe the
 data deviates from your model, and maximum likelihood hands you the loss. The loss is
-how we tell the model it is doing badly, so choosing it well is not a detail: the loss
-is the supervision itself.
+how we define and penalize error, so choosing it well is no mere detail: the loss is the
+supervision itself.
 
-With the loss fixed, training is one line:
+With the loss fixed, training minimizes the average loss:
 
 $$
 \hat{\vect{w}} = \argmin_{\vect{w}} \; \loss(\vect{w})
 = \argmin_{\vect{w}} \; \frac{1}{n}\sum_{i=1}^{n} \ell_i(\vect{w}),
 $$ {#eq-train-objective}
 
-where $\ell_i$ is the loss on example $i$. Everything that follows is about minimizing
-this average when $n$ is enormous.
+where $\ell_i$ is the loss on example $i$. The rest of this chapter addresses how to minimize
+this objective when $n$ is massive: making rapid, reliable progress without evaluating every
+term at every step.
 
 ## The computational bottleneck
 
@@ -48,13 +52,13 @@ $$ {#eq-full-gd}
 
 Look at the cost. One step touches every example; modern datasets have millions to
 billions of them, modern models have millions to billions of parameters, and training
-needs thousands of steps. One exact gradient per step is a luxury we cannot afford
-$\rightarrow$ we need to change strategy to scale up.
+needs thousands of steps. One exact gradient per step is a luxury we cannot afford:
+scaling up demands a different strategy.
 
 ## Stochastic gradient descent
 
 We can estimate the gradient without evaluating every training example. Instead of the expensive sum over all $n$ examples, average over a small random
-**minibatch** $\mathcal{B}$: think 32 examples against a million:
+**minibatch** $\mathcal{B}$, e.g., 32 examples against a million:
 
 $$
 \vect{w}^{(t+1)} = \vect{w}^{(t)} - \alpha \, \frac{1}{|\mathcal{B}|}\sum_{i \in \mathcal{B}} \nabla \ell_i(\vect{w}^{(t)}).
@@ -68,12 +72,17 @@ $$
 \E\bigl[\nabla \loss_{\mathcal{B}}(\vect{w})\bigr] = \nabla \loss(\vect{w}).
 $$ {#eq-unbiased}
 
-This statement holds for independent draws with replacement and also for one uniformly
-chosen subset without replacement. In expectation, that cheap gradient points where
-the expensive gradient points. Each estimate is noisy; its average direction is right.
+Here the expectation is over the random draw of the minibatch from the fixed training set.
+The identity holds for independent draws with replacement and also for one uniformly
+chosen subset without replacement.^[At a fixed $\vect{w}$, a subset of size $B$ drawn
+without replacement is unbiased, and its variance is the with-replacement variance times
+the finite-population correction $(n-B)/(n-1)$, which reaches zero at $B=n$. Across an
+epoch, however, reshuffled batches create path dependence between iterates; dedicated
+random-reshuffling theory handles that sequence.] In expectation, that cheap gradient points where
+the expensive gradient points.
 
 There is a second, physical reason to batch. The hardware that trains networks is built
-around batched matrix multiplication, the GEMM of the Preface. A dense layer applied to
+around batched general matrix multiplication (GEMM). A dense layer applied to
 $B$ examples is one matrix product in which every weight, once read from memory, is
 reused for all $B$ examples. For small $B$ the step's cost is dominated by moving
 weights rather than by arithmetic, so a batch of 32 often takes little more wall-clock
@@ -81,36 +90,20 @@ time than a batch of one, and $B=1$ leaves most of an accelerator idle. Batch si
 trades gradient noise against hardware efficiency, and we return to both sides below and
 in @sec-04-estimator-cases.
 
-In practice the algorithm is:
+In practice the algorithm runs as follows:
 
 1. Shuffle the training data.
 2. Split it into minibatches of size $B$.
 3. For each batch: compute the average gradient, update the parameters.
 4. One pass through all batches is an **epoch**; repeat for multiple epochs.
 
-::: {.callout-note}
-## Sampling without replacement
-
-There are two different facts hiding under the word "without replacement." A single
-uniform subset, evaluated at a fixed $\vect{w}$, is still unbiased and has *less*
-variance than with-replacement sampling. Its variance includes the finite-population
-correction $(n-B)/(n-1)$, which reaches zero at $B=n$.
-
-Random reshuffling is subtler. After the first batch changes $\vect{w}$, the next batch
-comes from the remaining examples and is statistically tied to the earlier path. It is
-not an independent unbiased draw of the full gradient at this *new* iterate. Dedicated
-random-reshuffling theory handles that dependence; the one-line proof in
-@eq-unbiased does not. Keep the caveat in mind; keep using the shuffle.
-:::
-
 ## The two zones of SGD
 
 Training with SGD moves through two regimes, a pattern often called
 **semi-convergence**: rapid, decisive progress early, then persistent oscillation near
 the solution. The mechanism is a shifting balance between signal and noise. At any
-parameter vector, split the minibatch gradient into the full gradient plus zero-mean
-sampling noise; the zero mean is @eq-unbiased, which holds because the batch is drawn
-at the same parameter vector where the gradient is evaluated:
+parameter vector, split the minibatch gradient into the full gradient plus a noise vector
+$\vect{\xi}_{\mathcal{B}}$ whose mean is zero by the unbiasedness in @eq-unbiased:
 
 $$
 \nabla\loss_{\mathcal B}(\vect{w})
@@ -124,7 +117,8 @@ On our convex least-squares bowl the two regimes are easy to see:
 - **Far from the optimum, signal dominates.** The full gradient is large relative to
   the batch noise, so most batch directions make useful progress, and their mean is the
   full descent direction.
-- **Near the optimum, noise dominates.** The full gradient shrinks toward zero, but
+- **Near the optimum, noise dominates.** The full gradient shrinks toward zero
+  (recall @fig-gd-path), but
   individual batches still disagree ("go left", "go right") because different examples
   pull in different directions. With a fixed learning rate the iterate keeps bouncing
   inside what we will call the **region of confusion**:
@@ -225,12 +219,12 @@ In some regimes the bouncing is not merely tolerable but a **feature**. A noisy 
 a shallow trap that exact descent would follow more predictably. Minibatch noise can
 also bias training toward different solutions, and smaller batches sometimes improve
 generalization. None of these outcomes is guaranteed: the effect depends on the model,
-data, learning rate, and batch size. @sec-06-generalization-inductive-bias returns to that evidence. For now, treat noise as part of the algorithm,
+data, learning rate, and batch size. For now, treat noise as part of the algorithm,
 not automatically as a defect or a cure.
 
 ## The learning rate
 
-One knob dominates all others. The learning rate $\alpha$ scales every step, and its
+No hyperparameter matters more. The learning rate $\alpha$ scales every step, and its
 failure modes are asymmetric: too small wastes your compute budget crawling; too large
 overshoots the valley and diverges.
 
@@ -275,16 +269,16 @@ plt.legend(); plt.tight_layout(); plt.show()
 For the normalized toy problems here, plain SGD often starts around
 $\alpha = 0.1$. That is a scale-calibrated starting point, not a universal constant;
 Adam, unnormalized features, and very deep models can require very different values.
-Read the training curves: crawling $\rightarrow$ consider raising it; oscillating or
-exploding $\rightarrow$ lower it. Later in training it often pays to *decay* the
+Read the training curves: if the loss crawls, consider raising it; if it oscillates or
+explodes, lower it. Later in training it often pays to *decay* the
 learning rate so the fine-tuning steps get smaller; that is a **learning-rate
-schedule**. *Warmup* starts with a small learning rate and gradually increases it. We will return to
-it when training Transformers in @sec-14-self-attention-transformer.
+schedule**. *Warmup* starts with a small learning rate and gradually increases it. Recipes for
+training Transformers (@sec-14-self-attention-transformer) commonly begin with warmup.
 :::
 
 ## The batch size
 
-The batch size $B$ sets where you live on the noise–efficiency trade-off:
+The batch size $B$ sets the operating point on the noise–efficiency trade-off:
 
 | Batch size | Character | Trade-off |
 |---|---|---|
@@ -311,7 +305,8 @@ $\loss(\vect{w}) = \E_{x}[\ell(x; \vect{w})]$, a minibatch average is an unbiase
 estimator of the full objective, and its gradient an unbiased estimator of the full
 gradient. SGD rests on this unbiasedness, which is why $B$ is a compute-and-noise
 dial, not a correctness dial. Cross-entropy, squared error, and every loss in Parts
-I–III are Case 1.
+I–III are Case 1, except where BatchNorm in training mode (@sec-09-modern-cnns-transfer)
+makes each example's term depend on its batch.
 
 **Case 2: nonlinear functionals of aggregates.** Some quantities are a *nonlinear
 function of an expectation*, $R\bigl(\E_x[s(x)]\bigr)$. A batch plug-in estimate
@@ -319,7 +314,7 @@ $R(\bar{s}_B)$ is generally **biased** (Jensen's inequality gives the direction 
 $R$ is convex or concave), and averaging per-batch values of $R$ does not converge to
 the true quantity as training runs longer; only larger batches shrink the bias.
 Log-of-mean, KL between *aggregate* distributions, and correlation-style diagnostics
-live here. For such quantities, either restructure the estimand or declare the bias.
+belong to this case. For such quantities, either restructure the estimand or declare the bias.
 The aggregate-posterior trap of @sec-19-generative is one example.
 
 **Case 3: batch-defined objectives.** Sometimes the batch is not estimating
@@ -330,13 +325,17 @@ other, and $B$ becomes part of the **protocol**, to be reported like any other d
 Decoding-side analogues exist too: beam width in @sec-11-encoder-decoder defines the
 search; it does not estimate anything.
 
-Whenever a loss line reduces over anything, name the target, the estimator, the
-reduction axes, the case, and the boundary where that case stops applying. @sec-a5-statistical-learning places these cases beside the population
-quantity, distribution, and uncertainty that a statistical claim must also name.
+A call to `.mean()` specifies a computation, not its statistical
+meaning. Depending on how the loss is constructed and the batch is
+sampled, changing $B$ can alter the sampling noise, the bias of a
+plug-in estimate, or the objective itself. Before choosing batch size
+for speed, write down what the batch calculation estimates or defines,
+and check the assumptions it requires. @sec-a5-statistical-learning
+connects these distinctions to population risk and statistical uncertainty.
 
 ## Momentum: give the ball some mass
 
-Vanilla SGD has exactly one control, $\alpha$, and in narrow, curved valleys that is
+Vanilla SGD has one control, $\alpha$, and in narrow, curved valleys that is
 not enough: the iterate zigzags across the steep direction while inching along the
 shallow one. The fix is to give the update a memory. Keep a running **velocity** that
 accumulates gradients, and move along the velocity instead of the raw gradient:
@@ -351,7 +350,7 @@ gradients keep agreeing, speed builds; in directions where they flip sign every 
 they cancel. The zigzag damps itself, and small bumps in the landscape get rolled
 through rather than obeyed.
 
-The ball is literal physics. A ball of mass $m$ moving through a viscous fluid with drag
+The ball analogy can be made precise. A ball of mass $m$ moving through a viscous fluid with drag
 coefficient $\gamma$ over the loss landscape obeys
 
 $$
@@ -382,15 +381,15 @@ every step is scaled by $\sum_k (-\beta)^k = 1/(1+\beta)$, about $0.53$. The ste
 downhill signal passes through, while the chatter across the valley and the minibatch
 noise, which has no preferred sign from step to step, are averaged down relative to it.
 
-## Adam: adaptive steps per knob
+## Adam: adaptive per-parameter steps {#adam-adaptive-steps-per-knob}
 
-Momentum treats every parameter alike, but some knobs sit on steep cliffs while others
+Momentum treats every parameter alike, but some parameters sit on steep cliffs while others
 sit on plains. **Adam** (adaptive moment estimation) combines three ideas from the
 same optimization family:^[The per-parameter denominator is RMSProp. Adam adds
 bias-corrected first moments and names RMSProp directly.] momentum (accumulate past
 gradients), per-parameter adaptive learning rates
-(scale each knob's step by its own gradient history), and bias correction (account for
-both accumulators starting at zero). Formally, with elementwise operations:
+(scale each parameter's step by its own gradient history), and bias correction (account for
+both accumulators starting at zero). Formally, Adam applies these elementwise updates:
 
 $$
 \vect{m}^{(t)} = \beta_1 \vect{m}^{(t-1)} + (1-\beta_1)\,\vect{g}^{(t)}, \quad
@@ -398,9 +397,21 @@ $$
 \vect{w}^{(t+1)} = \vect{w}^{(t)} - \alpha\,\frac{\hat{\vect{m}}^{(t)}}{\sqrt{\hat{\vect{s}}^{(t)}} + \epsilon},
 $$ {#eq-adam}
 
-where $\hat{\vect{m}}, \hat{\vect{s}}$ are the bias-corrected accumulators. When to use
-what: **SGD with momentum** is simple, reliable, and strong for large
-models; **Adam** is a good default that works out of the box.
+where $\vect{g}^{(t)} = \nabla \loss_{\mathcal{B}}(\vect{w}^{(t)})$ is the minibatch gradient at
+step $t$, and the bias-corrected accumulators are
+
+$$
+\hat{\vect{m}}^{(t)} = \frac{\vect{m}^{(t)}}{1 - \beta_1^t}, \qquad
+\hat{\vect{s}}^{(t)} = \frac{\vect{s}^{(t)}}{1 - \beta_2^t}.
+$$
+
+Because $\vect{m}^{(0)} = \vect{0}$ and $\vect{s}^{(0)} = \vect{0}$, dividing by $1 - \beta_1^t$ and
+$1 - \beta_2^t$ corrects the cold-start bias toward zero in early steps; the correction fades
+away as $t \to \infty$.
+
+**SGD with momentum** is lightweight, robust, and often reaches superior generalization when
+tuned well; **Adam** provides a versatile default that trains reliably across diverse
+architectures without intensive tuning.
 
 ## The race, on a problem where we know the truth
 
@@ -472,41 +483,50 @@ the valley's narrowness comes from unscaled features. Normalizing the inputs mak
 optimizer's job easier (Exercise 5).
 
 <!-- NOVEL: needs sign-off -->
-## Three regularizers that live inside training
+## Regularization during training {#three-regularizers-that-live-inside-training}
 
-Regularization can act on the update, the hidden computation, or the duration of
-training. Ridge from @sec-01-linear-regression returns as weight decay on the update;
-dropout and early stopping act on the other two.
+Weight decay, dropout, and early stopping regularize training in different
+ways. Weight decay modifies parameter updates, dropout randomly masks
+activations, and early stopping uses validation performance to determine
+training duration.
 
-### Weight decay: intervening on the update
+### Weight decay {#weight-decay-intervening-on-the-update}
 
-Under plain SGD, adding an $L_2$ penalty is equivalent (up to whether
-the coefficient is written as $\lambda$ or $\lambda/2$) to one extra shrinkage term:
-$\vect{w} \leftarrow (1 - \alpha\lambda)\vect{w} - \alpha\nabla\loss$. This is the
-ridge connection from @sec-01-linear-regression. Many PyTorch optimizers expose a
-`weight_decay` argument, but the equivalence stops at plain SGD. Under Adam, the $L_2$
-term $\lambda\vect{w}$ joins the gradient, passes through Adam's moment estimates, and
-is divided by the coordinate-wise scale $\sqrt{\hat{\vect{s}}^{(t)}} + \epsilon$ of
-@eq-adam, so weights with a large gradient history are shrunk less. **AdamW** decouples
-the two: it applies $\vect{w} \leftarrow (1 - \alpha\lambda)\vect{w}$ directly to the
-parameters, outside the adaptive step.
-Also, training recipes often exempt bias and normalization parameters rather than
-shrinking every parameter indiscriminately.
-
-### Dropout: intervening on the architecture
-
-<!-- NOVEL: needs sign-off -->
-Weight decay changes the update. Dropout changes the network that receives
-the update. Let $h_i$ be one hidden activation, let $p$ be its drop probability, and
-write $q=1-p$ for the probability that it survives. During training, **inverted
-dropout** draws an independent mask $r_i\sim\operatorname{Bernoulli}(q)$ and sends
+Under plain SGD, adding an $L_2$ penalty
+$\frac{\lambda}{2}\|\vect{w}\|_2^2$ to the loss gives
 
 $$
-\widetilde{h}_i = \frac{r_i}{q}h_i
+\vect{w} \leftarrow
+(1-\alpha\lambda)\vect{w} - \alpha\nabla\loss.
+$$
+
+The penalty introduces a shrinkage term, connecting weight decay to the
+ridge regression of @sec-01-linear-regression.
+
+Many PyTorch optimizers expose a `weight_decay` argument, but
+its implementation matters. Under Adam, an $L_2$ penalty contributes
+$\lambda\vect{w}$ to the gradient. This contribution is processed
+through the moment estimates and the coordinate-wise scaling of @eq-adam,
+so it does not produce the same uniform shrinkage.
+**AdamW** applies
+$\vect{w} \leftarrow (1-\alpha\lambda)\vect{w}$ separately from the
+adaptive gradient update. Training recipes often exclude bias and
+normalization parameters from this decay.
+
+### Dropout {#dropout-intervening-on-the-architecture}
+
+<!-- NOVEL: needs sign-off -->
+Dropout randomly sets activations to zero during training. Let $h_i$
+be one hidden activation, $p$ its drop probability, and $q=1-p$
+the probability that it is retained. With **inverted dropout**,
+an independent mask $r_i\sim\operatorname{Bernoulli}(q)$ gives
+
+$$
+\widetilde{h}_i = \frac{r_i}{q}h_i.
 $$ {#eq-inverted-dropout}
 
-to the next layer. A dropped activation becomes zero; a surviving activation is scaled
-by $1/q$. The scaling is not cosmetic. Conditional on the unmasked activation,
+A masked activation becomes zero; a retained activation is multiplied
+by $1/q$. This scaling preserves the conditional mean:
 
 $$
 \E[\widetilde{h}_i\mid h_i]
@@ -514,12 +534,11 @@ $$
 = h_i.
 $$ {#eq-dropout-expectation}
 
-The training-time signal therefore has the same first moment as the full signal, while
-each step sees a different thinned network. At evaluation time we remove the masks and
-use $h_i$ itself. PyTorch's `nn.Dropout(p)` implements exactly this convention;
-`model.train()` turns masking on and `model.eval()` turns it off throughout the model.
-This train/evaluation asymmetry is part of dropout's definition, not an optional
-speed setting.
+At evaluation time, dropout is disabled and the activation remains
+$h_i$, with no rescaling. PyTorch's `nn.Dropout(p)` uses this
+convention: `model.train()` enables its masking, and
+`model.eval()` disables it. The choice changes the computation,
+not just its execution speed.
 
 Here is the mechanism written directly, followed by a small seeded check. The empirical
 training mean is close to the input, while evaluation is deterministic and leaves the
@@ -560,36 +579,40 @@ print(f"max |mean - h|: {(mean_output - h).abs().max():.4f}")
 print("evaluation:", inverted_dropout(h, p=0.25, training=False).tolist())
 ```
 ::::
-There is a useful **ensemble intuition** here. Training
-shares weights across many masked subnetworks; evaluation uses one full network whose
-activation scale matches their mean. That can resemble averaging many related
-predictors. It is not an exact ensemble identity, because nonlinear layers and shared
-weights prevent the output of the full network from being the literal average of all
-masked-network outputs: nonlinearities do not commute with expectations, and in general
-$\E[\sigma(\vect{z})] \ne \sigma(\E[\vect{z}])$.
+Dropout also has an approximate **ensemble interpretation**.
+Training uses many masked subnetworks with shared weights, while
+evaluation uses the full network. Preserving the conditional mean of
+each masked activation does not make the full network's prediction
+equal to the average prediction of those subnetworks. Nonlinear
+transformations generally do not commute with expectation:
 
-### Early stopping: intervening on training duration
+$$
+\E[\sigma(\vect{z})]
+\ne \sigma(\E[\vect{z}]).
+$$
 
-Track the validation loss during training and stop when it turns
-upward, even though the training loss is still falling:
+### Early stopping {#early-stopping-intervening-on-training-duration}
 
-![Early stopping as model selection along one training trajectory. In this schematic, both losses initially improve; after the validation minimum, training loss keeps falling while validation loss worsens. Stop at the turn and retain that checkpoint.](../../figures/generated/1_1_lin_Recap-fig08.svg){#fig-early-stop width=76% fig-alt="A clean schematic plots training and validation loss against training step. Both fall initially. A dashed line marks the minimum validation loss; after it, a lightly shaded region shows validation worsening while training loss continues downward."}
+Monitor validation loss during training. Early stopping limits training
+when validation performance stops improving, even if training loss
+continues to decrease. Retain the checkpoint with the lowest validation
+loss. @fig-early-stop illustrates this choice along one training
+trajectory.
 
-<!-- NOVEL: needs sign-off -->
-All three are cheap relative to training the model, widely used, and work from inside
-the training loop by constraining or randomizing the fit.
+![Early stopping as model selection along one training trajectory. In this schematic, validation loss eventually increases while training loss continues to decrease. The checkpoint at the validation minimum is retained.](../../figures/generated/1_1_lin_Recap-fig08.svg){#fig-early-stop width=76% fig-alt="Training and validation loss are plotted against training step. Both decrease initially. A dashed line marks the minimum validation loss; beyond it, validation loss increases while training loss continues to decrease."}
 
 ::: {.callout-note}
 ## Check yourself
 
-Close the book for one minute and reconstruct one update.
+Write one parameter update, then answer the following questions.
 
-- Why is a minibatch gradient correct in expectation but noisy in any one draw?
-- What do momentum and Adam retain from earlier gradients?
-- Why does an $L_2$ penalty not shrink weights uniformly under Adam, and what does AdamW
-  change?
-- Why does inverted dropout need no rescaling at evaluation time, and what goes wrong if
-  `model.train()` is left active during validation?
+- Under what sampling assumptions is a minibatch gradient unbiased,
+  and why does it vary between batches?
+- What information from earlier gradients is used by momentum and Adam?
+- Why is an $L_2$ penalty under Adam different from uniform weight
+  decay, and what does AdamW change?
+- Why does inverted dropout need no rescaling at evaluation time,
+  and how does leaving dropout active change validation predictions?
 :::
 
 ## Okay, so: the training loop
@@ -627,12 +650,12 @@ and show only their model builder and their budget:
 Two reading notes. Seeding *precedes* construction, so one `(model_fn, seed)`
 pair always trains from the same starting tensors, which a paired comparison
 requires. And the loss line is a Case 1 estimator: a per-example objective averaged over a
-shuffled minibatch is an unbiased estimate of the full-data loss, which is precisely
-why the minibatch size is a compute knob rather than a correctness knob
+shuffled minibatch is an unbiased estimate of the full-data loss, which is
+why the minibatch size is a compute-and-noise dial, not a correctness dial
 (@sec-04-estimator-cases).
 
-One box in that loop is still magic: "backward pass for the gradients." Computing
-millions of partial derivatives at the cost of roughly one extra forward pass is the
+One step in that loop is still a black box: the backward pass for the gradients. Computing
+millions of partial derivatives for about twice the arithmetic of one forward pass is the
 subject of @sec-05-backpropagation.
 
 ## Sources and further reading {.unnumbered}
@@ -655,7 +678,7 @@ subject of @sec-05-backpropagation.
   (2015)](https://arxiv.org/abs/1412.6980) gives the algorithm, bias corrections, and
   motivation for adaptive moment estimates.
 - [Loshchilov and Hutter, “Decoupled Weight Decay Regularization”
-  (2019)](https://openreview.net/forum?id=Bkg6RiCqY7) explains precisely why coupled
+  (2019)](https://openreview.net/forum?id=Bkg6RiCqY7) explains why coupled
   $L_2$ regularization and weight decay separate under adaptive optimizers.
 - [Srivastava et al., “Dropout: A Simple Way to Prevent Neural Networks from
   Overfitting” (2014)](https://www.jmlr.org/papers/v15/srivastava14a.html) introduces

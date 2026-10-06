@@ -83,10 +83,12 @@ test('identity lane: the equation and the three stops are the chapter\'s, the nu
   const bare = tex.replace(/\\class\{[^}]*\}\{((?:[^{}]|\{[^{}]*\})*)\}/g, '$1').replace(/\\residualpart\{((?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*)\}/g, '$1');
   assert(bare.includes('\\frac{\\partial L}{\\partial x} = \\frac{\\partial L}{\\partial H}\\left(\\frac{\\partial F}{\\partial x} + I\\right)'), bare);
   assert(chapter.includes('= \\frac{\\partial L}{\\partial H}\\left(\\frac{\\partial F}{\\partial x} + I\\right).'));
-  // Reinforce, do nothing, mostly cancel: the chapter's own three words for the learned term.
-  assert(chapter.includes('the learned Jacobian can still reinforce, distort, or even partly cancel that term.'));
+  // Amplify, do nothing, mostly cancel: the chapter's own words for what the branch Jacobian does.
+  assert(chapter.includes('the branch Jacobian, which can amplify, attenuate, or partly\ncancel that contribution.'));
+  // The gradient at H already includes the final ReLU's derivative, which the panel leaves out.
+  assert(chapter.includes('Here $\\partial L/\\partial H$ already includes the derivative of\nthe final ReLU.'));
   const [reinforced, nothing, cancelled] = k.slopes;
-  assert(reinforced > 0, 'the first stop reinforces the identity term');
+  assert(reinforced > 0, 'the first stop amplifies the identity term');
   assert.equal(nothing, 0, 'the second stop is the chapter\'s F = 0');
   assert(chapter.includes('doing nothing is easy\nto represent: $F = 0$.') || chapter.includes('to represent: $F = 0$.'));
   assert(cancelled < -0.5 && cancelled > k.range[0], 'the third stop cancels most of the identity term, but not all');
@@ -480,7 +482,7 @@ test('identity lane: typography, voice and inertness', t => {
   assert.deepEqual([...css.matchAll(/^.*var\(--il-parameter\).*$/gm)].map(line => line[0].split('{')[0].trim()), ['.identity-lane-figure .il-branch-box']);
 });
 
-test('integration: the excerpt follows the residual-block figure and precedes the "not magical" paragraph', () => {
+test('integration: the excerpt follows the residual-block figure and precedes the paragraph on the ReLU gate and the branch Jacobian', () => {
   const filter = fs.readFileSync(path.join(ROOT, scene.filter), 'utf8');
   assert.match(filter, /^(?:--[^\n]*\n)+if not FORMAT:match\("\^html"\) then return \{\} end/);
   assert.doesNotMatch(filter, /identity-lane|fig-residual-stream/, 'the manifest, not the filter, names the scene');
@@ -490,7 +492,7 @@ test('integration: the excerpt follows the residual-block figure and precedes th
   const chapter = chapterSource(NAME);
   assert.equal((chapter.match(/^#\| label: fig-residual-stream$/gm) || []).length, 1, 'the cell label occurs once');
   const cell = chapter.indexOf('#| label: fig-residual-stream');
-  const equation = chapter.indexOf('$$ {#eq-residual}'), reading = chapter.indexOf('Read the right-hand side with'), caveat = chapter.indexOf('It is not magical');
+  const equation = chapter.indexOf('$$ {#eq-residual}'), reading = chapter.indexOf('Here $\\partial L/\\partial H$ already includes the derivative of'), caveat = chapter.indexOf('cancel that contribution.');
   assert(equation >= 0 && equation < cell, 'after the residual equation');
   assert(cell < reading && reading < caveat, 'before the paragraph that reads the equation and its caveat');
   assert.doesNotMatch(chapter.slice(chapter.indexOf('```', cell + 1) + 3, reading), /\S/, 'nothing between the figure cell and that paragraph');

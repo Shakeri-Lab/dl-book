@@ -3,11 +3,12 @@
   if (!root || root.dataset.ready) return;
   const $ = selector => root.querySelector(selector);
   // The panel is the one in-repo mirror of the manuscript fixture
-  // (chapters/part3/10-sequences-rnn.qmd:419-424 the cell-chain product, :431 the +1
-  // forget-bias recommendation, :556 sigma(0) = 1/2 with 0.5^80, :552 "astronomically
-  // attenuated, not exactly zero", :588 the measured mean gates). interactives/manifest.json
-  // names those literals and scripts/audit_excerpt_fixtures.py keeps the chapter and this
-  // panel together, so nothing below retypes a number the manuscript owns.
+  // (chapters/part3/10-sequences-rnn.qmd: @eq-lstm-highway, the direct cell-state product of
+  // forget gates, and the sentences after it on the positive forget-gate bias; the +1 the code
+  // sets; the measured mean gates of the diagnostic caption; and 0.5^80 = 8.27e-25 in
+  // chapters/appendices/a3-precision-performance.qmd). interactives/manifest.json names those
+  // literals and scripts/audit_excerpt_fixtures.py keeps the chapter and this panel together,
+  // so nothing below retypes a number the manuscript owns.
   const declared = name => root.dataset[name].trim().split(/\s+/).map(Number);
   const HALF = Number(root.dataset.half);        // sigma(0) = 1/2, a fresh LSTM's gate
   const BIAS = Number(root.dataset.bias);        // the chapter's +1 forget-gate bias
@@ -467,10 +468,10 @@
       const lead = w.line2 === 'times larger' ? `${w.line1} times larger` : w.line2 === 'smaller' ? `${w.line1} smaller` : 'The same';
       return `${lead[0].toUpperCase()}${lead.slice(1)}, yet ${order(retention(sigmoid(tl.bf), HORIZON))} of the gradient: attenuated, not exactly zero. Legible only on a log axis.`;
     };
-    const drag = `Drag ${BF} yourself: the valve’s resting position decides what survives.`;
+    const drag = `Drag ${BF} yourself: the gate’s resting value decides what survives.`;
     const sentence = dragged ? drag : [
       `A word enters at step 1. How much of its gradient reaches step ${HORIZON}?`,
-      `${BF} = ${biasLabel(TOP_BIAS)}: the valve rests half open. By step ${stepWord(INVISIBLE_TOP)} the gradient is already invisible.`,
+      `${BF} = ${biasLabel(TOP_BIAS)}: the gate rests half open. By step ${stepWord(INVISIBLE_TOP)} the gradient is already invisible.`,
       `On a linear axis both look dead by step ${stepWord(INVISIBLE_BOT)}.`,
       `On a log axis (floor ${power(-FLOOR_EXP)}) the slopes differ: the gap grows every step.`,
       arrival(), drag, arrival()

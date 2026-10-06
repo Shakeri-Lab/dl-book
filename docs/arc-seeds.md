@@ -23,7 +23,7 @@ statistical-contract coherence passes.*
 | "Softening the hard": replace one winning memory address with a weighted read, without naming the finished construction early | ch. 2 | ch. 13 — build the behavior, then harvest by name | done |
 | Temperature dial between hard max and uniform; bandwidth is the same dial | ch. 2; ch. 12 ($\tau=2h^2$) | ch. 10 ✓ (sampling); ch. 13 ✓ (scaled similarities); ch. 20 ✓ (learn the log scale jointly with the paired towers) | done |
 | Compositional hierarchy: features of features | ch. 3 | ch. 8 ✓ (receptive fields make it architectural) | done |
-| Gradient superhighway (ReLU's open gate) | ch. 5 | ch. 9 ✓ (residual = the highway as infrastructure), ch. 10 ✓ (cell state = highway through time) | done |
+| Gradient superhighway (ReLU's open gate) | ch. 5 | ch. 9 ✓ (residual = the highway as infrastructure), ch. 10 ✓ (cell state = highway through time) | retired 2026-10-05 (ch05-author-16/-21, ch10-note-020/-037; VOICE.md D12): the relay is now stated as the gradient through ReLU's open half, the identity path, and the additive cell-state update |
 | Float-precision death (tiny signals can become numerically unusable) | ch. 5 | ch. 9 ✓ (norm underflow + update-resolution diagnostic), ch. 10 ✓ (σ(0)^80); Appendix C (range, local spacing, accumulator dtype, stable algorithms) | done |
 | A small schedule coefficient is not a zero coefficient | ch. 19 | Appendix C — mathematical smallness, underflow, and rounded-away updates are separated | done |
 | Constraints are knowledge / inductive bias prescription | ch. 6 | ch. 7–8 ✓; ch. 16 ✓ (ViT trades the bias away — "inductive bias strikes again, this time as a trade") | done |
@@ -38,10 +38,10 @@ statistical-contract coherence passes.*
 | LayerNorm: "same equation, different axis — remember @eq-batchnorm when you meet it" | ch. 9 | ch. 14 | done |
 | Transfer decision rule (labels scarce ∧ task feature-hungry ∧ coverage at matched scale) | ch. 9 | ch. 15 ✓ (controlled generated-token transfer); ch. 17 ✓ (adaptation changes cost and permitted writes, not source coverage) | done |
 | Third weight sharing (examples → space → time) | ch. 10 | ch. 14 (stationarity retained; one comparison rule shared across ordered pairs) | done |
-| Six requirements of a sequence model: any length, order, streaming, parameters independent of length, reach, trainable reach; each Ch. 10 design is scored in prose, and revisiting plus time in parallel surface as the two unmet needs | ch. 10 (2026-09-27 revision) | ch. 11 (the fixed handoff makes revisiting concrete), ch. 13 (cross-attention revisits), ch. 14 (self-attention computes time in parallel). The author declined a book-wide running scorecard: later chapters may call back to the list in prose only | planted |
+| Six streaming design goals of a sequence model (retitled 2026-10-05 from "six requirements"): any length, order, streaming, parameters independent of length, reach, trainable reach; each Ch. 10 design is scored in prose, and revisiting plus time in parallel surface as the two unmet needs | ch. 10 (2026-09-27 revision) | ch. 11 (the fixed handoff makes revisiting concrete), ch. 13 (cross-attention revisits), ch. 14 (self-attention computes time in parallel). The author declined a book-wide running scorecard: later chapters may call back to the list in prose only | planted |
 | Masked update freezes the state on padded steps ($h_t=m_t f(h_{t-1},x_t)+(1-m_t)h_{t-1}$, @eq-masked-update) | ch. 10 | ch. 11 padding trap: a hand-written masked `nn.LSTMCell` loop reproduces the packed encoder's final states, and naive padding moves exactly the padded sources (`masked-update-check`) | done |
 | Keep a recurrence simple enough to compute in parallel: input-only gates make the cell update linear, and a doubling scan computes all states in $\lceil\log_2 T\rceil$ rounds (marked research-bridge Exercise 8; the author asked for an exercise, not a section) | ch. 10 Exercise 8 | test-time-regression interlude (fixed-state recurrences; the delta rule's state-space form) | planted |
-| The LSTM's $+1$ does not transfer to the GRU: at lag 80 the GRU needs $+2$; the signal at birth (gradient to the first input before training) sorts all six configurations' outcomes | ch. 10 memory test | ch. 10 Exercise 3 (Audit, named wrong answer) | done |
+| The LSTM's $+1$ does not transfer to the GRU: at lag 80 the GRU needs $+2$; the input-gradient norm at initialization (printed as "signal at birth") is associated with the six configurations' outcomes in this experiment, not a threshold (2026-10-05) | ch. 10 memory test | ch. 10 Exercise 3 (Audit, named wrong answer) | done |
 | Running translator: one corpus (general; Tatoeba English–French or Multi30K as examples), one split and evaluation, one ledger, one change per version; exercises stay open, no reference numbers (author decision 2026-09-27) | AE interlude Exercise 6 (v0 one-shot and mean-pooled codes) | ch. 10 Ex. 7 v1 recurrent encoder ✓; ch. 11 Ex. 7 v2 seq2seq ✓ (BLEU by source-length bucket against v1); ch. 13 v3 cross-attention; ch. 14 v4 Transformer; TTR v4b fixed-state decoder memory; ch. 15 v5 denoising pretraining; ch. 17 v6 adapt and quantize a pretrained translator | v0–v2 done; later versions pending, one chapter at a time |
 | Finite-state bottleneck; "the book ends Part III when we refuse to pay that price" | ch. 10–11 | ch. 12 (retain the memory bank), ch. 13 (learn the access rule), test-time-regression interlude (the fixed state returns as a chosen regression tradeoff) | done |
 | Fixed attention matrix; "what if the similarity itself were learnable?" | ch. 12 | ch. 13 (learned compatibility and the date-task rematch) | done |
@@ -61,7 +61,7 @@ statistical-contract coherence passes.*
 | Global routing trades away locality bias | ch. 14 | ch. 16 ✓ (patch-token ViT rematches convolution's built-in geometry in a five-seed scratch regime) | done |
 | Short paths, dense work; global access is not free memory | ch. 14 | test-time-regression interlude — one regression, three memory contracts; Appendix C — the $Bhn^2$ ledger becomes the FlashAttention I/O case study | done |
 | The KV cache is the nonparametric estimator's retained dataset | ch. 14.7 and test-time-regression interlude | Appendix C — FlashAttention changes the I/O schedule of that dataset traversal; fixed-state solvers change the statistical contract | done |
-| A learned summary token can gather a sequence for a downstream head | ch. 15 | ch. 16 ✓ (`[CLS]` becomes a learned meeting place over image patches, not a summary by birth) | done |
+| A learned summary token can gather a sequence for a downstream head | ch. 15 | ch. 16 ✓ (`[CLS]` supplies a sequence-level representation of the patches, learned rather than a summary by construction; "learned meeting place" retired 2026-10-05, its anchor kept) | done |
 | Pretraining is a regime, not an architecture | ch. 15 | ch. 16 ✓ (the same encoder pattern crosses from text to vision; data scale can reverse the CNN–ViT ranking) | done |
 | Training-optimal is not serving-optimal | ch. 16 | ch. 17 — harvested by name: Chinchilla allocates training compute, not storage, inference, or adaptation cost; the mismatch motivates prompting, PEFT, and quantization | done |
 | A smaller checkpoint is not automatically faster | ch. 17 | Appendix C — Roofline and the measurement contract separate bytes, FLOPs, latency, and throughput | done |
@@ -70,7 +70,7 @@ statistical-contract coherence passes.*
 | A judge is not a generator | ch. 18 | ch. 19 — harvested by name: reward models and preference losses evaluate completed samples; generative modeling learns the distribution that produces them | done |
 | Zero-shot names the missing task-specific update, not missing pretraining exposure | ch. 17 | ch. 20 — text-prototype classification is bounded retrieval over a declared candidate set | done |
 | A shared embedding is a comparison rule, not a generator | ch. 20 | epilogue — capability claims remain tied to objectives, candidate sets, and evaluation contracts | done |
-| “Weights learn inside a run; we learn about designs across runs” / “Tune the contender; ablate the claim” | experimentation interlude after ch. 6 | comparison-heavy studies in chs. 8–20; epilogue harvests the method by name | done |
+| “Tune the contender; ablate the claim” (the motto “Weights learn inside a run; we learn about designs across runs” was removed 2026-10-05) | experimentation interlude after ch. 6 | comparison-heavy studies in chs. 8–20; epilogue harvests the method by name | done |
 | m06 autoencoder spine: make PCA learnable, then nonlinear (“PCA on steroids”) | autoencoder interlude after ch. 9 | static encoder–decoder contract is available before recurrence | done |
 | A one-shot encoder is not a variable-length process | autoencoder interlude | ch. 10 — harvested by name as the motivation for a shared state update; ch. 11 turns both maps into recurrent processes | done |
 | A code is not yet a distribution | autoencoder interlude | ch. 19 — harvested by name: reconstruction supplies no principled random start | done |
@@ -134,7 +134,7 @@ optimizers or `backward()` before Chapter 5.
 | 5 | backprop/chain rule, autograd (`backward`, `requires_grad`, `detach`), vanishing/exploding intuition, init scales, `grad_by_layer` figure family |
 | 6 | generalization, overfitting, capacity, inductive bias through architecture/objective/data, Fashion-MNIST subset (`data/fashion-*.pt`), shift/shuffle experiments, data augmentation as a declared transformation distribution |
 | Experiment interlude (after 6) | run versus experiment versus study; parameters versus hyperparameters; fixed-protocol and tuned estimands; paired-seed contrasts; ablation interactions; train/validation/test roles and validation overtuning; log-scale/random/multi-fidelity search; experiment ledger. `nn.BatchNorm1d` is a labeled measuring-instrument preview only; ch. 9 opens the mechanism. |
-| 7 | convolution/cross-correlation, kernels, `F.conv1d/2d`, equivariance, filter zoo |
+| 7 | convolution/cross-correlation, kernels, `F.conv1d/2d`, equivariance, examples of fixed filters (the filter zoo; anchor `#the-filter-zoo`) |
 | 8 | `nn.Conv2d`, channels, padding/stride, `F.max_pool2d`, receptive fields, NCHW, LeNet, parameter audits |
 | 9 | BatchNorm (+train/eval modes), conv-BN-ReLU atom, 1×1 convs, GAP (`nn.AdaptiveAvgPool2d`), residual blocks, `weight_decay`, transfer mechanics (`requires_grad=False`, param groups/two LRs), `F.interpolate`, torchvision model loading from committed weights |
 | Autoencoder interlude (after 9) | encoder–code–decoder reconstruction contract; PCA as a tied undercomplete linear autoencoder; projector rather than basis comparison; nonlinear/manifold reconstruction; denoising input–target contracts; convolutional autoencoders; transposed convolution as adjoint, not inverse; fixed-code versus variable-length-process distinction. `torch.linalg.svd` is a labeled Appendix A baseline preview and `nn.Tanh` a labeled ch. 10 activation preview. |
@@ -157,13 +157,10 @@ optimizers or `backward()` before Chapter 5.
 | D | book-wide typography, decorations, index/dimension dictionary, recurring tensor shapes, probability/optimization roles, and four-question notation audit |
 | E | empirical, population, shifted, and augmentation risks; likelihood-to-loss contracts; KL/Jensen--Shannon/Wasserstein comparison; Monte Carlo estimator cases; SD, SE, pairing, and clustering |
 
-## 4. His signature analogies (use them; don't invent competitors)
+## 4. The author's signature analogies (use them; don't invent competitors)
 
-Blindfolded descent (GD), knobs (parameters), gradient
-superhighway (ch. 5/9/10 relay), ball rolling (momentum), house-and-foundation
-(pretrain/finetune), magnifying glass (kernels), detectives + cross-talk
-(channels, ch. 8), conveyor belt + valves / ball-valve (LSTM), gold rail
-(teacher forcing, coined ch. 11), chef and ingredient doorway (compute versus data
+Blindfolded descent (GD), knobs (parameters), ball rolling (momentum), house-and-foundation
+(pretrain/finetune), magnifying glass (kernels), chef and ingredient doorway (compute versus data
 movement, Appendix C), "Okay, so —" (recaps), "what if X were
 learnable?" (the book's refrain — every part pivots on it), “train a judge, then try
 to please the judge” (reward model then policy, ch. 18), model card as nutritional

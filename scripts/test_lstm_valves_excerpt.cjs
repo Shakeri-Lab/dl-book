@@ -217,10 +217,10 @@ test('valves: with the forget valve shut the old content is gone, and the write 
   // records what entered -- the erasure is visible as a difference between the belt's two ends.
   assert(Math.abs(barValue(mark(f, 'packet')) - fx.candidate) < 5e-4);
   assert(Math.abs(barValue(mark(f, 'inlet-ghost')) - fx.carry) < 5e-4);
-  assert.match(caption(f).textContent, /is not erased by closing the one that reads/);
+  assert.match(caption(f).textContent, /is not erased by closing the output gate/);
   // And the caption's own arithmetic followed the moved fixture.
   f.seek(B2); assert.match(caption(f).textContent, /falls from 1\.00 to 0\.00/);
-  f.seek(B3); assert.match(caption(f).textContent, /the belt reads 0\.50/);
+  f.seek(B3); assert.match(caption(f).textContent, /the cell state reads 0\.50/);
 });
 
 test('valves: a valve already standing part-open squeezes what passes through it', t => {
@@ -563,16 +563,16 @@ test('valves: captions are prose within the budget, coloured by meaning, and the
   f.seek(B0); assert.match(caption(f).textContent, /rides in at 1\.00/);
   f.seek(B1); assert.match(caption(f).textContent, /Forget stands wide open, so nothing intervenes/);
   f.seek(B2); assert.match(caption(f).textContent, /falls from 1\.00 to 0\.50/);
-  f.seek(B3); assert.match(caption(f).textContent, /candidate 0\.50 joins at the sum, and the belt reads 1\.00/);
+  f.seek(B3); assert.match(caption(f).textContent, /candidate 0\.50 joins at the sum, and the cell state reads 1\.00/);
   f.seek(B4); assert.match(caption(f).textContent, /hidden state is 0\.38/);
-  f.seek(B5); assert.match(caption(f).textContent, /falls to 0\.00 while the belt still holds 1\.00/);
+  f.seek(B5); assert.match(caption(f).textContent, /falls to 0\.00 while the cell state still holds 1\.00/);
   f.seek(B6); assert.match(caption(f).textContent, /cell state 1\.00, long-term; the hidden state 0\.00, working/);
-  f.seek(B7); assert.match(caption(f).textContent, /valves are learned/);
+  f.seek(B7); assert.match(caption(f).textContent, /gates are learned; the cell state is not erased by closing the output gate/);
   assert.equal(two(hiddenState(fx, fx.stops.f[1], fx.stops.i[1], fx.stops.o[1])), '0.38');
   // The scrubber's own wording never repeats the caption.
   const range = f.$('[data-controls] input[type=range]');
-  f.seek(B5); assert.match(range.getAttribute('aria-valuetext'), /Close\. Valves 0\.50, 1\.00, 0\.50\. Cell state 1\.00, hidden state 0\.38\./);
-  f.seek(scene.duration); assert.match(range.getAttribute('aria-valuetext'), /Hold\. Valves 0\.50, 1\.00, 0\.00\./);
+  f.seek(B5); assert.match(range.getAttribute('aria-valuetext'), /Close\. Gates 0\.50, 1\.00, 0\.50\. Cell state 1\.00, hidden state 0\.38\./);
+  f.seek(scene.duration); assert.match(range.getAttribute('aria-valuetext'), /Hold\. Gates 0\.50, 1\.00, 0\.00\./);
 });
 
 test('valves: the static fallback prints the final frame with every witness value', t => {

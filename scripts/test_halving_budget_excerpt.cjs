@@ -255,8 +255,12 @@ test('integration: the excerpt is HTML-only, manifest-driven, and declared in th
   const chapter = chapterSource(NAME);
   assert.equal(scene.anchor.type, 'before-heading');
   const headings = chapter.split('\n').filter(line => line.startsWith('## '));
-  assert.equal(headings.filter(line => line.slice(3).trim() === scene.anchor.target).length, 1,
+  assert.equal(headings.filter(line => line.slice(3).replace(/\s*\{.*\}\s*$/, '').trim() === scene.anchor.target).length, 1,
     'the anchor is an unambiguous level-two heading');
+  // The heading keeps its pre-rename id, {#train-validation-and-test-have-different-jobs},
+  // so older links still land.
+  assert.equal(chapter.split(`## ${scene.anchor.target} {#train-validation-and-test-have-different-jobs}\n`).length, 2,
+    'the anchor heading keeps its pre-rename id');
   // The scene sits after the successive-halving passage and its stated assumption, and
   // before the split section. The intervening "A practical search order" heading is
   // inside a callout, which is why it is not the anchor.

@@ -252,7 +252,7 @@ Lecture paths are relative to
 
 | path | sha256 |
 |---|---|
-| `chapters/part1/03-nonlinearity-mlp.qmd` | `ed8bc618c1cbd95c069671b7f2b67847b911fddff81fcf1d8e80225e04c47151` |
+| `chapters/part1/03-nonlinearity-mlp.qmd` | `d4f75bca8a468e6016dc52f70045137042c5215f5459398827daec2ca5a6c245` |
 | `6050-Ch3/STORYBOARD.md` | `065d2f5e9054d0581b9909b52654fafce446352caa94724b4752f4a620aeee84` |
 | `6050-Ch3/lecture.jsx` | `ec73751439013366e2ce867b9c6d076ee2a2798a88983defe6fdacbc8e6417b2` |
 | `6050-Ch3/geometry-3d.jsx` | `a4738205a33ac5d717ac5edb75cfd28423a707d11241c6cdb9900e0584d2f6e8` |

@@ -69,11 +69,11 @@ Professor Shakeri's teaching voice is fundamentally principle-first and concrete
 | Analogy / Example | Source / Context | Use Case |
 |---|---|---|
 | **Master Chef vs. Sous-Chefs** (CPU vs. GPU) | ML_concepts_roadmap.tex; Lecture 0 | Explaining CPU's few powerful cores vs. GPU's thousands of simple cores; when to use each; why deep learning favors GPUs |
-| **Gradient Superhighway** (ReLU) | Lecture 2 (Backpropagation) | Explaining how ReLU maintains gradient flow in deep networks vs. sigmoid's vanishing gradient problem |
+| **Gradient Superhighway** (ReLU) (retired 2026-10-05, VOICE.md D12) | Lecture 2 (Backpropagation) | Explaining how ReLU maintains gradient flow in deep networks vs. sigmoid's vanishing gradient problem |
 | **Ball rolling downhill with momentum** | Lecture 1 & throughout; SGD momentum discussion | Explaining momentum's benefit: consistent direction accumulation, rolling through small bumps |
 | **Memory bank vs. single vector** | Implied in RNN/LSTM discussion (Module 7 transcripts would contain this) | RNNs as distributed memory vs. single weight update; gating mechanisms as valves for memory flow |
-| **Magnifying glass / detective expertise** | Coding transcript m04 (CNN lesson) | Convolution kernels as specialized detectors; one kernel per feature type; parameter sharing as reuse of same tool |
-| **Valve/gate for LSTM** | Not yet in detailed transcripts; likely in Lecture 7 | LSTM forget/input/output gates controlling information flow through cell state |
+| **Magnifying glass / detective expertise** (detectives and experts retired 2026-10-05, VOICE.md D12; say *detector*) | Coding transcript m04 (CNN lesson) | Convolution kernels as specialized detectors; one kernel per feature type; parameter sharing as reuse of same tool |
+| **Valve/gate for LSTM** (valves retired 2026-10-05, VOICE.md D12; say *gate*) | Not yet in detailed transcripts; likely in Lecture 7 | LSTM forget/input/output gates controlling information flow through cell state |
 | **Weight as a knob to turn** | Lecture 1 (foundational image) | Parameters as tuning knobs for the loss landscape; optimization as knob-turning |
 | **Blame propagation** (retired 2026-09-25) | Lecture 2 (Backpropagation) | The author asked for this metaphor to be used very minimally: say *sensitivity* for $\delta^{(l)}=\partial L/\partial \vect{z}^{(l)}$ and *adjoint* for the automatic-differentiation term. Chapter 5, the Preface, and the Chapter 5 replays no longer use it |
 | **House on a foundation** (super() init) | Coding transcript m03 (MLP lesson) | Building a class on top of nn.Module foundation; super().__init__() as laying groundwork |
@@ -300,7 +300,7 @@ three things to code no human wrote.
   (evidence), and what *Remaining debt* is carried forward. The questions govern
   content, not format — keep the numbered-narrative voice; do not use five headings.
 - **Part transitions carry the arc.** Each Part is a file-backed, prose-only page
-  of four to six sentences. It names the object that enters fixed, the move made
+  of four to sixteen sentences (the print revisions of October 5, 2026 lengthened them). It names the object that enters fixed, the move made
   learnable, the structure deliberately built in, and the failure handed to the
   next Part. Use the same full title in the Part page, route table, sidebar, PDF
   contents, and outline; do not turn the transition into a syllabus summary.

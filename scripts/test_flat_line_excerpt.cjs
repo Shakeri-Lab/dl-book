@@ -121,7 +121,7 @@ test('flat line: the curve, the loss and the claim are the chapter\'s', t => {
   assert(chapter.includes(`return torch.stack((t, ${k.height} * (t.square() - 1.0 / 3.0)), dim=1)`), 'planted_curve, two coordinates');
   assert(chapter.includes('=\\frac{1}{nd}\\sum_{i=1}^{n}'), 'the chapter\'s normalization');
   assert(chapter.includes('PCA gives the best **flat** rank-$k$ reconstruction.'));
-  assert(chapter.includes('linear reconstruction maps of rank at most $k$, this projector minimizes squared'));
+  assert(chapter.includes('this projector minimizes squared reconstruction error among all linear reconstruction maps\nof rank at most $k$.'));
   for (const literal of scene.fixture.literals) assert(chapter.includes(literal), `manifest literal: ${literal.slice(0, 40)}`);
   // The declared sample: sixteen midpoints, evenly spread and symmetric about zero, and the
   // tilt range the dial sweeps, from the flat line through a half-turn.

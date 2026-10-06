@@ -1,30 +1,43 @@
-# Interlude: Who Trains the Trainer? Learning by Experiment {#sec-learning-by-experiment}
+# Interlude: Learning by Experiment {#sec-learning-by-experiment}
 
 <!-- lecture-source: GMT20250918-002913_Recording.transcript (1).vtt
      (SHA-256 65a63bd04f7df3c20b21725d4d0b0fa0ed98928686561c45b713a774f568410d),
      seeds: sources/3-HPO-experimentation.tex (sanitized from hpo_slides.tex,
      SHA-256 6deaf680eadf3ed04356207376fa359e5bd8c1fc04c54cd93c1b047676403fba) -->
 
-@sec-06-generalization-inductive-bias ended with a model whose code was correct, whose loss fell, and whose
-validation accuracy looked respectable. Then two carefully chosen experiments showed
-that it had learned the wrong structure. This creates a new problem. Gradient descent
-can train the weights, but who trains the trainer? Who chooses the learning rate, the
-architecture, the regularization, the stopping point, and even the comparison that we
-will call fair?
+The first chapters established how to build and train a neural network. We can now turn
+to the practical question that follows: how do we improve a model and judge whether a
+change helped? We might adjust the learning rate, add regularization, train longer, or
+replace a layer. Each choice requires a comparison, and the comparison determines what
+we can conclude.
 
-The answer is not another optimizer. It is **experimentation**. We make a claim,
-design a comparison that can answer it, spend a declared budget, and preserve enough
-evidence that someone else can audit our reasoning. Deep learning is mathematical,
-but much of its progress is also empirical; the code can run perfectly while the
-scientific question remains badly posed.
+@sec-06-generalization-inductive-bias illustrated this point: evaluating a fixed model on
+transformed images and retraining on those images answered different questions. @sec-07-filters-convolution
+will take up the spatial structure motivated by those experiments, beginning with local
+filters and convolution. Before continuing, we pause to develop the experimental
+practices used throughout the rest of the book.
 
-The central distinction is simple:
+This is a central part of the work of a machine learning engineer or scientist. We
+establish a baseline, propose an explanation, and turn it into a testable hypothesis. We
+decide what to change, what to hold fixed, and which outcome would support or challenge
+the hypothesis. The next run should give us information that helps choose the one after
+it.
 
-> **Weights learn inside a run; we learn about designs across runs.**
+Two goals recur. **Hyperparameter tuning** seeks an effective configuration within a
+training and search budget. **Ablation** tests the contribution of a component under
+specified conditions. A configuration that performs well and an explanation of why it
+performs well require different evidence.
 
-That distinction (inner training versus outer inquiry) keeps hyperparameter
-optimization and ablation from collapsing into one large sweep. They cooperate, but
-they answer different questions.
+Both depend on **experimental hygiene**. Data splits must retain their intended roles,
+evaluation must use the correct model mode, and the reported checkpoint must match the
+selection rule. Repeated runs reveal variation, while saved configurations and outputs
+make the comparison reproducible.
+
+> **Within a run, the optimizer fits parameters. Across runs, we evaluate choices.**
+
+@fig-experiment-loop places the familiar training loop inside this broader process. We
+will practice it with a small MLP, keeping the model familiar so that we can concentrate
+on designing and interpreting the experiment.
 
 ```{=html}
 <span id="exfig-experiment-loop" class="anchor-alias"></span>
@@ -34,7 +47,7 @@ they answer different questions.
 
 ```{python}
 #| echo: false
-#| fig-alt: "Two nested loops. The outer loop is four rounded boxes in a cycle with arrows: declare the claim, design the comparison, spend the declared budget, audit and preserve evidence, returning to the claim. Inside it, a dashed box holds the inner loop of one training run: forward, loss, backward, and update arranged in a small cycle, labeled backpropagation learns w, with w star equals Train of a, lambda, s, b beneath. An arrow from the spend box launches runs within budget b; an arrow from the run returns the metric J_D to the audit box. A note says the outer loop chooses a and lambda across runs, that no gradient reaches them, and that every run spends budget."
+#| fig-alt: "Two nested loops. The outer loop is four rounded boxes in a cycle with arrows: declare the claim, design the comparison, spend the declared budget, audit and preserve evidence, returning to the claim. Inside it, a dashed box holds the inner loop of one training run: forward, loss, backward, and update arranged in a small cycle, labeled the optimizer updates w, with w star equals Train of a, lambda, s, b beneath. An arrow from the spend box launches runs within budget b; an arrow from the run returns the metric J_D to the audit box. A note says the outer loop selects a and lambda across runs, not the inner optimizer, and that every run spends budget."
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import FancyBboxPatch, FancyArrowPatch
@@ -70,14 +83,14 @@ ax.text(6.0, 0.95, "seeds, splits, configs, outputs kept", ha="center", va="top"
 ax.text(1.75, 5.0, "the audit\nsharpens the\nnext claim", ha="right", va="center",
         fontsize=8, color="#555555")
 
-# Inner loop: one training run, where backpropagation learns the weights.
+# Inner loop: one training run, where the optimizer updates the weights.
 cx, cy, r = 6.0, 4.85, 1.35
 ax.add_patch(FancyBboxPatch((3.35, 2.45), 5.3, 5.05, boxstyle="round,pad=0.1",
                             facecolor="#FAFAFA", edgecolor="#9A9A9A", lw=1.1,
                             ls=(0, (4, 3))))
 ax.text(cx, 7.22, "INNER LOOP: one run", ha="center", va="center",
         fontsize=8.6, color=navy, weight="bold")
-ax.text(cx, 6.82, r"backpropagation learns $\mathbf{w}$", ha="center",
+ax.text(cx, 6.82, r"the optimizer updates $\mathbf{w}$", ha="center",
         va="center", fontsize=8.2, color="#444444")
 nodes = [(90, "forward", r"$f_{\mathbf{w}}(\mathbf{x})$", blue),
          (0, "loss", r"$L$", wine),
@@ -108,25 +121,25 @@ ax.annotate("", xy=(2.7, 2.15), xytext=(3.45, 3.0),
 ax.text(3.9, 1.95, r"read $J_D(a, \lambda, s, b)$", ha="left", va="center",
         fontsize=7.6, color=wine)
 
-ax.text(6.0, -0.55, r"OUTER LOOP: experiments across runs choose $a$ and $\lambda$; "
-        "no gradient reaches them, and every run spends budget",
+ax.text(6.0, -0.55, r"OUTER LOOP: $a$ and $\lambda$ are selected across runs, "
+        "not by the inner optimizer; every run spends budget",
         ha="center", va="center", fontsize=8, color=navy)
 plt.tight_layout(); plt.show()
 ```
 
-The two levels of learning. Inside one run (dashed box), backpropagation computes
-$\nabla_{\vect{w}}L$ and the optimizer learns the weights $\vect{w}$. Around it, the
-experimenter declares a claim, designs a comparison, spends a declared budget of runs,
-and audits the evidence. No gradient reaches the design $a$ or the configuration
-$\vect{\lambda}$, so the outer loop learns only through experiments, and each run it
-launches costs budget.
+Training within an experiment. Inside one run, backpropagation computes
+$\nabla_{\vect{w}}L$, and the optimizer updates the parameters $\vect{w}$. Across runs,
+the experimenter specifies a question, chooses designs and configurations to compare,
+allocates a budget, and interprets the results. In the workflow used here, the design $a$
+and the training configuration $\vect{\lambda}$ are selected across runs rather than
+updated by the inner optimizer.
 :::
 
-## Two levels of learning
+## Training runs and experimental decisions {#two-levels-of-learning}
 
-Recall the image of a weight as a knob. During one training run, the optimizer turns
-millions of those knobs using gradients. A **parameter** (a weight, a bias, or another
-model quantity updated by the training algorithm) is learned this way.
+During one training run, the optimizer updates the model's **parameters**, including its
+weights and biases, using the gradients developed in @sec-05-backpropagation. The training
+configuration determines how those updates are computed and applied.
 
 **Hyperparameters** (learning rate, batch size, weight decay, and training schedule,
 for example) control the learning process from outside that inner loop. An
@@ -144,7 +157,7 @@ on the question we ask of it.
   conclusion.
 
 Ten runs are not automatically an experiment. Without a question and a controlled
-comparison, they are ten observations looking for a story.
+comparison, they are only ten observations.
 :::
 
 Write $a$ for a
@@ -166,12 +179,12 @@ f_{\vect{w}^{*}(a,\vect{\lambda},s,b)},D
 \right).
 $$
 
-The optimizer learns $\vect{w}^{*}$. We choose $a$, search over
+The optimizer produces $\vect{w}^{*}$. We choose $a$, search over
 $\vect{\lambda}$, decide which seeds and budget are credible, and interpret the
 result. Those outer choices are part of the claim; they do not disappear when a
 library automates them.
 
-## Start with the claim, not the sweep
+## Claim types and comparisons {#start-with-the-claim-not-the-sweep}
 
 Suppose a new normalization layer improves accuracy by two points. What did the
 experiment establish? The answer depends on what stayed fixed and what was optimized.
@@ -234,8 +247,8 @@ $$
 $$
 
 In practice we only approximate these maxima with a finite search. The search spaces,
-number of trials, seeds, and per-trial budget therefore belong in the result. An
-analogy from physical measurement: comparing an internal combustion engine and an
+number of trials, seeds, and per-trial budget therefore belong in the result. Consider
+an analogy from physical measurement. Comparing an internal combustion engine and an
 electric motor at one shared shaft speed is not a fair comparison of power. Each
 machine has its own power curve, and a speed near one machine's peak can sit far from
 the other's. One learning rate likewise imposes a single operating point that may sit
@@ -246,19 +259,23 @@ controlled intervention; separate tuning is fair to the question of attainable
 performance. Trouble begins when we run one and write the conclusion of the other.
 
 ::: {.callout-note}
-## Framework preview: BatchNorm is an opaque factor here
+## BatchNorm as an experimental factor
 
-@sec-09-modern-cnns-transfer opens BatchNorm and explains its train/evaluation behavior. Here BatchNorm
-is only an on/off experimental factor; comparing protocols does not require knowing
-how it works.
+We use BatchNorm as an on/off design choice in an otherwise familiar MLP. Its mechanism is
+developed in @sec-09-modern-cnns-transfer. Here we need only to distinguish the two model
+variants and compare them under clearly specified training conditions.
 :::
 
-## A worked experiment: BatchNorm changes the learning-rate story
+## A worked experiment: BatchNorm and learning rate {#a-worked-experiment-batchnorm-changes-the-learning-rate-story}
 
-We can make the distinction between the two estimands visible on the same Fashion-MNIST subset used in @sec-06-generalization-inductive-bias.
-The research question is intentionally small: **does adding BatchNorm help a tiny
-MLP?** Before running anything, we fix every choice in
-@tbl-batchnorm-study-contract:
+We use the Fashion-MNIST subset from @sec-06-generalization-inductive-bias to practice two
+comparisons. First, does adding BatchNorm improve validation accuracy when both models use
+the same training configuration? Second, how do the models compare when each receives the
+same opportunity to tune its learning rate?
+
+The measured outcome here is classification accuracy under the study's data splits. The
+experiment demonstrates how to distinguish a component comparison from a configuration
+search. Before running either, we specify the choices in @tbl-batchnorm-study-contract:
 
 ```{=html}
 <span id="extbl-batchnorm-study-contract" class="anchor-alias"></span>
@@ -281,7 +298,7 @@ The predeclared choices for the paired BatchNorm study.
 :::
 
 Notice what has not happened: we have not chosen a result and then invented a protocol
-around it. The split, search space, seeds, metric, budget, and selection rule are fixed
+around it. We fix the split, search space, seeds, metric, budget, and selection rule
 first.
 
 The 600-image file is **not a globally sealed test set**: @sec-06-generalization-inductive-bias has already used
@@ -654,11 +671,11 @@ then decide whether the claim calls for a shared recipe or equal tuning opportun
 
 ## Hyperparameter optimization is a budgeted outer loop
 
-Hyperparameter optimization (HPO) chooses the training configuration using validation
-performance. It is a nested problem:
+Hyperparameter optimization (HPO), the systematic form of hyperparameter tuning, chooses
+the training configuration using validation performance. It is a nested problem:
 
 $$
-\widehat{\vect{\lambda}}(a)
+\hat{\vect{\lambda}}(a)
 =\argmax_{\vect{\lambda}\in\Lambda(a)}
 \frac{1}{|\mathcal{S}_{\mathrm{search}}|}
 \sum_{s\in\mathcal{S}_{\mathrm{search}}}
@@ -715,33 +732,38 @@ may trade against one another. In that case there may be no single winner, only 
 **Pareto frontier**: designs for which improving one objective requires worsening
 another. State the operating constraint before selecting a point from that frontier.
 
-## Train, validation, and test have different jobs
+## Roles of the training, validation, and test sets {#train-validation-and-test-have-different-jobs}
 
 The three-way split is not ceremonial:
 
-- The **training set** supplies gradients and fits $\vect{w}$.
-- The **validation set** supplies decisions: learning rate, architecture, checkpoint,
-  early stopping, and search-space revisions.
-- The **test set** audits the locked procedure after those decisions are complete.
+- We compute gradients on the **training set** and fit $\vect{w}$ to it.
+- We use the **validation set** to make decisions about the learning rate, architecture,
+  checkpoint, early stopping, and search-space revisions.
+- We use the **test set** to audit the locked procedure after those decisions are
+  complete.
 
 Every look at validation is information. After hundreds of trials, the winning
 configuration may partly fit quirks of that finite validation set; this is
 **validation overtuning**. A larger search budget can improve the chosen validation
-score while making the score a more optimistic estimate of future performance. Keep a
-test set sealed, and for high-stakes comparisons consider nested resampling or a fresh
-external audit.
+score while making the score a more optimistic estimate of performance on new data from
+the same data-generating distribution. Keep a test set sealed, and for high-stakes
+comparisons consider nested resampling or a fresh external audit.
 
 The test set (the only split not used for decisions) is not a second validation set.
 If the test result disappoints and we return to change the model, that test set has
 joined the development process. It can still be useful, but it is no longer an
 untouched audit for the revised procedure.
 
-## Seeds are a panel, not decoration
+## Seed panels and run-to-run variation {#seeds-are-a-panel-not-decoration}
 
 Random initialization, batch order, dropout masks, and other stochastic choices can
 change the outcome. A seed helps make one run reproducible; it does not remove the
-randomness of the training procedure, since another seed gives another run. The scientific target is usually an
-expectation over plausible runs, so we need a panel.
+randomness of the training procedure, since another seed gives another run. The
+scientific target is usually an expectation over plausible runs. Both estimands of
+[the claim-types section](#start-with-the-claim-not-the-sweep), $\Delta_{\mathrm{fixed}}$
+and $\Delta_{\mathrm{tuned}}$, are built from expectations over the seed $s$, and one
+seed gives a single draw of the quantity inside each expectation. We therefore need a
+panel.
 
 For a controlled comparison, use the same seed set and data split in both arms. Then
 report the per-seed differences as well as the means. This **paired-seed** design often
@@ -764,11 +786,11 @@ conclusion is claimed only for this CPU-scale teaching regime.
 ## What each run should record {#the-experiment-ledger}
 
 If a result cannot be reconstructed, it is an anecdote. At minimum, each run should
-preserve:
+preserve the following records:
 
 | Record | Why it matters |
 |---|---|
-| Question and hypothesis | Prevents the metric from inventing the story afterward |
+| Question and hypothesis | Prevents choosing the story after seeing the metric |
 | Code revision | Distinguishes an algorithmic change from a software change |
 | Data version and split seed | Makes leakage and split drift auditable |
 | Design and full configuration | Reconstructs both the outer and inner choices |
@@ -777,10 +799,10 @@ preserve:
 | Curves, final values, and failures | Keeps inconvenient trials in the evidence |
 | Software and execution environment | Explains numerical and performance differences |
 
-Do not overwrite failed runs. A divergence at learning rate 0.1 defines the boundary
-of a search space; deleting it makes the next search less informed. Give every run a
-stable identifier, save the resolved configuration rather than only the defaults, and
-make every plot from saved data rather than from memory.
+Do not overwrite failed runs. A run that diverges at a large learning rate marks a
+boundary of the search space; deleting it makes the next search less informed. Give
+every run a stable identifier, save the resolved configuration rather than only the
+defaults, and make every plot from saved data rather than from memory.
 
 This is also good coding hygiene. Separate data loading, model construction, training,
 and evaluation so a sweep changes configuration rather than copying a notebook. Assert
@@ -835,20 +857,28 @@ Close the book and audit one comparison you have run.
 
 ## Okay, so: tune the contender, ablate the claim
 
-1. **Weights and hyperparameters live in different loops.** The optimizer learns
-   weights inside a run; we learn about designs across runs.
+1. **Training and experimentation operate at different levels.** The optimizer fits
+   parameters within a run; comparisons across runs guide configuration and design
+   choices.
 2. **Begin with an estimand.** A fixed recipe and a tuned-per-design comparison answer
    different questions, so “fair” must be defined rather than assumed.
 3. **Ablation tests a claim.** Baseline, hypothesis, intervention, outcome, and scope
    turn a removal into an argument; factorial comparisons reveal interactions.
 4. **HPO spends a declared budget.** Search space, sampling rule, pruning, seeds, and
    per-run resources are part of the result.
-5. **Validation chooses; test audits.** Repeated validation queries can overfit, and a
+5. **Select on validation; audit on test.** Repeated validation queries can overfit, and a
    disappointing test result cannot be tuned away while keeping the same test set
    sealed.
 6. **Seed spread bounds the conclusion.** Report the whole panel, distinguish standard
    deviation from a confidence interval, and keep conclusions inside the tested
    regime.
+
+We now have a procedure for investigating the models that follow: establish a working
+baseline, state the hypothesis, choose the comparison, and separate selection from final
+evaluation. @sec-07-filters-convolution returns to the spatial structure examined
+in @sec-06-generalization-inductive-bias. Part II begins with local filters and
+convolution, then makes the filters learnable. As the architectures change, these
+experimental practices will help us determine what each change contributes.
 
 ## Sources and further reading {.unnumbered}
 

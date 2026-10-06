@@ -235,9 +235,11 @@ test('integration: the excerpt is HTML-only, manifest-driven, and declared in th
   assert(!section('  resources:', config).includes(`${scene.scene}/panel.html`));
   const chapter = chapterSource(NAME);
   assert.equal(scene.anchor.type, 'before-heading');
-  assert.equal(chapter.split('\n').filter(line => line === `## ${scene.anchor.target}`).length, 1);
+  // The retitled heading keeps its old public anchor, so pin the title and the id together.
+  const heading = `## ${scene.anchor.target} {#inside-the-weights-full-frame-matched-filters}`;
+  assert.equal(chapter.split('\n').filter(line => line === heading).length, 1);
   // The scene sits after both experiments and the diagnosis they share, and before the
   // autopsy that reads the fitted weights.
-  assert(chapter.indexOf('net_shuffled = train_mlp') < chapter.indexOf(`## ${scene.anchor.target}`));
-  assert(chapter.indexOf('def shift_right') < chapter.indexOf(`## ${scene.anchor.target}`));
+  assert(chapter.indexOf('net_shuffled = train_mlp') < chapter.indexOf(heading));
+  assert(chapter.indexOf('def shift_right') < chapter.indexOf(heading));
 });

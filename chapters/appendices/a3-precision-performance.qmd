@@ -30,7 +30,7 @@
      All prose, equations, code, numerical studies, and figures are original to this
      appendix; no third-party implementation or diagram was reproduced. -->
 
-Suppose a training step computes a gradient of $10^{-8}$. The gradient is nonzero; the
+Suppose a training step computes a gradient of $10^{-8}$. The gradient is nonzero, the
 learning rate is nonzero, and their product is nonzero. Yet a stored weight can remain
 exactly unchanged. Now suppose an attention implementation performs the same
 mathematical operation as another one (with essentially the same arithmetic count) but
@@ -278,7 +278,7 @@ p_i=\frac{e^{z_i}}{\sum_j e^{z_j}}.
 $$
 
 Subtracting $m=\max_j z_j$ leaves the ratio unchanged and ensures that the largest
-exponent is 1:
+exponent is 0, so no exponential exceeds 1:
 
 $$
 p_i=\frac{e^{z_i-m}}{\sum_j e^{z_j-m}}.
@@ -322,7 +322,8 @@ The same principle appears across the book:
 - Kernel regression in @sec-12-kernel-regression subtracts a maximum before
   exponentiating so a tiny bandwidth does not turn every weight into zero and produce
   `0/0`.
-- @sec-10-sequences-rnn's default forget-gate factor compounds to
+- An LSTM forget gate at its default initialization (@sec-10-sequences-rnn) passes about half
+  the cell state per step; over 80 steps the factor compounds to
   $0.5^{80}=8.27\times10^{-25}$. That value is still nonzero
   in FP32; the architecture can make the signal too weak to use before rounding turns it into zero.
 - Long products such as the diffusion schedule in @sec-19-generative are often more
@@ -366,7 +367,7 @@ loss scaling lowers $S$ after detected overflow and may grow it after successful
 steps. It cannot restore a forward activation that already overflowed or an optimizer
 update that was rounded away in low-precision master weights.
 
-The next check uses no accelerator timing; it isolates the arithmetic, then asks CPU
+The next check uses no accelerator timing; we isolate the arithmetic, then ask CPU
 autocast which dtypes it chose for one linear layer in this environment.
 
 <!-- NOVEL: needs sign-off -->
@@ -423,7 +424,7 @@ accumulation** across microbatches; they share a word, not a mechanism.
 
 ## Work is not time: the Roofline model
 
-Why can two mathematically equivalent programs have different speed? Imagine a chef
+Why can two mathematically equivalent programs have different speeds? Imagine a chef
 whose arithmetic station is extremely fast but whose ingredients arrive through one
 narrow door. More cooks at the station do not help when every recipe waits at the
 door. Other recipes reuse each delivered ingredient many times and keep the station
@@ -628,8 +629,8 @@ $$
 $$ {#eq-a3-attention}
 
 where $N$ is sequence length, $d$ is head width, and $\matr{M}$ carries any mask. The
-two matrix products require roughly $4N^2d$ FLOPs under the same two-FLOPs-per-
-multiply-add convention, plus $O(N^2)$ work for masking and softmax.
+two matrix products require roughly $4N^2d$ FLOPs under the same
+two-FLOPs-per-multiply-add convention, plus $O(N^2)$ work for masking and softmax.
 
 A straightforward sequence of kernels materializes a score matrix
 $\matr{S}=\matr{Q}\matr{K}^{\top}/\sqrt d$, writes it to device memory, reads and
@@ -820,8 +821,8 @@ Tiling, fusion, online softmax, and backward recomputation reduce reads and writ
 quadratic intermediates across the expensive memory boundary. Some extra arithmetic
 can be a good trade when it avoids much more costly movement.
 
-FlashAttention-2 keeps that I/O-aware idea and improves work partitioning, sequence-
-dimension parallelism, and the balance between matrix and non-matrix operations. Its
+FlashAttention-2 keeps that I/O-aware idea and improves work partitioning, sequence-dimension
+parallelism, and the balance between matrix and non-matrix operations. Its
 paper's device-specific speedups are measurements under stated conditions, not
 portable constants. Likewise, PyTorch's `scaled_dot_product_attention` may select a
 FlashAttention backend, another fused backend, or a mathematical fallback depending
@@ -899,9 +900,10 @@ the full quadratic intermediates to slow memory.
 
 ## Exercises {.unnumbered}
 
-1. **(Pencil.)** (a) For FP16, BF16, and FP32, predict how the representable gap
-   above $2^{-10}$, 1, and $2^{10}$ changes with the exponent.
-   **(Code.)** (b) Use `torch.nextafter` to verify the prediction and identify one
+1. **(Pencil.)** (a) For FP16, BF16, and FP32, compute the representable gap
+   above $2^{-10}$, 1, and $2^{10}$ from the spacing rule of
+   [What a binary float can represent](#what-a-binary-float-can-represent).
+   **(Code.)** (b) Use `torch.nextafter` to verify the gaps and identify one
    update that is representable near zero but rounds away when subtracted from each
    base value.
 
@@ -910,8 +912,9 @@ the full quadratic intermediates to slow memory.
    FP32, and FP64. Record the **stored logits** before interpreting the probabilities.
    Separate overflow prevented by stable algebra from distinctions erased by rounding.
 
-3. **(Pencil.)** (a) Predict how FP16 and FP32 accumulators will differ for serial
-   sums of 0.125 and 0.1.
+3. **(Pencil.)** (a) Explain why the serial FP16 sum of 0.125 in
+   [Rounding is part of the algorithm](#rounding-is-part-of-the-algorithm) stops at 256,
+   then predict how FP16 and FP32 accumulators will differ for serial sums of 0.1.
    **(Code.)** (b) Reproduce the experiment, then implement the $2^{-26}$
    loss-scaling probe with several powers-of-two scales. Explain why loss scaling can
    preserve a tiny gradient but cannot make a rounded-away FP16 master-weight update

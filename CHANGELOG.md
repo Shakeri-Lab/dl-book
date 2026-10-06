@@ -1,3 +1,29 @@
+# Rolling post-v1.4: the print edition's language revisions (October 5, 2026)
+
+- **What carried over.** The Springer print edition's revisions through October 5, 2026, read
+  from its HTML ledger (1,161 text entries). 538 were applied. Another 19 were superseded by a later
+  entry, and 43 were declined under the author's rulings. 581 were print-specific (companion
+  pointers, listings, layout, figure citations); one was already on main. Three wait for the
+  author. Every chapter, interlude, appendix, part page and the preface changed.
+- **The house rules, now VOICE.md D12.** No lecture or slide wording; no personification (the
+  gradient superhighway, detectives and experts, valves and the conveyor belt, the gold rail and
+  "Architecture proposes, initialization disposes" are gone); experiment setups in the active
+  "we"; look-aheads and caveats the argument does not need move to footnotes; claims are scoped to
+  the runs that support them; `\hat` over a single symbol. This edition keeps its
+  reinforcement-learning material in the main text, its caption style, and the question "What if
+  the template were learnable?". CLAUDE.md, the style guide and the arc-seeds ledger follow, and
+  the register check now covers every chapter, interlude and the epilogue.
+- **Figures.** Figures 7.1, 8.1 (now two panels: the signal and the window that averages), 12.3
+  ("cell-state update path"), 17.1 and 17.2 were redrawn after each frozen image was first
+  reproduced byte for byte; only labels and titles changed, plus Figure 8.1's new panel. Figure
+  9.2's drawn titles and Figure 3.2's drawn "the bend" still use the old wording.
+- **Anchors and replays.** Every retitled section heading keeps its old slug as an explicit id, so
+  no link moved. Sixteen mechanism replays and their tests follow the new wording, each pinned on the same
+  meaning as before.
+- **Unchanged.** No computation, printed number or experiment changed; code edits are comments and
+  drawn labels only, and the 137 frozen stdout blocks are byte-identical. Every changed passage beside its original, and every ledger entry's decision,
+  is in `audits/voice/print_revisions_2026-10-05.md`.
+
 # Rolling post-v1.4: Figure 10.1 names when the shortcut needs a 1×1 convolution (October 3, 2026)
 
 - **Figure 10.1, residual row.** The shortcut label now reads "identity (1×1 if shapes change)",

@@ -19,9 +19,10 @@ chapter must respect. Those two files replace any account-local memory.
 
 ## Non-negotiables
 
-- **Voice**: chapters are drafted from HIS materials (LaTeX seeds + lecture transcripts)
-  per `docs/drafting-template.md`, never from generic textbook knowledge. Reuse his
-  analogies (style guide §3); flag genuinely new material with `<!-- NOVEL: needs sign-off -->`.
+- **Voice**: chapters are drafted from the author's materials (LaTeX seeds + lecture transcripts)
+  per `docs/drafting-template.md`, never from generic textbook knowledge. Reuse the
+  author's analogies (style guide §3) that VOICE.md D12 has not retired; flag genuinely
+  new material with `<!-- NOVEL: needs sign-off -->`.
 - **No d2l.ai content, ever** — no `import d2l`, no copied prose/code. D2L book prose is
   CC BY-SA 4.0 and its sample/reference code uses a modified MIT license, but this
   project applies one stricter independent-provenance boundary to both. The local copy
@@ -121,7 +122,8 @@ compositions for figures. Full guide: `docs/dl-course-code.md`.
 1. **Pick the chapter or review pass.** Follow the status table and roadmap in
    `docs/CONTINUING.md`; every chapter lists its seed files and transcripts in the
    `draft-sources` comment. Chapters 1–20 and Appendices A–E are complete; change them
-   only through an explicit review or correction pass, preserving planted harvests.
+   only through an explicit review or correction pass, preserving the cross-chapter
+  callbacks that help the reader reason (VOICE.md D11) and the house rules (D12).
 2. **Snapshot seeds** from Box into `sources/` (spaces → underscores), then apply the
    licensing boundary in `sources/README.md`: remove explicitly third-party-derived
    blocks with an honest omission marker rather than publishing or silently rewriting

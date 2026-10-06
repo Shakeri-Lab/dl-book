@@ -19,18 +19,16 @@
      view by reserving “frozen” for a probe and showing original BERT-style
      fine-tuning as updates through the full backbone. -->
 
-The decision rule from @sec-09-modern-cnns-transfer says that transfer should help when
-**labels are scarce, the target is feature-hungry, and the pretraining data
-plausibly covers the target's features at a matched scale**. Images supplied a natural source task: learn
-visual features from many labeled photographs, then adapt them. What should play
-the same role for language, where task labels are expensive but raw text is
-everywhere?
+In @sec-09-modern-cnns-transfer, we compared training from scratch with adapting
+features learned on another task. For language, task-specific labels can be scarce while
+unlabeled text is available. Can that text provide a useful training signal before
+we introduce a downstream task?
 
-Text can write its own questions. Hide *bank* in “the boat reached the bank,” and
-the surrounding words contain the answer. Hide the same spelling in “the bank
-approved the loan,” and a different neighborhood supplies a different answer. No
-person had to label either sense. The answer is already inside the sequence;
-corruption turns it into a question.
+Masked language modeling constructs such a signal from the sequence itself. Replace
+*bank* in “the boat reached the bank” or “the bank approved the loan” and predict the
+original token from the corrupted input. Both examples have the same target word, but
+different contexts. The task provides token targets without requiring separate labels
+for word senses.
 
 That move depends on what @sec-14-self-attention-transformer showed:
 **visibility is a modeling decision**. A next-token model used a causal triangle
@@ -169,14 +167,19 @@ text supplies a target for every selected position, so a large corpus can create
 many training examples without a task-specific annotation campaign.
 :::
 
-This idea was part of a broader 2018 convergence, not a solitary invention.
+This idea was part of a broader 2018 convergence, not a solitary invention. @tbl-2018-convergence
+sets four of its works side by side.
 
+::: {#tbl-2018-convergence}
 | Work | Pretraining signal | What moved downstream |
 |---|---|---|
 | ELMo | Forward and backward LSTM language models | Fixed contextual features |
 | ULMFiT | Causal language modeling | The entire adapted language model |
 | GPT | Causal Transformer language modeling | A pretrained Transformer plus task head |
 | BERT | Masked tokens in full context, plus NSP | A deeply bidirectional Transformer encoder plus task head |
+
+Four 2018 works, with the pretraining signal of each and what moved downstream.
+:::
 
 [ELMo](https://aclanthology.org/N18-1202/) demonstrated that a word's useful vector
 should depend on its sentence. [ULMFiT](https://aclanthology.org/P18-1031/) supplied
@@ -492,12 +495,17 @@ $$
 
 The resulting sequence passes through a stack of full-context Transformer encoder
 blocks. Original BERT uses post-LayerNorm, as did the original
-Transformer in @sec-14-self-attention-transformer. Its two published sizes were:
+Transformer in @sec-14-self-attention-transformer. @tbl-bert-sizes gives the two
+published sizes of BERT.
 
+::: {#tbl-bert-sizes}
 | Model | Blocks $L$ | Width $d$ | Heads | Parameters |
 |---|---:|---:|---:|---:|
 | BERT Base | 12 | 768 | 12 | about 110 million |
 | BERT Large | 24 | 1,024 | 16 | about 340 million |
+
+Blocks, width, heads and parameter count of the two published BERT sizes.
+:::
 
 Pretraining used BooksCorpus and English Wikipedia, about 3.3 billion words by the
 paper's count. The scale is historically important, but the reusable idea is
@@ -517,7 +525,7 @@ still route through it. Later recipes such as RoBERTa showed
 that strong BERT-style training did not require NSP in their settings. That is a
 recipe result, not proof that a sentence-relation objective can never help.
 
-### `[CLS]` is a learned meeting place
+### `[CLS]` supplies a sequence-level representation {#cls-is-a-learned-meeting-place}
 
 `[CLS]` is an ordinary learned token with an unusual assignment: place it first,
 allow it to attend through every layer, then give its final hidden state to a
@@ -535,8 +543,8 @@ For token labeling, apply a head to every $h_i$. For extractive question
 answering, score candidate start and end positions. The encoder interface stays
 the same while the small task head changes.
 
-`[CLS]` is not born with sentence meaning. Pretraining and downstream gradients
-teach it what information to gather. @sec-16-vit-scaling will reuse this learned-summary
+`[CLS]` carries no sentence meaning at initialization. Pretraining and downstream
+gradients determine the representation it supplies. @sec-16-vit-scaling will reuse this learned-summary
 pattern after replacing words by image patches.
 
 ## Fine-tuning means the backbone moves
@@ -624,24 +632,27 @@ not performance at equal total compute.
 
 ## A controlled transfer lab
 
-The three conditions from @sec-09-modern-cnns-transfer are easy to state and surprisingly hard
-to test. A first pilot asked a tiny encoder to tell true continuations of passages in
+In @sec-09-modern-cnns-transfer, we listed three conditions that bear on whether
+transfer helps: scarce target labels, a feature-hungry target task, and pretraining
+data that plausibly covers the target's features at a matched scale. They are easy to
+state and surprisingly hard to test. A first pilot asked a tiny encoder to tell true continuations of passages in
 this book from segments spliced in from distant passages. The five-seed MLM gain was small, faded as labels increased, and
 lost decisively to a weighted lexical-overlap baseline. We rejected that task as
 the chapter's affirmative experiment: this pilot did not isolate what pretraining
 contributed.
 
-The replacement lab is synthetic by design. It removes spelling, frequency, and
+The replacement lab is synthetic by design, and each condition is a choice that its
+construction controls. The construction removes spelling, frequency, and
 downstream-context shortcuts so that source coverage is a controllable variable.
 
 <!-- NOVEL: needs sign-off - synthetic distributional-transfer experiment. -->
 
 ### Build a latent regularity
 
-Eighty randomly generated four-letter token strings are divided into two latent
+We generate eighty random four-letter token strings and divide them into two latent
 families. Family assignment is independent of spelling. Forty *covered* strings (20
 per family) each appear eight times in an unlabeled MLM corpus. Forty more (20 per
-family) live in the input vocabulary but are withheld from MLM input sequences,
+family) live in the input vocabulary, but we withhold them from MLM input sequences,
 random replacements, and prediction targets.
 
 Each covered word receives eight source sentences. Six contain cues from its own
@@ -829,10 +840,10 @@ plt.tight_layout()
 plt.show()
 ```
 
-Read @fig-bert-lab-design from top to bottom. Source exposure is decided before
-the neutral downstream sentence is formed, so the covered test pool measures
-transfer to unseen *types* and the uncovered pool audits what vocabulary
-membership alone can buy.
+Read @fig-bert-lab-design from top to bottom. We decide source exposure before
+we form the neutral downstream sentence, so the covered test pool measures
+transfer to covered types excluded from the downstream labeled set, and the
+uncovered pool audits what vocabulary membership alone can buy.
 
 The downstream input is always the neutral, previously unseen template
 
@@ -841,8 +852,8 @@ $$
 $$
 
 No family cue remains. A classifier reads the generated token's hidden state and
-receives only 1, 2, or 4 labeled word types from each family. Evaluation uses the
-remaining covered types, never the labeled types. The 40 uncovered controls use
+receives only 1, 2, or 4 labeled word types from each family. We evaluate on the
+remaining, held-out covered types, never on the labeled types. The 40 uncovered controls use
 the same neutral sentence. Source and target use the same atomic token granularity
 and similarly short sequences, making “matched scale” explicit rather than
 assuming it from a shared domain.
@@ -1113,11 +1124,11 @@ encoder_parameters = sum(
 print(f"encoder parameters: {encoder_parameters:,}")
 ```
 ::::
-The MLM decoder is deliberately *untied* from the input embedding table. The
+We deliberately *untie* the MLM decoder from the input embedding table. The
 [original released BERT code](https://github.com/google-research/bert/blob/master/run_pretraining.py)
 explicitly tied those weights, but tying would update an uncovered input row
 through the vocabulary softmax even when that token never appeared. The lab goes
-further: random replacements are drawn only from source tokens, and the
+further: we draw random replacements only from source tokens, and the
 code later asserts that every uncovered input embedding remains bitwise unchanged
 through pretraining. Untied decoder rows for the controls still participate as
 negative softmax classes, but they are discarded downstream and never expose a
@@ -1125,8 +1136,8 @@ control token's context or identity to the encoder input.
 
 ### Pretrain, then adapt
 
-For each seed from 6050 through 6054, one encoder is saved before training and the
-same encoder receives 600 MLM updates. The two downstream arms then receive the
+For each seed from 6050 through 6054, we save one encoder at initialization and give
+that same encoder 600 MLM updates. The two downstream arms then receive the
 same labeled word types, identical classifier-head tensors, 160 full-batch
 updates, and the same learning rates. All encoder weights move in both arms. Each
 seed therefore repeats initialization, corruption, MLM, label selection, and
@@ -1520,16 +1531,17 @@ centered vectors point in similar directions, a negative value that they point i
 opposing directions. Pretraining
 has organized neutral-context token states around
 the latent source regularity, and a few labels recover that organization for
-unseen covered types.
+covered types excluded from the downstream labeled set.
 
-The three conditions from @sec-09-modern-cnns-transfer hold at toy scale:
+At toy scale, the construction controls each of the three conditions
+from @sec-09-modern-cnns-transfer:
 
-- **Labels are scarce:** the task supplies only 2, 4, or 8 labeled words total.
-- **The target is feature-hungry:** spelling, frequency, and task-context
+- **Scarce labels:** the task supplies only 2, 4, or 8 labeled words total.
+- **A feature-hungry target:** spelling, frequency, and task-context
   cues are neutralized; the label must transfer through the token representation.
-- **The pretraining data covers the target's features at a matched scale:** source
-  and target use atomic tokens and similarly short sequences; covered strings
-  transfer, while the uncovered strings, balanced across families and withheld from
+- **Source coverage at a matched scale:** the generator decides which strings
+  MLM sees, and source and target use atomic tokens and similarly short sequences.
+  Covered strings transfer, while the uncovered strings, balanced across families and withheld from
   MLM inputs, replacements, and targets, remain near chance in both arms.
 
 The result is an existence proof for a mechanism. A co-occurrence method could
@@ -1537,8 +1549,9 @@ also recover the synthetic families; the experiment does not establish
 Transformer superiority. Three limits remain: the data generator builds the
 regularity, the pretrained arm receives extra compute, and five toy seeds do not
 estimate natural-language performance. The conclusion is narrower: **in this controlled
-construction, MLM organizes covered token representations around a latent
-regularity, and a few labels recover it for unseen covered types.**
+construction and across five seeds, MLM initialization lets a few labels recover a
+latent regularity for covered types excluded from the downstream labeled set; in seed 6050, MLM organizes covered token
+representations around that regularity.**
 
 <!-- /NOVEL -->
 

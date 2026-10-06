@@ -124,7 +124,7 @@ $$
 projects every raw patch to model width $d$. The operation has a useful exact
 identity. Unfold the image, multiply each flattened patch by $\matr{E}$, and add a
 bias, or reshape the columns of $\matr{E}$ into $d$ convolutional kernels with
-kernel size $P$ and stride $P$. The two computations are the same linear map.
+kernel size $P$ and stride $P$. The two computations are the same affine map.
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
@@ -216,31 +216,35 @@ roundoff. Patchification silently changes sequence length, feature width, and th
 attention cost; one shape mistake propagates through the entire model.
 :::
 
-## A learned meeting place for patches
+## A sequence-level representation of the patches {#a-learned-meeting-place-for-patches}
 
 The projected patches still need two additions. First, prepend a learned vector
 $\vect{x}_{\mathrm{CLS}}\in\mathbb{R}^{d}$. Second, add one learned position vector
 to every sequence slot. For image $b$, ViT's complete encoder input is
 
 $$
-\matr{Z}_0^{(b)}=
-\left[
-\vect{x}_{\mathrm{CLS}};
-\vect{x}_p^{1}\matr{E};
-\ldots;
-\vect{x}_p^{N}\matr{E}
-\right]
+\matr{Z}_0^{(b)}
+=
+\begin{bmatrix}
+\vect{x}_{\mathrm{CLS}}^\top\\
+\matr{X}_{\text{patch}}^{(b)}\matr{E}
++\mathbf{1}_N\vect{b}_{\text{patch}}^\top
+\end{bmatrix}
 +\matr{E}_{\mathrm{pos}}
-\in\mathbb{R}^{(N+1)\times d},
+\in\mathbb{R}^{(N+1)\times d}.
 $$ {#eq-vit-input}
 
-where $\vect{x}_p^{i}\in\mathbb{R}^{CP^2}$ is flattened patch $i$,
-$\matr{E}\in\mathbb{R}^{CP^2\times d}$ is the shared patch projection, and
+Here $\matr{X}_{\text{patch}}^{(b)}\in\mathbb{R}^{N\times CP^2}$ holds the
+flattened patches of image $b$ as rows, $\matr{E}\in\mathbb{R}^{CP^2\times d}$ is the
+shared patch projection, $\vect{b}_{\text{patch}}\in\mathbb{R}^{d}$ is the patch bias
+shared across patches, $\mathbf{1}_N\in\mathbb{R}^{N}$ is the all-ones vector, and
 $\matr{E}_{\mathrm{pos}}\in\mathbb{R}^{(N+1)\times d}$ contains learned absolute
-position vectors.
+position vectors. The `[CLS]` row remains separate: it receives neither the
+patch projection nor the patch bias.
 
-`[CLS]` does not start as a summary. As in @sec-15-bert-pretraining, it is a
-**learned meeting place** whose downstream loss teaches it what to gather. Every
+`[CLS]` does not start as a summary. As in @sec-15-bert-pretraining, it supplies a
+**sequence-level representation**, and training on the downstream loss determines
+what its final hidden state carries. Every
 encoder layer lets that row query the patch rows; after the final layer, a linear
 head reads its $d$ coordinates and produces class logits. The original ViT
 appendix found that class-token and global-average-pooling heads worked similarly
@@ -279,15 +283,15 @@ warmup.
 
 ## Locality: built in or learned {#inductive-bias-strikes-again}
 
-@sec-06-generalization-inductive-bias called constraints a form of knowledge. Convolution trades flexibility for locality and
-translation equivariance; ViT gives up much of that image-specific prior, so
+@sec-06-generalization-inductive-bias called constraints a form of knowledge. Convolution trades flexibility for locality and,
+at stride one under matched boundary conditions, for translation equivariance; ViT gives up much of that image-specific prior, so
 useful geometry must come from data, optimization, or a new architectural
 constraint.
 
 | Convolutional network | Vision Transformer |
 |---|---|
 | Local, spatially shared kernels | Content-dependent routes between all patch tokens |
-| Translation equivariance built into feature maps | Geometry supplied mainly by patches and position vectors |
+| Spatial sharing; stride-one convolution is equivariant under the stated boundary conditions | Geometry supplied mainly by patches and position vectors |
 | Global sight accumulated through depth | Every patch reachable in one attention layer |
 | Strong image-specific prior | More freedom, and greater dependence on the training regime |
 
@@ -317,9 +321,9 @@ Fashion-MNIST fitting images, no pretraining, and models small enough to inspect
 Predict the ordering before the run: which architecture wins clean validation at
 this scale, and which degrades less under shift?
 
-The ViT uses $4\times4$ patches, width 32, four heads, two pre-LayerNorm blocks,
+We build the ViT with $4\times4$ patches, width 32, four heads, two pre-LayerNorm blocks,
 and feedforward width 64. Its 49 patch tokens plus `[CLS]` make a 50-token
-sequence. The convolutional baseline uses four $3\times3$ layers, two max pools,
+sequence. We build the convolutional baseline from four $3\times3$ layers, two max pools,
 and global average pooling. Their parameter counts differ by about 3%. Both use
 the same initialization family, optimizer, update count, seed, and explicit
 minibatch order.
@@ -437,12 +441,12 @@ For one $28\times28$ image, a simple multiply–accumulate count gives about
 1.19 million for the CNN and 1.16 million for the ViT, a 1.8% difference. That
 count includes convolution, linear, and attention matrix products; it omits
 normalization, activations, softmax, pooling, memory traffic, and implementation
-effects. It is a useful dot-product proxy, not measured FLOPs, speed, or energy.
-@sec-a3-precision-performance supplies the missing count of bytes moved and the Roofline model,
-including why neither an operation count nor a dtype alone predicts elapsed time.
+effects. It is a useful dot-product proxy, not measured FLOPs, speed, or energy.^[@sec-a3-precision-performance
+supplies the missing count of bytes moved and the Roofline model, including why
+neither an operation count nor a dtype alone predicts elapsed time.]
 
-The training protocol uses AdamW for 120 epochs, a cosine learning-rate schedule,
-and batches of 100. For each seed, one explicit list of permutations is handed to
+We train both models with AdamW for 120 epochs, a cosine learning-rate schedule,
+and batches of 100. For each seed, we hand one explicit list of permutations to
 both architectures. Resetting the seed before each model makes initialization
 reproducible; sharing the permutation list makes minibatch order exactly equal.
 The schedule hash lets us check that both models used the same minibatch order.
@@ -722,8 +726,9 @@ CNN: local sharing, pooling, and a position-discarding global-average head.
 
 These runs match the data split, parameter scale, optimizer, update count,
 minibatch order, and seeds. Their dot-product counts are close as well. They do
-**not** match architecture-specific tuning, every operation, wall-clock cost, or
-pretraining. The five runs vary initialization and order while holding one split
+**not** match architecture-specific tuning, every operation, or wall-clock
+cost. Neither model is pretrained, so this experiment does not test transfer from
+a pretrained checkpoint. The five runs vary initialization and order while holding one split
 fixed, so their spread does not estimate how results vary across different draws of the data. The 600-image benchmark
 was opened in earlier chapters and is descriptive, not a fresh final test. This
 experiment tells us what happened here; it does not rank CNNs and ViTs in general.
@@ -1017,7 +1022,7 @@ That agreement is the central result, not one ratio.
 The third approach fits a joint loss surface:
 
 $$
-\widehat{L}(N,D)
+\hat{L}(N,D)
 =E+\frac{A}{N^\alpha}+\frac{B}{D^\beta},
 $$ {#eq-chinchilla-loss}
 
@@ -1028,7 +1033,7 @@ E=1.69,\quad A=406.4,\quad B=410.7,
 \quad \alpha=0.34,\quad \beta=0.28.
 $$
 
-$E$ is the fitted irreducible term for that distribution and objective;
+$E$ is the fitted asymptotic loss floor for that distribution and objective;
 $A/N^\alpha$ is the model-limited contribution; and $B/D^\beta$ is the
 data-limited contribution. This decomposition is empirical. It is not a theorem
 that every language model has exactly three such terms.
@@ -1040,8 +1045,10 @@ C\approx6ND,
 $$ {#eq-six-nd}
 
 where $C$ is training floating-point operations, $N$ is non-embedding parameters,
-and $D$ is processed training tokens. The factor six approximates a forward pass
-plus a backward pass. It omits context-dependent and embedding details, so it is a
+and $D$ is processed training tokens. Recall from our derivation of backpropagation that a
+training step costs about three forward passes; with about two floating-point operations
+per parameter per token in each forward pass, that gives the factor six. It omits
+context-dependent and embedding details, so it is a
 planning equation rather than a profiler.
 
 Fixing $C$ forces $D=C/(6N)$. Too large a model leaves too few tokens; too many
@@ -1233,9 +1240,9 @@ Close the book for one minute and try each question below unaided.
    flatten to width $CP^2$, and share a learned projection. Unfold-plus-linear is
    exactly a convolution with kernel and stride $P$ after reshaping its weights.
 2. **ViT is an encoder transplant, not assumption-free learning.** A learned
-   `[CLS]` meeting place, learned positions, pre-LayerNorm blocks, and a linear
-   head reuse the Transformer pattern while retaining a small set of image and
-   optimization biases.
+   `[CLS]` token that supplies a sequence-level representation, learned
+   positions, pre-LayerNorm blocks, and a linear head reuse the Transformer pattern
+   while retaining a small set of image and optimization biases.
 3. **Inductive bias is a trade.** The five-seed Fashion comparison favors the CNN on
    clean validation and much more strongly under shift, but it covers one tiny scratch
    regime and ranks no architecture in general. Large supervised pretraining changed
@@ -1297,9 +1304,10 @@ Close the book for one minute and try each question below unaided.
    optimizes.
 6. **(Code.)** Freeze one pinned Fashion CNN checkpoint from this chapter and fit one
    positive scalar temperature $T$ on validation logits by minimizing NLL. With seed
-   6050 and fixed bin edges, draw validation and sealed-test reliability diagrams
+   6050 and fixed bin edges, draw validation and reused-benchmark reliability diagrams
    before and after scaling; report NLL, ECE, accuracy, and the fraction of class
-   rankings that changed. Verify numerically that dividing every class logit by the
+   rankings that changed. The benchmark was opened in earlier chapters, so treat
+   its results as exploratory. Verify numerically that dividing every class logit by the
    same positive $T$ leaves argmax predictions unchanged. State what calibration
    improved and what it did not. This is post-hoc calibration of a frozen model, not
    @sec-20-multimodal's training-time $\gamma$. *Named wrong answer:* “better ECE means a

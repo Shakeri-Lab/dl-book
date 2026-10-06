@@ -12,31 +12,15 @@
      finite-mode, schedule, and one-dimensional diffusion studies are book-original
      mechanism demonstrations, not image-quality benchmarks. -->
 
-::: {.callout-warning}
-## Trap: a judge is not a generator
+The autoregressive models already generate sequences by sampling successive conditional
+distributions. We now examine three other constructions for learning a distribution and
+drawing new observations from it.
 
-A reward model can score a completed response, and a preference loss can move
-probability among compared responses. Both begin with a generator already in hand.
-Neither explains how a model first learns a distribution from which a new sample can
-be drawn.
-:::
-
-An autoencoder reconstructs observations from their codes, but it does not tell us
-where to start when we want a new sample. We need a rule for drawing samples, and a
-way to learn that rule:
-
-$$
-\text{probabilistic latent variables}
-\;\longrightarrow\;
-\text{adversarial sampling}
-\;\longrightarrow\;
-\text{iterative denoising}.
-$$
-
-Variational autoencoders (VAEs), generative adversarial networks (GANs), and diffusion
-models make different choices along that route. Each supplies a sampling rule, a
-training signal, and a characteristic way to fail. A high training score does not
-make those choices interchangeable.
+A reconstruction model supplies a decoder, but reconstruction alone does not specify how
+to choose a new code. A variational autoencoder introduces a latent probability model; a
+GAN trains a sampler through a discriminator; a diffusion model learns denoising across a
+sequence of noise levels. We compare their training objectives, sampling procedures, and
+the evidence needed to evaluate their outputs.
 
 <!-- NOVEL: needs sign-off -->
 
@@ -127,7 +111,7 @@ plt.tight_layout()
 plt.show()
 ```
 
-The first answer is to put an explicit probability law around the code.
+The first construction puts an explicit probability law around the code.
 
 ## Variational autoencoders (VAEs): put probability around the code {#put-probability-around-the-code}
 
@@ -403,7 +387,8 @@ it does not guarantee discovery of independent true factors.
 ::: {.callout-note}
 ## Why this batches
 
-The training objective is a population average of *per-example* quantities,
+The training objective is an empirical average of *per-example* quantities over
+the $N$ training examples,
 
 $$
 \frac{1}{N}\sum_{i}\Big[\,\mathbb{E}_{q_\phi(\vect{z}\mid\vect{x}_i)}
@@ -411,19 +396,21 @@ $$
 \;-\;\beta\,\mathrm{KL}\big(q_\phi(\vect{z}\mid\vect{x}_i)\,\|\,p(\vect{z})\big)\Big],
 $$
 
-so a minibatch mean is an unbiased estimate of it, by the same linearity of expectation
+so, at fixed parameters, the mean over a uniformly sampled minibatch is an unbiased
+estimate of this finite-data objective, by the same linearity of expectation
 that justified SGD in @sec-04-training-loss-sgd. The KL that looks like "one global term" in
 the single-$\vect{x}$ derivation is, in training, one KL *per datapoint* inside the
 sum. The reduction sequence to remember: **sum coordinates within an example, then
-average examples across the batch.** For the VAE, the *Target* is the
-population ELBO, and the *Estimator* is the batch mean of per-example ELBOs. The
+average examples across the batch.** For the VAE, the *Target* is this
+finite-data objective, which for $\beta=1$ is the training-set average of the ordinary ELBO,
+and the *Estimator* is the batch mean of the per-example terms. The
 *Reduction* sums over pixels and latent coordinates and averages over examples. The
 *Validity* condition is that the objective is a per-example sum (Case 1). The
 *Boundary* is any term defined through the
 *aggregate* posterior $q_{\mathrm{agg}}(\vect{z}) = \frac{1}{N}\sum_i
-q_\phi(\vect{z}\mid\vect{x}_i)$, as in total-correlation variants. Such a term is a
+q_\phi(\vect{z}\mid\vect{x}_i)$. Such a term is a
 nonlinear functional of the whole dataset (Case 2), and naive per-batch code for it
-is silently biased. Exercise 4 breaks the reduction rule; Exercise 5 breaks the aggregate boundary.
+is silently biased. Exercise 4 breaks the reduction rule; the optional Exercise 5 breaks the aggregate boundary.
 :::
 
 ### Move randomness outside the learned map
@@ -721,7 +708,7 @@ $$ {#eq-diffusion-direct-sample}
 This direct form is the training shortcut: choose a clean example, choose a timestep,
 draw one noise vector, and jump there without simulating all previous transitions.
 
-Let us watch a balanced one-dimensional mixture
+We follow a balanced one-dimensional mixture
 
 $$
 p_0(x)=\tfrac12\mathcal{N}(-2,0.25)+\tfrac12\mathcal{N}(2,0.25)
@@ -875,7 +862,7 @@ $$
 q(\vect{x}_{t-1}\mid\vect{x}_t,\vect{x}_0)
 =\mathcal{N}\!\left(
 \widetilde{\vect{\mu}}_t(\vect{x}_t,\vect{x}_0),
-\widetilde\beta_t\matr{I}_d
+\tilde\beta_t\matr{I}_d
 \right),
 $$ {#eq-diffusion-posterior}
 
@@ -888,14 +875,16 @@ $$
 \frac{\sqrt{\bar\alpha_{t-1}}\beta_t}{1-\bar\alpha_t}\vect{x}_0
 +
 \frac{\sqrt{\alpha_t}(1-\bar\alpha_{t-1})}{1-\bar\alpha_t}\vect{x}_t,\\
-\widetilde\beta_t
+\tilde\beta_t
 &=\beta_t\frac{1-\bar\alpha_{t-1}}{1-\bar\alpha_t}.
 \end{aligned}
 $$ {#eq-diffusion-posterior-coefficients}
 
 During generation, $\vect{x}_0$ is the unknown destination. A neural
 network $\vect{\epsilon}_\theta(\vect{x}_t,t)$ instead predicts the noise vector
-in @eq-diffusion-direct-sample. The common reverse-mean parameterization is
+in @eq-diffusion-direct-sample. Solving that equation for the clean example, with the
+predicted noise in place of the true noise, and substituting the result into the posterior
+mean above gives the common reverse-mean parameterization
 
 $$
 \vect{\mu}_\theta(\vect{x}_t,t)
@@ -1069,7 +1058,7 @@ print("t=1 stochastic-noise coefficient:", f"{posterior_variance[0].sqrt().item(
 ```
 ::::
 At $t=1$, the exact posterior conditioned on $\vect{x}_0$ has zero variance. With the
-fixed reverse-variance choice $\sigma_t^2=\widetilde\beta_t$ used below, the sampler
+fixed reverse-variance choice $\sigma_t^2=\tilde\beta_t$ used below, the sampler
 therefore adds no fresh random noise after computing its final mean. That edge case is
 easy to miss in code.
 
@@ -1094,10 +1083,10 @@ We can test that claim without images or a large network. The target is the know
 two-Gaussian mixture used above. A 4,417-parameter MLP with two 64-unit SiLU hidden
 layers predicts scalar noise for the 100-step schedule. The time-conditioned version
 receives $(x_t,t)$; the ablation has the identical architecture and seeded
-initialization but its time channel is fixed at zero, so it sees only $x_t$. Both train
+initialization, but we fix its time channel at zero, so it sees only $x_t$. We train both
 for 5,000 updates on the same seeded draws of data, timesteps, and noise over seeds 6050--6054. Each
 sampler then draws 20,000 points from a standard-normal endpoint and takes 100 reverse
-steps with variance $\widetilde\beta_t$.
+steps with variance $\tilde\beta_t$.
 
 The equations count timesteps from $t=1$, while arrays use zero-based index
 $j=t-1$. Model index zero therefore represents the equation's first noising step.
@@ -1414,18 +1403,6 @@ $$
 $$
 
 The noisy representation supplies the queries; the condition supplies keys and values.
-Another common tool is **classifier-free guidance**. With the convention $w\ge0$,
-
-$$
-\widetilde{\vect{\epsilon}}_\theta(\vect{x}_t,t,\vect{c})
-=(1+w)\vect{\epsilon}_\theta(\vect{x}_t,t,\vect{c})
--w\vect{\epsilon}_\theta(\vect{x}_t,t,\varnothing).
-$$
-
-At $w=0$ this is the conditional prediction; increasing $w$ amplifies the direction
-that distinguishes conditional from unconditional denoising. Stronger guidance can
-improve condition adherence while reducing diversity or exposing calibration errors,
-so an evaluation should report the convention, the scale sweep, and the trade-off.
 
 For images, a U-Net is a natural denoiser. Its contracting path gathers broad
 context; its expanding path returns to the original resolution. Skip connections carry
@@ -1439,6 +1416,24 @@ $p_\theta(\vect{x}\mid\vect{c})$. It does not remove the need to test the uncond
 support, the quality of the conditioning data, or whether the sampler follows
 $\vect{c}$ for the intended population. A strong condition score can coexist with
 repeated, memorized, or low-coverage samples.
+
+::: {.callout-tip}
+## Practice bridge (optional): classifier-free guidance
+
+**Classifier-free guidance** is one way to combine conditional and
+unconditional denoiser predictions during sampling. With the convention $w\ge0$,
+
+$$
+\widetilde{\vect{\epsilon}}_\theta(\vect{x}_t,t,\vect{c})
+=(1+w)\vect{\epsilon}_\theta(\vect{x}_t,t,\vect{c})
+-w\vect{\epsilon}_\theta(\vect{x}_t,t,\varnothing).
+$$
+
+At $w=0$ this is the conditional prediction; increasing $w$ amplifies the direction
+that distinguishes conditional from unconditional denoising. Stronger guidance can
+improve condition adherence while reducing diversity or exposing calibration errors,
+so an evaluation should report the convention, the scale sweep, and the trade-off.
+:::
 
 We can also run diffusion on an autoencoder's codes. A pretrained autoencoder can map high-dimensional observations into a
 lower-dimensional latent space. Diffusion then learns a distribution over those codes,
@@ -1461,7 +1456,7 @@ changes the computational problem; any speedup has to be measured.
 
 ## Evaluating a generator {#a-generator-needs-an-evaluation-contract-too}
 
-The original data distribution is unknown; that is why we are learning it. No single
+The data-generating distribution is unknown; that is why we are learning it. No single
 training loss can therefore certify generation. A useful evaluation separates
 at least these questions:
 
@@ -1588,11 +1583,13 @@ Close the book for one minute and recall how each model draws a new sample.
    of the defect: which term was silently divided by what? Then prove the identity:
    with default `mean` reductions the loss equals
    $\tfrac{1}{D_x}\big[\text{recon}_{\text{sum}} + (\beta D_x)\,\mathrm{KL}\big]$
-   exactly, so a nominal $\beta=1$ on $28\times28$ inputs trains an effective
-   $\beta=784$ (posterior collapse by construction). *Named wrong answer:* "the two
+   exactly. Thus, relative to the pixel-summed reconstruction convention, a nominal
+   $\beta=1$ on $28\times28$ inputs gives an effective KL coefficient of 784. This
+   substantially changes the reconstruction–regularization trade-off; the identity
+   alone does not establish posterior collapse. *Named wrong answer:* "the two
    `mean`s cancel, so the trade-off is unchanged"; they average over different axis
    sets ($B\!\cdot\!D_x$ versus $B$), and the mismatch is the bug.
-5. **(Audit.)** Now audit a "diversity" term that penalizes
+5. **(Audit.)** **Statistical extension (optional).** Now audit a "diversity" term that penalizes
    $\mathrm{KL}(q_{\mathrm{agg}}\,\|\,p)$ by computing it on each batch's mixture
    and averaging. Which of the three estimator cases is this, and in which direction
    is the batch estimate biased? Verify numerically on synthetic Gaussian posteriors:

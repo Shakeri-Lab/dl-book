@@ -1,4 +1,4 @@
-# Alignment and RL Fine-Tuning {#sec-18-alignment}
+# Instruction Tuning and Preference Learning {#sec-18-alignment}
 
 <!-- lecture-source:
      Module 11 is slide-only; the prose spine comes from the instructor's notes in
@@ -151,11 +151,12 @@ $$
 \right].
 $$ {#eq-sft-response-mask}
 
-The denominator makes the displayed version a mean per scored response token. Some
-implementations sum instead; the choice changes gradient scale and must be stated.
-This is [Case 1](../part1/04-training-loss-sgd.qmd#sec-04-estimator-cases) applied to
-response tokens: the mask selects the targets, and the denominator determines how we
-average their losses.
+The displayed objective averages scored tokens within each
+response, then averages over prompt--response examples.
+Uniform sampling of examples gives a minibatch estimator of
+this per-example objective. Pooling all scored tokens within
+a batch instead gives longer responses more weight.
+The mask and both reductions must therefore be specified.
 The prompt is still essential because it conditions every response probability. Its
 tokens are simply not scored as targets in this version.
 
@@ -277,8 +278,12 @@ There is a deeper assumption: all comparisons for one prompt must be representab
 one scalar ordering. Let $\vect{r}=(r_A,r_B,r_C)^\top\in\mathbb{R}^3$. Let the rows of
 $\matr{B}\in\mathbb{R}^{3\times3}$ encode $A-B$, $B-C$, and $C-A$. Then
 $\matr{B}\vect{r}$ contains their three score
-differences. A transitive set of probabilities can come from a score vector. A cycle
-that prefers each response to the next cannot:
+differences. Bradley--Terry requires pairwise log-odds to be differences
+of the same scalar scores. Those log-odds must therefore
+sum to zero around every cycle. An acyclic preference
+ordering alone does not ensure this probability-level
+consistency. A cycle that prefers each response to the next
+cannot come from a score vector:
 
 <!-- NOVEL: needs sign-off -->
 
@@ -528,7 +533,7 @@ we negate it.
 
 ### The exact finite-response policy
 
-Before discussing an optimizer, let us solve the finite problem. Add a Lagrange
+Before discussing an optimizer, we solve the finite problem. Add a Lagrange
 multiplier $\lambda$ for $\sum_i\pi_i=1$. Differentiating with respect to one
 probability gives
 
@@ -681,15 +686,15 @@ $$
 {\pi_{\mathrm{old}}(a_t\mid s_t)}.
 $$
 
-If $\widehat A_t$ estimates whether that sampled action did better or worse than the
-value baseline, PPO maximizes the clipped surrogate
+If the **advantage estimate** $\hat A_t$ indicates whether that sampled action did
+better or worse than the value baseline, PPO maximizes the clipped surrogate
 
 $$
 L^{\mathrm{CLIP}}(\theta)
 =\E_t\left[
 \min\!\left(
-\rho_t(\theta)\widehat A_t,
-\operatorname{clip}(\rho_t(\theta),1-\epsilon,1+\epsilon)\widehat A_t
+\rho_t(\theta)\hat A_t,
+\operatorname{clip}(\rho_t(\theta),1-\epsilon,1+\epsilon)\hat A_t
 \right)
 \right].
 $$ {#eq-ppo-clip}
@@ -750,11 +755,11 @@ eventually become costly. We generate 20,000 noisy Bradley--Terry comparisons pe
 seed and fit the linear reward model
 
 $$
-\widehat r(e,\ell)
+\hat r(e,\ell)
 =w_e e+w_\ell\ell+w_q\max(\ell-1,0)^2.
 $$
 
-Five complete runs use seeds 6050--6054. A **narrow-feedback** arm sees only
+We perform five complete runs, with seeds 6050--6054. A **narrow-feedback** arm sees only
 $\ell\in[0,1]$. A **coverage-repair** arm draws 20% of individual comparison
 responses from $\ell\in[1,4)$, where the missing curvature becomes observable. Both
 models have the same feature class and optimizer:
@@ -1434,7 +1439,7 @@ Close the book for one minute and separate update location from objective.
    supplies a different, comparative signal.
 3. **A preference is conditional evidence.** Bradley--Terry turns score differences
    into probabilities, but reward zero points are unidentified and cyclic aggregate
-   preferences need not fit one scalar ordering.
+   preferences cannot fit one scalar ordering.
 4. **RLHF separates judge from actor.** The reward model scores completed responses,
    the value function forecasts shaped return from prefixes, PPO uses a refreshed old
    policy, and reference KL uses a usually fixed anchor.

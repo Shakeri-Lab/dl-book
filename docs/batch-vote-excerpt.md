@@ -301,5 +301,5 @@ zero page overflow, zero SVG text outside the picture, zero console errors at
 
 | path | sha256 |
 |---|---|
-| `chapters/part1/04-training-loss-sgd.qmd` | `883c65e0600e0e77907ff14fd436295f948b6f745ca7f41091a84f15c853331b` |
+| `chapters/part1/04-training-loss-sgd.qmd` | `e1f7c2bf5e914da0e790d4d4064d0a28a070365177d13220b01886a133a3cacd` |
 | `6050-Ch4/STORYBOARD.md` | `c5f8b635909b585d6c62f310ef2e16801c58421127d9ef6d536d7fbd331db9ce` |

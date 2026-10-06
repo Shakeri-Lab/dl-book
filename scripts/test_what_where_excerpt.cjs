@@ -70,7 +70,7 @@ test('what where: the reports and their pooled versions carry the readings the p
   assert.deepEqual([pv[ti][tj], ph[ti][tj]], [0, 4], 'and the top stays horizontal');
   // The counterfactual: one maximum across the two maps cannot tell them apart.
   assert.equal(Math.max(pv[si][sj], ph[si][sj]), Math.max(pv[ti][tj], ph[ti][tj]));
-  // The detectives really are orientation-selective, so the distinction is theirs.
+  // The edge detectors really are orientation-selective, so the distinction is theirs.
   assert(v.every(row => row.every((x, c) => x === 0 || c === 6 || c === 7 || c === 20 || c === 21)));
 });
 

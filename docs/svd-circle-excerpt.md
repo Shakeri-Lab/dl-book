@@ -131,7 +131,7 @@ including the perturbation test. The scoped publication suite is recorded at
 
 | Source | SHA-256 |
 |---|---|
-| `chapters/appendices/a1-linear-algebra.qmd` | `b4636f57fe6f957400ccd9346357414cf918b4ca0ec2076159e94bb9f9637ff7` |
+| `chapters/appendices/a1-linear-algebra.qmd` | `a5fa24b6a7aa1a6d9049ea13b245dd233d7213eb45fd78efa2ef104465a0e194` |
 | `sources/misc_svd.tex` | `90c4e1c5da7a712661426c7094c293e8a8f6daa54bc1d9ccb6d23ef63169547a` |
 | `sources/misc_LinAlg.tex` | `4ea1a4372ebb47bb2735c76060425dd463531ebbdaa0c711a5a93f0ed915f904` |
 | `_freeze/chapters/appendices/a1-linear-algebra/execute-results/html.json` | `999ca511af7ddce799759dd184f0ca1d067c67f593622c5257d378a05c6330f9` |

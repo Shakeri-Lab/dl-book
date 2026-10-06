@@ -665,17 +665,17 @@ test('integration: the excerpt is HTML-only, manifest-driven, and placed before 
   assert.match(resources, /^\s+- interactives\/both-axes\/player\.js$/m);
   assert(!resources.includes('both-axes/panel.html'));
   const chapter = chapterSource(NAME);
-  assert.deepEqual(scene.anchor, {type: 'before-heading', target: 'Self-attention does not see order'});
+  assert.deepEqual(scene.anchor, {type: 'before-heading', target: 'Permutation symmetry without positional signals or masks'});
   // The heading keeps its pre-rename id, {#the-position-debt}, so older links still land.
   const heading = `### ${scene.anchor.target} {#the-position-debt}`;
   assert.equal(chapter.split('\n').filter(line => line.startsWith(`### ${scene.anchor.target}`)).length, 1);
   assert(chapter.includes(`\n${heading}\n`));
   const at = chapter.indexOf(`### ${scene.anchor.target}`);
   // After the figure it replays and the paragraph that closes the section's opening; before
-  // the slogan, the proof, the name and the audit.
+  // the scope statement, the proof, the name and the audit.
   assert(chapter.indexOf('#| label: fig-self-attention-read') < at);
   assert(chapter.indexOf('one new token at a time.') < at);
-  for (const later of ['Bare self-attention knows content but not slot number.', 'Let $P$ be an $n\\times n$ permutation matrix',
+  for (const later of ['First consider self-attention without positional signals or an attention mask.', 'Let $P$ be an $n\\times n$ permutation matrix',
     'Self-attention is *permutation equivariant*', '<!-- NOVEL: needs sign-off - seeded permutation'])
     assert(chapter.indexOf(later) > at, later);
   // The chapter's other replay sits two sections later, on a different anchor.

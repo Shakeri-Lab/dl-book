@@ -90,7 +90,7 @@ test('downhill bowl: every structural constant is the chapter\'s own printed lit
   // Every literal this panel mirrors, in the exact form the manifest should name.
   for (const literal of [
     'imagine standing on it *blindfolded*, trying to find the lowest valley. You\ncannot see the valley, but you can feel the slope under your feet.',
-    'With two parameters, $(w,b)$, this scalar becomes a surface over the parameter plane.\nThat surface is the **loss landscape**.',
+    'In the simplest problem we can visualize, with one weight and one bias\n$\\parameterpart{\\vect{w}} = (w,b)$, this scalar becomes a surface over the parameter plane.\nThat surface is the **loss landscape**.',
     'y1 = 2.5 * x1 - 1.0 + 0.3 * torch.randn(60)',
     'w, b, path = -0.5, 2.0, []',
     'for _ in range(20):',
