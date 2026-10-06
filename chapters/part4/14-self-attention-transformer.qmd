@@ -37,8 +37,7 @@ deliberately small causal Transformer on the book-corpus benchmark from
 Here is the result we have to explain on the same 14,860-character held-out tail.
 In one exactly matched seed, positional encoding improves the Transformer's loss
 from 2.3405 to 1.9190. Yet @sec-10-sequences-rnn's compact LSTM remains better at 1.8881. The new architecture
-has learned, and position matters in this run, but at this scale, the LSTM still
-wins.
+has learned, and position matters in this run, but the LSTM is still ahead.
 
 <!-- /NOVEL -->
 
@@ -50,9 +49,9 @@ another occurrence, now near *loan* and *interest*, should route different infor
 @sec-13-attention built exactly this kind of content-dependent routing. Self-attention
 changes only the source of the three inputs.
 
-The three questions still fit: a query asks “what am I looking for?”, a
-key advertises “what do I offer?”, and a value carries “what information do I
-contain?”
+The three roles still fit: a query specifies what is needed, a key
+provides the features used for comparison, and a value carries the content
+to be combined.
 
 Let a batch of token representations be
 
@@ -162,19 +161,23 @@ plt.tight_layout(); plt.show()
 ```
 
 Weights were already shared across examples and across space; @sec-10-sequences-rnn
-made time the third axis of weight sharing. An RNN shares one transition
-rule across time. Self-attention keeps that stationarity and extends the shared rule
-across every ordered pair of positions. The weights in a particular attention row
-still depend on the content; what is shared is the machinery that produces them.
+made time the third axis of weight sharing. An RNN shares transition
+parameters across time. Self-attention shares projection parameters across positions
+and applies the same comparison rule to each permitted query–key pair. The weights
+in a particular attention row still depend on the content; what is shared is the
+machinery that produces them.
 
 All query positions can be evaluated together during training because none waits
 for a hidden state from the preceding position. That is a structural statement, not
 a timing result. Dense self-attention still forms $n^2$ pairwise scores, and
 autoregressive generation still emits one new token at a time.
 
-### Self-attention does not see order {#the-position-debt}
+### Permutation symmetry without positional signals or masks {#the-position-debt}
 
-Bare self-attention knows content but not slot number.
+First consider self-attention without positional signals or an attention mask.
+We will show that permuting the input rows permutes the output rows in the same way.
+A fixed causal mask changes this setting by assigning different visible prefixes
+to different positions.
 
 Let $P$ be an $n\times n$ permutation matrix, so $PX$ reorders the tokens. Then
 
@@ -211,7 +214,7 @@ become invariant to order.
 
 In @sec-08-cnn, convolution received locality “for free.” A convolution knows which
 values are neighbors because its kernel is tied to nearby offsets. Global attention
-drops that built-in geometry, so position has to be added back explicitly.
+drops that built-in geometry, so position has to be supplied explicitly.
 
 <!-- NOVEL: needs sign-off - seeded permutation/position audits and figures. -->
 
@@ -583,7 +586,8 @@ $$
 $$
 
 Scaling uses $\sqrt{d_h}$, not $\sqrt d$, because a head's dot product sums $d_h$
-terms. With fixed $d$, splitting into heads does not multiply the leading projection
+terms, and the previous chapter's variance argument applies to that sum. With fixed $d$,
+splitting into heads does not multiply the leading projection
 count: $W_Q,W_K,W_V,W_O$ together contribute about $4d^2$ weights regardless of
 $h$. Heads divide the model width among themselves; they do not each receive a fresh
 width-$d$ model.
@@ -1045,8 +1049,8 @@ The two architectures cannot be made identical (one has recurrent gates and the
 other has attention blocks), but the training targets each one sees can be.
 The code below reconstructs @sec-10-sequences-rnn's exact random-window schedule, then gives
 both Transformer variants the same initial weights and all 16,006,400 target
-characters in the same order. The held-out tail has been inspected repeatedly
-across chapters, so treat it as a stable validation benchmark, not a newly sealed
+characters in the same order. We have inspected the held-out tail repeatedly
+across chapters, so we treat it as a stable validation benchmark, not a newly sealed
 test set.
 
 ```{python}
@@ -1231,7 +1235,7 @@ print(f"window schedule: {schedule_hash[:12]}…")
 The model has 132,488 trainable parameters, 736 fewer than @sec-10-sequences-rnn's 133,224.
 That difference is only 0.55%, close enough to remove model size as an easy
 explanation. The model width is 84, split into four 21-dimensional heads; each of
-the two FFNs expands to 168 features. Token embeddings are initialized with
+the two FFNs expands to 168 features. We initialize token embeddings with
 coordinate standard deviation $1/\sqrt d$ before the displayed $\sqrt d$ scaling,
 so their coordinates and the sinusoidal coordinates begin on comparable scales.
 `ModuleList` registers the two repeated blocks with the model. The nonpersistent
@@ -1245,13 +1249,12 @@ tensors and window schedule makes the positional ablation exact and repeatable.
 
 Calling the same random seed before both training runs would not, by itself, prove
 that they saw the same windows. Model construction consumes random numbers, and
-different construction paths can silently shift every later draw. The experiment
-precomputes the full start-index tensor with an explicit generator and copies one
-saved initialization into both models. It also prints fingerprints for both
-artifacts.
+different construction paths can silently shift every later draw. We precompute the
+full start-index tensor with an explicit generator and copy one saved initialization
+into both models. We also print fingerprints for both artifacts.
 :::
 
-Training and evaluation import @sec-10-sequences-rnn's code unchanged. The trainer's
+We import @sec-10-sequences-rnn's training and evaluation code unchanged. The trainer's
 signature:
 
 :::: {.plan-code}
@@ -1386,7 +1389,7 @@ print(f"positional Transformer minus LSTM: {lstm_gap:.4f} loss")
 ```{python}
 #| echo: false
 #| label: fig-book-corpus-rematch
-#| fig-cap: "Matched training curves (left) and fixed-window held-out loss (right). Position helps in this seed, while the @sec-10-sequences-rnn LSTM remains the strongest small model."
+#| fig-cap: "Matched training curves (left) and fixed-window held-out loss (right). Position helps in this seed, while the @sec-10-sequences-rnn LSTM has the lowest held-out loss of the three models."
 #| fig-alt: "Two-panel matched comparison. Training losses start together near 4.7, then the positional Transformer falls steadily to about 1.1 while the no-position model ends near 1.85. Held-out bars rank the Chapter 12 LSTM lowest at 1.8881, the positional Transformer at 1.9190, and the no-position Transformer highest at 2.3405."
 #| fig-width: 10
 #| fig-height: 4
@@ -1427,7 +1430,8 @@ orderless caricature might suggest; fixed sinusoidal encoding still produces a
 large improvement in this run.
 
 But @sec-10-sequences-rnn's LSTM remains ahead by 0.0309 held-out loss, or 1.64%. At 100
-characters of context and roughly 133,000 parameters, the LSTM wins this regime.
+characters of context and roughly 133,000 parameters, the LSTM has lower held-out
+loss in this run.
 This comparison matches corpus, parameter scale, updates,
 minibatch order, optimizer, clipping, and evaluation. It does not match internal
 architecture, and it does not show that either model reached its own tuned optimum.
@@ -1598,11 +1602,14 @@ a memory and compute cost: each new query must read every earlier key and value.
 rows so a new query can reuse them instead of recomputing the whole prefix. In the
 regression language of @sec-12-kernel-regression, the KV cache is the nonparametric estimator's
 dataset: one new query still reads a table that grows with $t$, but the earlier rows
-do not have to be rebuilt. The toy sampler in @sec-14-self-attention-transformer is
-wasteful precisely because it rebuilds that dataset at every step; Appendix C
+do not have to be rebuilt. Our sampler instead recomputes a cropped 100-character window.
+A persistent full-prefix cache would retain a different context once that window
+moves. A cached implementation therefore needs an explicit context and position
+policy; it is not simply a drop-in acceleration of this sampler. Appendix C
 separates caching from FlashAttention's I/O schedule.
 
-What if we keep this regression problem and change its solver? The next interlude
+What if we keep the regression perspective but change the kernel, the predictor
+class, or the update rule? The next interlude
 compares the growing KV cache with a finite sufficient state and a delta update.
 
 Readers who want the diagnostic side of these mechanisms will find kernel geometry,
@@ -1616,7 +1623,7 @@ Volume*](https://shakeri-lab.github.io/opt-book/chapters/beyond-this-volume.html
 
 Close the book for one minute and rebuild the Transformer block.
 
-- Why is bare self-attention permutation equivariant?
+- Without positional signals or a mask, why is self-attention permutation equivariant?
 - Which three paths write into the residual stream?
 - What changes when a causal mask restricts visibility?
 :::
@@ -1625,9 +1632,10 @@ Close the book for one minute and rebuild the Transformer block.
 
 1. **Self-attention reuses @sec-13-attention's operator within one sequence.** $Q$, $K$,
    and $V$ all come from $X$; one learned comparison rule is shared over every
-   ordered pair. Training positions can be evaluated together, while
+   permitted query–key pair. Training positions can be evaluated together, while
    autoregressive generation remains sequential.
-2. **Bare attention is permutation equivariant, not invariant.**
+2. **Without positional signals or a mask, self-attention is permutation
+   equivariant, not invariant.**
    $\operatorname{SA}(PX)=P\operatorname{SA}(X)$. Sinusoidal clocks supply the sense of
    order that @sec-08-cnn's kernels had built in and global routing lacks, and their sine/cosine pairs turn relative
    shifts into rotations.
@@ -1643,8 +1651,8 @@ Close the book for one minute and rebuild the Transformer block.
    @sec-09-modern-cnns-transfer's residual stream. LayerNorm is the same normalization equation over
    a token's feature axis.
 6. **Position wins this seed's controlled ablation.** It lowers held-out loss from
-   2.3405 to 1.9190. **The LSTM narrowly beats the small Transformer**, 1.8881
-   versus 1.9190.
+   2.3405 to 1.9190. **In this run, the LSTM has slightly lower held-out loss than the
+   small Transformer**, 1.8881 versus 1.9190.
    Architecture changes inductive bias; it does not guarantee victory in every
    data and scale regime.
 
@@ -1665,7 +1673,8 @@ Close the book for one minute and rebuild the Transformer block.
 ## Exercises {.unnumbered}
 
 1. **(Pencil.)** Starting from $Q'=PQ$, $K'=PK$, and $V'=PV$, prove each step of
-   $\operatorname{SA}(PX)=P\operatorname{SA}(X)$. Then show that mean-pooling the
+   $\operatorname{SA}(PX)=P\operatorname{SA}(X)$ for self-attention without
+   positional signals or a mask. Then show that mean-pooling the
    token outputs produces a permutation-*invariant* sequence representation.
 2. **(Pencil.)** For width $d=512$ and $h=8$, write every tensor shape in
    multi-head attention for $B=32$ and $n=100$. Count the weights in
