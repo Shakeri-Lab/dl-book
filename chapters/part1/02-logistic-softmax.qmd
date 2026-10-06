@@ -67,7 +67,7 @@ sigmoid_response = torch.sigmoid(o)
 #| echo: false
 #| label: fig-sigmoid
 #| fig-alt: "Left: an S-shaped curve rises from near zero to near one, with dotted guides meeting it at logit zero and probability one half. Right: navy circles and orange squares on a plane are separated by a straight solid line; two dashed lines parallel to it mark probabilities 0.1 and 0.9, and the shading shifts from navy to orange across the line."
-#| fig-cap: "The sigmoid maps any real score to $(0,1)$, crossing $\\tfrac{1}{2}$ exactly at $o=0$ (left). In input space (right), that single score is the straight line $\\mathbf{w}^\\top\\mathbf{x}+b=0$ between the circles and the squares; the dashed contours $\\hat p = 0.1$ and $0.9$ are parallel to it. Confidence grows with distance from the line, and the line itself never bends. The model's uncertainty lives near the boundary; its confident regions saturate far from it."
+#| fig-cap: "The sigmoid maps any real score to $(0,1)$, crossing $\\tfrac{1}{2}$ exactly at $o=0$ (left). In input space (right), that single score is the straight line $\\mathbf{w}^\\top\\mathbf{x}+b=0$ between the circles and the squares; the dashed contours $\\hat p = 0.1$ and $0.9$ are parallel to it. Confidence grows with distance from the line, and the line itself never bends. Near the boundary $\\hat p$ stays close to $\\tfrac{1}{2}$; far from it, $\\hat p$ saturates toward 0 or 1."
 fig, (ax_curve, ax_plane) = plt.subplots(1, 2, figsize=(10, 3.4),
                                          gridspec_kw={"width_ratios": [1.15, 1]})
 ax_curve.plot(o, sigmoid_response, color="#232D4B", lw=2.2)
@@ -119,8 +119,9 @@ side of it.
 
 ### The loss: cross-entropy from maximum likelihood
 
-Run the maximum-likelihood recipe with the correct noise model. If the label is a coin
-flip with $P(y{=}1 \mid \vect{x}) = \hat{p}$, the likelihood of the dataset is
+Run the maximum-likelihood recipe with the correct noise model. If the labels are
+independent coin flips with $P(y{=}1 \mid \vect{x}) = \hat{p}$, the likelihood of
+the dataset is
 $\prod_i \hat{p}_i^{\,y_i}(1-\hat{p}_i)^{1-y_i}$; taking the negative log gives the
 **binary cross-entropy**:
 
@@ -132,7 +133,7 @@ Read it as *surprise*: if the true label is 1, the loss is $-\log \hat{p}$. It i
 when the model believed in the outcome and explodes as that belief goes to zero. The more
 confidently wrong the model is, the larger the loss.
 
-### The beautiful gradient
+### The gradient with respect to the logit {#the-beautiful-gradient}
 
 Differentiate through the sigmoid and cross-entropy with respect to the logit
 (Exercise 1 walks you through the steps):
@@ -141,7 +142,7 @@ $$
 \frac{\partial \loss}{\partial o} = \hat{p} - y .
 $$ {#eq-bce-grad}
 
-The gradient is *literally the prediction error*, the same form MSE gave us for
+The gradient is *the prediction error*, the same form MSE gave us for
 regression. All the logs and exponentials cancel. Softmax with cross-entropy
 gives the same cancellation.
 
@@ -332,9 +333,13 @@ $$
 \frac{\partial \loss}{\partial o_j} = \hat{y}_j - y_j ,
 $$ {#eq-ce-grad}
 
-prediction minus target, one more time. This recurrence is no coincidence: sigmoid/BCE
-and softmax/CE are both members of the exponential family paired with their natural
-losses, and that pairing always collapses the gradient to the error.
+prediction minus target, one more time. This recurrence is no coincidence. The
+Bernoulli and categorical distributions belong to the exponential family, the logits are
+their natural parameters, and sigmoid and softmax, the inverses of their canonical links, map
+the logits back to the mean. Whenever a distribution of this family is paired with its
+canonical link, the model's score is the natural parameter, and the gradient of the negative
+log-likelihood with respect to that score is the mean minus the observation, which is the
+prediction error.
 
 ::: {.callout-note}
 ## The information-theory reading: coding and surprise
@@ -405,17 +410,18 @@ plt.tight_layout(); plt.show()
 
 ### One numerical landmine
 
-Computing $e^{o_j}$ overflows once a logit reaches the high eighties in float32
-(about 700 in float64), a scale training easily reaches. The fix exploits
-shift invariance: subtract the max logit before exponentiating (the *log-sum-exp
-trick*), which changes nothing mathematically and everything numerically. We will use
-it in the code below; the deeper story of floating-point limits lives in
-@sec-a3-precision-performance.
+Computing $e^{o_j}$ overflows once a logit exceeds roughly 88.7 in float32
+(about 709 in float64), a scale training easily reaches. The fix exploits
+shift invariance: subtracting the maximum logit before exponentiating forces every
+exponent to be at most zero, which completely prevents overflow. This safeguard (the
+core of the *log-sum-exp trick*) changes nothing mathematically and everything
+numerically. We put it to work from scratch in the code below; @sec-a3-precision-performance
+examines floating-point limits and hardware representations in depth.
 
 ## Build it: three classes, from scratch
 
 Now we assemble the full classifier on three Gaussian blobs. It has four pieces, all
-of which you have already met: three templates (one per class), the stable softmax, the
+introduced in the preceding sections: three templates (one per class), the stable softmax, the
 cross-entropy loss, and the gradient. And since @eq-ce-grad reduced that gradient to
 $\hat{y} - y$, we can implement it by hand $\rightarrow$ no autograd needed:
 
@@ -493,10 +499,10 @@ plt.xlabel("$x_1$"); plt.ylabel("$x_2$"); plt.legend(loc="lower right")
 plt.tight_layout(); plt.show()
 ```
 ::::
-The framework version is two lines, with one trap worth a warning. Its loss object is
-the only new framework tool introduced here: it scores logits against labels, while the
-manual loop above still supplies the gradient. Optimizers and automatic backpropagation
-stay black boxes, as in @sec-01-linear-regression, until Chapters [-@sec-04-training-loss-sgd] and [-@sec-05-backpropagation].
+Replacing our manual loss with a framework's built-in module takes just two lines, but
+conceals a classic trap. That loss object is the only new high-level tool introduced here:
+it scores logits against labels, while the manual loop above still supplies the parameter
+updates. Optimizers and automatic backpropagation stay black boxes, as in @sec-01-linear-regression, until Chapters [-@sec-04-training-loss-sgd] and [-@sec-05-backpropagation].
 
 :::: {.plan-code}
 ::: {.plan}
@@ -541,10 +547,14 @@ Close the book for one minute and reconstruct the classifier.
 
 ## Okay, so: classification is regression plus a normalizer
 
-1. **The geometry survived**: logits are still template similarities
+1. **The linear geometry holds**: logits are still template similarities
    $\vect{w}^\top\vect{x} + b$, boundaries are still hyperplanes. Sigmoid and softmax
-   grade confidence; they do not bend anything. In the vocabulary of later chapters,
-   this whole model is a single classification head.
+   grade confidence; here they act only on the output, not as nonlinear activations
+   between layers. Applying an order-preserving function to the scores rescales
+   certainty without folding space: every decision boundary remains an unyielding,
+   rigid hyperplane. In the backbone-and-head vocabulary of
+   [the multiclass section](#multiclass-classification-softmax), this whole model is a
+   single classification head.
 2. **The loss came from the noise model**, exactly as in @sec-01-linear-regression:
    Bernoulli $\rightarrow$ BCE, categorical $\rightarrow$ cross-entropy, both read as
    *surprise at the truth*.
@@ -555,7 +565,7 @@ Close the book for one minute and reconstruct the classifier.
 
 Next, we let the templates themselves be built out of other templates:
 @sec-03-nonlinearity-mlp stacks these linear units into a backbone beneath the same
-head, and discovers why a bend between them is not optional.
+head, and discovers why a nonlinear activation between them is not optional.
 
 ## Sources and further reading {.unnumbered}
 

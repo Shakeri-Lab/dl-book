@@ -87,8 +87,9 @@ test('surprise loss: the chapter owns the formula; the belief schedule is a decl
   const f = fixture(t, NAME), source = declared(f), chapter = chapterSource(NAME);
   assert.equal(scene.qmd, 'chapters/part1/02-logistic-softmax.qmd');
   assert.equal(scene.anchor.type, 'before-heading');
-  assert.equal(scene.anchor.target, 'The beautiful gradient');
-  assert.match(chapter, /^### The beautiful gradient$/m, 'the anchored heading is in the chapter');
+  assert.equal(scene.anchor.target, 'The gradient with respect to the logit');
+  assert.match(chapter, /^### The gradient with respect to the logit \{#the-beautiful-gradient\}$/m,
+    'the anchored heading is in the chapter, keeping its old anchor');
   assert.equal(scene.duration, 40);
   assert.deepEqual(scene.beats, [0, 5, 10, 15, 20, 25, 30, 35]);
   assert.equal(f.root.dataset.evidenceClass, 'computed');
