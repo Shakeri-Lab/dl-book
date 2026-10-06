@@ -259,14 +259,14 @@ test('integration: the excerpt is HTML-only, manifest-driven, and declared in th
   assert.match(section('  resources:', config), new RegExp(`^\\s+- interactives/${scene.scene}/player\\.js$`, 'm'));
   assert(!section('  resources:', config).includes(`${scene.scene}/panel.html`));
   // The scene sits between the engine that defines the accumulation rule and Rule 2,
-  // which names it. That heading carries a code span, which Pandoc renders without its
-  // backticks, so the manifest target carries none either.
+  // which names it. The heading keeps its old anchor as an explicit id, which Pandoc
+  // does not render as heading text, so the manifest target carries the title alone.
   assert.equal(scene.anchor.type, 'before-heading');
-  assert.equal(scene.anchor.target, 'torch.autograd in practice: five rules');
+  assert.equal(scene.anchor.target, 'PyTorch autograd in practice: five rules');
   const chapter = chapterSource(NAME);
-  assert(chapter.includes('## `torch.autograd` in practice: five rules'));
+  assert(chapter.includes('## PyTorch autograd in practice: five rules {#torch.autograd-in-practice-five-rules}'));
   assert.equal(chapter.split('\n').filter(line => line.startsWith('## ')
-    && line.slice(3).replace(/`/g, '').trim() === scene.anchor.target).length, 1, 'the anchor is unambiguous');
-  assert(chapter.indexOf('**Rule 2: gradients accumulate.**') > chapter.indexOf('## `torch.autograd`'),
+    && line.slice(3).replace(/\s*\{[^}]*\}\s*$/, '').replace(/`/g, '').trim() === scene.anchor.target).length, 1, 'the anchor is unambiguous');
+  assert(chapter.indexOf('**Rule 2: gradients accumulate.**') > chapter.indexOf('## PyTorch autograd in practice: five rules'),
     'the rule this scene explains is the one just past the anchor');
 });

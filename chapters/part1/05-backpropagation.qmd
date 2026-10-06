@@ -16,12 +16,11 @@ hopeless. @sec-03-nonlinearity-mlp named the underlying difficulty: with no targ
 the hidden units, how much of the output error should each hidden weight answer for?
 That is the credit assignment problem.
 
-Backpropagation answers it exactly. It computes *all* the partial derivatives in one
-backward sweep whose cost is a small constant multiple of the graph's elementary
-operations. It is not a new kind of calculus. It is the chain rule, *organized*. We will
-derive it as a recursion on sensitivities, implement it by hand on a batch, count what
-it costs in arithmetic and in memory, and check that `torch.autograd` agrees with us
-to machine precision.
+Backpropagation provides the exact algorithmic solution. It computes *all* the partial
+derivatives in one backward sweep whose cost is a small constant multiple of the forward
+graph's operations. It is simply the multivariable chain rule in calculus but organized
+for computational reuse. We will derive it as a recursion on sensitivities, implement it
+from scratch on a batch, and analyze its arithmetic and memory costs.
 
 ## One neuron, one chain
 
@@ -106,11 +105,11 @@ Two things about this picture generalize to any network, however deep:
 
 1. **The forward pass caches.** Computing $L$ produces the intermediate values
    ($z$, $a$) along the way; we keep them, because the backward pass will need them.
-2. **The backward pass reuses.** Each edge contributes one *local* derivative, and the
-   derivative of $L$ with respect to anything is the product of local derivatives along
-   the path back to it. Nothing is recomputed, so the whole sweep costs a small
-   constant multiple of one forward pass; for matrix-multiply layers the multiple is
-   about two, as the batched code below makes visible.
+2. **The backward pass reuses.** It uses cached values, multiplying local derivatives
+   along each path and summing contributions from multiple paths.
+   The whole sweep costs a small constant multiple of one forward pass; for
+   matrix-multiply layers the multiple is about two, as the batched code below makes
+   visible.
 
 ## Sensitivity propagation: the four layer equations
 
@@ -131,14 +130,14 @@ $$
 $$
 
 the gradient of the loss with respect to that layer's *pre-activations*. Entry $j$
-answers a first-order question: if $z^{(l)}_j$ moved by a small $\varepsilon$, the loss
+has a first-order meaning: if $z^{(l)}_j$ moved by a small $\varepsilon$, the loss
 would move by about $\delta^{(l)}_j\,\varepsilon$. Automatic differentiation calls such
 a quantity an **adjoint**: the derivative of the final output with respect to an
 intermediate value, computed backward from the output.
 :::
 
-Everything now unfolds in four short equations. With $\odot$ denoting elementwise
-(Hadamard) product:
+For fully connected layers with elementwise activation functions, backpropagation takes
+the following four forms. Here $\odot$ denotes the elementwise (Hadamard) product.
 
 **1. Start at the output layer $L$, where the sensitivity is explicit:**
 
@@ -271,7 +270,7 @@ $$
 $$ {#eq-bp4}
 
 Check the shapes in @eq-bp3. With $m$ neurons
-in layer $l$ and $k$ in layer $l-1$: $\delta^{(l)}$ is $(m \times 1)$, and
+in layer $l$ and $k$ in layer $l-1$, $\delta^{(l)}$ is $(m \times 1)$, and
 $(\vect{a}^{(l-1)})^\top$ is $(1 \times k)$. Their **outer product** is an $m \times k$
 matrix, exactly the shape of $\matr{W}^{(l)}$, and entry $(i,j)$ is the sensitivity of
 neuron $i$ times the activation of neuron $j$ that fed it,
@@ -341,15 +340,16 @@ ax.text(6.55, 0.0, (f"entry $({i0 + 1},{j0 + 1})$:\n"
 ax.set_xlim(-0.1, 7.9); ax.set_ylim(-1.45, 1.45); ax.axis("off")
 plt.tight_layout(); plt.show()
 ```
-No messy summations: the matrix form performs them all at once, and it maps directly
-onto the parallel matrix multiplies GPUs are built for. The same four equations govern
-a toy network and a billion-parameter model; only the matrix sizes change.
+The matrix form needs no explicit summations, and it maps directly onto the parallel
+matrix multiplies that GPUs are built for. The same reverse-mode principle applies to
+larger models, using the local derivative of each operation.
 
-## Build it, then check it against autograd
+## Manual implementation and autograd verification {#build-it-then-check-it-against-autograd}
 
-Let us implement the four equations on a two-layer network, with no autograd anywhere,
-and then ask `torch.autograd` to differentiate the same network. If our algebra is
-right, the two answers must agree to machine precision.
+We implement the four equations on a two-layer network using basic tensor operations,
+with no autograd involved, and then run PyTorch's autograd on the same network. If the
+derivation and tensor shapes are correct, the two sets of gradients agree to machine
+precision.
 
 :::: {.plan-code}
 ::: {.plan}
@@ -366,7 +366,7 @@ _ = torch.manual_seed(6050)
 ```
 ::::
 
-One change of layout before the code: it processes $n$ examples at once, stored as rows
+The code makes one change of layout: it processes $n$ examples at once, stored as rows
 as in @sec-01-linear-regression. Stack the activations into
 $\matr{A}^{(l-1)} \in \mathbb{R}^{n\times k}$ and the sensitivities into
 $\matr{\Delta}^{(l)} \in \mathbb{R}^{n\times m}$, row $i$ holding example $i$'s
@@ -379,9 +379,10 @@ $$
 = \sum_{i=1}^{n} \delta^{(l)}_i \,(\vect{a}^{(l-1)}_i)^\top ,
 $$
 
-which is the code's `delta2.T @ A1`; and @eq-bp2, transposed row by row, becomes
-`delta1 = (delta2 @ W2) * sig_prime`. The mean's $1/n$ already sits inside `delta2`, so
-the sum is the batch average.
+and @eq-bp2, transposed row by row, becomes
+$\matr{\Delta}^{(l)} = \bigl(\matr{\Delta}^{(l+1)}\matr{W}^{(l+1)}\bigr) \odot \sigma'(\matr{Z}^{(l)})$,
+with the pre-activations stacked into $\matr{Z}^{(l)}$ in the same way. The mean's $1/n$
+already sits inside $\matr{\Delta}^{(2)}$, so the sum is the batch average.
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
@@ -435,41 +436,49 @@ for k in grads:
 The largest discrepancy is $3.73\times10^{-9}$, consistent with float32 rounding. The
 four equations *are* what autograd computes; the framework simply builds the
 computation graph for us as we go and then walks it backward, caching and reusing
-exactly as we did.
+as we did.
 
 **Two products backward for each product forward.** The forward pass computed the
-output layer with one matrix product, `A1 @ W2.T`. Its backward pass needed two, one for
-each input of that product: `delta2 @ W2` carries the sensitivity to the layer's input,
-and `delta2.T @ A1` forms the weight gradient. For an $n\times k$ input and an
+output layer with one matrix product, $\matr{A}^{(1)}(\matr{W}^{(2)})^\top$. Its backward pass
+needed two, one for each input of that product: $\matr{\Delta}^{(2)}\matr{W}^{(2)}$ carries the
+sensitivity to the layer's input, and $(\matr{\Delta}^{(2)})^\top\matr{A}^{(1)}$ forms the weight
+gradient. For an $n\times k$ input and an
 $m\times k$ weight, each of the three products costs $2nmk$ floating-point operations,
 so a matrix-multiply layer's backward pass costs about twice its forward pass and a
-training step about three forward passes. That is the small constant multiple promised
-at the start. (The first layer needs no input gradient, because nothing upstream of
-`X` is trained; our code never forms one.)
+training step about three forward passes. That is the small constant multiple stated
+at the start of the chapter. (The first layer needs no input gradient, because nothing
+upstream of the input $\matr{X}$ is trained; our code never forms one.)
 
-**Caching costs memory.** The backward pass read `A1`, for `sig_prime` and the `W2`
-gradient, and `X`, for the `W1` gradient, so both had to survive the forward pass. Here
-`A1` alone holds $32 \times 8 = 256$ numbers, more than all $57$ parameters of the
-network, and it grows with the batch size while the parameter count does not. A deep
+**Caching costs memory.** The backward pass read the hidden activations $\matr{A}^{(1)}$,
+for the gate $\sigma'(\matr{Z}^{(1)})$ and the gradient of $\matr{W}^{(2)}$, and the input
+$\matr{X}$, for the gradient of $\matr{W}^{(1)}$, so both had to survive the forward pass.
+Here $\matr{A}^{(1)}$ alone holds $32 \times 8 = 256$ numbers, more than all $57$ parameters
+of the network, and it grows with the batch size while the parameter count does not. A deep
 network keeps about one such block per layer until the backward pass consumes it,
 which is why training a network takes more memory than running it, and why evaluation
 code runs under `torch.no_grad()`, where no graph is recorded and nothing is kept for a
 backward pass. Recomputing some activations during the backward pass instead of storing
 them, *gradient checkpointing*, trades extra arithmetic for memory (Chen et al., 2016).
 
-## Order and accumulation: a scalar autograd engine
+## Order and accumulation: how autograd traverses graphs {#order-and-accumulation-a-scalar-autograd-engine}
 
-The four equations assume a chain of layers. A program is a graph: one value can feed
-several later operations, and the backward pass must visit nodes in an order that
-respects every dependency. Two rules make any graph work, and a small engine shows both.
-Each `Value` node records its parents and a local derivative rule; its `grad` field
-holds its adjoint $\partial L/\partial v$, and the rule passes that adjoint on to the
-parents. Then `backward()`:
+The four layerwise equations derived above assume a strictly sequential network, where
+each layer feeds exactly one successor. Real computational workflows form directed
+acyclic graphs (DAGs): a single intermediate value may branch into multiple downstream
+operations. Extending reverse-mode differentiation to arbitrary DAGs requires two rules:
 
-1. sorts the recorded nodes topologically and visits them in reverse, so that every
-   consumer of a node has contributed before the node's own rule runs; and
-2. *adds* each contribution with `+=`, so a value used twice receives the sum over both
-   paths.
+1. **Reverse topological ordering.** The backward sweep must visit nodes in reverse
+   topological order, ensuring every downstream consumer of an intermediate tensor has
+   finished propagating its sensitivity before that tensor sends its own gradient
+   upstream.
+2. **Gradient accumulation.** When an intermediate variable branches into multiple
+   operations, the multivariable chain rule dictates that its total sensitivity is the
+   sum of the sensitivities along each path. Autograd engines therefore accumulate
+   adjoint contributions using addition rather than overwriting.
+
+A small engine shows both rules. Each `Value` node records its parents and a local
+derivative rule; its `grad` field holds its adjoint $\partial L/\partial v$, and the
+rule passes that adjoint on to the parents.
 
 This teaching implementation is adapted from Andrej Karpathy's
 [micrograd](https://github.com/karpathy/micrograd), released under the MIT License. We
@@ -571,23 +580,24 @@ product $\matr{Z} = \matr{A}\matr{W}^\top$, the rule is the pair from the batche
 $\bar{\matr{A}} = \bar{\matr{Z}}\matr{W}$ and $\bar{\matr{W}} = \bar{\matr{Z}}^\top\matr{A}$,
 where a bar marks an adjoint. The scalar engine models the bookkeeping, not the speed.
 
-## `torch.autograd` in practice: five rules
+## PyTorch autograd in practice: five rules {#torch.autograd-in-practice-five-rules}
 
 Autograd uses the same reverse pass we built manually. Understanding that pass
 explains its practical rules. These five cover nearly every autograd bug you will
 meet; @fig-autograd-rules pictures four of them in PyTorch syntax.
 
-![Four autograd rules in PyTorch syntax. (a) After `backward()`, the leaf `w` holds its gradient; the non-leaf `y_hat` used its gradient and released it. (b) A second `backward()` adds into `w.grad` until `optimizer.zero_grad()` resets it. (c) Of four ways to write an update, only the in-place one under `torch.no_grad()` keeps `w` a trainable leaf. (d) A loss stored from a pass that never reaches `backward()` keeps its graph and cached activations alive; `loss.item()` and `loss.detach()` keep only the value.](../../figures/generated/5_5_autograd_rules.svg){#fig-autograd-rules width=100% fig-alt="Four panels. Panel a: the code w equals torch.randn of 3 with requires_grad True, y_hat equals w times 2 summed, y_hat.backward. An orange leaf box w with is_leaf True points to a gray box y_hat with grad_fn SumBackward0; a dark-red backward arrow fills w.grad with 2, 2, 2, while y_hat.grad is None. Panel b: w.grad reads 2, 2, 2 after one backward call and 4, 4, 4 after a second, then None after optimizer.zero_grad. Panel c: four update lines; only with torch.no_grad, w minus-equals lr times w.grad, is checked, giving the same leaf with new values; rebinding w gives a non-leaf whose next grad is None, an in-place update with recording on raises RuntimeError, and rebinding under no_grad gives requires_grad False. Panel d: appending loss to a list during evaluation keeps the loss, its grad_fn chain, and cached activations alive; appending loss.item gives a Python float, and loss.detach gives the same value with its history cut."}
+![Four autograd rules in PyTorch syntax. (a) After the backward pass, the leaf `w` holds its gradient; the non-leaf `y_hat` used its gradient and released it. (b) A second backward pass adds into `w.grad` until `optimizer.zero_grad()` resets it. (c) Of four ways to write an update, only the in-place one with recording paused keeps `w` a trainable leaf. (d) A loss stored from a forward pass that is never backpropagated keeps its graph and cached activations alive; `loss.item()` and `loss.detach()` keep only the value.](../../figures/generated/5_5_autograd_rules.svg){#fig-autograd-rules width=100% fig-alt="Four panels. Panel a: the code w equals torch.randn of 3 with requires_grad True, y_hat equals w times 2 summed, y_hat.backward. An orange leaf box w with is_leaf True points to a gray box y_hat with grad_fn SumBackward0; a dark-red backward arrow fills w.grad with 2, 2, 2, while y_hat.grad is None. Panel b: w.grad reads 2, 2, 2 after one backward call and 4, 4, 4 after a second, then None after optimizer.zero_grad. Panel c: four update lines; only with torch.no_grad, w minus-equals lr times w.grad, is checked, giving the same leaf with new values; rebinding w gives a non-leaf whose next grad is None, an in-place update with recording on raises RuntimeError, and rebinding under no_grad gives requires_grad False. Panel d: appending loss to a list during evaluation keeps the loss, its grad_fn chain, and cached activations alive; appending loss.item gives a Python float, and loss.detach gives the same value with its history cut."}
 
 **Rule 1: by default, only leaf tensors retain gradients.** A *leaf* is a tensor you
 created directly (your parameters); a *non-leaf* is the result of an operation
-(activations, losses). After `backward()`, leaves have `.grad` populated while
-intermediate gradients are used and released. Call `.retain_grad()` on a non-leaf before
-`backward()` only when you explicitly need its gradient for inspection.
+(activations, losses). After the backward pass, each leaf holds its gradient in the
+attribute `.grad`, while intermediate gradients are used and released. Call
+`.retain_grad()` on a non-leaf before the backward pass only when you explicitly need its
+gradient for inspection.
 
-**Rule 2: gradients accumulate.** `backward()` *adds* into `.grad`. Zero them before
-each step (`optimizer.zero_grad()`), or every update uses the sum of all past
-gradients.
+**Rule 2: gradients accumulate.** Each backward pass *adds* into the gradient attribute.
+Zero the gradients before each step (`optimizer.zero_grad()`), or every update uses the
+sum of all past gradients.
 
 :::: {.plan-code}
 ::: {.plan}
@@ -615,15 +625,15 @@ print(f"after 2nd pass: {w.grad.tolist()}")            # doubled -- rule 2
 ```
 ::::
 **Rule 3: update parameters in place, with recording paused.** Write the update as
-`w -= lr * w.grad` inside `with torch.no_grad():`. Both halves matter. `torch.no_grad()`
-keeps the step itself off the graph, and the in-place `-=` changes the values of the
+`w -= lr * w.grad` inside `with torch.no_grad():`. Both halves matter. Pausing the recording
+keeps the step itself off the graph, and the in-place subtraction changes the values of the
 existing leaf, so `w` remains the same trainable tensor that the optimizer and the next
-`backward()` refer to. Drop either half and the update breaks
+backward pass refer to. Drop either half and the update breaks
 (@fig-autograd-rules, panel c): the rebinding `w = w - lr * w.grad` creates a new
-non-leaf whose `.grad` stays `None` on the next pass; an in-place update with recording
-on raises an error; and a rebinding under `no_grad()` yields a tensor that no longer
-requires gradients, so learning silently stops. Assigning a plain tensor over a
-registered `nn.Parameter` fails loudly instead. The idiom:
+non-leaf whose gradient is not populated on the next pass; an in-place update with recording
+on raises an error; and a rebinding with recording paused yields a tensor that no longer
+requires gradients, so learning silently stops. Assigning a plain tensor to a
+registered module parameter fails loudly instead. The idiom:
 
 :::: {.plan-code}
 ::: {.plan}
@@ -652,22 +662,22 @@ assert w.is_leaf
 
 **Rule 4: in-place operations can corrupt the backward pass.** Methods ending in `_`
 (`add_`, `relu_`) overwrite values that the backward pass may still need from the
-forward cache. They are safe in parameter updates inside `no_grad()`; anywhere else,
+forward cache. They are safe in parameter updates with recording paused; anywhere else,
 prefer creating a new tensor.
 
-**Rule 5: a graph lives as long as something refers to it.** Every forward pass
-builds a fresh graph, and `backward()` frees the activations that graph cached. A tensor
-you keep, say `loss` appended to a list for plotting, still holds its `grad_fn`
-history; one kept from a pass that never reaches `backward()` (an evaluation loop
-outside `torch.no_grad()`, for example) holds every cached activation as well. Store
-`loss.item()` (a plain float) or `loss.detach()` instead: `detach()` returns the same
-value with the history cut.
+**Rule 5: stored tensors can retain computation graphs.** Every forward pass
+builds a fresh graph, and the backward pass frees the activations that graph cached. A tensor
+you keep, say the loss appended to a list for plotting, still holds a reference to the graph
+that produced it; one kept from a forward pass that is never backpropagated (an evaluation
+loop that leaves recording on, for example) holds every cached activation as well. Store
+`loss.item()` (a plain float) or `loss.detach()` instead: the detached tensor has the
+same value and no reference to the graph.
 
 ::: {.callout-warning}
 ## Keep updates outside the graph
 
 The one safe manual update is in place and unrecorded: `w -= lr * w.grad` inside
-`with torch.no_grad():`, then clear `w.grad` (Rule 2) before the next `backward()`.
+`with torch.no_grad():`, then clear the leaf's gradient (Rule 2) before the next backward pass.
 Rules 1 and 3 combine into the classic raw-tensor bug: the rebinding
 `w = w - lr * w.grad` creates a **new non-leaf**, and its `.grad` comes back `None` on
 the next pass.
@@ -676,8 +686,8 @@ the next pass.
 ## The gate, and the problem with deep chains
 
 Look again at @eq-bp2. Every backward step multiplies by $\sigma'(\vect{z}^{(l)})$. That
-derivative acts as a **gate** on the sensitivity: wide open, and the signal passes;
-nearly closed, and it dies.
+derivative acts as a **gate** on the sensitivity: a value near one preserves its scale,
+while a value near zero attenuates it.
 
 Now examine the sigmoid's gate. From $\sigma'(z) = \sigma(z)(1-\sigma(z))$, its maximum
 value, at $z = 0$, is exactly $0.25$; away from zero the neuron *saturates* and the gate
@@ -727,11 +737,9 @@ gates strongly favor vanishing signals.
 Now replace the sigmoid with ReLU. $\mathrm{ReLU}(z) = \max(0, z)$ has derivative
 $1$ for $z > 0$ and $0$ for $z < 0$. At the kink $z=0$, PyTorch uses derivative $0$;
 exact zeros can occur with zero biases or sparse activations. The gate is either fully
-open or fully closed. For every neuron that was active
-in the forward pass, the activation derivative contributes a factor of exactly one.
-The surrounding weight matrices can still scale the full signal, but the active ReLU
-does not shrink it: a **gradient superhighway** through the network. This, more than
-anything, is why ReLU and its variants are the default in deep networks.
+open or fully closed. On positive inputs, ReLU has an activation derivative of one.
+Its derivative therefore introduces no attenuation at those units, although the
+surrounding weight matrices can still amplify or attenuate the full sensitivity.
 
 Do not take the argument on faith; measure it. We build the same 30-layer network twice
 (sigmoid versus ReLU), give both copies the same He-scaled weights and input batch, and
@@ -810,35 +818,38 @@ mathematically or representationally zero: all 4,096 survive the float32 cast. T
 so small, however, that subtracting $0.1g$ changes none of the stored float32 weights.
 The ReLU copy changes all 4,096. That distinction matters: a displayed float32 norm can
 underflow while individual entries remain nonzero, and nonzero gradients can still be
-too small to move a parameter at its current magnitude. ReLU is not magic, but its open
-gates make the signal usable in this matched experiment.
+too small to move a parameter at its current magnitude. In this matched experiment, ReLU
+leaves gradients large enough for a float32 update to change every first-layer weight.
 Underflow and a rounded-away update are separate representation failures, and @sec-a3-precision-performance
 names both: a gradient entry can stay nonzero in float32 while the update it produces
 rounds away when subtracted from a larger stored weight.
 
-## Initialization: setting the signal's energy
+## Initialization and signal scale {#initialization-setting-the-signals-energy}
 
 The weights also scale the signal at each layer, so their starting scale is a second
-lever. Think of the network as a pipeline and the variance of the signal as its
-*energy*. If each layer multiplies the variance by more than one, activations explode
-after enough layers; by less than one, they vanish, and by @eq-bp2 the gradients follow.
-A good initialization keeps the energy roughly constant in both directions.
+lever. If each layer multiplies the variance of the signal by more than one, activations
+explode after enough layers; by less than one, they vanish, and by @eq-bp2 the gradients
+follow. A good initialization keeps the variance roughly constant in both directions.
 
-The analysis is one line. For $z = \sum_{i=1}^{n_{\text{in}}} w_i x_i$ with independent,
-zero-mean inputs and weights, $\var(z) = n_{\text{in}} \var(w) \var(x)$. Keeping
-$\var(z) = \var(x)$ demands
+The variance scales predictably through the dot product. For
+$z = \sum_{i=1}^{n_{\text{in}}} w_i x_i$ with independent, zero-mean inputs and weights,
+$\var(z) = n_{\text{in}} \var(w) \var(x)$. Keeping $\var(z) = \var(x)$ demands the first
+condition below. On the backward pass, each input unit collects a sum over the units it
+fed, so keeping the variance of the sensitivities constant demands the second:
 
 $$
 \var(w) = \frac{1}{n_{\text{in}}} \quad \text{(forward)}, \qquad
 \var(w) = \frac{1}{n_{\text{out}}} \quad \text{(backward)}.
 $$
 
-**Xavier initialization** splits the difference for symmetric activations like tanh and
-sigmoid, $\var(w) = 2/(n_{\text{in}} + n_{\text{out}})$. **He initialization** accounts
+**Xavier initialization** balances the forward and backward variance criteria,
+$\var(w) = 2/(n_{\text{in}} + n_{\text{out}})$. **He initialization** accounts
 for ReLU discarding half its input distribution by doubling the forward recipe,
-$\var(w) = 2/n_{\text{in}}$. PyTorch applies sensible defaults for you; the difference
-between a good and a careless choice is smooth training versus a dead or exploding
-network:
+$\var(w) = 2/n_{\text{in}}$. A PyTorch linear layer follows neither recipe by default: it
+draws its weights uniformly with variance $1/(3n_{\text{in}})$, a sixth of the He value
+$2/n_{\text{in}}$, so a deep ReLU stack without normalization needs an explicit choice.
+The difference between a good and a careless choice is smooth training versus a dead or
+exploding network:
 
 :::: {.plan-code}
 ::: {.plan}
@@ -852,7 +863,7 @@ network:
 ```{python}
 #| label: fig-init
 #| fig-alt: "Activation standard deviation is traced across forty ReLU layers. One naive scale collapses toward zero, another grows explosively, and the He-initialized trace stays roughly level."
-#| fig-cap: "Signal energy through 40 ReLU layers. Careless scales lose or amplify the signal exponentially; He initialization holds it steady."
+#| fig-cap: "Activation standard deviation through 40 ReLU layers. The two fixed weight scales produce rapid attenuation or growth; the He-initialized trace remains roughly level in this run."
 #| code-summary: "Code: signal energy vs depth"
 #| code-fold: false
 from collections.abc import Callable
@@ -886,13 +897,13 @@ plt.xlabel("layer"); plt.ylabel("std of activations")
 plt.legend(); plt.tight_layout(); plt.show()
 ```
 ::::
-Initialization gives a stable *start*. Keeping the signal stable *during* training, as
-the weights move, is the job of normalization layers. For very deep networks even
-that is not enough, and gradients get an architectural bypass: skip connections that add
-a block's input straight to its output. Normalization and the residual idea arrive
+Initialization determines the starting scale of the weights. During training,
+normalization layers rescale intermediate computations, while skip connections
+provide additive paths through a network. Normalization and the residual idea arrive
 in @sec-09-modern-cnns-transfer, and layer normalization becomes essential inside the
-Transformer of @sec-14-self-attention-transformer. All three serve one invariant:
-*keep the signal, forward and backward, at constant energy*.
+Transformer of @sec-14-self-attention-transformer. Initialization, normalization,
+and skip connections help control activation and gradient scales through different
+mechanisms.
 
 ::: {.callout-note}
 ## Check yourself
@@ -907,24 +918,25 @@ Close the book for one minute and run the chain rule backward.
 ## Okay, so: the chain rule, organized
 
 1. **The graph.** Any network is a computation graph; the forward pass computes and
-   caches, the backward pass multiplies local derivatives in reverse.
+   caches, while the backward pass multiplies local derivatives in reverse and sums
+   contributions from multiple paths.
 2. **The sensitivity.** $\delta^{(l)} = \partial L / \partial \vect{z}^{(l)}$ turns
    the tangle into four equations: start at the output (@eq-bp1), propagate through
    $\matr{W}^\top$ and the gate (@eq-bp2), then read off weight and bias gradients
    (@eq-bp3, @eq-bp4). On a batch, each forward matrix product costs two backward
    ones, so the sweep delivers *every* gradient for about twice the forward
    arithmetic, paid for in cached activations.
-3. **We verified it**: our hand-built equations match `torch.autograd` to
-   $10^{-8}$, and a scalar `Value` engine exposes the two rules any graph needs:
-   reverse topological order and accumulation with `+=`.
-4. **The gate rules the depth.** The sigmoid-derivative product along a path is bounded
-   above by $0.25^k$ after $k$ gates;
-   ReLU's open gate is a gradient superhighway. Initialization sets the signal's
-   energy so neither direction explodes or dies at the start.
+3. **We verified it**: our hand-built equations match PyTorch's autograd to
+   $10^{-8}$. The scalar engine illustrates reverse topological order and adjoint
+   accumulation by addition.
+4. **Activation derivatives and depth.** The sigmoid-derivative product along a
+   path is bounded above by $0.25^k$ after $k$ gates. ReLU has an activation derivative
+   of one on positive inputs. Initialization helps control activation and gradient
+   scales at the start of training.
 
 Backpropagation trains every model from here through @sec-20-multimodal. The next
 time a deep model fails to learn, your first questions now have names: *is the gradient
-reaching the early layers? what is gating it? what is its energy?*
+reaching the early layers? what is gating it? what is its scale?*
 
 ## Sources and further reading {.unnumbered}
 
@@ -959,11 +971,13 @@ reaching the early layers? what is gating it? what is its energy?*
 
 1. **(Pencil.)** Derive the four layer equations for a network whose output layer uses
    the identity activation and squared-error loss (the network of our verification
-   cell). Confirm that your $\delta^{(2)}$ matches the `delta2` line in the code.
+   cell). Confirm that your $\delta^{(2)}$ matches the one that cell computes.
 2. **(Pencil.)** In @eq-bp2, why does the sensitivity pass through
    $(\matr{W}^{(l+1)})^\top$ rather than $\matr{W}^{(l+1)}$? Argue from shapes: what
    are the dimensions of $\delta^{(l)}$, $\delta^{(l+1)}$, and $\matr{W}^{(l+1)}$? Then
-   check that the batched form `(delta2 @ W2) * sig_prime` has consistent shapes too.
+   check that the batched form
+   $\bigl(\matr{\Delta}^{(2)}\matr{W}^{(2)}\bigr) \odot \sigma'(\matr{Z}^{(1)})$ in our
+   verification cell has consistent shapes too.
 3. **(Code.)** Extend the `Value` class with `tanh` and use it to train the one-neuron
    model from the check cell for 50 steps (write the update loop yourself). Verify the
    loss decreases.
@@ -973,7 +987,7 @@ reaching the early layers? what is gating it? what is its energy?*
    initialization *and* ReLU, became standard?
 5. **(Code.)** Comment out `optimizer.zero_grad()` in any training loop from
    @sec-01-linear-regression and describe what happens to the loss curve. Explain it
-   with one sentence about `.grad` accumulation.
+   with one sentence about gradient accumulation.
 6. **(Pencil.)** Derive why a forward finite difference has truncation error
    $O(\varepsilon)$ while a centered difference has error $O(\varepsilon^2)$.
    **(Audit.)** Gradient-check this chapter's two-layer manual backward pass with
