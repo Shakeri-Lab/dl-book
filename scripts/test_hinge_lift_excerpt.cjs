@@ -160,8 +160,8 @@ test('hinge lift: the manuscript owns the XOR table, the ReLU and this neuron', 
   assert(chapter.includes('"best linear rule (75%)"'));
   assert.deepEqual(source.bestLine, [1, 1, 0.5]);
   // The claim the failing sweep illustrates, and the sentence the neuron beat mirrors.
-  assert(chapter.includes('a hard linear boundary can classify at most three of the\nfour points (75%)'));
-  assert(chapter.includes('it draws a line through the plane: an OFF region and an ON region'));
+  assert(chapter.includes('any flat linear boundary can separate at most three of the\nfour points (75%)'));
+  assert(chapter.includes('it divides the plane into a flat zero-floor and a rising ramp separated\nby a crease: an inactive half-space where the neuron stays silent, and an active\nhalf-space where it fires'));
   assert.match(f.$('.mechanism-intro').textContent, /XOR table above/);
   assert.doesNotMatch(read('hinge-lift/panel.html'), /@eq-|@fig-|@sec-/);
 });

@@ -19,10 +19,11 @@ The stack *collapses*. Two linear layers, or twenty, are exactly one linear laye
 different knobs $\rightarrow$ no amount of stacking buys any new expressive power. We
 need a **nonlinear** operation between the linear layers.
 
-## The four points no hyperplane can separate
+## The four points a hyperplane cannot separate {#the-four-points-no-hyperplane-can-separate}
 
-You do not need real-world data to expose the linear ceiling. Four points suffice. The
-XOR function outputs 1 exactly when its two binary inputs *differ*:
+You do not need messy real-world data to find the limits of a linear model. Four
+points on a flat plane suffice. The XOR function outputs 1 exactly when its two
+binary inputs *differ*:
 
 | $x_1$ | $x_2$ | XOR |
 |:-:|:-:|:-:|
@@ -36,35 +37,30 @@ positive examples sit on one diagonal, the negatives on the other; any line you 
 puts at least one point on the wrong side. A linear classifier cannot represent this
 function, no matter how it is trained.
 
-Why is a linear model blind here? Weight the four points equally. Each input on its
+Why does a linear model fail here? Weight the four points equally. Each input on its
 own carries no evidence about the label: whether $x_1$ is 0 or 1, the label is 1 half
 the time, and the same holds for $x_2$, so the correlation between either input and
-the label is exactly zero. The label lives entirely in the *interaction* of the two
+the label is exactly zero. The label depends only on the *interaction* of the two
 inputs. A linear score $\vect{w}^\top\vect{x} + b$ adds up the inputs' separate
 contributions, so it has no term that could capture one.
 
 ::: {.callout-note}
-## A historical scar: credit assignment, not only geometry
+## A historical scar: credit assignment, not just geometry
 
-This is not a toy observation. In 1969 Marvin Minsky and Seymour Papert published
-*Perceptrons*, a rigorous analysis of what single-layer perceptrons can and cannot
-compute, with XOR as the simplest emblem of linear inseparability.
+In 1969, Marvin Minsky and Seymour Papert published *Perceptrons*, proving that
+single-layer models cannot solve XOR. Folklore claims this mathematical limit killed
+early neural research, but the reality is subtler. Multilayer networks could already
+represent XOR; the open challenge was how to *train* them.
 
-The folklore says *Perceptrons* exposed a blind spot and killed the field. The history is
-subtler. Networks with a layer of hidden units could already represent functions like
-XOR; the open problem was how to *train* them. With no targets for the hidden units,
-how should a learning rule decide which hidden weight to blame for an error at the
-output? Minsky had described this **credit assignment problem** in 1961, and he and
-Papert conjectured that extending the perceptron to multilayer machines would prove
-unrewarding.
-
-That doubt, together with limited compute and data and cuts in research funding,
-contributed to a long lull in neural-network research, though no single cause explains
-it. The obstacle was never representation; it was the lack of an efficient learning
-rule. Backpropagation (@sec-05-backpropagation) is that rule.
+Without target labels for intermediate layers, how does an algorithm decide which
+hidden weight to blame for an output error? This is the **credit assignment
+problem**. Skepticism that it could be solved, alongside primitive hardware and funding
+cuts, stalled the field for over a decade. The barrier was never representation: it
+was the lack of an efficient learning rule. Backpropagation
+(@sec-05-backpropagation) is that rule.
 :::
 
-Now confirm the ceiling empirically: train a linear model and a small MLP on the four points. The framework loop
+We confirm the linear model's limit empirically: we train a linear model and a small MLP on the four points. The framework loop
 previewed in @sec-01-linear-regression does the training; @sec-04-training-loss-sgd and
 @sec-05-backpropagation explain the optimizer and `backward()`.
 
@@ -118,12 +114,13 @@ print(f"trained linear: probabilities {linear_p.numpy().round(3)}, "
 print(f" MLP (4 hidden): accuracy {mlp_acc:.0%}")
 ```
 ::::
-The cross-entropy optimum for this symmetric XOR dataset assigns probability $0.5$ to
-all four points, with loss $\log 2 \approx 0.693$. Turning those exact ties into hard
-labels with a floating-point threshold can report 25%, 50%, or 75% because of tiny
-rounding differences; that number is not evidence about the classifier. Geometrically,
-a hard linear boundary can classify at most three of the
-four points (75%), while the little network with a bend is perfect.
+The trained linear model converges to the cross-entropy optimum for this symmetric
+dataset: it assigns a probability of exactly 0.5 to all four points, yielding a loss
+of $\log 2 \approx 0.693$. The linear model's logits differ from zero only by
+floating-point rounding, so thresholding them at 0 can report an apparent accuracy
+of 25%, 50%, or 75%; that number is a numerical artifact, not evidence of learning.
+Geometrically, any flat linear boundary can separate at most three of the
+four points (75%), whereas the four-unit ReLU network achieves 100%.
 
 :::: {.plan-code}
 ::: {.plan}
@@ -166,24 +163,27 @@ axes[0].set_ylabel("$x_2$"); axes[0].legend(loc="center right")
 plt.tight_layout(); plt.show()
 ```
 ::::
-## The neuron: a threshold with a bend
+## The neuron: a threshold with a hinge {#the-neuron-a-threshold-with-a-bend}
 
-Return once more to @fig-linear-circuit. A neuron keeps that weighted-sum circuit and
-places a bend after its output.
+Return once more to @fig-linear-circuit. A neuron keeps that weighted-sum circuit
+and places a hinge directly at its output.
 
-The artificial neuron takes its inspiration from biology: a neuron receives signals,
-and it *fires* only when the accumulated stimulus crosses a threshold. The modern,
-computationally friendly version of that thresholding is the **rectified linear unit**:
+The artificial neuron takes its conceptual inspiration from biology: a cell integrates
+incoming signals and fires only when the accumulated stimulus crosses a threshold.
+Early models formalized this as a hard step function, but step functions have zero
+derivatives almost everywhere, which halts gradient descent. The modern, computationally
+friendly relaxation of that threshold is the **rectified linear unit**:
 
 $$
 \mathrm{ReLU}(z) = \max(0, z), \qquad
 f(\vect{x}) = \mathrm{ReLU}(\vect{w}^\top\vect{x} + b).
 $$ {#eq-neuron}
 
-The weighted input $\vect{w}^\top\vect{x} + b$ is the stimulus, and recall from
-@sec-01-linear-regression that it is a *similarity score* against the template
-$\vect{w}$. Below threshold, the neuron is silent (output 0); above it, the neuron
-fires with intensity proportional to the stimulus.
+The affine combination $\vect{w}^\top\vect{x} + b$ is the stimulus. Recall
+from @sec-01-linear-regression that it measures the similarity between the input
+and the template $\vect{w}$, shifted by the bias $b$. Below threshold, the neuron
+remains silent with an output of zero; above threshold, it fires with an intensity
+directly proportional to the stimulus.
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
@@ -210,7 +210,7 @@ surface = torch.relu(w[0] * x1 + w[1] * x2 + b)
 #| echo: false
 #| label: fig-neuron-hinge
 #| fig-alt: "The left panel shows a ReLU response that is zero for negative stimulus and linear for positive stimulus. The right panel shows a two-dimensional neuron's zero-response half-plane and rising positive contours, with the weight vector perpendicular to the threshold boundary."
-#| fig-cap: "One neuron, two views. Left: ReLU bends a scalar stimulus at zero: silent on one side, proportional response on the other. Right: the same bend creates a threshold line in the input plane; the weight vector is perpendicular to it, and activation grows as inputs move across the line."
+#| fig-cap: "One neuron, two views. Left: the ReLU activation introduces a hinge at zero: silent on the negative half-line, linearly responsive on the positive side. Right: in the input plane, this cutoff defines a threshold hyperplane perpendicular to $\\vect{w}$; activation increases linearly as inputs advance into the active half-space."
 fig, axes = plt.subplots(1, 2, figsize=(8.2, 3.35))
 axes[0].plot(z, response, color="#2F855A", lw=2.5)
 axes[0].axvspan(-3, 0, color="#B8B8A8", alpha=0.18)
@@ -230,17 +230,21 @@ axes[1].set(xlabel="$x_1$", ylabel="$x_2$", title="the threshold in input space"
 plt.tight_layout(); plt.show()
 ```
 
-In one dimension a single neuron turns a line into a **hinge**, and in two dimensions
-it draws a line through the plane: an OFF region and an ON region, with $\vect{w}$
-perpendicular to the boundary. That boundary is the fundamental unit of computation in
-everything that follows.
+In one dimension, a single neuron turns a straight line into a **hinge**. In two
+dimensions, it divides the plane into a flat zero-floor and a rising ramp separated
+by a crease: an inactive half-space where the neuron stays silent, and an active
+half-space where it fires, with $\vect{w}$ standing perpendicular to the dividing
+boundary. That threshold boundary is the elementary building block of everything that
+follows.
 
-(What about the sharp corner at $z=0$, where the derivative is undefined? Libraries
-choose a subgradient convention, commonly 0. Exact zeros can occur systematically with
-zero biases, sparse activations, or symmetric inputs, so the convention is not merely
-academic. The gradient story of this open-or-shut gate, including when it helps and
-when a unit goes dead, is told in
-@sec-05-backpropagation.)
+At the sharp corner $z = 0$, the classical derivative is undefined. In theory,
+any slope in the subgradient interval $[0, 1]$ is valid. In practice, frameworks
+settle on a definitive convention by setting the derivative at zero to 0. Because
+exact zeros occur systematically with zero-initialized biases, sparse activations,
+and symmetric data, this choice is not a purely academic detail: it determines whether
+a unit at exactly $z = 0$ receives any gradient. We analyze the gradient through this
+gate in @sec-05-backpropagation; Exercise 3 inspects units that stay
+permanently silent.
 
 ## Layers of hinges: bumps and polytopes
 
@@ -251,7 +255,7 @@ dimension $d$, the maximum region count of one generic hyperplane arrangement gr
 the order of $k^d$: polynomial in the width $k$, and quadratic on a two-dimensional
 plane (Exercise 4 derives the exact count).
 
-The simplest compact constructive example lives in 1D. Combine three hinges so the
+The simplest compact constructive example is one-dimensional. Combine three hinges so the
 slopes cancel again after the third breakpoint:
 
 :::: {.plan-code}
@@ -291,16 +295,16 @@ plt.tight_layout(); plt.show()
 Follow the pieces: before the first hinge, all units are silent and the output is zero.
 After the first breakpoint, $h_1$ starts the climb. The coefficient $-2$ on $h_2$
 reverses the slope at the peak, and $h_3$ cancels that downward slope at the final
-breakpoint. Four linear pieces $\rightarrow$ one compact bump.
+breakpoint. Four linear pieces yield one compact bump.
 
 ## The universal approximation theorem
 
 Bumps are the whole secret. If you can make one bump, you can make many, at any
-position and height $\rightarrow$ with enough hidden units you can *tile* any
+position and height: with enough hidden units you can *tile* any
 continuous function, the way an artist paints a shape with brush strokes. That is the
 intuition behind the **universal approximation theorem**: a network with a single
-hidden layer can, in principle, approximate any continuous function on a bounded region
-to any desired accuracy.
+hidden layer can, in principle, approximate any continuous function on a closed and
+bounded region to any desired accuracy.
 
 Fit one hidden layer at widths 2, 8, and 64:
 
@@ -314,7 +318,7 @@ Fit one hidden layer at widths 2, 8, and 64:
 ```{python}
 #| label: fig-uat
 #| fig-alt: "A curved target is compared with three one-hidden-layer fits. Width two misses much of the curvature, width eight follows the broad shape, and width sixty-four nearly overlaps the target."
-#| fig-cap: "One hidden ReLU layer approximating a continuous curved target. Width 2 is too rigid; width 8 catches the shape; width 64 follows it closely. Width buys more hinge locations, but the theorem itself does not tell the optimizer where to place them."
+#| fig-cap: "One hidden ReLU layer approximating a continuous curved target. Width 2 is too rigid; width 8 catches the shape; width 64 follows it closely. Width buys more hinge locations, but the theorem itself says nothing about where the optimizer places them."
 #| code-summary: "Code: the width sweep"
 #| code-fold: false
 # [1]
@@ -352,21 +356,21 @@ The theorem guarantees less than beginners often assume:
 2. It does not say the network is **small**. Tiling a complicated function with
    one-layer bumps can require astronomically many units.
 3. In its usual uniform-approximation form, it speaks of **continuous functions on
-   bounded regions** and says nothing about how the fit behaves *between* or *beyond*
-   your samples. A continuous ReLU network cannot uniformly approximate a jump to
+   closed and bounded regions** and says nothing about how the fit behaves *between* or
+   *beyond* your samples. A continuous ReLU network cannot uniformly approximate a jump to
    arbitrary accuracy: near the jump its worst-case error stays at least half the jump
    size. Under a mean-square ($L_2$) criterion, however, it can squeeze the transition
    into a narrow interval and make the *average* error arbitrarily small. The norm and
    the target class matter. Approximation is still not generalization; that distinction
-   gets its own chapter (@sec-06-generalization-inductive-bias).
+   is the subject of @sec-06-generalization-inductive-bias.
 :::
 
 ## Why depth: boundaries that bend
 
 If one hidden layer suffices in principle, why is the field called *deep* learning?
 Efficiency, and geometry. A second hidden layer receives, as its inputs, the
-piecewise-linear outputs of the first $\rightarrow$ its boundaries are no longer
-straight lines. They *bend* wherever the first layer's boundaries cut the space.
+piecewise-linear outputs of the first; its boundaries are no longer
+straight lines. They fold wherever the first layer's boundaries cut the space.
 Boundaries composed of boundaries: each layer folds the space the previous layer drew.
 
 Concretely: a ReLU network is exactly linear inside each region of input space
@@ -374,7 +378,7 @@ where the on/off pattern of its units is constant, and those regions are polytop
 whose walls are the units' boundaries. Deeper layers add walls that kink wherever
 they cross earlier ones. Exercise 4 has you draw this tiling and count its cells.
 
-This bending compounds through repeated folding, and one dimension already shows how.
+This folding compounds through repeated composition, and one dimension already shows how.
 A single hidden layer of $k$ ReLU units cuts a line into at most $k+1$ linear pieces,
 so the pieces grow linearly with width. Now let two units fold the interval $[0,1]$
 into a tent, $t(x) = 2\,\mathrm{ReLU}(x) - 4\,\mathrm{ReLU}(x - \tfrac{1}{2})$, which
@@ -391,7 +395,7 @@ partitions that a shallow network would need exponentially more units to match.
 
 ## Your first real MLP
 
-Time to build the model properly as a reusable class.
+We now build the model as a reusable class.
 
 ::: {.callout-tip}
 ## Coding hygiene: the house and its foundation
@@ -399,7 +403,7 @@ Time to build the model properly as a reusable class.
 Every model you write from now on subclasses `nn.Module`, and the first line of your
 `__init__` is always `super().__init__()`. Think of it as pouring the foundation
 before building the house: it is what wires up parameter tracking, `.parameters()`,
-and everything the optimizer and autograd need. Forget it and PyTorch fails loudly,
+and everything the optimizer and autograd need. Forget it and PyTorch raises an immediate exception,
 so the mistake is easy to find.
 :::
 
@@ -476,7 +480,7 @@ for model in (lin_m, mlp_m):
 #| echo: false
 #| label: fig-moons
 #| fig-alt: "Two interleaved crescent-shaped point clouds are shown twice. A straight decision boundary cuts through their geometry on the left, while a curved MLP boundary passes through the gap on the right."
-#| fig-cap: "Two moons: the linear model does what it can with one line (about 90% here); the MLP bends its boundary through the gap and separates the classes completely."
+#| fig-cap: "Two moons: the linear model does what it can with one line (about 90% here); the MLP weaves its boundary through the gap and separates the classes completely."
 fig, axes = plt.subplots(1, 2, figsize=(7.6, 3.3), sharey=True)
 for ax, (acc, Z), title in zip(
     axes, moon_panels, ["linear", "MLP (16 hidden)"]
@@ -489,14 +493,15 @@ for ax, (acc, Z), title in zip(
 axes[0].set_ylabel("$x_2$")
 plt.tight_layout(); plt.show()
 ```
-Where did the curve go? Nowhere, and that is the chapter's deepest point. The MLP
+What happened to the curve? Nothing: the linear readout never had one. That
+distinction is the chapter's central insight. The MLP
 did not learn a curved boundary; it learned a **space in which the boundary is
-straight**. Its readout is still a linear model, $\vect{w}^\top \phi_\theta(x) + b$:
+straight**. Its readout is still a linear model, $\vect{w}^\top \phi_\theta(\vect{x}) + b$:
 project the hidden activations onto the readout direction
 $\hat{\vect{w}} = \vect{w}/\lVert\vect{w}\rVert$ and the decision boundary sits at
 the exact coordinate $-b/\lVert\vect{w}\rVert$, a straight line. In @sec-02-logistic-softmax's
 vocabulary, the hidden layers form a backbone $\phi_\theta$ and this readout is its
-classification head. @fig-feature-space draws the preface's linear readout on learned nonlinear features, with the moons plotted in the backbone's coordinates:
+classification head. @fig-feature-space visualizes this exact division: a linear readout operating on learned nonlinear features, with the moons plotted in the backbone's coordinates.
 
 :::: {.plan-code}
 ::: {.plan}
@@ -529,7 +534,7 @@ with torch.no_grad():
 #| echo: false
 #| label: fig-feature-space
 #| fig-alt: "Left: the two-moons input plane shaded by the learned scalar feature, with the decision boundary as a dashed piecewise-linear contour weaving between the crescents. Right: the same four hundred points plotted in learned feature coordinates, where the two classes form separated clouds split by an exact vertical line."
-#| fig-cap: "The learned feature space, on the trained moons MLP from the previous figure. Left: the scalar feature $\\hat{w}\\cdot\\phi_\\theta(x)$ over the input plane; the dashed contour is the decision boundary, kinked wherever hidden units switch on or off. Right: the same points with coordinates (readout direction, top orthogonal principal component of $\\phi_\\theta$): the classes separate, and the boundary is the exact vertical line $\\hat{w}\\cdot\\phi = -b/\\lVert w \\rVert$. The network learns nonlinear features until a linear readout suffices."
+#| fig-cap: "The learned feature space, on the trained moons MLP from the previous figure. Left: the scalar feature $\\hat{\\vect{w}}\\cdot\\phi_\\theta(\\vect{x})$ over the input plane; the dashed contour is the decision boundary, kinked wherever hidden units switch on or off. Right: the same points with coordinates (readout direction, top orthogonal principal component of $\\phi_\\theta$): the classes separate, and the boundary is the exact vertical line $\\hat{\\vect{w}}\\cdot\\phi = -b/\\lVert\\vect{w}\\rVert$. The network learns nonlinear features until a linear readout suffices."
 fig, axes = plt.subplots(1, 2, figsize=(7.8, 3.4))
 axes[0].contourf(gx3, gy3, field, levels=18, cmap="RdBu_r")
 axes[0].contour(gx3, gy3, field, levels=[boundary], colors="k",
@@ -547,21 +552,22 @@ axes[1].set_ylabel("top orthogonal PC")
 plt.tight_layout(); plt.show()
 ```
 For the XOR network, *two* hidden units suffice in principle, but such minimal networks
-are temperamental; across random seeds they frequently get stuck at 50% accuracy with
+are fragile; across random seeds they frequently get stuck at 50% accuracy with
 silent units (you will verify this in Exercise 3). A few spare
 units cost little and improve reliability. @sec-04-training-loss-sgd will examine when
 optimization noise helps exploration; noise does not guarantee an escape.
 
 ## A cautionary tale: representation without structure
 
-There is a seductive story about the hidden layers of a neural network: the first layer
-detects edges, the next combines them into textures and parts, and the next assembles
-objects, a tidy hierarchy of increasingly abstract features.
+Take image classification as an example. There is a seductive story often told
+about the hidden layers of a deep network: the first layer detects edges, the next
+combines them into textures and parts, and the next assembles objects, forming a
+tidy hierarchy of increasingly abstract features.
 
 For a fully connected network on raw images, that is mostly **not what happens**. An
-MLP treats its input as one long, flat vector. To a dense weight matrix, neighboring
+MLP treats its input as one long, flat vector. In a dense weight matrix, neighboring
 pixels are no closer than pixels in opposite corners of the frame: the architecture
-has no notion of two-dimensional geometry or of locality, and nothing in it encourages
+encodes neither two-dimensional geometry nor locality, and nothing in it encourages
 a local-to-global hierarchy. Every unit connects to every pixel, so the first layer
 spends its parameters on diffuse, full-frame templates, and the parameter count
 explodes long before recognizable parts appear. The tidy hierarchy is not a property
@@ -569,32 +575,32 @@ of depth itself; it appears in architectures that build locality in, and Part II
 builds one.
 
 We now hold real expressive power: networks that can, in principle, approximate any
-continuous function on a bounded domain. Universal representation does not guarantee
-sensible learning. What happens when an unconstrained model meets high-dimensional
-data whose geometry it cannot see? Flexibility without inductive bias tends to fit
-coordinates rather than concepts. That missing structure has to come from the
-architecture, the data, and the training procedure.
+continuous function on a closed and bounded domain. Universal representation does not
+guarantee sensible learning. What happens when an unconstrained model meets
+high-dimensional data whose geometry its architecture does not encode? Flexibility
+without inductive bias tends to fit coordinates rather than concepts. That missing
+structure has to come from the architecture, the data, and the training procedure.
 
 ::: {.callout-note}
 ## Check yourself
 
-Close the book for one minute and explain the bend.
+Close the book for one minute and explain the hinge.
 
 - Why does stacking linear layers without an activation still produce one linear map?
 - What geometric object does one ReLU neuron introduce?
 - How can a nonlinear feature map make a curved input-space problem linearly separable?
 :::
 
-## Okay, so: one bend changed everything
+## Okay, so: one hinge changed everything {#okay-so-one-bend-changed-everything}
 
 1. **Linear stacks collapse** (@eq-collapse); XOR proves four points can defeat any
    line.
 2. **A neuron is a thresholded similarity score**: below the boundary silent, above it
-   proportional. One neuron $\rightarrow$ one boundary; a layer $\rightarrow$ a
-   polyhedral partition; three hinges $\rightarrow$ a compact bump.
+   proportional. One neuron yields one boundary; a layer forms a
+   polyhedral partition; three hinges make a compact bump.
 3. **Bumps tile functions** (universal approximation), but the theorem promises
    existence, not learnability, economy, or generalization.
-4. **Depth bends boundaries**: suitable deep constructions can create region counts
+4. **Depth folds boundaries**: suitable deep constructions can create region counts
    that grow exponentially with depth, yielding large efficiency gaps relative to
    comparable shallow constructions.
 5. **The MLP is a class now** (`nn.Module`, foundation first), and it separates what
