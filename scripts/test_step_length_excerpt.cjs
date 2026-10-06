@@ -82,7 +82,7 @@ test('step length: the chapter owns the rates, the start and the rule of thumb',
   for (const literal of scene.fixture.literals) assert(chapter.includes(literal), literal);
   // Every literal this panel mirrors, in the exact form the manifest should name.
   for (const literal of [
-    'One knob dominates all others. The learning rate $\\alpha$ scales every step, and its\nfailure modes are asymmetric:',
+    'No hyperparameter matters more. The learning rate $\\alpha$ scales every step, and its\nfailure modes are asymmetric:',
     'too small wastes your compute budget crawling; too large\novershoots the valley and diverges.',
     'def losses_for(lr: float, steps: int = 60) -> list[float]:',
     '    w, b, out = torch.tensor(-0.5), torch.tensor(2.0), []',
@@ -90,7 +90,7 @@ test('step length: the chapter owns the rates, the start and the rule of thumb',
     'Same problem, same steps, three learning rates. Too small crawls; too large overshoots back and forth and climbs; the middle one converges quickly.',
     'y1 = 2.5 * x1 - 1.0 + 0.4 * torch.randn(80)',
     'For the normalized toy problems here, plain SGD often starts around\n$\\alpha = 0.1$.',
-    'crawling $\\rightarrow$ consider raising it; oscillating or\nexploding $\\rightarrow$ lower it.',
+    'if the loss crawls, consider raising it; if it oscillates or\nexplodes, lower it.',
     // Named in the scope as out of scope here, so the chapter must still say it.
     'Later in training it often pays to *decay* the\nlearning rate so the fine-tuning steps get smaller; that is a **learning-rate\nschedule**.'])
     assert(chapter.includes(literal), literal);

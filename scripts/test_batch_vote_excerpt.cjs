@@ -161,7 +161,7 @@ test('batch vote: the chapter owns both laws; the population is a declared toy p
   // The two sentences the scene exists to make visible, and the estimator case it lives in.
   assert.match(chapter, /gradient standard deviation scales like \$1\/\\sqrt\{B\}\$/);
   assert.match(chapter, /For a uniform subset without\nreplacement, multiply by/);
-  assert.match(chapter, /finite-population\ncorrection \$\(n-B\)\/\(n-B?B?\)?/);
+  assert.match(chapter, /finite-population\s+correction \$\(n-B\)\/\(n-1\)\$/);
   assert.match(chapter, /a minibatch average is an unbiased\nestimator of the full objective/);
   assert.match(chapter, /\{#sec-04-estimator-cases\}/);
   // The chapter's own gradient convention, which the toy problem reuses.

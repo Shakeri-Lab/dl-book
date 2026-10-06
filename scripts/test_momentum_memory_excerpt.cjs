@@ -106,7 +106,7 @@ test('momentum memory: the mechanism it draws is the chapter\'s own printed pass
     assert(chapter.includes(literal),literal);
   assert.equal(scene.qmd,'chapters/part1/04-training-loss-sgd.qmd');
   assert.equal(scene.anchor.type,'before-heading');
-  assert.equal(scene.anchor.target,'Adam: adaptive steps per knob');
+  assert.equal(scene.anchor.target,'Adam: adaptive per-parameter steps');
   assert(chapter.includes(`## ${scene.anchor.target}`));
   assert.deepEqual(scene.beats,[0,5,10,15,20,25,30,35]); assert.equal(scene.duration,40);
   const filter=fs.readFileSync(path.join(ROOT,scene.filter),'utf8');

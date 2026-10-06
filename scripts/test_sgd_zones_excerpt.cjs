@@ -109,12 +109,12 @@ test('sgd zones: the mechanism it draws is the chapter\'s own printed passage', 
     'batches = torch.randperm(len(x1)).reshape(-1, batch_size)',
     '\\nabla\\loss_{\\mathcal B}(\\vect{w})\n= \\nabla\\loss(\\vect{w}) + \\vect{\\xi}_{\\mathcal B},\n\\qquad\n\\E[\\vect{\\xi}_{\\mathcal B}]=\\vect{0}.',
     '\\E\\bigl[\\nabla \\loss_{\\mathcal{B}}(\\vect{w})\\bigr] = \\nabla \\loss(\\vect{w}).',
-    'Each estimate is noisy; its average direction is right.',
+    'In expectation, that cheap gradient points where\nthe expensive gradient points.',
     'The full gradient is large relative to\n  the batch noise, so most batch directions make useful progress, and their mean is the\n  full descent direction.',
     'inside what we will call the **region of confusion**:',
     '    assert torch.allclose(directions.mean(0), full_direction, atol=2e-6)',
     '1. Shuffle the training data.',
-    'think 32 examples against a million',
+    '32 examples against a million',
     // The seed is what makes the figure's own eighty points unreproducible here.
     'torch.manual_seed(6050)','x1 = torch.randn(80)'])
     assert(chapter.includes(literal),literal);
