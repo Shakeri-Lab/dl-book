@@ -5,10 +5,14 @@
      appear below. Equations, code, figures, and the sealed CPU study are original
      to the book. -->
 
-@sec-14-self-attention-transformer kept visible evidence in a growing key--value table. Now hold the
-regression question fixed and change only the forward-pass solver. The comparison
-reveals what each solver retains, what it costs, and which approximation it
-accepts.
+@sec-14-self-attention-transformer retained earlier keys and values so that each new query
+could form a weighted read. This interlude compares three ways to construct that memory
+computation: a query-local fit over stored pairs, running statistics for a factorized kernel,
+and an online linear predictor updated by the delta rule.
+
+The constructions share a regression perspective, but they need not solve the same
+optimization problem. The kernel, predictor class, regularization, and update rule determine
+both the answer and the information that must be retained.
 
 ```{python}
 #| echo: false
@@ -16,19 +20,20 @@ import matplotlib.pyplot as plt
 import numpy as np
 ```
 
-## One regression, three solvers
+## Three memory constructions through regression {#one-regression-three-solvers}
 
 The recurrent networks of @sec-10-sequences-rnn squeezed the evidence into a fixed-size
 state. The Transformer resolved that bottleneck by keeping all the visible evidence
 available. Its routing cost is quadratic in sequence length. There is another resolution:
-keep the *problem* @sec-12-kernel-regression posed, but change how the forward pass solves it.
+return to the regression perspective of @sec-12-kernel-regression and change the kernel,
+the predictor class, or the update rule. Some of these choices permit a state of fixed size.
 
 Recent sequence models make that move under names such as test-time
 regression, fast weights, linear attention, DeltaNet, and state-space sequence models.
 The names matter less than two questions about each solver: what does it keep, and
 what does it give up?
 
-### One objective, four dials
+### Choices within the regression framework {#one-objective-four-dials}
 
 At time $t$, let learned projections turn token representation $\vect{x}_\tau$ into
 two views,
@@ -54,12 +59,18 @@ M_t
 $$
 
 This is Wang, Shi, and Fox's test-time-regression frame, written for vector values.
-It exposes four dials.
+The display specifies a reference fitting problem. An online update need not attain its
+minimizer. Query-local attention also makes the observation weights depend on the query,
+as the next construction shows.
+
+Here the keys and values are computed from the input sequence. The memory state changes
+during the forward computation; the projection parameters are held fixed during that
+evaluation. The frame exposes four dials.
 
 **The views.** $W_Q,W_K,W_V$ are the learned projections of @sec-13-attention: queries
 and keys are compared, and values are what the comparison passes on.
-The token is not assigned one permanent meaning; it learns what to ask, advertise,
-and carry.
+The token is not assigned one permanent meaning; the three projections give it a query,
+a key that provides the features used for comparison, and a value.
 
 **The history weights.** $w_{t,\tau}$ decide how much an older residual matters to
 the fitting problem. @sec-10-sequences-rnn's forget gates already made retention
@@ -155,7 +166,10 @@ $$
 =\phi(\vect{q})^{\top}\phi(\vect{k}).
 $$
 
-Substitute that factorization into the weighted average and regroup terms:
+Assume the resulting kernel is nonnegative on the pairs being used and that the
+normalization denominator is positive. The positive feature map used below satisfies
+these conditions. Substitute that factorization into the weighted average and regroup
+terms:
 
 $$
 \begin{aligned}
@@ -163,8 +177,12 @@ $$
 &=\frac{\sum_{\tau\le t}
 \bigl[\phi(\vect{q})^{\top}\phi(\vect{k}_\tau)\bigr]\vect{v}_\tau}
 {\sum_{\tau\le t}\phi(\vect{q})^{\top}\phi(\vect{k}_\tau)} \\
-&=\frac{\phi(\vect{q})^{\top}\matr{S}_t}
-{\phi(\vect{q})^{\top}\vect{z}_t},
+&=\frac{\matr{S}_t^\top\phi(\vect{q})}
+     {\vect{z}_t^\top\phi(\vect{q})},
+\qquad
+\matr{S}_t\in\mathbb{R}^{r\times d_v},
+\quad
+\vect{z}_t\in\mathbb{R}^{r},
 \end{aligned}
 $$
 
@@ -290,7 +308,9 @@ $$
 +\eta_t(\vect{v}_t-\matr{H}_{t-1}\vect{k}_t)\vect{k}_t^{\top}.
 $$
 
-Each outer product writes the residual left by the current key. DeltaNet turns that
+Each outer product writes the residual left by the current key. Geometrically, the write
+changes the state only along that key, so a query orthogonal to the key reads the same value
+before and after the update. DeltaNet turns that
 classical online least-squares step into a sequence layer. The recurrence also exposes
 a state-space form: its transition is
 $\matr{A}_t=\matr{I}-\eta_t\vect{k}_t\vect{k}_t^{\top}$ and its input write is
@@ -363,7 +383,7 @@ axis.set(
     ylim=(0.45, 3.35),
     xlabel="retained history / state growth  →",
     ylabel="per-token fitting, update, or read cost  →",
-    title="one regression question, three solver contracts",
+    title="three memory constructions, three costs",
 )
 axis.set_xticks([])
 axis.set_yticks([])
@@ -397,17 +417,18 @@ mixture whose quality depends on keys, temperature, and interference.
 
 ### Mechanism test: recall under a fixed capacity
 
-@fig-solver-costs predicts that a fixed state loses recall as stored pairs
-accumulate, while a cache that grows with them need not. Store $N$ random unit key--value pairs, then query every stored key. Decode each
+The storage comparison motivates a recall experiment: how does the one-pass delta
+update behave as more associations are written into a state of fixed dimension?
+We store $N$ random unit key--value pairs, query every stored key, and decode each
 retrieved vector to the nearest stored value. Exact softmax attention keeps all pairs. A dense
 delta state has $d^2$ numbers regardless of $N$. A selective delta arm receives one
 extra priority bit and writes ordinary pairs at only one-tenth strength, so it can
 choose what to sacrifice.
 
-The study was designed on seed branches 0 and 1. Those branches fixed
+We designed the study on the development seed branches 0 and 1. On those branches we fixed
 $\eta=0.20$, the 25% priority rate, the 0.10 ordinary write gate, dimensions
-$(8,16,32)$, and loads $N/d\in(0.5,1,2,4,8)$. Only then was disjoint branch 2 opened
-for 30 endpoint repetitions. All methods in a trial receive the same keys, values,
+$(8,16,32)$, and loads $N/d\in(0.5,1,2,4,8)$. Only then did we open the disjoint, held-out
+branch 2 for 30 endpoint repetitions. All methods in a trial receive the same keys, values,
 order, queries, and decoder. The endpoint code below is the frozen protocol; it runs
 on CPU in under a second on the reference machine.
 
@@ -524,7 +545,7 @@ for d in MS_DIMS:
 axes[0].plot(MS_LOADS, np.ones(len(MS_LOADS)), color="#232D4B", lw=2,
              label="softmax table")
 axes[0].set(xscale="log", xlabel="load N/d", ylabel="top-1 recall",
-            title="Fixed state meets capacity", ylim=(-0.03, 1.05))
+            title="One-pass delta update\nwith a fixed state", ylim=(-0.03, 1.05))
 axes[0].set_xticks(MS_LOADS, [str(x) for x in MS_LOADS])
 axes[0].minorticks_off()
 axes[0].legend(fontsize=7.3)
@@ -539,7 +560,7 @@ for column, label, style, color in [
              for load in MS_LOADS]
     axes[1].plot(MS_LOADS, means, marker="o", ls=style, color=color, label=label)
 axes[1].set(xscale="log", xlabel="load N/d", ylabel="top-1 recall",
-            title="A gate chooses what to forget", ylim=(-0.03, 1.05))
+            title="Gated delta update", ylim=(-0.03, 1.05))
 axes[1].set_xticks(MS_LOADS, [str(x) for x in MS_LOADS])
 axes[1].minorticks_off()
 axes[1].legend(fontsize=7.3)
@@ -559,8 +580,9 @@ and total recall barely moves. Overall gated recall is
 0.138 while plain Delta recall is 0.134 at that load. Given an extra signal,
 a fixed state can spend its capacity differently.
 
-The fixed-size state could not hold everything in @sec-10-sequences-rnn. It still
-cannot. Now we can place that failure among three solvers. Keeping the
+These results show interference under the specified delta update as the number of stored
+pairs grows. They do not establish a universal recall limit for fixed-size recurrent
+states. Now we can compare the three solvers. Keeping the
 dataset buys uncompressed access at growing cost; sufficient statistics buy an exact
 stream for a restricted kernel; online updates buy a steerable fixed state and accept
 interference. The RNN state has returned as one of these statistical choices.
