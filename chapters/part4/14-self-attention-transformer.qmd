@@ -167,6 +167,36 @@ and applies the same comparison rule to each permitted query–key pair. The wei
 in a particular attention row still depend on the content; what is shared is the
 machinery that produces them.
 
+<!-- print 2026-10-09, author-approved: the learned score written as one matrix W_Q W_K^T, its possible asymmetry, the row-normalization caveat, a footnote on tied projections (Tsai et al. 2019), and the pointer to fig-self-attention-geometry -->
+For one sequence, that comparison rule comes down to one learned matrix. With
+$\vect{x}_i^\top$ as row $i$ of $X$, substituting the projections gives
+
+$$
+\frac{(QK^\top)_{ij}}{\sqrt d}
+=\frac{\vect{x}_i^\top W_QW_K^\top\vect{x}_j}{\sqrt d}.
+$$
+
+The kernel smoother of @sec-12-kernel-regression compared a query with a key through a
+fixed distance and a single bandwidth. Here training sets the $d\times d$ matrix
+$W_QW_K^\top$, which decides which features of the querying token are compared with
+which features of the token being read. Because $W_Q$ and $W_K$ are trained separately,
+$W_QW_K^\top$ need not be symmetric, so the score of *bank* against *river* need not
+equal the score of *river* against *bank*. @sec-13-attention called the learned kernel
+an analogy for this reason: a classical kernel is symmetric and positive semidefinite,
+and this score need be neither.^[Tying $W_Q=W_K$ makes the matrix symmetric and positive
+semidefinite. In the translation and sequence-prediction experiments of
+[Tsai et al.](https://aclanthology.org/D19-1443/), tying made little difference to
+performance at the same projection sizes and saved parameters.] Lopsided attention
+weights are not evidence of that asymmetry. Softmax normalizes each row on its own, so
+even a symmetric score can give *bank*'s row most of its weight on *river* while
+*river*'s row spreads its weight across other keys. @fig-self-attention-geometry draws
+one such row, *bank*'s, to scale in a two-dimensional toy, where each learned matrix
+appears as what it is, a function from one plane to another, and each score as a signed
+shadow on the line through the query.
+
+<!-- print 2026-10-09, author-approved: figure fig-self-attention-geometry, bank's row of fig-self-attention-read as geometry in a d = 2 toy (HTML copy of the print TikZ, figures/tikz-src/14_self_attention_geometry.tex, drawn without the print panel letters a, b, c because the caption names the planes Left, Middle and Right) -->
+![*Bank*'s row of @fig-self-attention-read as geometry, in a toy with $d=2$ built to reproduce its illustrative weights. Each plane, drawn to scale, stands in for the $d$ dimensions of a real model. Orange marks only the learned maps. The query is computed by one, not learned, so it is drawn in black (orange in @fig-self-attention-read), as are *bank*'s token, key, value and output. Left: each map is a function of a token $\vect{x}_j^\top$, a row of $X$. So $\vect{q}^\top=\vect{x}_{\text{bank}}^\top W_Q$ is *bank*'s row of $Q$, and $\vect{k}_j^\top=\vect{x}_j^\top W_K$ and $\vect{v}_j^\top=\vect{x}_j^\top W_V$ are the rows of $K$ and $V$. Middle: a key's score $\vect{q}^\top\vect{k}_j/\sqrt2=\vect{x}_{\text{bank}}^\top W_QW_K^\top\vect{x}_j/\sqrt2$ is its signed shadow on the dashed line through $\vect{q}$, as in @fig-linear-response, times $\norm{\vect{q}}/\sqrt2$. *By* and *the* share one shadow and tie. Right: softmax over this one row gives the weights. The output (ring), the values' weighted average, lies inside their hull, nearest *river*. Not shown: the other rows, whether $W_QW_K^\top$ is symmetric, and what trained maps learn.](../../figures/generated/14_self_attention_geometry.svg){#fig-self-attention-geometry width=100% fig-alt="Three framed planes side by side, drawn at one scale and joined by thick orange arrows. The left panel, token plane, x j: four arrows from one origin, labeled bank (thicker and darker), by, the and river. Two curved orange arrows lead to the middle panel. The upper is labeled x bank transpose W Q, the lower x j transpose W K. The middle panel, query-key plane, q of bank and k j: a thick dark vertical arrow q with a dashed line through it, and four thinner key arrows from the same origin: river up and to the left, bank to the right and slightly up (darker), the down and to the left, by down and to the right. Dotted horizontal lines run from the dashed line through each key's tip to a vertical scale just outside the frame, headed q transpose k j over root 2, with marks 1.59 for river, 0.35 for bank, and minus 1.06 shared by the and by, whose tips lie on one dotted line. An arrow labeled softmax leads to the right panel, value plane, v j: four dots at the corners of a shaded quadrilateral, labeled bank 0.20 (darker), by 0.05, the 0.05 and river 0.70, and a ringed dot labeled output for bank inside it, nearest river. An orange line labeled x j transpose W V runs below the panels from the left panel to the bottom of the right panel."}
+
 All query positions can be evaluated together during training because none waits
 for a hidden state from the preceding position. That is a structural statement, not
 a timing result. Dense self-attention still forms $n^2$ pairwise scores, and
@@ -608,7 +638,12 @@ M_{ij}=
 $$
 
 *before* softmax. Replacing forbidden probabilities with zero afterward would
-leave the remaining row unnormalized. Masking every key in a row is invalid; softmax
+leave the remaining row unnormalized.
+<!-- print 2026-10-09, author-approved: adding minus infinity before softmax equals zeroing and renormalizing, so each row is the unmasked row conditioned on j <= i (the top-k and nucleus link is made where those samplers appear, in the practice bridge below) -->
+Adding $-\infty$ first gives the same row as zeroing those probabilities and then
+dividing the rest by their sum. Each row becomes the unmasked row conditioned on the
+event $j\le i$.
+Masking every key in a row is invalid; softmax
 would receive only negative infinity. Here the diagonal remains visible:
 the representation at a character may use that character while predicting the
 next one.
@@ -807,6 +842,12 @@ across other tokens or examples. Its calculation is the same at training and
 evaluation time. Before the learned $\gamma$ and $\beta$, the vector is
 approximately zero mean and unit variance. After applying them, that claim need
 not remain true.
+<!-- print 2026-10-09, author-approved: LayerNorm's geometric reading, removing the projection onto the all-ones vector and rescaling to squared length just under d -->
+Geometrically, before $\gamma$ and $\beta$, subtracting $\mu$ from every entry removes
+$\mu(1,\ldots,1)$, the projection of $x$ onto the all-ones vector. Dividing by
+$\sqrt{\sigma^2+\epsilon}$ then brings the squared length to $d\sigma^2/(\sigma^2+\epsilon)$.
+When $\sigma^2$ is much larger than $\epsilon$, this is just under $d$, so the normalized
+token lies just inside the sphere of radius $\sqrt d$.
 
 :::: {.plan-code}
 ::: {.plan}
@@ -952,6 +993,19 @@ x&\leftarrow x+\operatorname{FFN}(\operatorname{LN}(x)).
 \end{aligned}
 $$
 
+<!-- print 2026-10-09, author-approved: why the original Transformer needed warmup (Xiong et al. 2020), with the post-/pre-LayerNorm placement compared with the ResNet ReLU placement, answering the warmup pointer of the training chapter -->
+Post-LayerNorm normalizes after each residual addition, where the original ResNet block
+of @sec-09-modern-cnns-transfer applied its final ReLU. Pre-LayerNorm moves the
+normalization into the learned branch, as pre-activation ResNets did with that ReLU.
+[Xiong et al.](https://proceedings.mlr.press/v119/xiong20b.html) argued that the
+post-LayerNorm placement is one reason the original Transformer needed
+warmup (@sec-04-training-loss-sgd), which raises the learning rate gradually from a
+small value. In their analysis at initialization, post-LayerNorm gives large gradients
+to the parameters of the layers nearest the output. Starting at the full learning rate
+can then make training unstable, and warmup keeps the first steps small. In their
+experiments, pre-LayerNorm Transformers trained without warmup did about as well as
+post-LayerNorm baselines trained with it.
+
 Pre-LayerNorm leaves an unobstructed identity route along the residual stream and
 often improves optimization at initialization. This is an implementation choice,
 not a universal theorem that post-LayerNorm fails or that pre-LayerNorm eliminates
@@ -968,7 +1022,11 @@ $$
 $$
 
 It normalizes each token by its root-mean-square magnitude and retains a learned
-per-feature scale $\vect{g}$. This removes one statistic from the computation; it
+per-feature scale $\vect{g}$.
+<!-- print 2026-10-09, author-approved: RMSNorm rescales to length about sqrt(d) like LayerNorm but keeps the projection onto the all-ones vector -->
+Before $\vect{g}$, it rescales $\vect{x}$ to length about $\sqrt d$, as LayerNorm does,
+but leaves the projection onto the all-ones vector in place.
+This removes one statistic from the computation; it
 does not imply universal superiority over LayerNorm. Architecture, optimizer, dtype,
 and scale still determine the observed trade-off.
 
@@ -1008,6 +1066,35 @@ The complete block therefore alternates two kinds of computation:
 
 Residual additions keep both results in one shared stream: a common workspace that
 survives the full stack.
+
+<!-- print 2026-10-09, author-approved: box on what attention alone does to a stack of tokens (rank collapse, Dong, Cordonnier, and Loukas 2021), so residuals do an additional job in a Transformer: they keep the tokens distinct -->
+::: {.callout-note}
+## What attention alone does to a stack of tokens
+
+An attention layer replaces each token's vector with a weighted average of the value
+vectors, with nonnegative weights that add up to one. An average lies between the
+vectors it averages, so unless rows put nearly all of their weight on single tokens,
+the outputs sit closer together than the values did. Without the residual additions and
+the FFN, a second layer averages those averages. In a stack of such layers, every
+position ends up carrying nearly the same vector, and whatever distinguished one token
+from another is averaged away.
+
+[Dong, Cordonnier, and Loukas](https://proceedings.mlr.press/v139/dong21a.html) bound
+how fast this happens in unmasked attention. When the query, key, and value matrices
+are small enough in norm and the tokens already lie close together, their bound on the
+distance to a state with all token rows equal shrinks doubly exponentially with depth,
+the exponent tripling at each layer. Their experiments find the same rapid collapse in
+three pretrained Transformer language models once the residuals are removed.
+
+The residual update $x\leftarrow x+F(x)$ keeps a path around every attention layer. The
+differences the tokens arrive with pass through each sum unchanged, and attention only
+adds its average to them, so the collapse is no longer forced. The FFN cannot do this on
+its own. It acts on each position separately, so two identical tokens leave it
+identical. In their analysis, an FFN that can stretch the remaining differences slows
+the collapse but does not remove it. In @sec-09-modern-cnns-transfer, residuals made a
+deep stack easier to optimize. In a Transformer they do an additional job before any
+gradient is computed: they keep the tokens distinct.
+:::
 
 ## From the original Transformer to this experiment
 
@@ -1426,7 +1513,15 @@ held-out loss by 0.4214, or 18.0% relative to the no-position variant.
 The causal mask already gives a position some weak structural information: row
 $i$ sees a prefix of length $i+1$, and stacked layers can propagate clues from
 those nested prefixes. That is why the no-position model does better than a purely
-orderless caricature might suggest; fixed sinusoidal encoding still produces a
+orderless caricature might suggest.
+<!-- print 2026-10-09, author-approved: Haviv et al. 2022, larger causal language models without positional encodings, the shrinking gap, and position recoverable from their representations. These sentences are approved on their own, while the surrounding NOVEL block still awaits sign-off. Print places them after its hedge 'This structure may be why ... would test this explanation.' That hedge is NOVEL proposal N25-1, still awaiting the author (the 2026-10-05 ledger declined it under Q12), so this edition keeps 'That is why' and splits that sentence at its semicolon -->
+[Haviv et al.](https://aclanthology.org/2022.findings-emnlp.99/) trained much larger
+causal language models without positional encodings. Their held-out loss came close to
+that of models with sinusoidal encoding, and the gap shrank as the models grew. In their
+no-position models, a small network trained on the internal representations could still
+predict each token's approximate position, and the authors proposed that the causal
+mask supplies this information.
+Fixed sinusoidal encoding still produces a
 large improvement in this run.
 
 But @sec-10-sequences-rnn's LSTM remains ahead by 0.0309 held-out loss, or 1.64%. At 100
@@ -1537,6 +1632,17 @@ keeps the $k$ largest logits, sets the rest to negative infinity, then renormali
 smallest prefix whose cumulative mass reaches $p$, then renormalizes. The former fixes
 a candidate count; the latter lets that count adapt to the distribution's shape.
 Neither changes the trained weights, and neither guarantees a better sample.
+
+<!-- print 2026-10-09, author-approved: keep-and-renormalize as conditioning, per-step token forbidding, and why it need not sample allowed outputs in proportion to the model (Park et al. 2024). Print places this in the encoder-decoder chapter's sampling subsection, which this edition does not yet have. This paragraph is approved on its own, while the surrounding NOVEL block still awaits sign-off -->
+Keeping a set of tokens and renormalizing, as top-$k$ and nucleus sampling do, is what
+the causal mask does to each attention row (zero the excluded entries, divide the rest
+by their sum), with next tokens in place of keys. It gives the distribution over the
+next token conditioned on that token lying in the kept set.
+Enforcing a rule that forbids tokens, such as characters that would break the ISO date
+format of @sec-11-encoder-decoder, conditions the distribution at each step in the same
+way. A sampler that does this at every step need not return the outputs the rule allows
+in proportion to their probabilities under the model
+(Exercise 9 of @sec-11-encoder-decoder).
 
 For evaluation, if $L$ is mean token negative log-likelihood in natural-log units,
 **perplexity** is $\exp(L)$. It is an exponentiated loss, not a fluency score. Compare
@@ -1662,10 +1768,19 @@ Close the book for one minute and rebuild the Transformer block.
 - [Su et al., *RoFormer: Enhanced Transformer with Rotary Position Embedding*](https://arxiv.org/abs/2104.09864): rotates queries and keys so their positional interaction is expressed through relative offset.
 - [Ba, Kiros, and Hinton, *Layer Normalization*](https://arxiv.org/abs/1607.06450): normalization within one example and identical train/evaluation computation.
 - [Zhang and Sennrich, *Root Mean Square Layer Normalization*](https://proceedings.neurips.cc/paper/2019/hash/1e8a19426224ca89e83cef47f1e7f53b-Abstract.html): RMSNorm's scale-only normalization and empirical study.
-- [Xiong et al., *On Layer Normalization in the Transformer Architecture*](https://proceedings.mlr.press/v119/xiong20b.html): a qualified comparison of pre- and post-LayerNorm optimization.
+<!-- print 2026-10-09, author-approved: Xiong et al. entry extended with pre-LayerNorm training without warmup -->
+- [Xiong et al., *On Layer Normalization in the Transformer Architecture*](https://proceedings.mlr.press/v119/xiong20b.html): a qualified comparison of pre- and post-LayerNorm optimization, including pre-LayerNorm training without warmup.
+<!-- print 2026-10-09, author-approved: Sources entry for Dong, Cordonnier, and Loukas (rank collapse without residuals) -->
+- [Dong, Cordonnier, and Loukas, *Attention Is Not All You Need: Pure Attention Loses Rank Doubly Exponentially with Depth*](https://proceedings.mlr.press/v139/dong21a.html): without residuals, a stack of attention layers drives the token vectors toward a common row, and MLPs only slow that collapse.
 - [Geva et al., *Transformer Feed-Forward Layers Are Key-Value Memories*](https://aclanthology.org/2021.emnlp-main.446/): empirical evidence behind the associative-memory interpretation of FFNs.
+<!-- print 2026-10-09, author-approved: Sources entry for Haviv et al. (language models without positional encodings) -->
+- [Haviv et al., *Transformer Language Models without Positional Encodings Still Learn Positional Information*](https://aclanthology.org/2022.findings-emnlp.99/): causal language models trained without positional encodings come close to models with them in held-out loss and still carry each token's approximate position, and the authors conjecture that the causal mask supplies it.
 - [Jain and Wallace, *Attention Is Not Explanation*](https://aclanthology.org/N19-1357/): an important limit on reading attention maps as explanations.
+<!-- print 2026-10-09, author-approved: Sources entry for Tsai et al. (attention as a kernel smoother, tied query and key projections) -->
+- [Tsai et al., *Transformer Dissection: An Unified Understanding for Transformer's Attention via the Lens of Kernel*](https://aclanthology.org/D19-1443/): attention written as a kernel smoother, with a comparison of kernel choices that includes a symmetric kernel made by tying the query and key projections.
 - [Holtzman et al., *The Curious Case of Neural Text Degeneration*](https://arxiv.org/abs/1904.09751): nucleus sampling and the distinction between likely continuations and useful generation behavior.
+<!-- print 2026-10-09, author-approved: Sources entry for Park et al. (Grammar-Aligned Decoding), supporting the per-step forbidding paragraph that this edition places in the practice bridge. Print lists it only in the encoder-decoder chapter, next to that paragraph -->
+- [Park et al., *Grammar-Aligned Decoding*](https://proceedings.neurips.cc/paper_files/paper/2024/hash/2bdc2267c3d7d01523e2e17ac0a754f3-Abstract-Conference.html): shows that a sampler that forbids, at each step, every token that cannot lead to a grammatical output can return grammatical outputs at rates not proportional to the model's probabilities, as in Exercise 9 of @sec-11-encoder-decoder.
 - [Shakeri, *Deep Learning: Making It Trainable* (2026), “Beyond This
   Volume”](https://shakeri-lab.github.io/opt-book/chapters/beyond-this-volume.html#beyond): kernel geometry, exact I/O-aware
   algorithms, parallel recurrence, and feature-learning regimes.
