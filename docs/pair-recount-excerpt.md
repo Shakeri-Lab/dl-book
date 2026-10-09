@@ -452,7 +452,7 @@ Lecture paths are relative to the lecture repository root; all film files were h
 
 | Source | SHA-256 |
 |---|---|
-| `chapters/part4/15-bert-pretraining.qmd` | `b9de00ebfd0dd39782906888e23bfaf3d8c2c9cf72d4a1f8d7fdb8e71e3be807` |
+| `chapters/part4/15-bert-pretraining.qmd` | `87a90290f99ac61028637d7d1814f038ca0477d23e30e40a4c47ac716aa983b6` |
 | `6050-Ch15/lecture.jsx` | `6b4adf6ec2e1f9f2986e97acd7dfb15197dbd0e187efc50d50a2614a80ba2cfd` |
 | `6050-Ch15/STORYBOARD.md` | `f05053b3d8b57c9240c0506df71a71f165b611eb649635ba6a414d47cb47724d` |
 | `6050-Ch15/ch15-data.js` | `33c5e03b6f48e013bef42aa791e08a9bec8a16af03c3ab5dafd0149ed98bcc06` |
