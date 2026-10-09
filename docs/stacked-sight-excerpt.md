@@ -55,4 +55,4 @@ stack.
 
 | Source | SHA-256 |
 |---|---|
-| `chapters/part2/09-modern-cnns-transfer.qmd` | `b6d549df30113942da9db115813b10ce2b45b586b0a1a3fdafe9d7ba33eeabe4` |
+| `chapters/part2/09-modern-cnns-transfer.qmd` | `7c76dc4105900f675bf6057d227a6f0a0415c9f635b5d1decb3a49cf273fd45f` |
