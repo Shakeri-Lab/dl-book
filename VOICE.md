@@ -204,6 +204,31 @@ section we will", no emoji.
     "What if the template were learnable?".
   The ledger and the per-entry decisions are in
   `audits/voice/print_revisions_2026-10-05.md`.
+- **D13 The print edition's later house rules (author's rulings, October 6 and 7, 2026).**
+  The Springer edition's rulings of October 6 and 7, 2026 were adopted for this edition on
+  October 8, 2026. They are later than D12; where the two conflict, D13 wins. They also
+  hold in passages that only this edition carries. Code, printed outputs, numbers and
+  anchors do not change to meet them, and a string pinned by CI or by a replay fixture
+  waits for the author.
+  - "Gate" names only an architectural mechanism: the LSTM and GRU gates. The factor
+    $\sigma'(z)$ in backpropagation is the activation derivative, never an "open" or
+    "closed" gate; for ReLU it equals one or zero (October 6). D12's "the gradient through
+    ReLU's open half" becomes the gradient through ReLU's active units, where the
+    derivative is one.
+  - Setup details do not open a section: its first two sentences are about the
+    phenomenon, the concept or the failure, never arrays or seeds. The arbitrary settings
+    of an illustrative toy (sample counts, noise levels, image sizes) go in the caption or
+    a brief parenthesis. Setup stays in the body when its parameters are the subject of
+    the claim, as in a learning-rate sweep or the 2-pixel shift control (October 7).
+  - The author's GPU cluster, Rivanna, is never named in the book: "a GPU cluster" or
+    "the full-data runs" (October 7). The `experiments/rivanna/` paths are code and stay.
+  - No seed numbers outside printed code: "a fixed seed", "three seeds", and rows keyed
+    by seed become Run 1, Run 2, Run 3 (October 7). A seed that a cell prints stays.
+  The other rulings of those days are structural or specific to print and wait for the
+  author: pseudocode, "Experimental setup" boxes and result figures as separate floats,
+  and training details moved out of the main text unless the claim is about them (this
+  edition keeps them next to its code). The ledger and the per-entry decisions are in
+  `audits/voice/print_revisions_2026-10-08.md`.
 
 ## Rules
 

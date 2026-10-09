@@ -123,7 +123,7 @@ compositions for figures. Full guide: `docs/dl-course-code.md`.
    `docs/CONTINUING.md`; every chapter lists its seed files and transcripts in the
    `draft-sources` comment. Chapters 1–20 and Appendices A–E are complete; change them
    only through an explicit review or correction pass, preserving the cross-chapter
-  callbacks that help the reader reason (VOICE.md D11) and the house rules (D12).
+  callbacks that help the reader reason (VOICE.md D11) and the house rules (D12, D13).
 2. **Snapshot seeds** from Box into `sources/` (spaces → underscores), then apply the
    licensing boundary in `sources/README.md`: remove explicitly third-party-derived
    blocks with an honest omission marker rather than publishing or silently rewriting

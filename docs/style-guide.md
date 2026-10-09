@@ -182,7 +182,7 @@ Use **`callout-warning`** for:
 - Shape mismatches, device placement bugs, gradient accumulation, in-place ops
 - Vanishing/exploding gradient scenarios
 - Why certain activation functions fail in depth
-- *Example from transcripts:* "The sigmoid gate is at best only partially open and is often nearly closed. In a deep network uh these small derivative um that are multiplied together each layer... causes the gradient to shrink exponentially as it flows backward."
+- *Example from transcripts* (the sigmoid "gate" retired 2026-10-08, VOICE.md D13; say *activation derivative*): "The sigmoid gate is at best only partially open and is often nearly closed. In a deep network uh these small derivative um that are multiplied together each layer... causes the gradient to shrink exponentially as it flows backward."
 - Memory leaks from storing computation graphs unnecessarily
 - When NOT to use certain techniques (e.g., "Residual connections are designed for very deep networks. For shallow networks this is not necessary and maybe even not helpful.")
 
