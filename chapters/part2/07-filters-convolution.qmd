@@ -68,11 +68,18 @@ smooth = F.conv1d(noisy[None, None], kernel[None, None]).squeeze()
 ```
 ::::
 
+We slide a symmetric window along the signal. At each stop, we average the samples under
+the window and record that mean as the output at the window's center. The positive and
+negative fluctuations of the noise largely cancel in the sum, so the rapid jitter is damped
+while the slow variation of the signal survives. @fig-moving-average shows the
+operation on a noisy sinusoid; its bottom panel magnifies one nine-point window and the
+averaging step that produces one point of the smoothed curve.
+
 ```{python}
 #| echo: false
 #| label: fig-moving-average
 #| fig-alt: "Two panels. Top: a jagged noisy signal fluctuates around a smooth periodic trend, and the nine-point moving-average curve follows the central oscillation without the high-frequency variation; a small box near t equal to 2 marks one window of nine samples, with a dot on the curve at its center. Bottom: the nine samples of that window drawn as stems at offsets minus four to plus four, with a dashed line at their mean and a dot at offset zero, labeled as the output at the center."
-#| fig-cap: "A window of uniform weights, slid along a noisy signal, averaging as it goes. Top: the noisy signal and its nine-point moving average; the box marks one window, and the dot on the curve is that window's output. Bottom: the nine samples inside the box, each weighted $1/9$; their mean is the output at the window's center. This simplest sliding-window operation is already recognizably a denoiser."
+#| fig-cap: "A window of uniform weights, slid along a noisy signal, averaging as it goes. Top: the signal, 300 samples of $\\sin t$ on $[0, 4\\pi]$ with Gaussian noise of standard deviation 0.35, and its nine-point moving average, computed with `F.conv1d`; the box marks one window, and the dot on the curve is that window's output. Bottom: the nine samples in the box, drawn larger as stems from zero, each multiplied by its weight $1/9$; the nine products sum to the samples' mean, the output at the window's center."
 fig, (top, bottom) = plt.subplots(2, 1, figsize=(6.4, 5.2), height_ratios=[3, 2])
 plt.sca(top)
 plt.plot(t, noisy, color="#B8B8A8", lw=0.8, label="noisy signal")
@@ -97,8 +104,18 @@ plt.tight_layout(); plt.show()
 ```
 ## To 2D: the recipe
 
-The image version is the same idea with a small 2-D window. Its five-step recipe sits
-beside the three lines that carry it:
+The moving average extends to images when the window becomes a small square. In two
+dimensions the weights form a $k \times k$ array, the **kernel**, and we slide it across
+the rows and columns of the image. At each position the kernel covers a $k \times k$ patch
+of pixels. We multiply each pixel by the kernel weight that lies over it and sum the $k^2$
+products into one output value.
+
+If we flatten the patch and the kernel into two vectors of length $k^2$, this sum of
+products is their dot product: the template score of @sec-01-linear-regression, applied
+to one neighborhood of the image. Repeating it at every position where the kernel fits
+inside the image produces a new two-dimensional array of responses, called a
+**feature map**. The operation's five-step recipe sits beside the three lines that
+carry it:
 
 :::: {.plan-code}
 ::: {.plan}
@@ -131,17 +148,23 @@ print(f"recipe vs. torch.conv2d: max |diff| = {gap:.1e}")
 ```
 ::::
 
-As the markers show, steps 2 and 5 share a line. The plan
-moves one window at a time; `unfold` places *every* window at once, and the next
-line scores them all in parallel. Translating a sequential plan into vectorized code can
-introduce indexing and shape errors, so we check the result
-against the framework implementation.
+As the markers show, steps 2 and 5 share a line. The plan moves one window at a time,
+while the code computes every dot product at once: the two `unfold` calls
+return all the windows of the image as one view, and the next line scores each window
+against the kernel. The second function, `conv2d`, wraps PyTorch's `F.conv2d`; the rest of
+the chapter uses it, and the two functions agree to float32 rounding.^[A vectorized rewrite
+of a sliding loop is easy to get wrong by one index or one axis, so we check it against the
+framework before relying on it. On a random $10 \times 12$ image and a random $3 \times 3$
+kernel, the largest absolute difference between the outputs of `manual_conv2d` and
+`conv2d` is $4.8 \times 10^{-7}$, the size of float32 rounding.]
 
-The output is smaller than the input. A $k
-\times k$ kernel on an $n \times n$ image produces $(n - k + 1) \times (n - k + 1)$
-outputs, because the window must stay inside the frame. Padding, which controls this
-shrinkage, and stride, which slides the window in bigger steps, are treated
-in @sec-08-cnn.
+The feature map is smaller than the image. We take an odd kernel size, $k = 2\Delta + 1$,
+so the kernel has a center entry and reaches $\Delta$ pixels to each side of it; a
+$3 \times 3$ kernel has $\Delta = 1$. A window that stays inside the frame keeps its center
+at least $\Delta$ pixels from every edge, which leaves $n - 2\Delta = n - k + 1$ positions
+in each row and each column of an $n \times n$ image. The output is therefore
+$(n - k + 1) \times (n - k + 1)$. Padding the image with extra pixels controls this
+shrinkage, and a stride moves the window in larger steps; @sec-08-cnn treats both.
 
 ## Examples of fixed filters {#the-filter-zoo}
 
@@ -169,7 +192,7 @@ subset:
 ```{python}
 #| label: fig-filter-zoo
 #| fig-alt: "Three rows across five columns. The top row prints each 3-by-3 kernel as a grid of numbers shaded by sign: identity has a single 1 at the center; blur has nine entries of 1/9; sharpen has 5 at the center and −1 at its four neighbors; the vertical Sobel kernel has −1, −2, −1 down its left column and 1, 2, 1 down its right; the horizontal Sobel kernel has −1, −2, −1 across its top row and 1, 2, 1 across its bottom. Below, a synthetic shapes scene and a boot pass through each kernel: blur softens both inputs, sharpen strengthens local contrast, and the two Sobel outputs illuminate boundaries of different orientations."
-#| fig-cap: "One recipe, five kernels. The top row prints the nine weights of each 3×3 kernel (identity, blur, sharpen, and two Sobel edge detectors), shaded on one scale centered at zero; each column below applies that kernel to the same two inputs. The vertical-edge kernel fires on vertical boundaries; the horizontal one fires on horizontal boundaries."
+#| fig-cap: "One operation, five kernels. The top row prints the nine weights of each 3×3 kernel (identity, blur, sharpen, and two Sobel edge detectors), shaded on one scale centered at zero; each column below applies that kernel to the same two inputs. The middle row is the synthetic scene ($64 \\times 64$, zero except for a rectangle, a disk and diagonal stripes of intensities 0.9, 0.6 and 0.8); the bottom row is the first ankle boot among the development images, scaled to $[0, 1]$. The vertical-edge kernel responds strongly to vertical boundaries, the horizontal one to horizontal boundaries."
 #| code-summary: "Code: the zoo"
 #| code-fold: false
 #| classes: responsive-wide-opt-in
@@ -228,12 +251,20 @@ suggest, and none of its coefficients was learned.
 
 ## Naming the operation
 
-This sliding sum-of-products has a proper name: **cross-correlation**. With kernel $V$
-of half-width $\Delta$ and image $X$:
+This sliding sum of products is called **cross-correlation**. To write it down, we index
+the kernel $V$ by offsets from its center: the entry $[V]_{u,v}$ sits $u$ rows and $v$ columns
+from the center, with $u$ and $v$ running from $-\Delta$ to $\Delta$; negative $u$ lies
+above the center and negative $v$ to its left, so in a $3 \times 3$ kernel $[V]_{-1,-1}$ is
+the top-left entry. With the kernel centered on pixel $(i, j)$ of the image $X$, the entry
+$[V]_{u,v}$ lies over the pixel $[X]_{i+u,\,j+v}$, and the output $[H]_{i,j}$ sums these
+products over the window:
 
 $$
 [H]_{i,j} \;=\; \sum_{u=-\Delta}^{\Delta}\;\sum_{v=-\Delta}^{\Delta} [V]_{u,v}\,[X]_{i+u,\,j+v} .
 $$ {#eq-crosscorr}
+
+This is the sliding dot product written entry by entry, for each center $(i, j)$ at least
+$\Delta$ pixels from the edges.
 
 ::: {.callout-note}
 ## Why we call it "convolution"
@@ -248,10 +279,13 @@ a reparameterization of the same family of operations.
 
 ## Translation equivariance {#the-property-we-paid-for-equivariance}
 
-Unlike the MLP of @sec-06-generalization-inductive-bias, slide-and-score treats every
-position identically away from boundaries $\rightarrow$ if the input shifts, the
-output shifts *with it*, unchanged in content. That is **translation equivariance**,
-and it need not be taken on faith:
+Unlike the dense layer of @sec-06-generalization-inductive-bias, cross-correlation applies
+the same kernel at every position. On the interior of the image, shifting the input
+therefore shifts the feature map by the same displacement and leaves its values unchanged.
+This property is **translation equivariance**.
+
+We test it as a question of order: does shifting before filtering give the same result as
+filtering before shifting?
 
 :::: {.plan-code}
 ::: {.plan}
@@ -281,39 +315,55 @@ interior = (A - B_shifted)[:, s + 2:]         # compare away from the blank bord
 print(f"filter(shift(x)) vs shift(filter(x)): max |diff| = {interior.abs().max():.1f}")
 ```
 ::::
-The difference prints as 0.0 on the compared interior. The detector's response moves with the scene.
-The distinction from @sec-06-generalization-inductive-bias is structural:
-the dense layer did not impose this relation between shifted
-inputs and outputs. Here, applying the same local weights at
-each position gives the relation directly. At the frame boundary,
-cropping, padding, or fill rules can break exact equality;
-that is why the code excludes the blank-border region.
+With the scene shifted $s = 5$ pixels to the right, the difference prints as 0.0 away from
+the left edge, in all but the first $s + 2$ output columns (the $s$ columns that read the
+zero fill, plus a margin of two). The detector's response moves with the scene.
 
-Before going further, keep these two distinct:
+The contrast with @sec-06-generalization-inductive-bias is structural. A dense layer gives
+every input pixel its own coefficient in every output, so its weights are tied to absolute
+positions in the frame. Cross-correlation ties its weights to offsets from the window's
+center, so a pattern produces the same response wherever it appears. Near the edges the
+equality can fail, because a window there covers pixels that the shift filled with zeros
+or pushed out of the frame; exact equivariance holds on the interior, which is why the code
+excludes the border columns.
 
-- **Equivariant** means the output moves along with the input (what convolution
-  gives us).
-- **Invariant** means the output does not change at all (a classifier should
-  output "boot" regardless of position).
+Before going further, keep two related properties distinct:
 
-Equivariance is the raw material; in @sec-08-cnn, pooling will discard some position
-information to gain local shift tolerance. Exact invariance is a stronger property and must be tested, not presumed.
+- **Equivariant** means that the output transforms along with the input: if the input
+  moves, the feature map moves by the same displacement. Convolution provides this.
+- **Invariant** means that the output does not change at all: a garment classifier
+  should predict the same category wherever the garment sits in the image.
+
+Equivariance tracks *where* a feature is; classification needs invariance, because the
+label depends on *what* is present. Equivariance is the raw material for invariance.
+In @sec-08-cnn, pooling discards some position information to gain local shift
+tolerance, and @sec-09-modern-cnns-transfer pools each feature map over the whole image.
+Edge effects, strides and pooling windows can still change intermediate responses under a
+shift, so whether a whole network is shift invariant must be measured at its output, not
+presumed.
 
 ## The matrix view: a structured, weight-shared linear map
 
-Every output pixel is a dot
-product $\rightarrow$ the whole operation is *linear* $\rightarrow$ cross-correlation
-could be written as one enormous matrix multiplying the flattened image. But that
-matrix has a rigid structure: it is mostly zeros (locality means each row touches only
-one patch), and the same nine numbers repeat along its diagonals (sharing means every
-row is the same template, relocated).
+Every output is a dot product of a few inputs with the kernel weights, so cross-correlation
+is a linear map: it can be written as one matrix multiplying the flattened input. We build
+that matrix in @fig-shared-matrix for a one-dimensional signal of six inputs and a kernel
+of three weights $v_1, v_2, v_3$, which gives four outputs. Each row of the matrix is one
+position of the window. Row 2 computes $h_2 = v_1x_2 + v_2x_3 + v_3x_4$: it holds the
+three weights in the columns of the inputs under its window and zeros everywhere else.
+With $v_1 = v_2 = v_3 = 1/3$, the matrix computes a three-point moving average.
 
-That view makes the economics explicit. A dense layer from our 28×28 images to an
-equal-sized output would have $784 \times 784 \approx 615{,}000$ weights. The Sobel
-detector has **nine**, reused at every position. This is @sec-06-generalization-inductive-bias's
-constraints-as-knowledge idea made concrete: locality zeroes out most of the
-matrix, equivariance ties the survivors together, and what remains is a linear map
-with almost nothing left to specify.
+The matrix has two kinds of structure. Half its entries are zero here, and nearly all of
+them for an image, because each output depends only on its window (locality). The nonzero
+entries repeat, because every row holds the same three weights, one column further right
+than the row above (weight sharing). A dense $4 \times 6$ matrix has 24 independent
+entries; this one has 3.
+
+The saving grows with the input. A dense layer from our 28×28 images to an equal-sized
+output (with padding) would have $784 \times 784 \approx 615{,}000$ weights; the Sobel
+detector has **nine**, reused at every position. These are the constraints
+of @sec-06-generalization-inductive-bias made concrete: locality zeroes out most of the
+matrix, weight sharing ties the remaining entries together, and what is left is a linear
+map with almost nothing to specify.
 
 :::: {.plan-code}
 ::: {.plan}
@@ -337,7 +387,7 @@ for row in range(4):
 #| echo: false
 #| label: fig-shared-matrix
 #| fig-alt: "A four-by-six matrix grid is half zeros. Each row has the same three adjacent symbols v-one, v-two, and v-three, shifted one column right from the row above to form three repeating diagonals."
-#| fig-cap: "The 1-D version of convolution as a structured matrix (shown in 1-D only so the pattern is visible). Each output row touches one local three-value window, so half the entries are zero here, and nearly all are for a real image. The same three kernel weights repeat along diagonals: locality creates sparsity; sharing ties the nonzero entries together. A 2-D image produces the analogous block-structured matrix."
+#| fig-cap: "One-dimensional cross-correlation written as a matrix, for six inputs, a kernel of three weights and four outputs. Each row is one position of the window, with $v_1, v_2, v_3$ in the columns of its three inputs and zeros elsewhere. A 2-D image gives the analogous block-structured matrix."
 fig, ax = plt.subplots(figsize=(5.7, 2.8), dpi=450)
 ax.imshow(weight_ids, cmap=ListedColormap(["white", "#DCE6F2", "#F8D9B0", "#E7D4E8"]),
           vmin=0, vmax=3)
@@ -416,6 +466,9 @@ Close the book for one minute and reconstruct the sliding operation.
 - Dumoulin and Visin,
   ["A Guide to Convolution Arithmetic for Deep Learning"](https://arxiv.org/abs/1603.07285)
   (2016): a visual reference for padding, stride, and output-shape arithmetic.
+- PyTorch's documentation for
+  [`Tensor.unfold`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.unfold.html)
+  specifies the sliding-window view that `manual_conv2d` scores against the kernel.
 
 ## Exercises {.unnumbered}
 
