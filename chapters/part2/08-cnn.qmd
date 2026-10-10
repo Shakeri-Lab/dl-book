@@ -7,15 +7,16 @@
      note: sources/4.2-CNN-2.tex (efficiency principles, modern architectures) is
            @sec-09-modern-cnns-transfer material and is not used here. -->
 
-@sec-07-filters-convolution applied a fixed local kernel
-with shared coefficients at every position. We now retain that
-structure and optimize the coefficients against a loss.
+@sec-07-filters-convolution applied a fixed local kernel with shared coefficients at
+every position. We now keep that spatial structure and optimize the coefficients against a
+task loss.
 
-To do so, we declare the kernel a **parameter**. That single change is the core of this chapter. Everything else here (channels, padding, stride, pooling) turns that one learnable
-filter into a working network. By the end we will have assembled
-[LeNet](https://doi.org/10.1109/5.726791), trained it on our garments, and re-run the
-shift experiment of @sec-06-generalization-inductive-bias to compare
-LeNet with that chapter's MLP.
+To do so, we declare the kernel coefficients to be learnable parameters. That single change is
+the core of this chapter. Everything else introduced here (channels, padding, stride and
+pooling) turns the learnable filter into a working network. By the end of the chapter we will
+have assembled [LeNet](https://doi.org/10.1109/5.726791), trained it on the Fashion-MNIST
+images of @sec-06-generalization-inductive-bias, and repeated that chapter's shift experiment
+to test whether LeNet tolerates the shift better than the MLP did.
 
 :::: {.plan-code}
 ::: {.plan}
@@ -47,8 +48,9 @@ X_tr, y_tr = X_dev[fit_idx], y_dev[fit_idx]      # (1000,1,28,28), (1000,)
 X_val, y_val = X_dev[val_idx], y_dev[val_idx]    # (200,1,28,28), (200,)
 ```
 ::::
-Note the shapes. In Part I we flattened every image into a 784-vector before it entered
-the model. Here the images stay rectangular, and they pick up a *channel*
+Note the shapes. In Part I our MLPs flattened every image into a vector of 784 pixels,
+discarding its two-dimensional arrangement at the first layer. A convolutional network keeps
+that geometry: the images stay rectangular grids, and they gain an explicit *channel*
 dimension, whose purpose we explain below.
 
 ::: {.callout-warning}
@@ -157,45 +159,63 @@ network. The gradient flows backward through every layer (exactly the mechanics 
 loss favors. We chose Sobel here; a trained network may arrive at kernels that match
 no named filter.
 
-Backpropagation through the slide follows the same fan-out rule we met in
-@sec-05-backpropagation. The *same* nine numbers are used at every position of
-the slide $\rightarrow$ every position contributes a gradient term to the shared kernel. Those
-contributions are summed, and the loss reduction sets their scale: `F.mse_loss`
-with the default `reduction="mean"` averages over batch, channel, and spatial elements.
-Weight sharing is not just a parameter economy. At training time every patch of every
-image contributes to fitting the one shared template.
+Backpropagation through a convolutional layer applies the accumulation rule of @sec-05-backpropagation:
+a quantity used in several places of a computation receives the sum of the gradients from all
+of them. The kernel is such a quantity. In the notation of @eq-crosscorr, write the kernel as
+$V$ (the $K$ of the game) and the output map as $H$. The weight $[V]_{u,v}$ enters every
+output entry $[H]_{i,j}$, each time multiplied by the pixel $[X]_{i+u,\,j+v}$, so
+
+$$
+\frac{\partial L}{\partial [V]_{u,v}} \;=\; \sum_{i,j} \delta_{i,j}\,[X]_{i+u,\,j+v},
+\qquad \delta_{i,j} = \frac{\partial L}{\partial [H]_{i,j}},
+$$
+
+with one more sum over the images of the batch. The gradient is itself a cross-correlation with
+the roles exchanged: the map of sensitivities $\delta$ acts as the kernel and slides over
+$X$, and its $k \times k$ stops give the entries of $\partial L/\partial V$. With the default
+`reduction="mean"` of `F.mse_loss`, each $\delta_{i,j}$ carries a factor of one over the
+number of averaged entries. Weight sharing on the forward pass therefore means summed gradients
+on the backward pass: every patch of every image contributes to the update of the one shared
+template.
 
 ## Channels: from one detector to many {#from-one-detector-to-a-layer-of-detectives}
 
-One learnable kernel gives one feature map. The examples of fixed filters in @sec-07-filters-convolution
-already showed that one kernel is not
-enough: vertical edges, horizontal edges, blobs, textures all carry information. So
-a layer applies several kernels to the same input, six for example, each
-producing its own feature map.
+One learnable kernel gives one feature map, and one feature map records one pattern: a
+vertical edge, a horizontal edge, a local average. The examples of fixed filters in @sec-07-filters-convolution
+showed that an image carries many such patterns at once, and a classifier needs evidence about
+several of them at every position. A layer therefore applies several kernels to the same input,
+a team of specialized detectors, each producing its own feature map. Their responses at one
+position form a vector, and the representation gains a dimension: the **channels**.
 
-That is all the **channel** machinery is:
+Channels enter a convolutional layer at two places, with different roles:
 
 - **Out-channels add kernels.** A conv layer with 6 output channels owns 6
   independent kernels and produces a stack of 6 feature maps.
-- **In-channels let each kernel span the whole stack.** The *next* layer's input is that
-  6-deep stack, so each of its kernels grows a third dimension: a $6 \times 5 \times
-  5$ volume that covers all six incoming maps *simultaneously*, sums the
-  evidence into one output map, and adds that output channel's bias.
+- **In-channels let each kernel span the whole stack.** The next layer's input is that
+  6-deep stack, so the input at each position is a vector of 6 responses rather than one
+  pixel. Each kernel of the next layer therefore grows a third dimension: a $6 \times 5
+  \times 5$ volume that covers all six incoming maps at once.
 
-For an input stack $\matr{X}$ with $C_{\text{in}}$ channels, output feature map
-$o \in \{1, \dots, C_{\text{out}}\}$ is:
+For an input stack $X$ with $C_{\text{in}}$ channels, output feature map
+$o \in \{1, \dots, C_{\text{out}}\}$ is
 
 $$
 [H_o]_{i,j} \;=\; b_o \;+\; \sum_{c=1}^{C_{\text{in}}}\;
-\sum_{u=-\Delta}^{\Delta}\;\sum_{v=-\Delta}^{\Delta}
-[V_{o,c}]_{u,v}\,[X_c]_{i+u,\,j+v},
+\Bigl(\,\sum_{u=-\Delta}^{\Delta}\;\sum_{v=-\Delta}^{\Delta}
+[V_{o,c}]_{u,v}\,[X_c]_{i+u,\,j+v}\Bigr),
 $$ {#eq-conv-layer}
 
-which evaluates @eq-crosscorr across every input channel, accumulates across
-$C_{\text{in}}$, and adds the scalar channel bias $b_o$; a pointwise activation
-follows. A convolutional layer is an MLP layer with a structured linear map:
-dot products $\rightarrow$ add bias $\rightarrow$ ReLU. Nothing in the recipe
-changed; only the wiring of the linear part did.
+and a pointwise activation follows; as in @sec-07-filters-convolution, the kernel is
+$k \times k$ with $k = 2\Delta + 1$. The inner double sum is the cross-correlation of @eq-crosscorr,
+applied to input channel $c$ with the slice $V_{o,c}$ of the kernel; the outer sum adds the
+$C_{\text{in}}$ results, and $b_o$ is the bias of output channel $o$. The
+computation for one output pixel is one dot product between a
+$C_{\text{in}} \times k \times k$ patch of the input and the $C_{\text{in}} \times k \times k$
+kernel of output channel $o$, plus the bias $b_o$. A dense layer of an MLP takes a dot product
+across all of its input features; a convolutional layer takes the same kind of dot product
+across all input channels but only a small spatial window, and slides it over the grid. The
+recipe of the layer (dot products, bias, activation) is the MLP's; only the wiring of the
+linear part differs.
 
 :::: {.plan-code}
 ::: {.plan}
@@ -221,15 +241,12 @@ print(f"conv1   {tuple(h1.shape)}   kernels: {tuple(conv1.weight.shape)}")
 print(f"conv2   {tuple(h2.shape)}  kernels: {tuple(conv2.weight.shape)}")
 ```
 ::::
-Each second-layer kernel combines responses across channels and
-neighboring positions. If earlier channels respond to different
-edge orientations, a later layer can combine their spatial
-patterns. The following hand-built example illustrates this
-composition on a square, using two fixed edge detectors from @sec-07-filters-convolution.
-
-We give the first layer
-the two edge detectors (vertical and horizontal edge energy), then hand-build one
-second-layer kernel that spans both responses at once:
+Each kernel of `conv2` spans all six maps of `conv1`, so it computes combinations of the first
+layer's responses rather than of raw pixels. If earlier channels respond to edges of different
+orientations, a later channel can combine them into a response to corners or crossings. We
+build one such combination by hand on a filled square: two first-layer channels compute
+vertical and horizontal edge energy, and one second-layer kernel with equal positive weights on
+both channels sums them over a local window (@fig-corner-detector).
 
 :::: {.plan-code}
 ::: {.plan}
@@ -260,7 +277,7 @@ corners = F.conv2d(experts, corner_k, padding=2).squeeze()
 #| echo: false
 #| label: fig-corner-detector
 #| fig-alt: "Four grayscale panels progress from a filled square to vertical-edge energy, horizontal-edge energy, and their combined response. Only the last panel concentrates its brightest responses at all four corners."
-#| fig-cap: "Combining two edge maps by hand. Two first-layer detectors compute edge energy (absolute Sobel response) on a square. One second-layer kernel spanning both channels (all-positive weights; @eq-conv-layer with two input channels) sums both edge maps over a local window, and its response is strongest near the square's four corners."
+#| fig-cap: "Combining two edge maps by hand. The input is a 28×28 image of zeros whose central 14×14 block (rows and columns 7 to 20) is set to 1. Two first-layer channels compute edge energy, the absolute response to the vertical Sobel kernel and to its transpose, each with padding 1. One second-layer kernel of shape 2×5×5, every entry 1/50 (@eq-conv-layer with two input channels, padding 2), sums both edge maps over a local window, and its response is strongest near the square's four corners."
 fig, axes = plt.subplots(1, 4, figsize=(9, 2.5))
 panels = [(square, "input"), (v.squeeze(), "vertical-edge expert"),
           (h.squeeze(), "horizontal-edge expert"), (corners, "their reader: corners")]
@@ -268,11 +285,10 @@ for ax, (t, title) in zip(axes, panels):
     ax.imshow(t, cmap="gray"); ax.set_title(title, fontsize=9); ax.axis("off")
 plt.tight_layout(); plt.show()
 ```
-For this square, the combined response is strongest near the
-corners. The kernel sums local edge responses from both channels;
-a sufficiently strong response in either channel can also
-produce a large output. In a trained CNN, the coefficients of
-these combinations are learned from the task loss.
+For this square, the combined response is strongest near the corners, where both channels
+respond. The kernel only sums local edge responses, so a sufficiently strong response in
+either channel could also produce a large output. In a trained CNN, the coefficients of these
+combinations are learned from the task loss.
 
 ::: {.callout-tip}
 ## Modules and functional operations
@@ -288,20 +304,28 @@ to organize its trainable parameters.
 
 @sec-07-filters-convolution left a practical problem: a $k \times k$ kernel on an $n \times n$ image
 yields only $(n-k+1) \times (n-k+1)$ outputs, because the window must stay inside the
-frame. For one layer this is a nuisance. For a *deep* stack it is fatal: $28 \rightarrow 24
-\rightarrow 20 \rightarrow \cdots$ and the feature map shrinks toward nothing, with
-edge pixels contributing to ever fewer windows along the way.
+frame. For one layer this is a small loss. For a deep stack it is fatal: unpadded
+$5 \times 5$ convolutions take a $28 \times 28$ image to 24, 20, 16, 12, 8 and then 4 pixels
+on a side, and a seventh layer would leave nothing.
 
-The fix is **padding**: add a border of zeros around the input so the window
-can be centered on every real pixel. For a $5 \times 5$ kernel, a 2-pixel border
-returns exactly the input size $\rightarrow$ that is why the first convolutional layer above uses
-`padding=2`. Padding
-decouples "how deep can the network be" from "how fast do the maps shrink," and that
-decoupling is what makes deep stacks possible.
+Unpadded convolution also treats pixels unequally. A pixel enters one dot product for every
+window position that covers it, and near the border there are fewer such positions: a corner
+pixel is covered by a single window, an interior pixel by $k^2$. Border pixels therefore
+contribute fewer terms to the output, and receive fewer gradient terms, than central ones.
 
-Sometimes, though, we *want* to shrink: coarser maps mean less computation and a
-wider view per pixel. Then we shrink on purpose with **stride**: slide the window $s$
-pixels at a time instead of one. Both knobs enter one formula, which is worth memorizing:
+The remedy is **padding**: a border of extra pixels, usually zeros, added around the input
+before the window slides. Padding serves two purposes. It decouples depth from shrinkage, so a
+network can be deep without its feature maps vanishing. It also narrows the border imbalance:
+for a $3 \times 3$ kernel with one pixel of padding, a corner pixel enters 4 windows and an
+edge pixel 6, against 9 in the interior. For our $5 \times 5$ kernels, a 2-pixel border keeps
+a $28 \times 28$ image at $28 \times 28$, which is why the first convolutional layer above
+uses `padding=2`.
+
+Sometimes we want to shrink a map on purpose: coarser maps cost less computation, and every
+later window then covers more of the image. **Stride** moves the window $s$ pixels at a time
+instead of one. A stride of 2 roughly halves each spatial dimension and divides the number of
+activations by about four. A strided convolution downsamples with learned weights; pooling
+downsamples with a fixed rule. Padding, kernel size and stride enter one formula:
 
 $$
 n_{\text{out}} \;=\; \left\lfloor \frac{n + 2p - k}{s} \right\rfloor + 1 .
@@ -557,12 +581,13 @@ print(f"\nLeNet: {n_lenet:,} parameters ({n_conv:,} of them convolutional)")
 print(f"MLP:   {n_mlp:,} parameters")
 ```
 ::::
-Two readings of this table. Against the MLP, LeNet carries 61,706 parameters to the
-MLP's 203,530 (less than a third) while performing far richer spatial computation.
-This is the saving that @sec-07-filters-convolution's matrix view showed. Within LeNet,
-consider which layers hold the parameters. The two conv layers, which compute the spatial features,
-hold 2,572 parameters (about 4%) while the dense head holds the rest. We reduce that imbalance
-in @sec-09-modern-cnns-transfer, where modern
+These parameter counts can be read two ways. Against the MLP of @sec-06-generalization-inductive-bias,
+rebuilt here as `make_mlp` (the network of that chapter with an `nn.Flatten()` in front: 784
+inputs, 256 hidden ReLU units and 10 outputs), LeNet carries 61,706 parameters to the MLP's
+203,530 (less than a third) while performing far richer spatial computation. This is the saving
+that @sec-07-filters-convolution's matrix view showed. Within LeNet, the two convolutional
+layers, which compute the spatial features, hold 2,572 parameters (about 4%), and the dense
+head holds the rest. We reduce that imbalance in @sec-09-modern-cnns-transfer, where modern
 architectures go deeper in convolution and lighter in the head.
 
 Now train both models under one shared optimization recipe: same fitting split,
@@ -619,11 +644,11 @@ garments.
 
 ## LeNet under the two-pixel shift {#the-rematch}
 
-@sec-06-generalization-inductive-bias broke our MLP with one experiment: shift every validation garment two pixels
-right, and accuracy fell off a cliff. Now run the same shift on LeNet, which is built on locality and
-weight sharing. Before running, write down
-two predictions: LeNet's clean accuracy and its accuracy at a two-pixel shift. Retrained here on
-the same schedule, the MLP scores 75.5% clean and 42% at two pixels.
+In @sec-06-generalization-inductive-bias, shifting every validation image two pixels to the
+right took our MLP from 76.0% to 46.5% accuracy. We now give LeNet the same test. Retrained
+here on LeNet's schedule, the MLP starts from 75.5% clean validation accuracy and LeNet from
+74.5%, so the two begin level. The question is whether the convolutional structure makes the
+classifier more tolerant of the shift.
 
 :::: {.plan-code}
 ::: {.plan}
@@ -664,25 +689,23 @@ plt.ylim(0, 0.9); plt.xticks(shifts); plt.legend()
 plt.tight_layout(); plt.show()
 ```
 ::::
-At two pixels the MLP falls
-from 75.5% to 42.0%, while LeNet falls from 74.5% to 57.5%. That is one deterministic
-validation split, not a sampling distribution, but the within-run contrast is large.
-Under this recipe, the fitted LeNet is more tolerant of the
-two-pixel shift than the fitted MLP. The comparison changes the
-complete architecture, so it does not isolate the contributions
-of locality, weight sharing, pooling, or the classifier head.
+LeNet stays above the MLP at every nonzero shift, and the gap is largest at two and three
+pixels. At one pixel the two are close, 66.0% for LeNet and 64.0% for the MLP. At two pixels
+the MLP loses 33.5 points and LeNet 17.0; at three, LeNet scores 42.0% against 27.0%, and at
+four, 23.0% against 18.5%. These numbers come from one deterministic validation split, not a
+sampling distribution, but the within-run contrast is large.
 
-Several operations can still introduce shift sensitivity.
-Cropping and padding affect boundary responses, pooling depends
-on window alignment, and the dense head assigns separate weights
-to the spatial positions retained after flattening.
-The current experiment does not separate their effects. @sec-09-modern-cnns-transfer
-examines deeper convolutional networks and
-alternatives to the position-sensitive head.
+The comparison changes the complete architecture, so it does not isolate the contributions of
+locality, weight sharing, pooling or the classifier head. Several operations can still
+introduce shift sensitivity: cropping and padding affect the responses at the border, pooling
+depends on window alignment, and the dense head gives each spatial position retained after
+flattening its own weights. @sec-09-modern-cnns-transfer replaces that position-sensitive
+head with global pooling.
 
-Take one last look inside, because @sec-06-generalization-inductive-bias also showed us what the MLP's first layer
-*looked like* (full-frame weight maps with broad,
-diffuse patterns). Does LeNet's first layer look different?
+In @sec-06-generalization-inductive-bias, the MLP's first-layer weights were full-frame
+templates with broad, diffuse patterns. @fig-learned-filters shows the six $5 \times 5$
+kernels of LeNet's first layer and, under each, its feature map after the ReLU on the coat
+of @fig-receptive-field, a validation image.
 
 :::: {.plan-code}
 ::: {.plan}
@@ -706,7 +729,7 @@ kernels = lenet.conv1.weight.detach().squeeze(1)    # (6, 5, 5)
 #| echo: false
 #| label: fig-learned-filters
 #| fig-alt: "Six small signed kernel heatmaps form the top row, and six larger activation maps for the same coat form the bottom row. The response maps emphasize different local regions even where the kernels remain diffuse."
-#| fig-cap: "What LeNet's first layer learned. Top: six first-layer 5×5 kernels (red positive, blue negative). Bottom: their feature maps on the same validation coat used in @fig-receptive-field, whose sleeves and torso make spatial responses easy to compare. The maps respond differently, but several kernels remain diffuse and should not be over-interpreted."
+#| fig-cap: "What LeNet's first layer learned. Top: six first-layer 5×5 kernels (red positive, blue negative). Bottom: their feature maps on the coat of @fig-receptive-field, a validation image whose sleeves and torso make spatial responses easy to compare. The maps respond differently, but several kernels remain diffuse and should not be over-interpreted."
 fig, axes = plt.subplots(2, 6, figsize=(9, 3.2))
 lim = kernels.abs().max()
 for i in range(6):
@@ -715,20 +738,20 @@ for i in range(6):
     axes[0, i].axis("off"); axes[1, i].axis("off")
 plt.tight_layout(); plt.show()
 ```
-Six small, local kernels produce distinct response maps on the same garment. Some show
-directional structure; others remain noisy enough that naming them as detectors would
-claim more than this one run supports. Nobody designed them. They result from roughly 1,200 optimizer steps on the
+The six local kernels produce distinct response maps on the same image. Some show directional
+structure; others remain noisy enough that naming them as detectors would claim more than this
+one run supports. Nobody designed them: they result from optimizer steps on the
 classification loss, with gradients flowing backward through @eq-conv-layer.
 
 ## One sealed test check
 
-We have now fixed both architectures, the optimizer schedule, the shift size, and the
-two reported metrics. We refit each model on all 1,200 development images, then open the
-600-image test set once:
-
-Here *sealed* is chapter-local. These 600 images are not untouched: other chapters also use them as an endpoint, as [the
-experiment interlude](../interludes/learning-by-experiment.qmd) explains. No choice in
-this chapter looked at them.
+With both architectures, the optimizer schedule, the shift size and the two reported metrics
+fixed, we refit each model on all 1,200 development images with the same training budget, open
+the 600-image test set once, and score each refit model on the clean test images and on the
+same images shifted two pixels right. *Sealed* is chapter-local here: these 600 images also
+serve other chapters as an endpoint, as [the experiment
+interlude](../interludes/learning-by-experiment.qmd) explains, but no choice in this chapter
+looked at them.
 
 :::: {.plan-code}
 ::: {.plan}
@@ -749,9 +772,10 @@ for name, model in [("MLP  ", mlp_final), ("LeNet", lenet_final)]:
           f"shift-2 {accuracy(model, shift_right(X_test, 2), y_test):.1%}")
 ```
 ::::
-The sealed check confirms the validation comparison. Clean accuracy is 82.2% for the
-MLP and 82.5% for LeNet, a descriptive 0.3-point gap from one seed. Under the
-predeclared two-pixel shift, the gap becomes 41.8% versus 62.3%.
+The sealed check confirms the validation comparison. On clean test images the MLP scores
+82.2% and LeNet 82.5%, a descriptive 0.3-point gap from one seed. Under the predeclared
+two-pixel shift the MLP falls to 41.8% and LeNet to 62.3%, with less than a third of the
+MLP's parameters.
 
 ::: {.callout-note}
 ## Check yourself

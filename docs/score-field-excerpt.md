@@ -95,7 +95,7 @@ Lecture paths are relative to
 
 | Source | SHA-256 |
 |---|---|
-| `chapters/part5/19-generative.qmd` | `409e8f10623a0aab5fd9f40a3c9b999e265cf503a3a3df81c71eb6571bf06cba` |
+| `chapters/part5/19-generative.qmd` | `437405b8bb7c776fc6d55c1882bb06d71ec9d51ddf072620fbdf39588acc99c9` |
 | `6050-Ch19/lecture.jsx` | `aadc9e924c40da695315f0db3b58dc69b9cd77f6c807e5b85dd8b48eb5591a98` |
 | `6050-Ch19/STORYBOARD.md` | `6c0956d6e00f54428aa562527c602c8f521b66c52240ba2f776bdd5aa3f6643b` |
 | `6050-Ch19/ch19-data.js` | `a82d1f350fb6da16f92f8322a6fd0c41c130c80394ddd7d181cb9ed3d1358110` |

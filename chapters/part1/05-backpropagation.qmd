@@ -150,7 +150,8 @@ $L=\tfrac12\|\vect{a}^{(L)}-\vect{y}\|^2$,
 $\partial L / \partial \vect{a}^{(L)}$ is exactly the prediction error
 $\vect{a}^{(L)} - \vect{y}$. Other conventions contribute a known scale: mean squared
 error, for example, contributes $2/n$ for $n$ scalar outputs. In every case the output
-error is then gated by how sensitive the activation was to its input.
+error is then multiplied by the activation derivative, which measures how sensitive the
+activation was to its input.
 
 **2. Propagate one layer back:**
 
@@ -161,9 +162,9 @@ $$ {#eq-bp2}
 The sensitivity travels backward through the same weights the signal traveled forward
 through. Unit $j$ of layer $l$ fed every unit $i$ of layer $l+1$ through the weight
 $W^{(l+1)}_{ij}$, so it collects $\sum_i W^{(l+1)}_{ij}\,\delta^{(l+1)}_i$, which is entry
-$j$ of $(\matr{W}^{(l+1)})^\top\delta^{(l+1)}$: hence the transpose. The local gate
-$\sigma'(\vect{z}^{(l)})$ then scales it. This recursion runs from the last layer to the
-first.
+$j$ of $(\matr{W}^{(l+1)})^\top\delta^{(l+1)}$: hence the transpose. The activation
+derivative $\sigma'(\vect{z}^{(l)})$ then scales it. This recursion runs from the last
+layer to the first.
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
@@ -204,8 +205,8 @@ delta[0] = (Ws[1].T @ delta[1]) * sp(zs[0])          # eq. 2 again
 ```{python}
 #| echo: false
 #| label: fig-delta-pullback
-#| fig-alt: "Seven vertical strips of numbers read right to left: the single output sensitivity, its product with the transposed weights, the layer's four sigmoid-derivative gates in gray, the resulting four-entry sensitivity, and the same three steps again for the first hidden layer. Arrows labeled W transpose join each sensitivity to the next pulled-back strip; equals signs and elementwise-product signs sit between the others. Color fades toward the input. One row is outlined where a nearly closed gate shrinks a large pulled-back value."
-#| fig-cap: "@eq-bp2 as two operations, run right to left on a 3–4–4–1 network (random weights, one example): multiply by $W^\\top$, which sends each sensitivity back to every unit that fed it, then gate elementwise by $\\sigma'(z) \\le 0.25$ (gray). The numbers are the executed values; blue is negative and dark red positive on one shared scale, so the fading toward the input is the gates at work. The outlined row is the most nearly closed gate: a large pulled-back value leaves it as a small sensitivity."
+#| fig-alt: "Seven vertical strips of numbers read right to left: the single output sensitivity, its product with the transposed weights, the layer's four sigmoid derivatives in gray, the resulting four-entry sensitivity, and the same three steps again for the first hidden layer. Arrows labeled W transpose join each sensitivity to the next pulled-back strip; equals signs and elementwise-product signs sit between the others. Color fades toward the input. One row is outlined where a derivative near zero shrinks a large pulled-back value."
+#| fig-cap: "@eq-bp2 as two operations, run right to left on a 3–4–4–1 network (random weights, one example): multiply by $W^\\top$, which sends each sensitivity back to every unit that fed it, then multiply elementwise by the activation derivative $\\sigma'(z) \\le 0.25$ (gray). The numbers are the executed values; blue is negative and dark red positive on one shared scale, so the fading toward the input shows the derivatives at work. The outlined row has the smallest derivative: a large pulled-back value leaves it as a small sensitivity."
 import matplotlib.patches as mp
 from matplotlib.colors import LinearSegmentedColormap
 
@@ -450,8 +451,9 @@ at the start of the chapter. (The first layer needs no input gradient, because n
 upstream of the input $\matr{X}$ is trained; our code never forms one.)
 
 **Caching costs memory.** The backward pass read the hidden activations $\matr{A}^{(1)}$,
-for the gate $\sigma'(\matr{Z}^{(1)})$ and the gradient of $\matr{W}^{(2)}$, and the input
-$\matr{X}$, for the gradient of $\matr{W}^{(1)}$, so both had to survive the forward pass.
+for the activation derivative $\sigma'(\matr{Z}^{(1)})$ and the gradient of $\matr{W}^{(2)}$,
+and the input $\matr{X}$, for the gradient of $\matr{W}^{(1)}$, so both had to survive the
+forward pass.
 Here $\matr{A}^{(1)}$ alone holds $32 \times 8 = 256$ numbers, more than all $57$ parameters
 of the network, and it grows with the batch size while the parameter count does not. A deep
 network keeps about one such block per layer until the backward pass consumes it,
@@ -683,15 +685,16 @@ Rules 1 and 3 combine into the classic raw-tensor bug: the rebinding
 the next pass.
 :::
 
-## The gate, and the problem with deep chains
+## Activation derivatives and depth {#the-gate-and-the-problem-with-deep-chains}
 
-Look again at @eq-bp2. Every backward step multiplies by $\sigma'(\vect{z}^{(l)})$. That
-derivative acts as a **gate** on the sensitivity: a value near one preserves its scale,
-while a value near zero attenuates it.
+In @eq-bp2, the transposed weight matrix combines sensitivities from the next layer, and
+the activation derivative scales each resulting component. A derivative near zero
+attenuates that component; a derivative equal to one leaves it unchanged at this
+operation.
 
-Now examine the sigmoid's gate. From $\sigma'(z) = \sigma(z)(1-\sigma(z))$, its maximum
-value, at $z = 0$, is exactly $0.25$; away from zero the neuron *saturates* and the gate
-approaches $0$. The sigmoid gate is at best a quarter open, and often nearly closed.
+For the logistic sigmoid, $\sigma'(z) = \sigma(z)(1-\sigma(z))$. Its maximum
+value, at $z = 0$, is exactly $0.25$; as the activation saturates toward either endpoint,
+its derivative approaches zero.
 
 :::: {.plan-code}
 ::: {.plan}
@@ -716,7 +719,7 @@ relu_gate = (z > 0).float()
 #| echo: false
 #| label: fig-gates
 #| fig-alt: "The sigmoid-derivative panel is a bell-shaped curve capped at one quarter and approaching zero in both tails. The ReLU-derivative panel is a step: zero for negative inputs and one for positive inputs."
-#| fig-cap: "Two gates. The sigmoid's derivative never exceeds 0.25 and vanishes under saturation; ReLU's is fully open (exactly 1) for every active neuron."
+#| fig-cap: "Activation derivatives on a common vertical scale. The sigmoid derivative never exceeds $0.25$ and approaches zero under saturation. The ReLU derivative is zero for negative inputs and one for positive inputs."
 fig, axes = plt.subplots(1, 2, figsize=(7.4, 2.9), sharey=True)
 axes[0].plot(z, sigmoid_gate, color="#232D4B")
 axes[0].axhline(0.25, ls="--", color="#E57200", lw=1)
@@ -726,26 +729,27 @@ axes[1].plot(z, relu_gate, color="#232D4B")
 axes[1].set_title(r"ReLU gate"); axes[1].set_xlabel("$z$")
 plt.tight_layout(); plt.show()
 ```
-Stack these gates, and you get one of deep learning's most important failure modes.
+Products of these derivatives produce one of the central failure modes of deep networks.
 The chain rule *multiplies* local Jacobians across layers. The activation-derivative
 part of a sigmoid path contributes at most $0.25$ per layer, so that part is bounded by
 $0.25^k$ after $k$ gates. Ten gates in, its ceiling is below one in a million. The
 weight matrices and branching paths also scale the full network Jacobian, so
-$0.25^k$ is not a bound on the complete gradient. It isolates why repeated sigmoid
-gates strongly favor vanishing signals.
+$0.25^k$ bounds the activation-derivative product alone, not the complete gradient; it
+isolates why repeated sigmoid derivatives strongly favor vanishing signals.
 
 Now replace the sigmoid with ReLU. $\mathrm{ReLU}(z) = \max(0, z)$ has derivative
 $1$ for $z > 0$ and $0$ for $z < 0$. At the kink $z=0$, PyTorch uses derivative $0$;
-exact zeros can occur with zero biases or sparse activations. The gate is either fully
-open or fully closed. On positive inputs, ReLU has an activation derivative of one.
-Its derivative therefore introduces no attenuation at those units, although the
-surrounding weight matrices can still amplify or attenuate the full sensitivity.
+exact zeros can occur with zero biases or sparse activations. The derivative is either
+one or zero. At an active unit the sensitivity passes through this factor unchanged; the
+surrounding weight matrices can still amplify or attenuate it, which is where the weight
+scale comes in.
 
-Do not take the argument on faith; measure it. We build the same 30-layer network twice
-(sigmoid versus ReLU), give both copies the same He-scaled weights and input batch, and
-record how much gradient reaches each layer. We compute the diagnostic in float64 so
-the norm itself does not underflow; then we ask the practical float32 question: would a
-learning-rate-$0.1$ update actually change the first layer's stored weights?
+We test the argument in two networks that differ only in the activation function. Both
+have 30 layers, one with sigmoid units and one with ReLU. Both get the same He-scaled
+weights and input batch, and we record how much gradient reaches each layer. We
+compute the diagnostic in float64 so the norm itself does not underflow; then we ask the
+practical float32 question: would a learning-rate-$0.1$ update actually change the first
+layer's stored weights?
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
@@ -759,7 +763,7 @@ learning-rate-$0.1$ update actually change the first layer's stored weights?
 ```{python}
 #| label: fig-vanishing
 #| fig-alt: "On a logarithmic gradient-norm axis across thirty layers, the sigmoid curve is extremely small near the input and grows toward the output, while the ReLU curve remains many orders of magnitude higher at early layers."
-#| fig-cap: "Gradient reaching each layer of two matched 30-layer MLPs (float64 norm, log scale). With the same He-scaled weights and inputs, repeated sigmoid gates leave a nonzero but unusably small first-layer signal; ReLU preserves enough signal for a float32 update to change every first-layer weight."
+#| fig-cap: "Gradient reaching each layer of two matched 30-layer MLPs (float64 norm, log scale). With the same He-scaled weights and inputs, repeated sigmoid derivatives leave a nonzero but unusably small first-layer signal; ReLU preserves enough signal for a float32 update to change every first-layer weight."
 #| code-summary: "Code: the depth experiment"
 #| code-fold: false
 from torch import nn
@@ -813,23 +817,21 @@ for name, result in diagnostics.items():
           f"changed={result['first_changed']}/{result['first_size']}")
 ```
 ::::
-Read the slopes, then read the printed counts of nonzero gradient entries and changed weights. The sigmoid first-layer entries are not
-mathematically or representationally zero: all 4,096 survive the float32 cast. They are
-so small, however, that subtracting $0.1g$ changes none of the stored float32 weights.
-The ReLU copy changes all 4,096. That distinction matters: a displayed float32 norm can
-underflow while individual entries remain nonzero, and nonzero gradients can still be
-too small to move a parameter at its current magnitude. In this matched experiment, ReLU
-leaves gradients large enough for a float32 update to change every first-layer weight.
-Underflow and a rounded-away update are separate representation failures, and @sec-a3-precision-performance
-names both: a gradient entry can stay nonzero in float32 while the update it produces
-rounds away when subtracted from a larger stored weight.
+Read the slopes, then read the printed counts of nonzero gradient entries and changed
+weights. All 4,096 sigmoid first-layer entries survive the float32 cast as nonzero
+numbers. They are so small, however, that subtracting $0.1g$ changes none of the stored
+float32 weights. The ReLU network changes all 4,096.
+That distinction matters, and @sec-a3-precision-performance names both failures: a displayed float32 norm can underflow while individual entries
+remain nonzero, and a nonzero entry can still produce an update that rounds away when
+subtracted from a larger stored weight.
 
 ## Initialization and signal scale {#initialization-setting-the-signals-energy}
 
-The weights also scale the signal at each layer, so their starting scale is a second
-lever. If each layer multiplies the variance of the signal by more than one, activations
-explode after enough layers; by less than one, they vanish, and by @eq-bp2 the gradients
-follow. A good initialization keeps the variance roughly constant in both directions.
+The weights also scale the signal at each layer, so their initial scale is a second
+factor we choose. If each layer multiplies the variance of the signal by more than one,
+activations explode after enough layers; by less than one, they vanish, and by @eq-bp2
+the gradients follow. A good initialization keeps the variance roughly constant in both
+directions.
 
 The variance scales predictably through the dot product. For
 $z = \sum_{i=1}^{n_{\text{in}}} w_i x_i$ with independent, zero-mean inputs and weights,
@@ -848,8 +850,6 @@ for ReLU discarding half its input distribution by doubling the forward recipe,
 $\var(w) = 2/n_{\text{in}}$. A PyTorch linear layer follows neither recipe by default: it
 draws its weights uniformly with variance $1/(3n_{\text{in}})$, a sixth of the He value
 $2/n_{\text{in}}$, so a deep ReLU stack without normalization needs an explicit choice.
-The difference between a good and a careless choice is smooth training versus a dead or
-exploding network:
 
 :::: {.plan-code}
 ::: {.plan}
@@ -863,7 +863,7 @@ exploding network:
 ```{python}
 #| label: fig-init
 #| fig-alt: "Activation standard deviation is traced across forty ReLU layers. One naive scale collapses toward zero, another grows explosively, and the He-initialized trace stays roughly level."
-#| fig-cap: "Activation standard deviation through 40 ReLU layers. The two fixed weight scales produce rapid attenuation or growth; the He-initialized trace remains roughly level in this run."
+#| fig-cap: "Activation standard deviation through 40 ReLU layers of width $n = 256$. Each fixed weight scale multiplies the signal by a roughly constant factor per layer, a straight line on the log axis; the He-initialized trace stays near its starting scale in this run."
 #| code-summary: "Code: signal energy vs depth"
 #| code-fold: false
 from collections.abc import Callable
@@ -897,13 +897,15 @@ plt.xlabel("layer"); plt.ylabel("std of activations")
 plt.legend(); plt.tight_layout(); plt.show()
 ```
 ::::
-Initialization determines the starting scale of the weights. During training,
-normalization layers rescale intermediate computations, while skip connections
-provide additive paths through a network. Normalization and the residual idea arrive
-in @sec-09-modern-cnns-transfer, and layer normalization becomes essential inside the
-Transformer of @sec-14-self-attention-transformer. Initialization, normalization,
-and skip connections help control activation and gradient scales through different
-mechanisms.
+Over 40 layers, the two fixed scales, $0.05$ and $0.12$, move the signal by many orders of
+magnitude before training starts, while the He scale keeps it level. Initialization sets
+the starting scale of the weights, and the choice of activation determines the derivative
+factors; together they decide whether the forward and backward signals survive depth at
+the start of training. Two later tools work on the same problem during training:
+normalization layers rescale intermediate computations, and skip connections add paths
+that bypass a block's activation derivatives and weights alike. Normalization and the
+residual idea arrive in @sec-09-modern-cnns-transfer, and layer normalization becomes
+essential inside the Transformer of @sec-14-self-attention-transformer.
 
 ::: {.callout-note}
 ## Check yourself
@@ -922,21 +924,21 @@ Close the book for one minute and run the chain rule backward.
    contributions from multiple paths.
 2. **The sensitivity.** $\delta^{(l)} = \partial L / \partial \vect{z}^{(l)}$ turns
    the tangle into four equations: start at the output (@eq-bp1), propagate through
-   $\matr{W}^\top$ and the gate (@eq-bp2), then read off weight and bias gradients
-   (@eq-bp3, @eq-bp4). On a batch, each forward matrix product costs two backward
-   ones, so the sweep delivers *every* gradient for about twice the forward
+   $\matr{W}^\top$ and the activation derivative (@eq-bp2), then read off weight and
+   bias gradients (@eq-bp3, @eq-bp4). On a batch, each forward matrix product costs two
+   backward ones, so the sweep delivers *every* gradient for about twice the forward
    arithmetic, paid for in cached activations.
 3. **We verified it**: our hand-built equations match PyTorch's autograd to
    $10^{-8}$. The scalar engine illustrates reverse topological order and adjoint
    accumulation by addition.
 4. **Activation derivatives and depth.** The sigmoid-derivative product along a
-   path is bounded above by $0.25^k$ after $k$ gates. ReLU has an activation derivative
-   of one on positive inputs. Initialization helps control activation and gradient
-   scales at the start of training.
+   path is bounded above by $0.25^k$ after $k$ activation-derivative factors. ReLU has
+   an activation derivative of one on positive inputs. Initialization helps control
+   activation and gradient scales at the start of training.
 
 Backpropagation trains every model from here through @sec-20-multimodal. The next
 time a deep model fails to learn, your first questions now have names: *is the gradient
-reaching the early layers? what is gating it? what is its scale?*
+reaching the early layers? what is attenuating it? what is its scale?*
 
 ## Sources and further reading {.unnumbered}
 
@@ -994,7 +996,7 @@ reaching the early layers? what is gating it? what is its scale?*
    $|g_a-g_n|/\max(10^{-12},|g_a|,|g_n|)$ for
    $\varepsilon=10^{-2},\ldots,10^{-10}$ in float32 and float64. Plot relative error,
    explain its U-shape as truncation meets rounding, and require agreement across
-   several randomly selected parameters under seed 6050. *Named wrong answer:*
+   several randomly selected parameters under a fixed seed. *Named wrong answer:*
    “absolute error below $10^{-4}$ proves the gradient”: absolute error ignores the
    scale of the quantity being checked.
 7. **(Pencil.)** Let $\hat{\vect{y}} = \operatorname{softmax}(\vect{o})$ for logits
@@ -1009,6 +1011,6 @@ reaching the early layers? what is gating it? what is its scale?*
    one-hot target and recover the row formula in Exercise 4
    of @sec-02-logistic-softmax.
    **(Code.)** Implement `softmax_vjp(y_hat, u)`, check it against
-   `torch.autograd.grad` in float64 for random logits and upstream vectors under seed
-   6050, and time it against multiplying by the materialized Jacobian for
+   `torch.autograd.grad` in float64 for random logits and upstream vectors under a fixed
+   seed, and time it against multiplying by the materialized Jacobian for
    $K = 10^2, 10^3, 10^4$.

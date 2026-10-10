@@ -108,7 +108,7 @@ Source digests recorded before implementation:
 
 | Source | SHA-256 |
 |---|---|
-| `chapters/part5/18-alignment.qmd` | `680de41a048fd62e53b9460f1f6961deb92d025e90923a57696f8852d5664f5d` |
+| `chapters/part5/18-alignment.qmd` | `62d7bb34d01b01c76f00d92cbffdb0fd025bb206bfa0ad55b463f2f12a930573` |
 | `6050-Ch18/lecture.jsx` | `b6249e488ae52885878af68311b57b07e064a8e1d1ff97a333e1d94c62ebcd14` |
 | `6050-Ch18/STORYBOARD.md` | `ab55d9c8a65e83d285dc6c9a5b68ddfad53022d04fa9901eaf9aca7fc67e11c2` |
 | `6050-Ch18/ch18-data.js` | `6d2e39ae7ca6cad71629827bc7c951dfc6f1289f88a1da93aa24e55028e06b16` |

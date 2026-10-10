@@ -1,3 +1,77 @@
+# Rolling post-v1.4: the print edition's additions of October 9, 2026
+
+- **What carried over.** The new material the author approved for the Springer print edition on
+  October 9, 2026 (items 1 to 8 of the Frontiers list and three pieces the author asked for), in
+  Chapters 2, 13, 16, 17, 21 and 22 and Appendix E. The wording is print's.
+- **Chapter 16.** The score written as one learned matrix $W_QW_K^\top$, with the row-softmax caveat
+  and a footnote on tied projections (Tsai et al.); a new figure, `fig-self-attention-geometry`, that
+  draws one row of attention as geometry in a two-dimensional toy, each learned matrix a function
+  between planes; the causal mask as conditioning; LayerNorm's sphere and the RMSNorm contrast; why
+  the original Transformer needed warmup, and pre-LayerNorm (Xiong et al.); a box on what attention
+  alone does to a stack of tokens (rank collapse, Dong, Cordonnier, and Loukas), so residuals do an
+  additional job and keep the tokens distinct; Haviv et al. on positional information from the
+  causal mask; and, in the decoding practice bridge, the paragraph on per-step masking. The later
+  figures of Chapter 16 renumber.
+- **Elsewhere.** Chapter 13: a pencil exercise on forbidding tokens one step at a time, with Park
+  et al. Chapter 2: an optional exercise (the temperature softmax maximizes expected score plus
+  temperature times entropy), with Jaynes. Chapter 17: why the exponential kernel has no finite
+  feature map (Choromanski et al.). Chapter 21: the Gibbs policy as a temperature softmax, a fourth
+  route-table row for programmatic checks, a paragraph on checkers and reward hacking, a closing
+  sentence for Exercise 5, and Tülu 3, Lightman et al. and Liu et al. Chapter 22: a sample-based
+  result belongs to the weights and the sampler; the denoising-autoencoder recall; Vincent 2011.
+  Appendix E: the population minimizer of each loss and an orthogonality exercise (Gneiting).
+- **Adapted for this edition.** Decoding rules live in Chapter 16's practice bridge here, not in
+  Chapter 13 as in print. So the per-step-masking paragraph sits in that bridge and links back to the
+  causal mask, the mask sentence drops print's forward link to the samplers, Chapter 13's Exercise 9
+  and Chapter 22 point to the bridge, and Park et al. is listed in both chapters. Chapter 21's new row follows this edition's third row (online
+  policy optimization with a value function). The figure's caption names its planes Left, Middle and
+  Right.
+- **Unchanged.** No code cell, printed number, heading or anchor changed. The changed chapters were
+  re-rendered on the reference machine, and every frozen stdout block is byte-identical.
+  Each addition, with its location, print source, adaptations and the
+  author's open questions, is in `audits/voice/print_additions_2026-10-09.md`.
+
+# Rolling post-v1.4: the print edition's later revisions (October 8, 2026)
+
+- **What carried over.** The Springer print edition's revisions of October 6 to 8, 2026: the 397
+  entries of its HTML ledger that the October 5 pass did not decide. 186 were applied, some in part.
+  Another 2 were superseded by a later entry, and 11 were declined under the author's rulings. 152
+  were print-specific (prose versions of experiments that this edition shows as code, listings,
+  companion pointers, layout). 46 wait for the author: new figures, sections, boxes and exercises,
+  text pinned by CI or by a replay, and NOVEL-marked passages. The Preface, the Part III page and
+  Chapters 3, 5 to 19 and 21 to 23 changed.
+- **The house rules, now VOICE.md D13.** "Gate" names only the LSTM and GRU gates, and the factor
+  $\sigma'(z)$ in backpropagation is the activation derivative. A section's first two sentences are
+  about its phenomenon, not its setup. The GPU cluster is never named. Seed numbers appear only in
+  printed code: prose, captions, alt text and Plan steps say "a fixed seed", "five seeds" or "the
+  third run". CLAUDE.md, the style guide and the arc-seeds ledger follow.
+- **Rewritten passages.** The author's new text for Chapters 6 to 13: Chapter 6's weight maps,
+  U-curve and pixel geometry; Chapter 7's opening; Chapter 8's moving average, sliding dot product,
+  equivariance test and matrix view; Chapter 9's opening, kernel gradient, channels, padding and
+  shift results; Chapter 10's opening and projection shortcuts; Chapter 11's opening, loss as a noise
+  model, sampler box and bridge to recurrence; Chapter 12's opening and six goals, gradients through
+  time, finite horizons and the book-reads-itself study; Chapter 13 as a conditional language model,
+  with its two masks, checkpoint choice, search and recap. The Part III page is the author's new
+  text: incremental computation, one transition rule shared across time, gated architectures, and
+  the training and decoding rules that Parts IV and V reuse.
+- **Chapters 5 and 11.** Chapter 5's depth section is now "Activation derivatives and depth", and
+  its experiment compares two 30-layer networks that differ only in the activation function. Its
+  replay-pinned sentence "$0.25^k$ after $k$ gates", the replay panel and the drawn panel titles
+  still say "gate" and wait for the author with a tested patch. Chapter 11's paragraph after the
+  nonlinear-autoencoder figure keeps its wording: it sits in a signed-off NOVEL passage, so its
+  tightening (ch11-rev14-04) waits for the author.
+- **Anchors and replays.** Retitled headings keep their old slugs as explicit ids (Chapter 5
+  "Activation derivatives and depth", Chapter 6 "Capacity: testing the classical U-curve", Chapter
+  13 "What the loss grades and what the encoder reads" and its recap), so no link moved. No replay
+  literal, manifest entry or CI-pinned sentence changed. The receipts' chapter-hash rows were
+  refreshed with `scripts/refresh_excerpt_receipts.py` after re-reading that no replay quotes an
+  edited sentence.
+- **Unchanged.** No computation, printed number or code cell changed, and no figure was redrawn;
+  captions and alt text changed in place. Every changed chapter was re-rendered on the reference
+  machine, and every frozen stdout block is byte-identical. Every
+  changed passage beside its original, every ledger entry's decision and the items waiting for the
+  author are in `audits/voice/print_revisions_2026-10-08.md`.
+
 # Rolling post-v1.4: the print edition's language revisions (October 5, 2026)
 
 - **What carried over.** The Springer print edition's revisions through October 5, 2026, read

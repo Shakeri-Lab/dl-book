@@ -250,5 +250,5 @@ line, which every width carries.
 
 | path | sha256 |
 |---|---|
-| `chapters/part1/03-nonlinearity-mlp.qmd` | `d4f75bca8a468e6016dc52f70045137042c5215f5459398827daec2ca5a6c245` |
+| `chapters/part1/03-nonlinearity-mlp.qmd` | `3b4fe926e7acd19ef96bc02f4a729cd688b509a3d5b334b54503651b69148f44` |
 | `6050-Ch3/STORYBOARD.md` | `065d2f5e9054d0581b9909b52654fafce446352caa94724b4752f4a620aeee84` |

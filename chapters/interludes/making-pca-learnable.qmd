@@ -18,20 +18,45 @@
      from displayed equations. D2L-linked course code and external figures were not
      reproduced. -->
 
-Part II used learned features to predict class labels. We now change the objective: can a
-network compress an input into a small code and reconstruct it? The input itself supplies
-the target, so we can study representation learning without class labels.
+The models we have built so far lived under a strict contract: the input size was fixed in
+advance. In Part I, our multilayer perceptrons demanded exactly 784 input pixels. In Part II,
+convolutional networks processed images on fixed spatial grids (or cropped and resized them
+to uniform dimensions), which also let batch normalization compute clean statistics.
 
-This interlude introduces the encoder--decoder structure through a familiar example. PCA
-already learns principal directions from data. We first express its reconstruction as a
-linear autoencoder and fit that map by gradient descent, then allow nonlinear maps to
-represent curved structure. A convolutional example connects the same idea to the image
-models just developed.
+Much of the data we care about does not come in a fixed size. Natural language can be a
+two-word greeting or an entire novel; audio can be a brief command or a symphony. How do we
+bridge the fixed-size machinery we know with the variable-length reality of incoming data?
 
-The encoder--decoder structure will return in later chapters. For sequences, we will need a
-rule for updating a representation as inputs arrive (@fig-fixed-code-bridge). For
-generation, we will need a rule for sampling new codes. Reconstruction alone supplies
-neither.
+The opening move is a clever sidestep: rather than inventing a variable-length architecture
+immediately, we learn to compress data into a fixed-size latent code. The strategy works
+because high-dimensional observations rarely fill their ambient space. An image with $d$
+pixels or a document with thousands of tokens contains enormous redundancy: noise, empty
+backgrounds and superficial syntax. The underlying concepts, structures and identities
+concentrate near a much lower-dimensional set, often called a manifold. If an encoder can
+extract them into a compact vector $\vect{z} \in \mathbb{R}^k$, with $k \ll d$, we can
+return to the charted territory of fixed-size readout heads and classifiers.
+
+This interlude introduces the **encoder--decoder** architecture through unsupervised
+reconstruction, where the input itself supplies the target. We begin with principal
+component analysis (PCA), which finds the best flat subspace for squared reconstruction
+error in closed form. We rewrite PCA as a tied linear network optimized by gradient descent,
+then add depth and activations so that the reconstruction map can follow curved structure.
+A convolutional autoencoder then connects the compression principle to the spatial features
+of Part II.
+
+Compressing an input into a static code is a powerful design pattern, but it leaves two
+fundamental questions unanswered (@fig-fixed-code-bridge):
+
+1. **How do we handle streaming evidence?** For a sequence that arrives one piece at a time,
+   a one-shot encoder cannot run until the final token has arrived, and a fixed-width vector
+   cannot expand as evidence accumulates. Part III addresses this with a shared rule that
+   updates a latent state step by step as each input arrives.
+2. **How do we generate new data?** An autoencoder learns to reconstruct observed examples,
+   but its latent space has gaps between the observed codes, where the decoder was never
+   trained, and it supplies no rule for drawing a random starting point. In
+   Part V (@sec-19-generative) we return to this bottleneck and give the latent space a
+   probability distribution, turning deterministic compression into generative models that
+   sample new data.
 
 <!-- NOVEL: needs sign-off -->
 
@@ -43,7 +68,7 @@ neither.
 
 ```{python}
 #| echo: false
-#| fig-alt: "A fixed image passes through an encoder to a small code and then a decoder. Below it, short and long sequences are both squeezed into the same-width code; the long path is marked as a fixed-code bottleneck and points toward step-by-step recurrence."
+#| fig-alt: "Two rows under the title Compress first; then ask what the code cannot do. Top: a fixed object passes through an encoder to a small code and then a decoder to its reconstruction. Bottom: short and long sequences are both squeezed into the same fixed-width code and reconstructed; notes say more evidence, yet no more memory, and point toward updating memory step by step."
 #| fig-width: 10
 #| fig-height: 4.2
 #| code-summary: "Figure code: connect fixed-size codes to step-by-step memory"
@@ -130,10 +155,11 @@ plt.tight_layout()
 plt.show()
 ```
 
-A fixed-size
-object can be compressed and reconstructed. Variable-length sequences can also be
-forced through one code, but its width does not grow with the evidence. The unmet
-need is memory that updates as each new piece arrives.
+The fixed-code contract. Top: an autoencoder compresses a fixed-size object into a
+compact code and decodes it back, the regime in which the contract holds. Bottom: when
+evidence arrives in sequences of different lengths, short and long sequences are forced
+into the same fixed-width code, which cannot grow with the evidence. What the bottom row
+needs is memory that updates as each new piece arrives.
 :::
 
 ## Compress, then reconstruct
@@ -163,9 +189,19 @@ $$
 The target is available for free (the input supplies it), but the objective is still
 specific: preserve enough information to reconstruct the input. This is commonly
 called **self-supervised** because each input supplies its own target. It also
-belongs to unsupervised representation learning. Mean squared error is one
-choice, suitable when independent, equal-variance Gaussian error is a reasonable model.
-It is not the universal autoencoder loss.
+belongs to unsupervised representation learning. The squared error is not the universal
+autoencoder loss. As @fig-likelihood-loss showed, a loss is a noise model for the target.
+If each coordinate of $\vect{x}$ is the decoder output plus independent Gaussian noise of
+variance $\sigma^2$, the negative log-likelihood of the input is
+
+$$
+-\log p(\vect{x}\mid\vect{z})
+=\frac{1}{2\sigma^2}\norm{\vect{x}-g_\theta(\vect{z})}_2^2+\text{const},
+$$
+
+so maximum likelihood gives the squared error. For binary coordinates, a Bernoulli model
+with a sigmoid output gives the binary cross-entropy (@eq-bce) instead; applied to gray
+levels in $[0,1]$, the same formula is a common surrogate rather than an exact likelihood.
 
 The hourglass shape creates pressure. If $k$ is small and the maps have controlled
 capacity, useful regularities may be cheaper to preserve than the quirks of
@@ -546,10 +582,22 @@ beyond those codes; at the unsupported draw $z=0.5$, their outputs differ.
 ::: {.callout-warning}
 ## Reconstruction does not specify a sampler
 
-A deterministic autoencoder may still be used inside a generative system, and we can
-fit a separate distribution to its codes. The narrower statement is the important
-one: ordinary reconstruction training supplies no built-in latent prior and no principled
-rule for arbitrary random draws. A code is not yet a probability distribution.
+A deterministic autoencoder maps $\vect{x} \mapsto \vect{z} \mapsto \hat{\vect{x}}$. It
+trains the decoder only on the codes that observed training examples produce. Between those
+codes, and outside their empirical range, nothing in the training data constrains what the
+decoder does.
+
+Ordinary reconstruction training supplies no prior distribution over the latent space and
+no principled recipe for drawing a random starting vector. If we draw
+$\vect{z} \sim \mathcal{N}(\vect{0}, \matr{I})$ and feed it to a deterministic decoder, the
+output can be a blur or an implausible mixture of training examples.
+
+To turn a representation into a generative model, we must give the latent space a
+probability law. In Part V (@sec-19-generative) we build **variational autoencoders**
+(VAEs): networks whose encoder outputs a distribution, whose training penalizes its
+divergence from a known prior with the Kullback--Leibler divergence, and whose
+reparameterization trick makes the sampling step trainable. For now, keep the distinction:
+*a code is not yet a distribution*.
 :::
 
 One useful intermediate move is **same architecture, different
@@ -823,29 +871,34 @@ changes the function the same architecture is rewarded for learning.
 
 ## From fixed-size inputs to sequences {#why-a-one-shot-encoder-cannot-be-the-whole-sequence-model}
 
-We now have a useful machine: an encoder can learn a code; a decoder can be
-trained to reconstruct, denoise, or translate from it. Why not encode an entire
-sentence into one $k$-dimensional vector and decode the translation?
+We now possess a working representation machine: an encoder compresses an input into a
+compact latent vector $\vect{z}$, and a decoder reconstructs, denoises or transforms it. Why
+not solve sequence tasks, such as machine translation, by encoding an entire sentence into
+one $k$-dimensional vector and decoding it into another language?
 
-For short, bounded objects, that design may work. The trouble is the contract:
+For short, bounded sequences, this one-shot compression can serve as a crude baseline
+(Exercise 6 builds one). But it does not match how sequential data arrives:
 
-- every input must be available before the one-shot encoder can finish;
-- the code has the same width for four tokens and four thousand;
-- every distinction in content and order must survive the same handoff;
-- the decoder cannot revisit an earlier input detail that the code discarded.
+- **Premature termination.** Every token of the input must be available before the
+  one-shot encoder can run. It cannot stream, listen or respond as the input arrives.
+- **Static capacity against growing evidence.** The code has the same width $k$ whether it
+  compresses a three-word phrase or a thousand-word contract.
+- **Irrevocable loss of order and detail.** Word order, subordinate clauses and every
+  intermediate detail must survive the same static handoff; once the encoder discards a
+  detail to fit its bottleneck, the decoder cannot look back to retrieve it.
 
-The fixed-input encoders constructed here expect a predetermined input shape. Increasing
-the code width $k$ does not change that interface or specify how to incorporate another
-sequence element. The recurrent network of @sec-10-sequences-rnn introduces a shared update:
+Padding or truncating variable inputs to an arbitrary maximum length only evades the
+problem. What we need is not a wider static code but a **time-homogeneous state update**:
 
 $$
-\vect{h}_t=f_\theta(\vect{h}_{t-1},\vect{x}_t),
+\vect{h}_t = f_\theta(\vect{h}_{t-1}, \vect{x}_t).
 $$
 
-The same update can be applied as each element arrives, allowing the computation to
-continue for different sequence lengths. The state still has fixed width, so recurrence does
-not remove every information bottleneck. It supplies the variable-length processing rule
-that the fixed-input architecture lacked.
+The model applies the same parameterized update rule as each token arrives, maintaining a
+running memory vector $\vect{h}_t$ that evolves with the evidence. The state still has a
+fixed width, so recurrence does not remove every bottleneck, but it supplies the processing
+rule that a one-shot encoder lacks. That rule is the foundation of recurrent neural
+networks, the subject of Part III (@sec-10-sequences-rnn).
 
 ::: {.callout-note}
 ## Two different limitations
@@ -881,9 +934,10 @@ Answer these questions without looking back.
    shape-changing operator used by the decoder, not an inverse of the encoder.
 5. **Same architecture, different contracts, different behavior.** Clean reconstruction,
    denoising, and translation pair inputs and targets in distinct ways.
-6. **A one-shot handoff leaves two questions open.** Processing a variable-length sequence needs a
-   rule for updating a representation as its elements arrive. Drawing new samples needs a
-   probabilistic rule for choosing the starting code.
+6. **A static code leaves two distinct frontiers open.** Processing a variable-length
+   sequence requires a time-homogeneous rule for updating memory as tokens arrive
+   (Part III). Generating genuinely new samples requires giving the latent space a
+   probability law and learning a sampling procedure (Part V, @sec-19-generative).
 
 ## Sources and further reading {.unnumbered}
 

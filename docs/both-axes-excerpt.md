@@ -455,7 +455,7 @@ from that tree itself on 2026-09-29.
 
 | Source | SHA-256 |
 |---|---|
-| `chapters/part4/14-self-attention-transformer.qmd` | `3d9a8e060ab570345a02dbd2b050f02aa65c09a06b2dface0043c1c6c8623182` |
+| `chapters/part4/14-self-attention-transformer.qmd` | `44a80188f044fba1c38b85818d984a57ab2c351283e8545f29d753b7ba199cd9` |
 | `6050-Ch14/lecture.jsx` | `ac103ade3aecf01355955a24a1a2042cd9c58d6a434b39dd7ef6e680ee0fce93` |
 | `6050-Ch14/STORYBOARD.md` | `cd493a87b78f9f2fcd705bd2385bf4f8651bb3a9472e44b120838fffa81b1324` |
 | `6050-Ch14/ch14-data.js` | `df6cfab3b0b92b5e9eaf634ae82a229f42dfa32030600bc0016ef90d7b11ff39` |
