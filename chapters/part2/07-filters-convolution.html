@@ -574,6 +574,7 @@ window.Quarto = {
 <span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>smooth <span class="op">=</span> F.conv1d(noisy[<span class="va">None</span>, <span class="va">None</span>], kernel[<span class="va">None</span>, <span class="va">None</span>]).squeeze()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
 </div>
+<p>We slide a symmetric window along the signal. At each stop, we average the samples under the window and record that mean as the output at the window’s center. The positive and negative fluctuations of the noise largely cancel in the sum, so the rapid jitter is damped while the slow variation of the signal survives. <a href="#fig-moving-average" class="quarto-xref">Figure&nbsp;<span>8.1</span></a> shows the operation on a noisy sinusoid; its bottom panel magnifies one nine-point window and the averaging step that produces one point of the smoothed curve.</p>
 <div id="cell-fig-moving-average" class="cell" data-execution_count="2">
 <div class="cell-output cell-output-display">
 <div id="fig-moving-average" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Two panels. Top: a jagged noisy signal fluctuates around a smooth periodic trend, and the nine-point moving-average curve follows the central oscillation without the high-frequency variation; a small box near t equal to 2 marks one window of nine samples, with a dot on the curve at its center. Bottom: the nine samples of that window drawn as stems at offsets minus four to plus four, with a dashed line at their mean and a dot at offset zero, labeled as the output at the center.">
@@ -582,7 +583,7 @@ window.Quarto = {
 <img src="07-filters-convolution_files/figure-html/fig-moving-average-output-1.png" alt="Two panels. Top: a jagged noisy signal fluctuates around a smooth periodic trend, and the nine-point moving-average curve follows the central oscillation without the high-frequency variation; a small box near t equal to 2 marks one window of nine samples, with a dot on the curve at its center. Bottom: the nine samples of that window drawn as stems at offsets minus four to plus four, with a dashed line at their mean and a dot at offset zero, labeled as the output at the center." width="579" height="489" class="figure-img">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-moving-average-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;8.1: A window of uniform weights, slid along a noisy signal, averaging as it goes. Top: the noisy signal and its nine-point moving average; the box marks one window, and the dot on the curve is that window’s output. Bottom: the nine samples inside the box, each weighted <span class="math inline">\(1/9\)</span>; their mean is the output at the window’s center. This simplest sliding-window operation is already recognizably a denoiser.
+Figure&nbsp;8.1: A window of uniform weights, slid along a noisy signal, averaging as it goes. Top: the signal, 300 samples of <span class="math inline">\(\sin t\)</span> on <span class="math inline">\([0, 4\pi]\)</span> with Gaussian noise of standard deviation 0.35, and its nine-point moving average, computed with <code>F.conv1d</code>; the box marks one window, and the dot on the curve is that window’s output. Bottom: the nine samples in the box, drawn larger as stems from zero, each multiplied by its weight <span class="math inline">\(1/9\)</span>; the nine products sum to the samples’ mean, the output at the window’s center.
 </figcaption>
 </figure>
 </div>
@@ -764,7 +765,8 @@ Figure&nbsp;8.1: A window of uniform weights, slid along a noisy signal, averagi
 </section>
 <section id="to-2d-the-recipe" class="level2" data-number="8.3">
 <h2 data-number="8.3" class="anchored" data-anchor-id="to-2d-the-recipe"><span class="header-section-number">8.3</span> To 2D: the recipe</h2>
-<p>The image version is the same idea with a small 2-D window. Its five-step recipe sits beside the three lines that carry it:</p>
+<p>The moving average extends to images when the window becomes a small square. In two dimensions the weights form a <span class="math inline">\(k \times k\)</span> array, the <strong>kernel</strong>, and we slide it across the rows and columns of the image. At each position the kernel covers a <span class="math inline">\(k \times k\)</span> patch of pixels. We multiply each pixel by the kernel weight that lies over it and sum the <span class="math inline">\(k^2\)</span> products into one output value.</p>
+<p>If we flatten the patch and the kernel into two vectors of length <span class="math inline">\(k^2\)</span>, this sum of products is their dot product: the template score of <a href="../part1/01-linear-regression.html" class="quarto-xref"><span>Chapter 1</span></a>, applied to one neighborhood of the image. Repeating it at every position where the kernel fits inside the image produces a new two-dimensional array of responses, called a <strong>feature map</strong>. The operation’s five-step recipe sits beside the three lines that carry it:</p>
 <div class="plan-code">
 <div class="plan">
 <ol type="1">
@@ -795,9 +797,8 @@ Figure&nbsp;8.1: A window of uniform weights, slid along a noisy signal, averagi
 </div>
 </div>
 </div>
-<p>As the markers show, steps 2 and 5 share a line. The plan moves one window at a time; <code>unfold</code> places <em>every</em> window at once, and the next line scores them all in parallel. Translating a sequential plan into vectorized code can introduce indexing and shape errors, so we check the result against the framework implementation.</p>
-<p>The output is smaller than the input. A <span class="math inline">\(k
-\times k\)</span> kernel on an <span class="math inline">\(n \times n\)</span> image produces <span class="math inline">\((n - k + 1) \times (n - k + 1)\)</span> outputs, because the window must stay inside the frame. Padding, which controls this shrinkage, and stride, which slides the window in bigger steps, are treated in <a href="08-cnn.html" class="quarto-xref"><span>Chapter 9</span></a>.</p>
+<p>As the markers show, steps 2 and 5 share a line. The plan moves one window at a time, while the code computes every dot product at once: the two <code>unfold</code> calls return all the windows of the image as one view, and the next line scores each window against the kernel. The second function, <code>conv2d</code>, wraps PyTorch’s <code>F.conv2d</code>; the rest of the chapter uses it, and the two functions agree to float32 rounding.<a href="#fn1" class="footnote-ref" id="fnref1" role="doc-noteref"><sup>1</sup></a></p>
+<p>The feature map is smaller than the image. We take an odd kernel size, <span class="math inline">\(k = 2\Delta + 1\)</span>, so the kernel has a center entry and reaches <span class="math inline">\(\Delta\)</span> pixels to each side of it; a <span class="math inline">\(3 \times 3\)</span> kernel has <span class="math inline">\(\Delta = 1\)</span>. A window that stays inside the frame keeps its center at least <span class="math inline">\(\Delta\)</span> pixels from every edge, which leaves <span class="math inline">\(n - 2\Delta = n - k + 1\)</span> positions in each row and each column of an <span class="math inline">\(n \times n\)</span> image. The output is therefore <span class="math inline">\((n - k + 1) \times (n - k + 1)\)</span>. Padding the image with extra pixels controls this shrinkage, and a stride moves the window in larger steps; <a href="08-cnn.html" class="quarto-xref"><span>Chapter 9</span></a> treats both.</p>
 <style>
 .conv-excerpt {
   border: 1px solid #d5dde5; border-radius: .4rem; margin: 1.4rem 0;
@@ -1308,7 +1309,7 @@ Figure&nbsp;8.1: A window of uniform weights, slid along a noisy signal, averagi
 <img src="07-filters-convolution_files/figure-html/fig-filter-zoo-output-1.png" loading="lazy" decoding="async" alt="Three rows across five columns. The top row prints each 3-by-3 kernel as a grid of numbers shaded by sign: identity has a single 1 at the center; blur has nine entries of 1/9; sharpen has 5 at the center and −1 at its four neighbors; the vertical Sobel kernel has −1, −2, −1 down its left column and 1, 2, 1 down its right; the horizontal Sobel kernel has −1, −2, −1 across its top row and 1, 2, 1 across its bottom. Below, a synthetic shapes scene and a boot pass through each kernel: blur softens both inputs, sharpen strengthens local contrast, and the two Sobel outputs illuminate boundaries of different orientations." width="739" height="464" class="figure-img">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-filter-zoo-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;8.2: One recipe, five kernels. The top row prints the nine weights of each 3×3 kernel (identity, blur, sharpen, and two Sobel edge detectors), shaded on one scale centered at zero; each column below applies that kernel to the same two inputs. The vertical-edge kernel fires on vertical boundaries; the horizontal one fires on horizontal boundaries.
+Figure&nbsp;8.2: One operation, five kernels. The top row prints the nine weights of each 3×3 kernel (identity, blur, sharpen, and two Sobel edge detectors), shaded on one scale centered at zero; each column below applies that kernel to the same two inputs. The middle row is the synthetic scene (<span class="math inline">\(64 \times 64\)</span>, zero except for a rectangle, a disk and diagonal stripes of intensities 0.9, 0.6 and 0.8); the bottom row is the first ankle boot among the development images, scaled to <span class="math inline">\([0, 1]\)</span>. The vertical-edge kernel responds strongly to vertical boundaries, the horizontal one to horizontal boundaries.
 </figcaption>
 </figure>
 </div>
@@ -1319,10 +1320,11 @@ Figure&nbsp;8.2: One recipe, five kernels. The top row prints the nine weights o
 </section>
 <section id="naming-the-operation" class="level2" data-number="8.5">
 <h2 data-number="8.5" class="anchored" data-anchor-id="naming-the-operation"><span class="header-section-number">8.5</span> Naming the operation</h2>
-<p>This sliding sum-of-products has a proper name: <strong>cross-correlation</strong>. With kernel <span class="math inline">\(V\)</span> of half-width <span class="math inline">\(\Delta\)</span> and image <span class="math inline">\(X\)</span>:</p>
+<p>This sliding sum of products is called <strong>cross-correlation</strong>. To write it down, we index the kernel <span class="math inline">\(V\)</span> by offsets from its center: the entry <span class="math inline">\([V]_{u,v}\)</span> sits <span class="math inline">\(u\)</span> rows and <span class="math inline">\(v\)</span> columns from the center, with <span class="math inline">\(u\)</span> and <span class="math inline">\(v\)</span> running from <span class="math inline">\(-\Delta\)</span> to <span class="math inline">\(\Delta\)</span>; negative <span class="math inline">\(u\)</span> lies above the center and negative <span class="math inline">\(v\)</span> to its left, so in a <span class="math inline">\(3 \times 3\)</span> kernel <span class="math inline">\([V]_{-1,-1}\)</span> is the top-left entry. With the kernel centered on pixel <span class="math inline">\((i, j)\)</span> of the image <span class="math inline">\(X\)</span>, the entry <span class="math inline">\([V]_{u,v}\)</span> lies over the pixel <span class="math inline">\([X]_{i+u,\,j+v}\)</span>, and the output <span class="math inline">\([H]_{i,j}\)</span> sums these products over the window:</p>
 <p><span id="eq-crosscorr"><span class="math display">\[
 [H]_{i,j} \;=\; \sum_{u=-\Delta}^{\Delta}\;\sum_{v=-\Delta}^{\Delta} [V]_{u,v}\,[X]_{i+u,\,j+v} .
 \tag{8.1}\]</span></span></p>
+<p>This is the sliding dot product written entry by entry, for each center <span class="math inline">\((i, j)\)</span> at least <span class="math inline">\(\Delta\)</span> pixels from the edges.</p>
 <div class="callout callout-style-default callout-note callout-titled">
 <div class="callout-header d-flex align-content-center">
 <div class="callout-icon-container">
@@ -1339,7 +1341,8 @@ Figure&nbsp;8.2: One recipe, five kernels. The top row prints the nine weights o
 </section>
 <section id="the-property-we-paid-for-equivariance" class="level2" data-number="8.6">
 <h2 data-number="8.6" class="anchored" data-anchor-id="the-property-we-paid-for-equivariance"><span class="header-section-number">8.6</span> Translation equivariance</h2>
-<p>Unlike the MLP of <a href="../part1/06-generalization-inductive-bias.html" class="quarto-xref"><span>Chapter 6</span></a>, slide-and-score treats every position identically away from boundaries <span class="math inline">\(\rightarrow\)</span> if the input shifts, the output shifts <em>with it</em>, unchanged in content. That is <strong>translation equivariance</strong>, and it need not be taken on faith:</p>
+<p>Unlike the dense layer of <a href="../part1/06-generalization-inductive-bias.html" class="quarto-xref"><span>Chapter 6</span></a>, cross-correlation applies the same kernel at every position. On the interior of the image, shifting the input therefore shifts the feature map by the same displacement and leaves its values unchanged. This property is <strong>translation equivariance</strong>.</p>
+<p>We test it as a question of order: does shifting before filtering give the same result as filtering before shifting?</p>
 <div class="plan-code">
 <div class="plan">
 <ol type="1">
@@ -1369,18 +1372,20 @@ Figure&nbsp;8.2: One recipe, five kernels. The top row prints the nine weights o
 </div>
 </div>
 </div>
-<p>The difference prints as 0.0 on the compared interior. The detector’s response moves with the scene. The distinction from <a href="../part1/06-generalization-inductive-bias.html" class="quarto-xref"><span>Chapter 6</span></a> is structural: the dense layer did not impose this relation between shifted inputs and outputs. Here, applying the same local weights at each position gives the relation directly. At the frame boundary, cropping, padding, or fill rules can break exact equality; that is why the code excludes the blank-border region.</p>
-<p>Before going further, keep these two distinct:</p>
+<p>With the scene shifted <span class="math inline">\(s = 5\)</span> pixels to the right, the difference prints as 0.0 away from the left edge, in all but the first <span class="math inline">\(s + 2\)</span> output columns (the <span class="math inline">\(s\)</span> columns that read the zero fill, plus a margin of two). The detector’s response moves with the scene.</p>
+<p>The contrast with <a href="../part1/06-generalization-inductive-bias.html" class="quarto-xref"><span>Chapter 6</span></a> is structural. A dense layer gives every input pixel its own coefficient in every output, so its weights are tied to absolute positions in the frame. Cross-correlation ties its weights to offsets from the window’s center, so a pattern produces the same response wherever it appears. Near the edges the equality can fail, because a window there covers pixels that the shift filled with zeros or pushed out of the frame; exact equivariance holds on the interior, which is why the code excludes the border columns.</p>
+<p>Before going further, keep two related properties distinct:</p>
 <ul>
-<li><strong>Equivariant</strong> means the output moves along with the input (what convolution gives us).</li>
-<li><strong>Invariant</strong> means the output does not change at all (a classifier should output “boot” regardless of position).</li>
+<li><strong>Equivariant</strong> means that the output transforms along with the input: if the input moves, the feature map moves by the same displacement. Convolution provides this.</li>
+<li><strong>Invariant</strong> means that the output does not change at all: a garment classifier should predict the same category wherever the garment sits in the image.</li>
 </ul>
-<p>Equivariance is the raw material; in <a href="08-cnn.html" class="quarto-xref"><span>Chapter 9</span></a>, pooling will discard some position information to gain local shift tolerance. Exact invariance is a stronger property and must be tested, not presumed.</p>
+<p>Equivariance tracks <em>where</em> a feature is; classification needs invariance, because the label depends on <em>what</em> is present. Equivariance is the raw material for invariance. In <a href="08-cnn.html" class="quarto-xref"><span>Chapter 9</span></a>, pooling discards some position information to gain local shift tolerance, and <a href="09-modern-cnns-transfer.html" class="quarto-xref"><span>Chapter 10</span></a> pools each feature map over the whole image. Edge effects, strides and pooling windows can still change intermediate responses under a shift, so whether a whole network is shift invariant must be measured at its output, not presumed.</p>
 </section>
 <section id="the-matrix-view-a-structured-weight-shared-linear-map" class="level2" data-number="8.7">
 <h2 data-number="8.7" class="anchored" data-anchor-id="the-matrix-view-a-structured-weight-shared-linear-map"><span class="header-section-number">8.7</span> The matrix view: a structured, weight-shared linear map</h2>
-<p>Every output pixel is a dot product <span class="math inline">\(\rightarrow\)</span> the whole operation is <em>linear</em> <span class="math inline">\(\rightarrow\)</span> cross-correlation could be written as one enormous matrix multiplying the flattened image. But that matrix has a rigid structure: it is mostly zeros (locality means each row touches only one patch), and the same nine numbers repeat along its diagonals (sharing means every row is the same template, relocated).</p>
-<p>That view makes the economics explicit. A dense layer from our 28×28 images to an equal-sized output would have <span class="math inline">\(784 \times 784 \approx 615{,}000\)</span> weights. The Sobel detector has <strong>nine</strong>, reused at every position. This is <a href="../part1/06-generalization-inductive-bias.html" class="quarto-xref"><span>Chapter 6</span></a>’s constraints-as-knowledge idea made concrete: locality zeroes out most of the matrix, equivariance ties the survivors together, and what remains is a linear map with almost nothing left to specify.</p>
+<p>Every output is a dot product of a few inputs with the kernel weights, so cross-correlation is a linear map: it can be written as one matrix multiplying the flattened input. We build that matrix in <a href="#fig-shared-matrix" class="quarto-xref">Figure&nbsp;<span>8.3</span></a> for a one-dimensional signal of six inputs and a kernel of three weights <span class="math inline">\(v_1, v_2, v_3\)</span>, which gives four outputs. Each row of the matrix is one position of the window. Row 2 computes <span class="math inline">\(h_2 = v_1x_2 + v_2x_3 + v_3x_4\)</span>: it holds the three weights in the columns of the inputs under its window and zeros everywhere else. With <span class="math inline">\(v_1 = v_2 = v_3 = 1/3\)</span>, the matrix computes a three-point moving average.</p>
+<p>The matrix has two kinds of structure. Half its entries are zero here, and nearly all of them for an image, because each output depends only on its window (locality). The nonzero entries repeat, because every row holds the same three weights, one column further right than the row above (weight sharing). A dense <span class="math inline">\(4 \times 6\)</span> matrix has 24 independent entries; this one has 3.</p>
+<p>The saving grows with the input. A dense layer from our 28×28 images to an equal-sized output (with padding) would have <span class="math inline">\(784 \times 784 \approx 615{,}000\)</span> weights; the Sobel detector has <strong>nine</strong>, reused at every position. These are the constraints of <a href="../part1/06-generalization-inductive-bias.html" class="quarto-xref"><span>Chapter 6</span></a> made concrete: locality zeroes out most of the matrix, weight sharing ties the remaining entries together, and what is left is a linear map with almost nothing to specify.</p>
 <div class="plan-code">
 <div class="plan">
 <ol type="1">
@@ -1404,7 +1409,7 @@ Figure&nbsp;8.2: One recipe, five kernels. The top row prints the nine weights o
 <img src="07-filters-convolution_files/figure-html/fig-shared-matrix-output-1.png" loading="lazy" decoding="async" alt="A four-by-six matrix grid is half zeros. Each row has the same three adjacent symbols v-one, v-two, and v-three, shifted one column right from the row above to form three repeating diagonals." width="1589" height="1215" class="figure-img">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-shared-matrix-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;8.3: The 1-D version of convolution as a structured matrix (shown in 1-D only so the pattern is visible). Each output row touches one local three-value window, so half the entries are zero here, and nearly all are for a real image. The same three kernel weights repeat along diagonals: locality creates sparsity; sharing ties the nonzero entries together. A 2-D image produces the analogous block-structured matrix.
+Figure&nbsp;8.3: One-dimensional cross-correlation written as a matrix, for six inputs, a kernel of three weights and four outputs. Each row is one position of the window, with <span class="math inline">\(v_1, v_2, v_3\)</span> in the columns of its three inputs and zeros elsewhere. A 2-D image gives the analogous block-structured matrix.
 </figcaption>
 </figure>
 </div>
@@ -1455,6 +1460,7 @@ Figure&nbsp;8.3: The 1-D version of convolution as a structured matrix (shown in
 <li>Fukushima, <a href="https://doi.org/10.1007/BF00344251">“Neocognitron: A Self-organizing Neural Network Model”</a> (1980): an early hierarchy of local, shift-tolerant feature detectors.</li>
 <li>LeCun et al., <a href="https://doi.org/10.1109/5.726791">“Gradient-Based Learning Applied to Document Recognition”</a> (1998): connects shared local kernels to the trainable CNN built next.</li>
 <li>Dumoulin and Visin, <a href="https://arxiv.org/abs/1603.07285">“A Guide to Convolution Arithmetic for Deep Learning”</a> (2016): a visual reference for padding, stride, and output-shape arithmetic.</li>
+<li>PyTorch’s documentation for <a href="https://docs.pytorch.org/docs/stable/generated/torch.Tensor.unfold.html"><code>Tensor.unfold</code></a> specifies the sliding-window view that <code>manual_conv2d</code> scores against the kernel.</li>
 </ul>
 </section>
 <section id="exercises" class="level2 unnumbered">
@@ -1468,6 +1474,12 @@ Figure&nbsp;8.3: The 1-D version of convolution as a structured matrix (shown in
 </ol>
 
 
+</section>
+<section id="footnotes" class="footnotes footnotes-end-of-document" role="doc-endnotes">
+<hr>
+<ol>
+<li id="fn1"><p>A vectorized rewrite of a sliding loop is easy to get wrong by one index or one axis, so we check it against the framework before relying on it. On a random <span class="math inline">\(10 \times 12\)</span> image and a random <span class="math inline">\(3 \times 3\)</span> kernel, the largest absolute difference between the outputs of <code>manual_conv2d</code> and <code>conv2d</code> is <span class="math inline">\(4.8 \times 10^{-7}\)</span>, the size of float32 rounding.<a href="#fnref1" class="footnote-back" role="doc-backlink">↩︎</a></p></li>
+</ol>
 </section>
 
 </main> 

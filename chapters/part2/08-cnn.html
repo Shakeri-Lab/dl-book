@@ -537,8 +537,8 @@ window.Quarto = {
   <span class="chapter-tools__label">Chapter tools</span>
   <span class="chapter-tools__items"><a class="chapter-tools__link" data-kind="specific" href="https://www.youtube.com/watch?v=s6xDEvdz3tY">Lecture 4.1 · Convolutional Neural Networks</a><span class="chapter-tools__separator" aria-hidden="true">·</span><a class="chapter-tools__link" data-kind="specific" href="https://www.youtube.com/watch?v=Dprs8jH13GA">Lecture 4.2 · Coding Your First CNN</a><span class="chapter-tools__separator" aria-hidden="true">·</span><a class="chapter-tools__link" data-kind="notebook-download" href="../../notebooks/08-cnn.ipynb" download="">Download notebook</a><span class="chapter-tools__separator" aria-hidden="true">·</span><a class="chapter-tools__link" data-kind="colab" href="https://colab.research.google.com/github/Shakeri-Lab/dl-book/blob/gh-pages/notebooks/08-cnn.ipynb" target="_blank" rel="noopener">Open in Colab<span class="visually-hidden"> (opens in a new tab)</span></a></span>
 </aside>
-<p><a href="07-filters-convolution.html" class="quarto-xref"><span>Chapter 8</span></a> applied a fixed local kernel with shared coefficients at every position. We now retain that structure and optimize the coefficients against a loss.</p>
-<p>To do so, we declare the kernel a <strong>parameter</strong>. That single change is the core of this chapter. Everything else here (channels, padding, stride, pooling) turns that one learnable filter into a working network. By the end we will have assembled <a href="https://doi.org/10.1109/5.726791">LeNet</a>, trained it on our garments, and re-run the shift experiment of <a href="../part1/06-generalization-inductive-bias.html" class="quarto-xref"><span>Chapter 6</span></a> to compare LeNet with that chapter’s MLP.</p>
+<p><a href="07-filters-convolution.html" class="quarto-xref"><span>Chapter 8</span></a> applied a fixed local kernel with shared coefficients at every position. We now keep that spatial structure and optimize the coefficients against a task loss.</p>
+<p>To do so, we declare the kernel coefficients to be learnable parameters. That single change is the core of this chapter. Everything else introduced here (channels, padding, stride and pooling) turns the learnable filter into a working network. By the end of the chapter we will have assembled <a href="https://doi.org/10.1109/5.726791">LeNet</a>, trained it on the Fashion-MNIST images of <a href="../part1/06-generalization-inductive-bias.html" class="quarto-xref"><span>Chapter 6</span></a>, and repeated that chapter’s shift experiment to test whether LeNet tolerates the shift better than the MLP did.</p>
 <div class="plan-code">
 <div class="plan">
 <ol type="1">
@@ -567,7 +567,7 @@ window.Quarto = {
 <span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>X_val, y_val <span class="op">=</span> X_dev[val_idx], y_dev[val_idx]    <span class="co"># (200,1,28,28), (200,)</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
 </div>
-<p>Note the shapes. In Part I we flattened every image into a 784-vector before it entered the model. Here the images stay rectangular, and they pick up a <em>channel</em> dimension, whose purpose we explain below.</p>
+<p>Note the shapes. In Part I our MLPs flattened every image into a vector of 784 pixels, discarding its two-dimensional arrangement at the first layer. A convolutional network keeps that geometry: the images stay rectangular grids, and they gain an explicit <em>channel</em> dimension, whose purpose we explain below.</p>
 <div class="callout callout-style-default callout-warning callout-titled">
 <div class="callout-header d-flex align-content-center">
 <div class="callout-icon-container">
@@ -663,24 +663,29 @@ Figure&nbsp;9.1: The mystery-detector game. Left: the random starting kernel. Mi
 </div>
 </div>
 <p>Two differences make the real thing <em>harder</em> than the game, not easier. First, the game was rigged: the target came from a known kernel, so a perfect answer existed and the loss surface was a clean convex bowl (the output is linear in the kernel <span class="math inline">\(K\)</span>, and squared error in a linear map is <a href="../part1/01-linear-regression.html" class="quarto-xref"><span>Chapter 1</span></a>’s setting all over again). Second, and more important: <strong>in a real CNN, nobody supplies the target feature maps.</strong> The only supervision is the classification loss at the far end of the network. The gradient flows backward through every layer (exactly the mechanics of <a href="../part1/05-backpropagation.html" class="quarto-xref"><span>Chapter 5</span></a>) and the kernels that emerge are whatever detectors the task loss favors. We chose Sobel here; a trained network may arrive at kernels that match no named filter.</p>
-<p>Backpropagation through the slide follows the same fan-out rule we met in <a href="../part1/05-backpropagation.html" class="quarto-xref"><span>Chapter 5</span></a>. The <em>same</em> nine numbers are used at every position of the slide <span class="math inline">\(\rightarrow\)</span> every position contributes a gradient term to the shared kernel. Those contributions are summed, and the loss reduction sets their scale: <code>F.mse_loss</code> with the default <code>reduction="mean"</code> averages over batch, channel, and spatial elements. Weight sharing is not just a parameter economy. At training time every patch of every image contributes to fitting the one shared template.</p>
+<p>Backpropagation through a convolutional layer applies the accumulation rule of <a href="../part1/05-backpropagation.html" class="quarto-xref"><span>Chapter 5</span></a>: a quantity used in several places of a computation receives the sum of the gradients from all of them. The kernel is such a quantity. In the notation of <a href="07-filters-convolution.html#eq-crosscorr" class="quarto-xref">Equation&nbsp;<span>8.1</span></a>, write the kernel as <span class="math inline">\(V\)</span> (the <span class="math inline">\(K\)</span> of the game) and the output map as <span class="math inline">\(H\)</span>. The weight <span class="math inline">\([V]_{u,v}\)</span> enters every output entry <span class="math inline">\([H]_{i,j}\)</span>, each time multiplied by the pixel <span class="math inline">\([X]_{i+u,\,j+v}\)</span>, so</p>
+<p><span class="math display">\[
+\frac{\partial L}{\partial [V]_{u,v}} \;=\; \sum_{i,j} \delta_{i,j}\,[X]_{i+u,\,j+v},
+\qquad \delta_{i,j} = \frac{\partial L}{\partial [H]_{i,j}},
+\]</span></p>
+<p>with one more sum over the images of the batch. The gradient is itself a cross-correlation with the roles exchanged: the map of sensitivities <span class="math inline">\(\delta\)</span> acts as the kernel and slides over <span class="math inline">\(X\)</span>, and its <span class="math inline">\(k \times k\)</span> stops give the entries of <span class="math inline">\(\partial L/\partial V\)</span>. With the default <code>reduction="mean"</code> of <code>F.mse_loss</code>, each <span class="math inline">\(\delta_{i,j}\)</span> carries a factor of one over the number of averaged entries. Weight sharing on the forward pass therefore means summed gradients on the backward pass: every patch of every image contributes to the update of the one shared template.</p>
 </section>
 <section id="from-one-detector-to-a-layer-of-detectives" class="level2" data-number="9.2">
 <h2 data-number="9.2" class="anchored" data-anchor-id="from-one-detector-to-a-layer-of-detectives"><span class="header-section-number">9.2</span> Channels: from one detector to many</h2>
-<p>One learnable kernel gives one feature map. The examples of fixed filters in <a href="07-filters-convolution.html" class="quarto-xref"><span>Chapter 8</span></a> already showed that one kernel is not enough: vertical edges, horizontal edges, blobs, textures all carry information. So a layer applies several kernels to the same input, six for example, each producing its own feature map.</p>
-<p>That is all the <strong>channel</strong> machinery is:</p>
+<p>One learnable kernel gives one feature map, and one feature map records one pattern: a vertical edge, a horizontal edge, a local average. The examples of fixed filters in <a href="07-filters-convolution.html" class="quarto-xref"><span>Chapter 8</span></a> showed that an image carries many such patterns at once, and a classifier needs evidence about several of them at every position. A layer therefore applies several kernels to the same input, a team of specialized detectors, each producing its own feature map. Their responses at one position form a vector, and the representation gains a dimension: the <strong>channels</strong>.</p>
+<p>Channels enter a convolutional layer at two places, with different roles:</p>
 <ul>
 <li><strong>Out-channels add kernels.</strong> A conv layer with 6 output channels owns 6 independent kernels and produces a stack of 6 feature maps.</li>
-<li><strong>In-channels let each kernel span the whole stack.</strong> The <em>next</em> layer’s input is that 6-deep stack, so each of its kernels grows a third dimension: a <span class="math inline">\(6 \times 5 \times
-5\)</span> volume that covers all six incoming maps <em>simultaneously</em>, sums the evidence into one output map, and adds that output channel’s bias.</li>
+<li><strong>In-channels let each kernel span the whole stack.</strong> The next layer’s input is that 6-deep stack, so the input at each position is a vector of 6 responses rather than one pixel. Each kernel of the next layer therefore grows a third dimension: a <span class="math inline">\(6 \times 5
+\times 5\)</span> volume that covers all six incoming maps at once.</li>
 </ul>
-<p>For an input stack <span class="math inline">\(\matr{X}\)</span> with <span class="math inline">\(C_{\text{in}}\)</span> channels, output feature map <span class="math inline">\(o \in \{1, \dots, C_{\text{out}}\}\)</span> is:</p>
+<p>For an input stack <span class="math inline">\(X\)</span> with <span class="math inline">\(C_{\text{in}}\)</span> channels, output feature map <span class="math inline">\(o \in \{1, \dots, C_{\text{out}}\}\)</span> is</p>
 <p><span id="eq-conv-layer"><span class="math display">\[
 [H_o]_{i,j} \;=\; b_o \;+\; \sum_{c=1}^{C_{\text{in}}}\;
-\sum_{u=-\Delta}^{\Delta}\;\sum_{v=-\Delta}^{\Delta}
-[V_{o,c}]_{u,v}\,[X_c]_{i+u,\,j+v},
+\Bigl(\,\sum_{u=-\Delta}^{\Delta}\;\sum_{v=-\Delta}^{\Delta}
+[V_{o,c}]_{u,v}\,[X_c]_{i+u,\,j+v}\Bigr),
 \tag{9.1}\]</span></span></p>
-<p>which evaluates <a href="07-filters-convolution.html#eq-crosscorr" class="quarto-xref">Equation&nbsp;<span>8.1</span></a> across every input channel, accumulates across <span class="math inline">\(C_{\text{in}}\)</span>, and adds the scalar channel bias <span class="math inline">\(b_o\)</span>; a pointwise activation follows. A convolutional layer is an MLP layer with a structured linear map: dot products <span class="math inline">\(\rightarrow\)</span> add bias <span class="math inline">\(\rightarrow\)</span> ReLU. Nothing in the recipe changed; only the wiring of the linear part did.</p>
+<p>and a pointwise activation follows; as in <a href="07-filters-convolution.html" class="quarto-xref"><span>Chapter 8</span></a>, the kernel is <span class="math inline">\(k \times k\)</span> with <span class="math inline">\(k = 2\Delta + 1\)</span>. The inner double sum is the cross-correlation of <a href="07-filters-convolution.html#eq-crosscorr" class="quarto-xref">Equation&nbsp;<span>8.1</span></a>, applied to input channel <span class="math inline">\(c\)</span> with the slice <span class="math inline">\(V_{o,c}\)</span> of the kernel; the outer sum adds the <span class="math inline">\(C_{\text{in}}\)</span> results, and <span class="math inline">\(b_o\)</span> is the bias of output channel <span class="math inline">\(o\)</span>. The computation for one output pixel is one dot product between a <span class="math inline">\(C_{\text{in}} \times k \times k\)</span> patch of the input and the <span class="math inline">\(C_{\text{in}} \times k \times k\)</span> kernel of output channel <span class="math inline">\(o\)</span>, plus the bias <span class="math inline">\(b_o\)</span>. A dense layer of an MLP takes a dot product across all of its input features; a convolutional layer takes the same kind of dot product across all input channels but only a small spatial window, and slides it over the grid. The recipe of the layer (dot products, bias, activation) is the MLP’s; only the wiring of the linear part differs.</p>
 <div class="plan-code">
 <div class="plan">
 <ol type="1">
@@ -707,8 +712,7 @@ conv2   (1, 16, 24, 24)  kernels: (16, 6, 5, 5)</code></pre>
 </div>
 </div>
 </div>
-<p>Each second-layer kernel combines responses across channels and neighboring positions. If earlier channels respond to different edge orientations, a later layer can combine their spatial patterns. The following hand-built example illustrates this composition on a square, using two fixed edge detectors from <a href="07-filters-convolution.html" class="quarto-xref"><span>Chapter 8</span></a>.</p>
-<p>We give the first layer the two edge detectors (vertical and horizontal edge energy), then hand-build one second-layer kernel that spans both responses at once:</p>
+<p>Each kernel of <code>conv2</code> spans all six maps of <code>conv1</code>, so it computes combinations of the first layer’s responses rather than of raw pixels. If earlier channels respond to edges of different orientations, a later channel can combine them into a response to corners or crossings. We build one such combination by hand on a filled square: two first-layer channels compute vertical and horizontal edge energy, and one second-layer kernel with equal positive weights on both channels sums them over a local window (<a href="#fig-corner-detector" class="quarto-xref">Figure&nbsp;<span>9.2</span></a>).</p>
 <div class="plan-code">
 <div class="plan">
 <ol type="1">
@@ -738,13 +742,13 @@ conv2   (1, 16, 24, 24)  kernels: (16, 6, 5, 5)</code></pre>
 <img src="08-cnn_files/figure-html/fig-corner-detector-output-1.png" loading="lazy" decoding="async" alt="Four grayscale panels progress from a filled square to vertical-edge energy, horizontal-edge energy, and their combined response. Only the last panel concentrates its brightest responses at all four corners." width="854" height="234" class="figure-img">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-corner-detector-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;9.2: Combining two edge maps by hand. Two first-layer detectors compute edge energy (absolute Sobel response) on a square. One second-layer kernel spanning both channels (all-positive weights; <a href="#eq-conv-layer" class="quarto-xref">Equation&nbsp;<span>9.1</span></a> with two input channels) sums both edge maps over a local window, and its response is strongest near the square’s four corners.
+Figure&nbsp;9.2: Combining two edge maps by hand. The input is a 28×28 image of zeros whose central 14×14 block (rows and columns 7 to 20) is set to 1. Two first-layer channels compute edge energy, the absolute response to the vertical Sobel kernel and to its transpose, each with padding 1. One second-layer kernel of shape 2×5×5, every entry 1/50 (<a href="#eq-conv-layer" class="quarto-xref">Equation&nbsp;<span>9.1</span></a> with two input channels, padding 2), sums both edge maps over a local window, and its response is strongest near the square’s four corners.
 </figcaption>
 </figure>
 </div>
 </div>
 </div>
-<p>For this square, the combined response is strongest near the corners. The kernel sums local edge responses from both channels; a sufficiently strong response in either channel can also produce a large output. In a trained CNN, the coefficients of these combinations are learned from the task loss.</p>
+<p>For this square, the combined response is strongest near the corners, where both channels respond. The kernel only sums local edge responses, so a sufficiently strong response in either channel could also produce a large output. In a trained CNN, the coefficients of these combinations are learned from the task loss.</p>
 <div class="callout callout-style-default callout-tip callout-titled">
 <div class="callout-header d-flex align-content-center">
 <div class="callout-icon-container">
@@ -761,10 +765,10 @@ Figure&nbsp;9.2: Combining two edge maps by hand. Two first-layer detectors comp
 </section>
 <section id="padding-and-stride-the-bookkeeping-with-a-payoff" class="level2" data-number="9.3">
 <h2 data-number="9.3" class="anchored" data-anchor-id="padding-and-stride-the-bookkeeping-with-a-payoff"><span class="header-section-number">9.3</span> Padding and stride: controlling the output size</h2>
-<p><a href="07-filters-convolution.html" class="quarto-xref"><span>Chapter 8</span></a> left a practical problem: a <span class="math inline">\(k \times k\)</span> kernel on an <span class="math inline">\(n \times n\)</span> image yields only <span class="math inline">\((n-k+1) \times (n-k+1)\)</span> outputs, because the window must stay inside the frame. For one layer this is a nuisance. For a <em>deep</em> stack it is fatal: <span class="math inline">\(28 \rightarrow 24
-\rightarrow 20 \rightarrow \cdots\)</span> and the feature map shrinks toward nothing, with edge pixels contributing to ever fewer windows along the way.</p>
-<p>The fix is <strong>padding</strong>: add a border of zeros around the input so the window can be centered on every real pixel. For a <span class="math inline">\(5 \times 5\)</span> kernel, a 2-pixel border returns exactly the input size <span class="math inline">\(\rightarrow\)</span> that is why the first convolutional layer above uses <code>padding=2</code>. Padding decouples “how deep can the network be” from “how fast do the maps shrink,” and that decoupling is what makes deep stacks possible.</p>
-<p>Sometimes, though, we <em>want</em> to shrink: coarser maps mean less computation and a wider view per pixel. Then we shrink on purpose with <strong>stride</strong>: slide the window <span class="math inline">\(s\)</span> pixels at a time instead of one. Both knobs enter one formula, which is worth memorizing:</p>
+<p><a href="07-filters-convolution.html" class="quarto-xref"><span>Chapter 8</span></a> left a practical problem: a <span class="math inline">\(k \times k\)</span> kernel on an <span class="math inline">\(n \times n\)</span> image yields only <span class="math inline">\((n-k+1) \times (n-k+1)\)</span> outputs, because the window must stay inside the frame. For one layer this is a small loss. For a deep stack it is fatal: unpadded <span class="math inline">\(5 \times 5\)</span> convolutions take a <span class="math inline">\(28 \times 28\)</span> image to 24, 20, 16, 12, 8 and then 4 pixels on a side, and a seventh layer would leave nothing.</p>
+<p>Unpadded convolution also treats pixels unequally. A pixel enters one dot product for every window position that covers it, and near the border there are fewer such positions: a corner pixel is covered by a single window, an interior pixel by <span class="math inline">\(k^2\)</span>. Border pixels therefore contribute fewer terms to the output, and receive fewer gradient terms, than central ones.</p>
+<p>The remedy is <strong>padding</strong>: a border of extra pixels, usually zeros, added around the input before the window slides. Padding serves two purposes. It decouples depth from shrinkage, so a network can be deep without its feature maps vanishing. It also narrows the border imbalance: for a <span class="math inline">\(3 \times 3\)</span> kernel with one pixel of padding, a corner pixel enters 4 windows and an edge pixel 6, against 9 in the interior. For our <span class="math inline">\(5 \times 5\)</span> kernels, a 2-pixel border keeps a <span class="math inline">\(28 \times 28\)</span> image at <span class="math inline">\(28 \times 28\)</span>, which is why the first convolutional layer above uses <code>padding=2</code>.</p>
+<p>Sometimes we want to shrink a map on purpose: coarser maps cost less computation, and every later window then covers more of the image. <strong>Stride</strong> moves the window <span class="math inline">\(s\)</span> pixels at a time instead of one. A stride of 2 roughly halves each spatial dimension and divides the number of activations by about four. A strided convolution downsamples with learned weights; pooling downsamples with a fixed rule. Padding, kernel size and stride enter one formula:</p>
 <p><span id="eq-outsize"><span class="math display">\[
 n_{\text{out}} \;=\; \left\lfloor \frac{n + 2p - k}{s} \right\rfloor + 1 .
 \tag{9.2}\]</span></span></p>
@@ -1612,7 +1616,7 @@ MLP:   203,530 parameters</code></pre>
 </div>
 </div>
 </div>
-<p>Two readings of this table. Against the MLP, LeNet carries 61,706 parameters to the MLP’s 203,530 (less than a third) while performing far richer spatial computation. This is the saving that <a href="07-filters-convolution.html" class="quarto-xref"><span>Chapter 8</span></a>’s matrix view showed. Within LeNet, consider which layers hold the parameters. The two conv layers, which compute the spatial features, hold 2,572 parameters (about 4%) while the dense head holds the rest. We reduce that imbalance in <a href="09-modern-cnns-transfer.html" class="quarto-xref"><span>Chapter 10</span></a>, where modern architectures go deeper in convolution and lighter in the head.</p>
+<p>These parameter counts can be read two ways. Against the MLP of <a href="../part1/06-generalization-inductive-bias.html" class="quarto-xref"><span>Chapter 6</span></a>, rebuilt here as <code>make_mlp</code> (the network of that chapter with an <code>nn.Flatten()</code> in front: 784 inputs, 256 hidden ReLU units and 10 outputs), LeNet carries 61,706 parameters to the MLP’s 203,530 (less than a third) while performing far richer spatial computation. This is the saving that <a href="07-filters-convolution.html" class="quarto-xref"><span>Chapter 8</span></a>’s matrix view showed. Within LeNet, the two convolutional layers, which compute the spatial features, hold 2,572 parameters (about 4%), and the dense head holds the rest. We reduce that imbalance in <a href="09-modern-cnns-transfer.html" class="quarto-xref"><span>Chapter 10</span></a>, where modern architectures go deeper in convolution and lighter in the head.</p>
 <p>Now train both models under one shared optimization recipe: same fitting split, optimizer, minibatch size, number of epochs, and therefore number of parameter updates. The comparison does <strong>not</strong> match parameter count or floating-point work; a convolution and a dense layer spend different computation per update. Architecture is the intended difference; compute is not controlled:</p>
 <div class="plan-code">
 <div class="plan">
@@ -1658,7 +1662,7 @@ LeNet  train 99.5%   validation 74.5%</code></pre>
 </section>
 <section id="the-rematch" class="level2" data-number="9.7">
 <h2 data-number="9.7" class="anchored" data-anchor-id="the-rematch"><span class="header-section-number">9.7</span> LeNet under the two-pixel shift</h2>
-<p><a href="../part1/06-generalization-inductive-bias.html" class="quarto-xref"><span>Chapter 6</span></a> broke our MLP with one experiment: shift every validation garment two pixels right, and accuracy fell off a cliff. Now run the same shift on LeNet, which is built on locality and weight sharing. Before running, write down two predictions: LeNet’s clean accuracy and its accuracy at a two-pixel shift. Retrained here on the same schedule, the MLP scores 75.5% clean and 42% at two pixels.</p>
+<p>In <a href="../part1/06-generalization-inductive-bias.html" class="quarto-xref"><span>Chapter 6</span></a>, shifting every validation image two pixels to the right took our MLP from 76.0% to 46.5% accuracy. We now give LeNet the same test. Retrained here on LeNet’s schedule, the MLP starts from 75.5% clean validation accuracy and LeNet from 74.5%, so the two begin level. The question is whether the convolutional structure makes the classifier more tolerant of the shift.</p>
 <div class="plan-code">
 <div class="plan">
 <ol type="1">
@@ -1712,9 +1716,9 @@ Figure&nbsp;9.4: Validation accuracy under right shifts. Both architectures use 
 </div>
 </div>
 </div>
-<p>At two pixels the MLP falls from 75.5% to 42.0%, while LeNet falls from 74.5% to 57.5%. That is one deterministic validation split, not a sampling distribution, but the within-run contrast is large. Under this recipe, the fitted LeNet is more tolerant of the two-pixel shift than the fitted MLP. The comparison changes the complete architecture, so it does not isolate the contributions of locality, weight sharing, pooling, or the classifier head.</p>
-<p>Several operations can still introduce shift sensitivity. Cropping and padding affect boundary responses, pooling depends on window alignment, and the dense head assigns separate weights to the spatial positions retained after flattening. The current experiment does not separate their effects. <a href="09-modern-cnns-transfer.html" class="quarto-xref"><span>Chapter 10</span></a> examines deeper convolutional networks and alternatives to the position-sensitive head.</p>
-<p>Take one last look inside, because <a href="../part1/06-generalization-inductive-bias.html" class="quarto-xref"><span>Chapter 6</span></a> also showed us what the MLP’s first layer <em>looked like</em> (full-frame weight maps with broad, diffuse patterns). Does LeNet’s first layer look different?</p>
+<p>LeNet stays above the MLP at every nonzero shift, and the gap is largest at two and three pixels. At one pixel the two are close, 66.0% for LeNet and 64.0% for the MLP. At two pixels the MLP loses 33.5 points and LeNet 17.0; at three, LeNet scores 42.0% against 27.0%, and at four, 23.0% against 18.5%. These numbers come from one deterministic validation split, not a sampling distribution, but the within-run contrast is large.</p>
+<p>The comparison changes the complete architecture, so it does not isolate the contributions of locality, weight sharing, pooling or the classifier head. Several operations can still introduce shift sensitivity: cropping and padding affect the responses at the border, pooling depends on window alignment, and the dense head gives each spatial position retained after flattening its own weights. <a href="09-modern-cnns-transfer.html" class="quarto-xref"><span>Chapter 10</span></a> replaces that position-sensitive head with global pooling.</p>
+<p>In <a href="../part1/06-generalization-inductive-bias.html" class="quarto-xref"><span>Chapter 6</span></a>, the MLP’s first-layer weights were full-frame templates with broad, diffuse patterns. <a href="#fig-learned-filters" class="quarto-xref">Figure&nbsp;<span>9.5</span></a> shows the six <span class="math inline">\(5 \times 5\)</span> kernels of LeNet’s first layer and, under each, its feature map after the ReLU on the coat of <a href="#fig-receptive-field" class="quarto-xref">Figure&nbsp;<span>9.3</span></a>, a validation image.</p>
 <div class="plan-code">
 <div class="plan">
 <ol type="1">
@@ -1738,18 +1742,17 @@ Figure&nbsp;9.4: Validation accuracy under right shifts. Both architectures use 
 <img src="08-cnn_files/figure-html/fig-learned-filters-output-1.png" loading="lazy" decoding="async" alt="Six small signed kernel heatmaps form the top row, and six larger activation maps for the same coat form the bottom row. The response maps emphasize different local regions even where the kernels remain diffuse." width="854" height="287" class="figure-img">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-learned-filters-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;9.5: What LeNet’s first layer learned. Top: six first-layer 5×5 kernels (red positive, blue negative). Bottom: their feature maps on the same validation coat used in <a href="#fig-receptive-field" class="quarto-xref">Figure&nbsp;<span>9.3</span></a>, whose sleeves and torso make spatial responses easy to compare. The maps respond differently, but several kernels remain diffuse and should not be over-interpreted.
+Figure&nbsp;9.5: What LeNet’s first layer learned. Top: six first-layer 5×5 kernels (red positive, blue negative). Bottom: their feature maps on the coat of <a href="#fig-receptive-field" class="quarto-xref">Figure&nbsp;<span>9.3</span></a>, a validation image whose sleeves and torso make spatial responses easy to compare. The maps respond differently, but several kernels remain diffuse and should not be over-interpreted.
 </figcaption>
 </figure>
 </div>
 </div>
 </div>
-<p>Six small, local kernels produce distinct response maps on the same garment. Some show directional structure; others remain noisy enough that naming them as detectors would claim more than this one run supports. Nobody designed them. They result from roughly 1,200 optimizer steps on the classification loss, with gradients flowing backward through <a href="#eq-conv-layer" class="quarto-xref">Equation&nbsp;<span>9.1</span></a>.</p>
+<p>The six local kernels produce distinct response maps on the same image. Some show directional structure; others remain noisy enough that naming them as detectors would claim more than this one run supports. Nobody designed them: they result from optimizer steps on the classification loss, with gradients flowing backward through <a href="#eq-conv-layer" class="quarto-xref">Equation&nbsp;<span>9.1</span></a>.</p>
 </section>
 <section id="one-sealed-test-check" class="level2" data-number="9.8">
 <h2 data-number="9.8" class="anchored" data-anchor-id="one-sealed-test-check"><span class="header-section-number">9.8</span> One sealed test check</h2>
-<p>We have now fixed both architectures, the optimizer schedule, the shift size, and the two reported metrics. We refit each model on all 1,200 development images, then open the 600-image test set once:</p>
-<p>Here <em>sealed</em> is chapter-local. These 600 images are not untouched: other chapters also use them as an endpoint, as <a href="../../chapters/interludes/learning-by-experiment.html">the experiment interlude</a> explains. No choice in this chapter looked at them.</p>
+<p>With both architectures, the optimizer schedule, the shift size and the two reported metrics fixed, we refit each model on all 1,200 development images with the same training budget, open the 600-image test set once, and score each refit model on the clean test images and on the same images shifted two pixels right. <em>Sealed</em> is chapter-local here: these 600 images also serve other chapters as an endpoint, as <a href="../../chapters/interludes/learning-by-experiment.html">the experiment interlude</a> explains, but no choice in this chapter looked at them.</p>
 <div class="plan-code">
 <div class="plan">
 <ol type="1">
@@ -1771,7 +1774,7 @@ LeNet  clean 82.5%   shift-2 62.3%</code></pre>
 </div>
 </div>
 </div>
-<p>The sealed check confirms the validation comparison. Clean accuracy is 82.2% for the MLP and 82.5% for LeNet, a descriptive 0.3-point gap from one seed. Under the predeclared two-pixel shift, the gap becomes 41.8% versus 62.3%.</p>
+<p>The sealed check confirms the validation comparison. On clean test images the MLP scores 82.2% and LeNet 82.5%, a descriptive 0.3-point gap from one seed. Under the predeclared two-pixel shift the MLP falls to 41.8% and LeNet to 62.3%, with less than a third of the MLP’s parameters.</p>
 <div class="callout callout-style-default callout-note callout-titled">
 <div class="callout-header d-flex align-content-center">
 <div class="callout-icon-container">

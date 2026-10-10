@@ -539,15 +539,15 @@ window.Quarto = {
   <span class="chapter-tools__label">Chapter tools</span>
   <span class="chapter-tools__items"><a class="chapter-tools__link" data-kind="specific" href="https://www.youtube.com/watch?v=-R64Wg5Sgsc">Lecture 5 · Modern CNN Architectures and Transfer Learning</a><span class="chapter-tools__separator" aria-hidden="true">·</span><a class="chapter-tools__link" data-kind="notebook-download" href="../../notebooks/09-modern-cnns-transfer.ipynb" download="">Download notebook</a><span class="chapter-tools__separator" aria-hidden="true">·</span><a class="chapter-tools__link" data-kind="colab" href="https://colab.research.google.com/github/Shakeri-Lab/dl-book/blob/gh-pages/notebooks/09-modern-cnns-transfer.ipynb" target="_blank" rel="noopener">Open in Colab<span class="visually-hidden"> (opens in a new tab)</span></a></span>
 </aside>
-<p><a href="08-cnn.html" class="quarto-xref"><span>Chapter 9</span></a> developed LeNet and tested its response to image shifts. The reported model reaches 82.5% clean test accuracy with 61,706 parameters, but 96% of those parameters belong to its dense head, and its shift tolerance remains incomplete. We now examine how kernel size, channel mixing, <a href="https://proceedings.mlr.press/v37/ioffe15.html">normalization</a>, and residual connections change the cost and trainability of a convolutional network, then consider which features can be reused on another task.</p>
-<p>What happened after LeNet is a decade of architecture research, and it can drown you in named networks. Four design questions keep the mechanism visible:</p>
+<p><a href="08-cnn.html" class="quarto-xref"><span>Chapter 9</span></a> built a modern version of LeNet, one of the first practical convolutional networks, and tested its response to image shifts. The model reaches 82.5% clean test accuracy with 61,706 parameters, but 96% of those parameters belong to its dense head, and a two-pixel shift lowers its test accuracy to 62.3%. The architectures that followed, mostly between 2012 and 2017, kept LeNet’s ingredients (local kernels, channels, pooling) and arranged them better. We take them in an order in which each design fixes a problem that the previous one exposes, and we examine how kernel size, channel mixing, <a href="https://proceedings.mlr.press/v37/ioffe15.html">normalization</a>, and residual connections change the cost and trainability of a convolutional network, and then which features can be reused on another task.</p>
+<p>The networks of those years are many, and their mechanisms are easy to lose among them. Four design questions keep the mechanisms in view:</p>
 <ol type="1">
 <li><strong>Why <span class="math inline">\(5 \times 5\)</span>?</strong> Could smaller filters do the same job with fewer parameters?</li>
 <li><strong>How can we train deeper networks reliably?</strong></li>
 <li><strong>How can we reduce the parameters in the classifier head?</strong></li>
 <li><strong>Can we design reusable blocks</strong>: optimized layer combinations we stack, keeping a bird’s-eye view instead of re-designing what already works?</li>
 </ol>
-<p>Each question has a famous answer (<a href="https://arxiv.org/abs/1409.1556">VGG</a>, <a href="https://openaccess.thecvf.com/content_cvpr_2016/html/He_Deep_Residual_Learning_CVPR_2016_paper.html">ResNet</a>, <a href="https://arxiv.org/abs/1312.4400">NiN</a>’s <span class="math inline">\(1\times1\)</span> + global pooling, and the block habit itself), and we can test each answer on our own data. We then test what transfers when we reuse a pretrained backbone.</p>
+<p>Each question has a representative answer: <a href="https://arxiv.org/abs/1409.1556">VGG</a> for the first, <a href="https://openaccess.thecvf.com/content_cvpr_2016/html/He_Deep_Residual_Learning_CVPR_2016_paper.html">ResNet</a> for the second, the <span class="math inline">\(1\times1\)</span> convolutions and global pooling of <a href="https://arxiv.org/abs/1312.4400">NiN</a> for the third, and the habit of building in blocks for the fourth. We test each answer on our own data, and then test what transfers when we reuse a pretrained backbone.</p>
 <div id="fig-cnn-building-blocks" class="responsive-wide-opt-in quarto-float quarto-figure quarto-figure-center anchored" alt="A diagram with one row per block design and three columns: compose a block, repeat it, add a head. VGG-style row: a 3-by-3 convolution, batch normalization, and ReLU, heavily outlined as a unit and applied twice, then 2-by-2 max pooling; the block repeats twice, with 16 and then 32 channels; the head is flatten, linear 1568 to 128, ReLU, linear 128 to 10. NiN row: a 3-by-3 convolution, batch normalization, and ReLU, then two heavily outlined 1-by-1 convolutions, each followed by ReLU; the block repeats three times, with 16, 32, and 64 channels and max pooling between; the head is a heavily outlined global average pooling, then flatten and linear 64 to 10. Residual row: a 3-by-3 convolution, batch normalization, ReLU, a second 3-by-3 convolution, and batch normalization lead into a heavily outlined sum; a heavily outlined identity route, labelled identity with a 1-by-1 convolution if shapes change, carries the block input forward, above the branch, into the same sum, and a ReLU follows; the block repeats twenty times with 12 channels, after a convolution stem and max pooling; the head is global average pooling, flatten, and linear 12 to 10.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-cnn-building-blocks-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -558,7 +558,7 @@ Figure&nbsp;10.1: Three block designs, one per row. Each row composes a block fr
 </figcaption>
 </figure>
 </div>
-<p>Read each row from left to right whenever a named architecture becomes noisy. First find the operators inside the block, then count how often the block repeats, then read the head.</p>
+<p>Read each row from left to right: first the operators inside the block, then how often the block repeats, then the head.</p>
 <p>Both trainers follow Listing 4.1, with one change: the inner loop (<code>train_existing</code>) accepts a model and optimizer that already exist, because we will train models we did not just construct: fresh heads on frozen trunks, and selectively thawed layers at their own learning rates.</p>
 <div class="plan-code plan-code-wide">
 <div class="plan">
@@ -823,7 +823,7 @@ two 3x3s: 18,496 parameters, 2 ReLUs</code></pre>
 <div class="plan">
 <ol type="1">
 <li>Define the reusable <code>stack12</code> helper.</li>
-<li>Fix seed 0, take 256 garments as <code>x</code>, build <code>plain_stack</code> and <code>bn_stack</code>, and list their conv layers.</li>
+<li>Fix a seed, take 256 garments as <code>x</code>, build <code>plain_stack</code> and <code>bn_stack</code>, and list their conv layers.</li>
 <li>Activation scale through 12 conv layers, with and without BN.</li>
 <li>Pass <code>x</code> through both stacks and print the activation std after every other conv layer.</li>
 </ol>
@@ -1262,7 +1262,7 @@ test accuracy 86.7%</code></pre>
 <div class="plan">
 <ol type="1">
 <li>Define the reusable helpers: <code>nin_block</code> and <code>NINSmall</code>.</li>
-<li>Fix seed 6050, build <code>NINSmall</code>, and give it an Adam optimizer <code>nin_opt</code> at learning rate 1e-3.</li>
+<li>Fix a seed, build <code>NINSmall</code>, and give it an Adam optimizer <code>nin_opt</code> at learning rate 1e-3.</li>
 <li>NINSmall: architecture and first 75 epochs.</li>
 </ol>
 </div>
@@ -1394,14 +1394,14 @@ Figure&nbsp;10.2: <a href="08-cnn.html" class="quarto-xref"><span>Chapter 9</spa
 </div>
 </div>
 <p>LeNet’s curve falls from 82% to 27%; NINSmall’s is a gentle slope from 76% to 67%. Position-specific weights are gone from NINSmall’s head, and the result is consistent with the flatten-head diagnosis. It is not a matched-head ablation: the trunks differ too. The complete CNN is only approximately shift-tolerant; boundaries, strides, and pooling can still change its features.</p>
-<p>Now the dip. On clean, centered test garments NINSmall trails LeNet by six points. That result is <em>consistent with</em> <a href="08-cnn.html" class="quarto-xref"><span>Chapter 9</span></a>’s warning: on centered data, position can carry information, and a GAP head cannot assign separate weights to separate locations. But GAP is not the only changed ingredient, so this run does not prove it caused the gap. On the full 60,000-image dataset, the book’s pinned Rivanna runs put NiN at <span class="math inline">\(92.78\% \pm 0.08\%\)</span> across seeds 6050–6052. At our scale the comparison exposes a hypothesis worth testing with a matched-head ablation: shift tolerance may cost positional information.</p>
+<p>Now the dip. On clean, centered test garments NINSmall trails LeNet by six points. That result is <em>consistent with</em> <a href="08-cnn.html" class="quarto-xref"><span>Chapter 9</span></a>’s warning: on centered data, position can carry information, and a GAP head cannot assign separate weights to separate locations. But GAP is not the only changed ingredient, so this run does not prove it caused the gap. On the full 60,000-image dataset, the book’s <a href="#the-scorecard-what-a-decade-of-design-bought">pinned runs</a> put NiN at <span class="math inline">\(92.78\% \pm 0.08\%\)</span> across three seeds. At our scale the comparison exposes a hypothesis worth testing with a matched-head ablation: shift tolerance may cost positional information.</p>
 <div class="callout callout-style-default callout-note callout-titled">
 <div class="callout-header d-flex align-content-center">
 <div class="callout-icon-container">
 <i class="callout-icon"></i>
 </div>
 <div class="callout-title-container flex-fill">
-<span class="screen-reader-only">Note</span>Question 4’s other famous block: Inception
+<span class="screen-reader-only">Note</span>Another block for Question 4: Inception
 </div>
 </div>
 <div class="callout-body-container callout-body">
@@ -1476,7 +1476,7 @@ Figure&nbsp;10.2: <a href="08-cnn.html" class="quarto-xref"><span>Chapter 9</spa
 </div>
 </div>
 <p>Look at the <em>training</em> column first. The plain 40-conv-layer network did not fit the 1,200 images it trains on within the 30-epoch training budget: 61% train accuracy, while its residual twin memorizes them and generalizes twenty-seven points better. This is an <strong>optimization failure</strong> in the same family as the degradation problem He et al.&nbsp;reported in 2015, where their 56-layer plain net trained worse than their 20-layer one. Our experiment isolates the residual rescue at one depth; a strict demonstration that adding depth degrades a plain network would also require a shallower plain control.</p>
-<p>The residual version adds the block input to the learned branch before applying the final ReLU. Write <span class="math inline">\(H(x)=x+F(x)\)</span> for this pre-activation sum; the implemented block returns <span class="math inline">\(\operatorname{ReLU}(H(x))\)</span>. <a href="#fig-residual-stream" class="quarto-xref">Figure&nbsp;<span>10.3</span></a> shows both operations. Differentiating through the sum gives</p>
+<p>The residual version adds the block input to the learned branch before applying the final ReLU. Write <span class="math inline">\(H(x)=x+F(x)\)</span> for this pre-activation sum; the implemented block returns <span class="math inline">\(\operatorname{ReLU}(H(x))\)</span>. <a href="#fig-residual-stream" class="quarto-xref">Figure&nbsp;<span>10.3</span></a> shows both operations. The sum <span class="math inline">\(x + F(x)\)</span> needs <span class="math inline">\(x\)</span> and <span class="math inline">\(F(x)\)</span> of the same shape. Our blocks keep 12 channels and the grid size, so <code>Block</code> needs only the identity route. When a block changes the number of channels, or halves the grid with a stride, ResNets commonly put a <span class="math inline">\(1\times1\)</span> convolution on the shortcut, with stride 2 like the branch’s first convolution, to match the shapes (He et al.). This projection shortcut costs <span class="math inline">\(C_{\text{in}}C_{\text{out}}\)</span> weights: the <span class="math inline">\(1\times1\)</span> convolution of Question 3 reappears as a shape adapter. With the identity route, differentiating through the sum gives</p>
 <p><span id="eq-residual"><span class="math display">\[
 H(x) = F(x) + x
 \qquad\Longrightarrow\qquad
@@ -1713,7 +1713,7 @@ Figure&nbsp;10.3: A residual block in the original ResNet form, which <code>Bloc
 })();
 
 </script>
-<p>Here <span class="math inline">\(\partial L/\partial H\)</span> already includes the derivative of the final ReLU. The identity term provides an additive gradient contribution that does not multiply by the learned branch’s weights. The full gradient still depends on the ReLU gate and the branch Jacobian, which can amplify, attenuate, or partly cancel that contribution. The block only needs to learn the <em>residual</em>, the correction on top of “pass it through,” and doing nothing is easy to represent: <span class="math inline">\(F = 0\)</span>.</p>
+<p>Here <span class="math inline">\(\partial L/\partial H\)</span> already includes the derivative of the final ReLU. The identity term provides an additive gradient contribution that does not multiply by the learned branch’s weights. The full gradient still depends on the ReLU’s derivative and the branch Jacobian, which can amplify, attenuate, or partly cancel that contribution. The block only needs to learn the <em>residual</em>, the correction on top of “pass it through,” and doing nothing is easy to represent: <span class="math inline">\(F = 0\)</span>.</p>
 <p>We next measure how the stem gradient changes with depth at initialization. We extend <a href="../part1/05-backpropagation.html" class="quarto-xref"><span>Chapter 5</span></a>’s depth experiment from dense layers to conv stacks:</p>
 <div class="plan-code plan-code-wide">
 <div class="plan">
@@ -1781,10 +1781,10 @@ residual + BN : 1.6e-01   4.9e-01   5.0e-01
 48-layer no-BN check: max |component| 5.2e-24; nonzero 108/108; float64 norm 2.2e-23</code></pre>
 </div>
 <div class="cell-output cell-output-display">
-<div id="fig-gradient-highway" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Log-scale line chart of first-layer gradient norm at 8, 24, and 48 convolutional layers. The plain network without BatchNorm plunges from around 10 to the minus 5 to below 10 to the minus 21; the plain BatchNorm network rises sharply at 48 layers; the residual BatchNorm network remains near order one across all depths.">
+<div id="fig-gradient-highway" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Log-scale line chart of the stem gradient norm at 8, 24, and 48 convolutional layers. The plain network without BatchNorm plunges from about 10 to the minus 5 to 2.2 times 10 to the minus 23; the plain BatchNorm network rises to about 83 at 48 layers; the residual BatchNorm network remains near order one across all depths.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-gradient-highway-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<img src="09-modern-cnns-transfer_files/figure-html/fig-gradient-highway-output-2.png" loading="lazy" decoding="async" alt="Log-scale line chart of first-layer gradient norm at 8, 24, and 48 convolutional layers. The plain network without BatchNorm plunges from around 10 to the minus 5 to below 10 to the minus 21; the plain BatchNorm network rises sharply at 48 layers; the residual BatchNorm network remains near order one across all depths." width="585" height="316" class="figure-img">
+<img src="09-modern-cnns-transfer_files/figure-html/fig-gradient-highway-output-2.png" loading="lazy" decoding="async" alt="Log-scale line chart of the stem gradient norm at 8, 24, and 48 convolutional layers. The plain network without BatchNorm plunges from about 10 to the minus 5 to 2.2 times 10 to the minus 23; the plain BatchNorm network rises to about 83 at 48 layers; the residual BatchNorm network remains near order one across all depths." width="585" height="316" class="figure-img">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-gradient-highway-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 Figure&nbsp;10.4: Gradient magnitude reaching the stem (first layer) at initialization, versus depth, for three designs. In the 48-layer no-BN stack, the true norm is 2.2e-23; a float32 norm calculation reports zero because squaring these nonzero components underflows. BN fixes the vanishing but overshoots: in plain stacks the gradient grows with depth. Residual blocks keep the gradient within one order of magnitude across these depths.
@@ -1824,11 +1824,11 @@ Figure&nbsp;10.4: Gradient magnitude reaching the stem (first layer) at initiali
 </section>
 <section id="the-scorecard-what-a-decade-of-design-bought" class="level2" data-number="10.6">
 <h2 data-number="10.6" class="anchored" data-anchor-id="the-scorecard-what-a-decade-of-design-bought"><span class="header-section-number">10.6</span> Four architectures on the full data</h2>
-<p>The small-data studies isolated mechanisms. To compare architectures, we use the full task: we split all 60,000 <a href="https://arxiv.org/abs/1708.07747">Fashion-MNIST</a> training images once into 50,000 for fitting and 10,000 for validation, and we open the official 10,000-image test set only after selecting the checkpoint on the validation split. We ran LeNet, NiN, VGG, and a nine-block residual network for three end-to-end seeds on Rivanna:</p>
+<p>The small-data studies isolated mechanisms. To compare architectures, we use the full task: we split all 60,000 <a href="https://arxiv.org/abs/1708.07747">Fashion-MNIST</a> training images once into 50,000 for fitting and 10,000 for validation, and we open the official 10,000-image test set only after selecting the checkpoint on the validation split. We ran LeNet, NiN, VGG, and a nine-block residual network for three end-to-end seeds each, all under one training recipe:</p>
 <div class="plan-code plan-code-wide">
 <div class="plan">
 <ol type="1">
-<li>Load the 12 pinned full-data Rivanna records.</li>
+<li>Load the 12 pinned full-data run records.</li>
 <li>Summarize test accuracy and parameter count by architecture.</li>
 </ol>
 </div>
@@ -1864,7 +1864,7 @@ Figure&nbsp;10.4: Gradient magnitude reaching the stem (first layer) at initiali
 <img src="09-modern-cnns-transfer_files/figure-html/fig-scorecard-output-1.png" loading="lazy" decoding="async" alt="Scatter plot of full Fashion-MNIST test accuracy against log-scaled parameter count. NiN is the smallest point at about 92.8 percent, LeNet is near 92.5 percent, VGG is near 93.7 percent, and the residual network is highest near 94.2 percent. Small vertical error bars show variation over three seeds." width="588" height="335" class="figure-img">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-scorecard-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;10.5: Full-data Part II accuracy against parameters on Rivanna. Points show mean official-test accuracy and bars one sample standard deviation across seeds 6050–6052. LeNet reaches 92.52%, NiN 92.78%, VGG 93.73%, and the residual network 94.20%. NiN is the most parameter-efficient point; VGG buys more accuracy with depth; residual blocks reach the strongest endpoint in this declared training regime. Parameter count is not training compute, and these four points are not a universal architecture ranking.
+Figure&nbsp;10.5: Full-data Part II accuracy against parameters. Points show mean official-test accuracy and bars one sample standard deviation across three seeds. LeNet reaches 92.52%, NiN 92.78%, VGG 93.73%, and the residual network 94.20%. NiN is the most parameter-efficient point; VGG buys more accuracy with depth; residual blocks reach the strongest endpoint in this declared training regime. Parameter count is not training compute, and these four points are not a universal architecture ranking.
 </figcaption>
 </figure>
 </div>
@@ -1877,9 +1877,10 @@ Figure&nbsp;10.5: Full-data Part II accuracy against parameters on Rivanna. Poin
 <p>Everything so far trains from scratch. Practice today often does not: most image features are <em>shared</em> (edges, textures, parts transfer across tasks), so we train one strong backbone once, on enormous data, and reuse it everywhere. The mechanics come in two strengths:</p>
 <ul>
 <li><strong>Linear probe</strong>: freeze the pretrained trunk entirely (<code>requires_grad = False</code>), extract its features, train only a new linear head on your labels. The frozen backbone also runs in evaluation mode, so BatchNorm uses its stored statistics.</li>
-<li><strong>Fine-tuning</strong>: additionally unfreeze the last block or two, training them at a <em>much</em> smaller learning rate than the fresh head, so the pretrained features adapt gently instead of being trampled.</li>
+<li><strong>Fine-tuning</strong>: additionally unfreeze the last block or two, training them, usually at a <em>much</em> smaller learning rate than the fresh head, so the pretrained features adapt gently instead of being trampled.</li>
 </ul>
-<p>The task is to classify the three shoe classes (sandal, sneaker, ankle boot) from <strong>ten labeled examples each</strong>. The 30-image regime is exactly where transfer should shine: too few labels to learn features, goes the story, so imported features should dominate. Three contenders:</p>
+<p>Under a linear probe, the frozen trunk turns each image <span class="math inline">\(x\)</span> into a vector of features <span class="math inline">\(h(x)\)</span>, a <strong>representation</strong> (or <strong>embedding</strong>) of the image, and the probe tests whether the target labels can be read from that vector by a linear model. Whatever the trunk learned in pretraining reaches the new task only through <span class="math inline">\(h(x)\)</span>. <a href="../interludes/making-pca-learnable.html" class="quarto-xref"><span>Chapter 11</span></a>, the interlude that follows, builds such representations without labels, by training a network to compress its input and reconstruct it.</p>
+<p>Our test case is a shoe task: classify the three shoe classes (sandal, sneaker, ankle boot) from <strong>ten labeled examples each</strong>. The 30-image regime is exactly where transfer should shine: too few labels to learn features, goes the story, so imported features should dominate. Three contenders:</p>
 <ol type="1">
 <li><strong>From scratch</strong>, our VGG-style trunk trains on the 30 images alone.</li>
 <li><strong>Our own pretrained trunk</strong> is the same trunk pretrained on the seven <em>non-shoe</em> classes (863 images), then frozen under a linear probe.</li>
@@ -2058,7 +2059,7 @@ mean     86.6%       70.6%           87.2%</code></pre>
 <img src="09-modern-cnns-transfer_files/figure-html/fig-transfer-full-output-1.png" loading="lazy" decoding="async" alt="Three bars compare full Fashion-MNIST ResNet-18 regimes. The frozen ImageNet probe is lowest near 88.8 percent. Fine-tuning and scratch are both near 94 percent, with scratch slightly higher. Three dots on each bar show the individual seeds." width="587" height="326" class="figure-img">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-transfer-full-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;10.6: ImageNet transfer on full Fashion-MNIST at 224 pixels. Across seeds 6050–6052, the frozen linear probe reaches 88.79% ± 0.08% official-test accuracy, last-block fine-tuning 93.92% ± 0.12%, and scratch 94.14% ± 0.08%. Fine-tuning repairs most of the domain mismatch, but 50,000 target labels are enough for scratch to match it in this regime. Bars are means, dots are seeds, and error bars are one sample standard deviation.
+Figure&nbsp;10.6: ImageNet transfer on full Fashion-MNIST at 224 pixels. Across three seeds, the frozen linear probe reaches 88.79% ± 0.08% official-test accuracy, last-block fine-tuning 93.92% ± 0.12%, and scratch 94.14% ± 0.08%. Fine-tuning repairs most of the domain mismatch, but 50,000 target labels are enough for scratch to match it in this regime. Bars are means, dots are seeds, and error bars are one sample standard deviation.
 </figcaption>
 </figure>
 </div>
@@ -2148,7 +2149,7 @@ Figure&nbsp;10.6: ImageNet transfer on full Fashion-MNIST at 224 pixels. Across 
 <ul>
 <li>Why can several small kernels replace one large kernel?</li>
 <li>What changes between a frozen probe, partial fine-tuning, and training from scratch?</li>
-<li>Which evidence here is a mechanism study, and which comes from the pinned Rivanna runs?</li>
+<li>Which evidence here is a mechanism study, and which comes from the pinned full-data runs?</li>
 </ul>
 </div>
 </div>
@@ -2161,7 +2162,7 @@ Figure&nbsp;10.6: ImageNet transfer on full Fashion-MNIST at 224 pixels. Across 
 <li><strong>BatchNorm</strong> re-standardizes every channel over the batch and spatial axes, then applies a learnable scale and shift (<span class="math inline">\(\gamma, \beta\)</span>); conv→BN→ReLU with <code>bias=False</code>; <em>train and eval are different machines</em>, so flip the switch. Its per-token cousin, LayerNorm, appears in <a href="../part4/14-self-attention-transformer.html" class="quarto-xref"><span>Chapter 16</span></a>. Readers who want normalization treated as a choice of invariance, finite-sample state, and derivative path will find that treatment in <em>Deep Learning: Making It Trainable</em> (Shakeri, 2026), Chapter 15, <a href="https://shakeri-lab.github.io/opt-book/chapters/act2/15-normalization.html#c15"><em>Normalization Chooses an Invariance</em></a>.</li>
 <li><strong><span class="math inline">\(1\times1\)</span> convolutions</strong> run <a href="../part1/01-linear-regression.html" class="quarto-xref"><span>Chapter 1</span></a>’s linear model across channels at every pixel. With <strong>global average pooling</strong> they replace the flatten head: parameters collapse (218k <span class="math inline">\(\rightarrow\)</span> 35k) and the head has no position-specific weights. On our small dataset, NINSmall lost less accuracy under shift than LeNet but trailed it on centered images; the trunks also differ, so neither difference isolates GAP. Boundaries and downsampling still prevent exact invariance.</li>
 <li><strong>Residual connections rescued a deep stack</strong>: our plain 40-layer net did not fit its own training set within the 30-epoch training budget. The residual connection <span class="math inline">\(H(x) = F(x) + x\)</span> adds an identity term to the Jacobian, and the same-depth twin trains to 100%. Transformer stacks will reuse this residual pattern around each attention and feedforward sublayer.</li>
-<li><strong>Transfer learning</strong> = freeze + probe, or gently fine-tune. Our experiment found similar mean accuracy for scratch and the ImageNet probe across three seeds at 28-pixel scale. Possible explanations include a pretraining curriculum that lacks the target’s features, domain and resolution gaps, and a small target task that leaves little room for imported features. The pinned full-scale Rivanna runs report <span class="math inline">\(88.79\% \pm 0.08\%\)</span> for the frozen probe, <span class="math inline">\(93.92\% \pm 0.12\%\)</span> for fine-tuning, and <span class="math inline">\(94.14\% \pm 0.08\%\)</span> for scratch with ResNet-18. Under these procedures, partial fine-tuning raises the frozen-probe result by more than five points, and scratch finishes slightly above fine-tuning. Diagnosing the regime is the skill.</li>
+<li><strong>Transfer learning</strong> = freeze + probe, or gently fine-tune. Our experiment found similar mean accuracy for scratch and the ImageNet probe across three seeds at 28-pixel scale. Possible explanations include a pretraining curriculum that lacks the target’s features, domain and resolution gaps, and a small target task that leaves little room for imported features. The pinned full-scale runs report <span class="math inline">\(88.79\% \pm 0.08\%\)</span> for the frozen probe, <span class="math inline">\(93.92\% \pm 0.12\%\)</span> for fine-tuning, and <span class="math inline">\(94.14\% \pm 0.08\%\)</span> for scratch with ResNet-18. Under these procedures, partial fine-tuning raises the frozen-probe result by more than five points, and scratch finishes slightly above fine-tuning. Diagnosing the regime is the skill.</li>
 </ol>
 </section>
 <section id="sources-and-further-reading" class="level2 unnumbered">
@@ -2192,7 +2193,7 @@ Figure&nbsp;10.6: ImageNet transfer on full Fashion-MNIST at 224 pixels. Across 
 <li><strong>(Code.)</strong> Make VGGSmall’s blocks <em>depthwise separable</em>: replace each <span class="math inline">\(3\times3\)</span> conv with a per-channel <span class="math inline">\(3\times3\)</span> (<code>groups=c_in</code>) followed by a <span class="math inline">\(1\times1\)</span> mixer. Count parameters, retrain, and report the accuracy-per-parameter ratio against the original. (This is MobileNet’s depthwise-separable construction.)</li>
 <li><strong>(Code.)</strong> Ablate BatchNorm: retrain VGGSmall with the BN layers removed, same budget. Compare final accuracy <em>and</em> the first ten epochs’ training accuracy. Then repeat the <code>bn-drift</code> cell’s measurement on both trained networks. Does training itself fix the activation scales?</li>
 <li><strong>(Code.)</strong> Try data augmentation as a third road: on the 30-image shoe task, train from scratch with random horizontal flips and ±3-pixel shifts (<a href="../part1/06-generalization-inductive-bias.html" class="quarto-xref"><span>Chapter 6</span></a>’s exercise, now as a tool). Does augmentation improve the scratch model relative to the transfer baselines on the same shoe test images? Why might augmentation and transfer help in <em>different</em> regimes?</li>
-<li><strong>(Audit.)</strong> Retrain <code>VGGSmall</code> and <code>NINSmall</code> under seed 6050, then collect the 20 Fashion-MNIST test items on which the models disagree with each other or with the supplied label while at least one model assigns its prediction probability above 0.9. Preserve the images, supplied labels, predictions, and confidences before adjudication. Have a second reader independently label the 20 items, report agreement and a binomial interval for the suspected-label-error share, and list ambiguous cases separately. Explain why confident disagreement is a biased sample of the full test set, in which direction that selection can distort prevalence, and what the audit can still reveal.</li>
+<li><strong>(Audit.)</strong> Retrain <code>VGGSmall</code> and <code>NINSmall</code> under one fixed seed, then collect the 20 Fashion-MNIST test items on which the models disagree with each other or with the supplied label while at least one model assigns its prediction probability above 0.9. Preserve the images, supplied labels, predictions, and confidences before adjudication. Have a second reader independently label the 20 items, report agreement and a binomial interval for the suspected-label-error share, and list ambiguous cases separately. Explain why confident disagreement is a biased sample of the full test set, in which direction that selection can distort prevalence, and what the audit can still reveal.</li>
 <li><strong>(Pencil.)</strong> Derive <span class="math inline">\(\partial\loss/\partial x\)</span> through <a href="#eq-batchnorm" class="quarto-xref">Equation&nbsp;<span>10.1</span></a>’s batch mean and variance. Mark the direct normalized-input term and the two terms created by coupling every example through those statistics. <strong>(Code.)</strong> Verify all three terms against autograd on the experimentation interlude’s BatchNorm module. Then delete the two coupling terms deliberately, compare the gradient error, and rerun the interlude’s training curve under the same data, initialization, minibatch schedule, and seed panel.</li>
 </ol>
 
