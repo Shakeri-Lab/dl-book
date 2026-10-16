@@ -25,14 +25,13 @@ and we examine how kernel size, channel mixing,
 change the cost and trainability of a convolutional network, and then which features can be
 reused on another task.
 
-The networks of those years are many, and their mechanisms are easy to lose among them. Four
-design questions keep the mechanisms in view:
+The networks of those years are many. Four design questions organize their mechanisms:
 
 1. **Why $5 \times 5$?** Could smaller filters do the same job with fewer parameters?
 2. **How can we train deeper networks reliably?**
 3. **How can we reduce the parameters in the classifier head?**
-4. **Can we design reusable blocks**: optimized layer combinations we stack, keeping
-   a bird's-eye view instead of re-designing what already works?
+4. **Can we design reusable blocks**: optimized layer combinations we stack and repeat
+   instead of re-designing what already works?
 
 Each question has a representative answer: [VGG](https://arxiv.org/abs/1409.1556) for the first,
 [ResNet](https://openaccess.thecvf.com/content_cvpr_2016/html/He_Deep_Residual_Learning_CVPR_2016_paper.html) for the second,
@@ -115,20 +114,20 @@ def count(model: nn.Module) -> int:
 @sec-08-cnn already opened the 600-image holdout, and this chapter queries it
 repeatedly while comparing architectures, so we keep the familiar `X_te` name but treat
 it as the book's fixed **benchmark**. These
-comparisons are descriptive, not an unbiased estimate after model selection; a final
+comparisons are descriptive, not unbiased estimates after model selection; a final
 claim would require a fresh, untouched test set.
 
 The recipe has two small novelties, both because these networks contain batch
 normalization: `model.train()` before each step and `model.eval()` before each
 evaluation. Batch normalization uses different statistics in each mode.
 
-## Question 1: why $5 \times 5$? Stack small kernels instead
+## Why $5 \times 5$? Stack small kernels instead {#question-1-why-5-times-5-stack-small-kernels-instead}
 
-VGG (Simonyan & Zisserman, 2014) answers with a rule: never use a $5 \times 5$
-kernel; stack $3 \times 3$s until the field is as wide as you need. Recall
+VGG (Simonyan & Zisserman, 2014) answers with a design move: build larger receptive fields by
+stacking $3 \times 3$ kernels until the field is as wide as needed. Recall
 from @sec-08-cnn that stacking grows the receptive field. Two stacked
 $3 \times 3$ convolutions give the second layer a $5 \times 5$ window on the input, the
-*same* receptive field as one $5 \times 5$ kernel. But compare the parameter counts, for a layer
+*same* receptive field as one $5 \times 5$ kernel. But the parameter counts differ for a layer
 with $C$ channels in and $C$ out:
 
 $$
@@ -138,10 +137,8 @@ $$
 $$
 
 a 28% saving. The stacked pair also fires a ReLU *twice* where the big kernel fires
-once. The pair has the same receptive field, fewer parameters, and more
-nonlinearity. Three $3\times3$s reach a
-$7\times7$ field for $27C^2$ against $49C^2$: the deeper you take the idea, the
-larger the saving.
+once. The pair has the same receptive field and fewer parameters. Three $3\times3$s reach a
+$7\times7$ field for $27C^2$ against $49C^2$: the saving grows with depth.
 
 :::: {.plan-code}
 ::: {.plan}
@@ -168,8 +165,7 @@ The $18C^2 < 25C^2$ arithmetic assumes the channel width stays $C$ through the s
 When a layer *grows* channels (as LeNet's $6 \rightarrow 16$ did), splitting it into
 two growing $3\times3$s can cost more, not less. VGG's design sidesteps this by
 keeping width constant inside each block and changing it only between blocks, which
-is exactly the shape our code will take. (Exercise 1 makes you find the break-even
-point.)
+is the shape our code takes. (Exercise 1 asks for the break-even point.)
 
 ## Batch normalization {#the-stabilizer-we-owe-you-batch-normalization}
 
@@ -232,7 +228,7 @@ as we do below.
 **Batch normalization** (Ioffe & Szegedy, 2015) re-standardizes at every layer. For
 each channel of an NCHW tensor, `BatchNorm2d` computes the mean and variance across
 the current minibatch **and both spatial axes** ($N$, $H$, and $W$), normalizes the
-activations, then lets the layer undo that transformation through two learnable knobs:
+activations, then applies a learned scale and shift through two parameters:
 
 $$
 \hat{x} = \frac{x - \mu_{\text{batch}}}{\sqrt{\sigma^2_{\text{batch}} + \epsilon}},
@@ -240,9 +236,9 @@ $$
 y = \gamma\,\hat{x} + \beta .
 $$ {#eq-batchnorm}
 
-The $\gamma, \beta$ pair matters: normalization is a *reset to a healthy scale*, not a
-straitjacket. The network can learn to restore any mean and spread that helps, but
-it starts every layer from sane numbers. In the printout above, the BN row holds
+Here $\epsilon$ is a small constant that keeps the denominator nonzero. The output is not
+constrained to remain at zero mean and unit variance: $\gamma$ and $\beta$ control its
+scale and shift, while each layer starts from standardized activations. In the printout above, the BN row holds
 a near-constant spread at every printed depth: the signal reaches each layer at a usable
 scale from the first step.
 The standard placement we adopt is conv $\rightarrow$ BN $\rightarrow$ ReLU, with
@@ -252,13 +248,13 @@ The standard placement we adopt is conv $\rightarrow$ BN $\rightarrow$ ReLU, wit
 ## BN uses different statistics in training and evaluation
 
 At training time BN normalizes by the *current batch's* statistics. At evaluation
-time there may be no batch (one image), so it uses running averages collected during
-training. `model.train()` and `model.eval()` switch between the two. Forgetting the
-switch is the classic BN bug: evaluate in train mode and your predictions depend on
-whatever else happens to be in the batch; train in eval mode and BN never learns its
-statistics. Our `train_model` recipe flips the switch in both directions; look for
-it. It follows that BN needs real batches to estimate statistics, so it gets
-unreliable at tiny batch sizes.
+time, the models here use stored running averages collected during training, including
+when they process one image at a time. `model.train()` and `model.eval()` switch between
+the two. Forgetting the switch is a common BN error: a prediction made in train mode
+depends on the other images in the batch, and a network trained in eval mode never
+updates its running statistics. Our `train_model` recipe flips the switch in both
+directions; look for it. It follows that BN needs real batches to estimate statistics,
+so it gets unreliable at tiny batch sizes.
 :::
 
 ::: {.callout-note}
@@ -267,17 +263,17 @@ unreliable at tiny batch sizes.
 Batch statistics are one choice among several. When we build transformers
 (@sec-14-self-attention-transformer), batches of variable-length sequences will make
 per-batch statistics awkward, and the same standardize-then-rescale idea will reappear
-computed per *token* instead: **layer normalization**. Same equation, different
-axis. Remember @eq-batchnorm when you meet it.
+computed per *token* instead: **layer normalization**, which applies @eq-batchnorm along a
+different axis.
 :::
 
 ## Building with blocks: a small VGG
 
-Now combine the small stacked kernels of Question 1 with the reusable blocks of
-Question 4. Define the *atom* (conv,
-BN, ReLU) once; a block stacks atoms and pools; a network stacks blocks. This is the
-point about VGG versus its hand-tuned predecessors: you stop re-designing
-and start repeating.
+Now combine the small stacked kernels of [the first
+section](#question-1-why-5-times-5-stack-small-kernels-instead) with reusable blocks. Define the
+*atom* (conv, BN, ReLU) once; a block stacks atoms and pools; a network stacks blocks. This is
+the point about VGG versus its hand-tuned predecessors: one block is designed once and
+repeated.
 
 :::: {.plan-code}
 ::: {.plan}
@@ -318,23 +314,22 @@ print(f"VGGSmall: {count(vgg):,} parameters ({n_head:,} in the head, "
 print(f"test accuracy {accuracy(vgg, X_te, y_te):.1%}")
 ```
 ::::
-Two readings again. On the good side, this VGG-style recipe reaches 86.7%, four
-points above LeNet in this run. Because depth, width, normalization, kernel sizes, parameter count,
-and training duration all changed together, this comparison does not isolate which
-ingredient earned the gain. On the bad side, it carries 218,586 parameters, *three and
-a half times* LeNet's total, and
-the head still dominates, accounting for 92% of the parameters: it is a dense layer
-reading a flattened grid. The convolutions stayed
-small and the total grew anyway. That raises the third question: how can we reduce the
-parameters in the classifier head?
+This VGG-style model illustrates both a gain and a remaining bottleneck. It reaches 86.7%,
+four points above LeNet in this run, though changing depth, width, normalization, kernel size,
+parameter count, and training duration together prevents isolating which ingredient drove the
+improvement. At the same time, it carries 218,586 parameters, *three and a half times* LeNet's
+total, and the dense head on the flattened grid still accounts for 92% of them. Keeping the
+convolutional kernels small did not keep the network small. That raises the question of the
+classifier head: how can we reduce its parameters?
 
-## Question 3: $1 \times 1$ convolutions and a smaller classifier head {#question-3-1-times-1-convolutions-and-firing-the-flatten-head}
+## $1 \times 1$ convolutions and a smaller classifier head {#question-3-1-times-1-convolutions-and-firing-the-flatten-head}
 
-Most parameters sit in `nn.Linear(1568, 128)`. To remove it we need one more tool,
-odd-looking at first sight: a convolution whose kernel is $1 \times 1$.
+Most parameters sit in `nn.Linear(1568, 128)`. We will replace that flattened head with global
+averaging. First, a convolution whose kernel is $1 \times 1$ mixes channels before pooling
+without combining neighboring spatial positions.
 
-A $1 \times 1$ kernel does no spatial mixing at all: its window is a single pixel. But
-across *channels* it does exactly what @eq-conv-layer says: at each position, take
+The window of a $1 \times 1$ kernel is a single pixel. Across *channels*, however,
+it computes @eq-conv-layer: at each position, take
 the $C_{\text{in}}$ channel values and form $C_{\text{out}}$ weighted combinations
 plus bias. At each spatial position, the same learned affine map transforms
 the channel vector. A following ReLU makes this a nonlinear
@@ -344,8 +339,8 @@ width. The kernel uses $C_{\text{in}}C_{\text{out}}$ weights,
 rather than the $k^2C_{\text{in}}C_{\text{out}}$ weights of a
 $k\times k$ spatial kernel.
 
-That tool enables the **Network-in-Network** design (Lin et al., 2013), and with it
-the clean head. A NiN block is one $3\times3$ (some spatial mixing) followed by two
+The **Network-in-Network** design (Lin et al., 2013) combines this tool
+with a global-averaging head. A NiN block is one $3\times3$ (some spatial mixing) followed by two
 $1\times1$s (per-pixel channel mixing). And the classifier becomes:
 
 1. Let the last block produce a stack of feature maps.
@@ -412,14 +407,14 @@ print(f"test accuracy {accuracy(nin, X_te, y_te):.1%}")
 ```
 ::::
 NINSmall has 35,034 parameters, six times fewer than VGGSmall, and a
-650-parameter head. The accuracy is 76.2%, and that dip is worth more attention than the
-win. First, though, we return to image shifts. @sec-08-cnn
+650-parameter head. The accuracy is 76.2%, and we examine that dip after returning to image
+shifts. @sec-08-cnn
 showed that LeNet's shift tolerance is incomplete. A flatten head assigns separate weights
 to separate spatial positions. GAP removes that position-specific parameterization
 by averaging each feature map before classification. This gives
 a reason to test shift tolerance, although comparing LeNet with
-NINSmall does not isolate the effect of the head. NINSmall's head is @sec-02-logistic-softmax's classification head
-in its plainest form: one linear layer reading one averaged number per channel. The shift test runs a third time:
+NINSmall does not isolate the effect of the head. NINSmall's head is the classification head of
+@sec-02-logistic-softmax in its plainest form: one linear layer reading one averaged number per channel. The shift test runs a third time:
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
@@ -431,7 +426,7 @@ in its plainest form: one linear layer reading one averaged number per channel. 
 
 ```{python}
 #| label: fig-cliff-gap
-#| fig-cap: "@sec-08-cnn's experiment, third round. LeNet's accuracy still falls below 30% by four pixels of shift; NINSmall, with its global-average-pool head, declines gently. The two networks also differ in their trunks, so the curves do not isolate the effect of GAP. GAP removes position-specific weights from the head, but padding, stride, pooling, and content clipped at the image edge keep the complete network from being exactly shift-invariant."
+#| fig-cap: "The shift experiment of @sec-08-cnn, run a third time. LeNet's accuracy still falls below 30% by four pixels of shift; NINSmall, with its global-average-pooling head, declines gently. The two networks also differ in their trunks, so the curves do not isolate the effect of GAP. GAP removes position-specific weights from the head, but padding, stride, pooling, and content clipped at the image edge keep the complete network from being exactly shift-invariant."
 #| fig-alt: "Line chart of accuracy against a rightward image shift from zero to four pixels. LeNet begins above NINSmall, crosses below it between one and two pixels, then falls steeply to about 0.26; NINSmall declines gently from about 0.76 to 0.66. A dotted chance line stays at 0.10."
 #| code-summary: "Code: shift curves, flatten head vs GAP head"
 #| code-fold: false
@@ -484,15 +479,15 @@ plt.ylim(0, 0.9); plt.xticks(shifts); plt.legend()
 plt.tight_layout(); plt.show()
 ```
 ::::
-LeNet's curve falls from 82% to 27%; NINSmall's is a gentle slope from 76% to 67%.
+LeNet's curve falls from 82% to 27%, while NINSmall's is a gentle slope from 76% to 67%.
 Position-specific weights are gone from NINSmall's head, and the result is consistent
 with the flatten-head diagnosis. It is not a matched-head
 ablation: the trunks differ too. The complete CNN is only
-approximately shift-tolerant; boundaries, strides, and pooling can still change its
+approximately shift-tolerant. Boundaries, strides, and pooling can still change its
 features.
 
-Now the dip. On clean, centered test garments NINSmall trails LeNet by six points.
-That result is *consistent with* @sec-08-cnn's warning: on centered data, position can
+On clean, centered test garments NINSmall scores six points below LeNet.
+That result is *consistent with* the warning in @sec-08-cnn: on centered data, position can
 carry information, and a GAP head cannot assign separate weights to separate
 locations. But GAP is not the only changed ingredient, so this run does not prove it
 caused the gap. On the full 60,000-image dataset, the book's
@@ -501,28 +496,29 @@ NiN at $92.78\% \pm 0.08\%$ across three seeds. At our scale the comparison expo
 matched-head ablation: shift tolerance may cost positional information.
 
 ::: {.callout-note}
-## Another block for Question 4: Inception
+## Another reusable block: Inception
 
 [GoogLeNet](https://openaccess.thecvf.com/content_cvpr_2015/html/Szegedy_Going_Deeper_With_2015_CVPR_paper.html)'s Inception block (2014) answers "which kernel size?" with "all of them":
 parallel $1\times1$, $3\times3$, $5\times5$, and pooling branches, concatenated. Its
-enabling trick is the $1\times1$ *bottleneck*: compress channels before the expensive
+cost is kept low by the $1\times1$ *bottleneck*: compress channels before the expensive
 spatial kernels. For one $5\times5$ branch at 256 channels:
 direct, $5^2 \times 256 \times 128 \approx 819$k parameters; with a $1\times1$
 squeeze to 32 first, $256 \times 32 + 5^2 \times 32 \times 128 \approx 111$k, an
-86% cut for the same nominal operation. We will not build Inception here; the transferable part is its principle of
+86% reduction in weights, with the same input and output channel counts and the same nominal
+spatial receptive field. We will not build Inception here; the transferable part is its principle of
 compressing channels before the expensive spatial kernels. Exercise 2 works through
 the arithmetic.
 :::
 
-## Question 2: training deeper networks {#question-2-going-deeper-and-the-wall-you-hit}
+## Training deeper networks {#question-2-going-deeper-and-the-wall-you-hit}
 
 VGG's design favors depth. We stack twenty of our two-conv blocks
 (with BN, per the recipe, on a $14\times14$ grid so the experiment fits a laptop) and
 compare the result against the *identical* stack with one change: residual connections.
 
 Predict before running. Two networks have identical parameter counts and
-twenty blocks each; one is plain, one residual. Will the plain net merely trail, or fail
-to fit the *training* set at all?
+twenty blocks each. One is plain, one residual. How do the two networks differ in their fit to
+the *training* set under the same budget?
 
 :::: {.plan-code}
 ::: {.plan}
@@ -590,20 +586,20 @@ within the 30-epoch training budget: 61% train
 accuracy, while its residual twin memorizes them and generalizes twenty-seven points
 better. This is an **optimization failure** in the same family as the degradation
 problem He et al. reported in 2015, where their 56-layer plain net trained worse than
-their 20-layer one. Our experiment isolates the residual rescue at one depth; a strict
-demonstration that adding depth degrades a plain network would also require a shallower
+their 20-layer one. Our experiment isolates the effect of the residual connection at one
+depth. A strict demonstration that adding depth degrades a plain network would also require a shallower
 plain control.
 
-The residual version adds the block input to the learned branch
-before applying the final ReLU. Write
-$H(x)=x+F(x)$ for this pre-activation sum; the implemented block
+A **residual connection** adds the block input to the learned branch
+before applying the final ReLU. Writing
+$H(x)=x+F(x)$ for this pre-activation sum, the implemented block
 returns $\operatorname{ReLU}(H(x))$. @fig-residual-stream shows both
 operations. The sum $x + F(x)$ needs $x$ and $F(x)$ of the same shape. Our blocks keep 12
 channels and the grid size, so `Block` needs only the identity route. When a block changes the
 number of channels, or halves the grid with a stride, ResNets commonly put a $1\times1$
 convolution on the shortcut, with stride 2 like the branch's first convolution, to match the
 shapes (He et al.). This projection shortcut costs $C_{\text{in}}C_{\text{out}}$ weights: the
-$1\times1$ convolution of Question 3 reappears as a shape adapter. With the identity route,
+$1\times1$ convolution of NiN reappears as a shape adapter. With the identity route,
 differentiating through the sum gives
 
 $$
@@ -664,15 +660,15 @@ plt.tight_layout(); plt.show()
 
 Here $\partial L/\partial H$ already includes the derivative of
 the final ReLU. The identity term provides an additive gradient
-contribution that does not multiply by the learned branch's
+contribution that is not multiplied by the learned branch's
 weights. The full gradient still depends on the ReLU's derivative and
 the branch Jacobian, which can amplify, attenuate, or partly
 cancel that contribution. The block only needs to learn
-the *residual*, the correction on top of "pass it through," and doing nothing is easy
-to represent: $F = 0$.
+the *residual*, a correction to the identity map. A zero correction is represented
+by $F = 0$.
 
 We next measure how the stem gradient changes with depth at
-initialization. We extend @sec-05-backpropagation's depth experiment
+initialization. We extend the depth experiment of @sec-05-backpropagation
 from dense layers to conv stacks:
 
 :::: {.plan-code .plan-code-wide}
@@ -685,7 +681,7 @@ from dense layers to conv stacks:
 
 ```{python}
 #| label: fig-gradient-highway
-#| fig-cap: "Gradient magnitude reaching the stem (first layer) at initialization, versus depth, for three designs. In the 48-layer no-BN stack, the true norm is 2.2e-23; a float32 norm calculation reports zero because squaring these nonzero components underflows. BN fixes the vanishing but overshoots: in plain stacks the gradient grows with depth. Residual blocks keep the gradient within one order of magnitude across these depths."
+#| fig-cap: "Gradient magnitude reaching the stem (first layer) at initialization, versus depth, for three designs. In the 48-layer no-BN stack, the norm computed in float64 is 2.2e-23; a float32 norm calculation reports zero because squaring these nonzero components underflows. In this initialization check, the plain BN stack's stem gradient grows with depth, while the residual stack's stays within one order of magnitude across these depths."
 #| fig-alt: "Log-scale line chart of the stem gradient norm at 8, 24, and 48 convolutional layers. The plain network without BatchNorm plunges from about 10 to the minus 5 to 2.2 times 10 to the minus 23; the plain BatchNorm network rises to about 83 at 48 layers; the residual BatchNorm network remains near order one across all depths."
 #| code-summary: "Code: gradient at the stem vs. depth, three designs"
 #| code-fold: false
@@ -750,12 +746,13 @@ resolution, and accumulator roles behind that distinction are gathered in
 ::: {.callout-note}
 ## Architecture bridge (optional): DenseNet concatenates the history
 
-A residual connection preserves an old representation by **addition**:
+A residual connection combines an incoming representation with a learned correction by
+**addition**:
 $x_{\ell+1}=x_\ell+F_\ell(x_\ell)$; the block above applies a ReLU after that sum. A [DenseNet](https://openaccess.thecvf.com/content_cvpr_2017/html/Huang_Densely_Connected_Convolutional_CVPR_2017_paper.html) block makes a different connectivity
 choice. If $x_j$ denotes layer $j$'s output feature map, layer $\ell$ receives the
 channel-wise concatenation $[x_0,x_1,\ldots,x_{\ell-1}]$ and contributes a small new
 group of feature maps for later layers. Earlier features therefore remain directly
-available instead of being recreated, while the channel axis grows; transition blocks
+available instead of being recreated, while the channel axis grows; transition layers
 compress channels and
 downsample between dense blocks. The defining operation, in the tensor
 vocabulary of @sec-a2-tensors, is concatenation along the feature-channel axis, not
@@ -766,7 +763,7 @@ another kind of residual addition.
 ::: {.callout-tip}
 ## Residual streams beyond CNNs
 
-Residual connections are not only a CNN trick. They became a central design device in
+Residual connections are not specific to CNNs. They became a central design device in
 many deep architectures; when we assemble a transformer in
 @sec-14-self-attention-transformer, every attention layer and every feedforward
 layer will be wrapped as $x + F(x)$, and the freshly met layer normalization will sit
@@ -823,7 +820,7 @@ for model_name in scorecard_order:
 ```{python}
 #| echo: false
 #| label: fig-scorecard
-#| fig-cap: "Full-data Part II accuracy against parameters. Points show mean official-test accuracy and bars one sample standard deviation across three seeds. LeNet reaches 92.52%, NiN 92.78%, VGG 93.73%, and the residual network 94.20%. NiN is the most parameter-efficient point; VGG buys more accuracy with depth; residual blocks reach the strongest endpoint in this declared training regime. Parameter count is not training compute, and these four points are not a universal architecture ranking."
+#| fig-cap: "Full-data Part II accuracy against parameters. Points show mean official-test accuracy and bars one sample standard deviation across three seeds. LeNet reaches 92.52%, NiN 92.78%, VGG 93.73%, and the residual network 94.20%. NiN is the most parameter-efficient point; VGG attains higher accuracy with a larger parameter count; residual blocks reach the strongest endpoint in this declared training regime. Parameter count is not training compute, and these four points are not a universal architecture ranking."
 #| fig-alt: "Scatter plot of full Fashion-MNIST test accuracy against log-scaled parameter count. NiN is the smallest point at about 92.8 percent, LeNet is near 92.5 percent, VGG is near 93.7 percent, and the residual network is highest near 94.2 percent. Small vertical error bars show variation over three seeds."
 plt.figure(figsize=(6.2, 3.6))
 for model_name, color in zip(scorecard_order, scorecard_colors):
@@ -838,23 +835,25 @@ plt.xlabel("parameters (log scale)"); plt.ylabel("test accuracy")
 plt.ylim(0.915, 0.95)
 plt.tight_layout(); plt.show()
 ```
-The scale changes the verdict from the 1,200-image mechanism studies. NiN no longer trails LeNet in clean accuracy, and all four architectures clear
-92%. The residual network leads this declared recipe, but the plot still has one
-horizontal axis too few: parameters measure storage, not optimizer steps, activation
+The full-data training recipe changes the comparison from the 1,200-image mechanism studies.
+NiN no longer scores below LeNet in clean accuracy, and all four architectures exceed 92%. The
+residual network has the highest mean accuracy under this declared recipe, but the plot still
+has one horizontal axis too few: parameters measure storage, not optimizer steps, activation
 memory, or total training work.
 
 ## Transfer learning: mechanics and a shoe experiment {#transfer-learning-the-mechanics-and-an-honest-experiment}
 
-Everything so far trains from scratch. Practice today often does not:
+Everything so far trains from scratch. Common practice often does not:
 most image features are *shared* (edges, textures, parts transfer across tasks), so we
-train one strong backbone once, on enormous data, and reuse it everywhere. The mechanics come in two strengths:
+train one strong backbone once, on a large dataset, and reuse it for many tasks. We consider two
+adaptation settings:
 
 - **Linear probe**: freeze the pretrained trunk entirely (`requires_grad = False`),
   extract its features, train only a new linear head on your labels. The frozen
   backbone also runs in evaluation mode, so BatchNorm uses its stored statistics.
-- **Fine-tuning**: additionally unfreeze the last block or two, training them, usually at
-  a *much* smaller learning rate than the fresh head, so the pretrained features adapt
-  gently instead of being trampled.
+- **Partial fine-tuning**: additionally unfreeze the last block or two, training them, usually
+  at a *much* smaller learning rate than the fresh head, to limit changes to the pretrained
+  representation.
 
 Under a linear probe, the frozen trunk turns each image $x$ into a vector of features $h(x)$,
 a **representation** (or **embedding**) of the image, and the probe tests whether the target
@@ -865,21 +864,22 @@ compress its input and reconstruct it.
 
 Our test case is a shoe task: classify the three shoe classes (sandal,
 sneaker, ankle boot) from **ten labeled examples each**. The 30-image regime is
-exactly where transfer should shine: too few labels to learn features, goes the
-story, so imported features should dominate. Three contenders:
+where transfer is expected to help most: a small labeled set may be insufficient to learn
+useful features, which makes pretrained features a plausible advantage. We compare three
+contenders:
 
 1. **From scratch**, our VGG-style trunk trains on the 30 images alone.
 2. **Our own pretrained trunk** is the same trunk pretrained on the seven *non-shoe*
    classes (863 images), then frozen under a linear probe.
-3. **A real pretrained backbone** is [SqueezeNet](https://arxiv.org/abs/1602.07360) 1.1 trained on
+3. **An ImageNet-pretrained backbone** is [SqueezeNet](https://arxiv.org/abs/1602.07360) 1.1 trained on
    [ImageNet](https://doi.org/10.1109/CVPR.2009.5206848) (1.2 million photographs,
    1,000 classes), loaded from weights committed with this book, frozen, and read by a
    linear probe on its 512-dimensional features. (We upsample the Fashion images
-   to 96×96 and repeat them across three channels to fit its expectations. That
+   to $96 \times 96$ and repeat them across three channels to fit its expectations. That
    awkwardness is part of the experiment.)
 
-Rank the three contenders before you run them, and write down how far ahead you expect
-the ImageNet backbone to finish.
+Rank the three contenders before you run them, and state whether you expect the ImageNet
+probe to improve on training from scratch.
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
@@ -1005,12 +1005,13 @@ mean = [sum(c) / 3 for c in zip(*rows)]
 print(f"mean     {mean[0]:.1%}       {mean[1]:.1%}           {mean[2]:.1%}")
 ```
 ::::
-These numbers do *not* say what the textbook story predicts. The scratch model, trained on
+These results do not support the expected advantage of transfer learning in this setting. The
+scratch model, trained on
 thirty images, and the ImageNet probe have similar mean accuracy across these three
 seeds: the means differ by less than a point. And our own pretrained trunk,
-competent on its source task per the printout above, transfers *worse
-than nothing*. Three
-reasons, each a general principle:
+competent on its source task per the printout above, performs worse than the scratch baseline
+under this probe-training recipe. There are three
+possible explanations:
 
 1. **A trunk transfers only the features its pretraining produced.** Our own trunk was pretrained on 863
    shirts, bags, and trousers. Nothing in that curriculum required foot-shaped
@@ -1018,13 +1019,13 @@ reasons, each a general principle:
    the same point. The accuracies in the printout cannot show this; a look at the
    features themselves would test it. In this sense, pretraining is a *curriculum*.
 2. **Domain and resolution gaps reduce what transfers.** SqueezeNet's filters were trained on
-   224-pixel color photographs; we feed it 28-pixel grayscale icons inflated to 96.
+   224-pixel color photographs; we feed it 28-pixel grayscale images resized to 96 pixels.
    Its early layers respond to detail that these images do not contain. (The matching recipe,
-   resize and normalize *to match the pretraining pipeline*, is doing real work;
-   we complied as far as the data allows.)
-3. **Transfer wins when the target task is big relative to your labels, not small.**
-   Three shoe silhouettes at $28 \times 28$ is a *small*
-   problem: thirty images suffice, so the scratch baseline is strong and
+   resize and normalize *to match the pretraining pipeline*, is consequential. We apply it
+   subject to the limitations of the available data.)
+3. **A strong scratch baseline can leave less room for transfer to improve the result.**
+   Three shoe silhouettes at $28 \times 28$ form a *small*
+   problem: thirty images suffice for a strong scratch baseline, so
    there is little room for imported knowledge to help. The full ten-class task
    below is different: 50,000 fitting labels, 224-pixel inputs, and a ResNet-18-sized
    feature extractor.
@@ -1069,7 +1070,7 @@ for regime in transfer_order:
 ```{python}
 #| echo: false
 #| label: fig-transfer-full
-#| fig-cap: "ImageNet transfer on full Fashion-MNIST at 224 pixels. Across three seeds, the frozen linear probe reaches 88.79% ± 0.08% official-test accuracy, last-block fine-tuning 93.92% ± 0.12%, and scratch 94.14% ± 0.08%. Fine-tuning repairs most of the domain mismatch, but 50,000 target labels are enough for scratch to match it in this regime. Bars are means, dots are seeds, and error bars are one sample standard deviation."
+#| fig-cap: "ImageNet transfer on full Fashion-MNIST at 224 pixels. Across three seeds, the frozen linear probe reaches 88.79% ± 0.08% official-test accuracy, last-block fine-tuning 93.92% ± 0.12%, and scratch 94.14% ± 0.08%. Fine-tuning raises the frozen-probe result by more than five percentage points, and scratch finishes slightly higher under this training recipe. Bars are means, dots are seeds, and error bars are one sample standard deviation."
 #| fig-alt: "Three bars compare full Fashion-MNIST ResNet-18 regimes. The frozen ImageNet probe is lowest near 88.8 percent. Fine-tuning and scratch are both near 94 percent, with scratch slightly higher. Three dots on each bar show the individual seeds."
 fig, ax = plt.subplots(figsize=(6.2, 3.5))
 x_positions = torch.arange(len(transfer_order))
@@ -1091,29 +1092,29 @@ support 88.79% test accuracy. Fine-tuning the last residual stage
 raises that result by more than five percentage points. Training
 from scratch finishes 0.22 points above fine-tuning across the
 three seeds. These results compare the specified training
-procedures; they do not establish a general ranking of transfer
-and scratch training. Pretraining changes the initial
-representation, while the target data and adaptation procedure
+procedures and do not establish a general ranking between transfer
+and scratch training. Pretraining alters the initial
+representation, whereas the target data and adaptation procedure
 determine how useful that starting point becomes.
 
 ::: {.callout-tip}
 ## When to reach for a pretrained backbone
 
-Transfer helps when (your labels are scarce) *and* (the target task is feature-hungry)
-*and* (the pretraining data plausibly covers the target's features at a matched scale).
+Scarce labels, a feature-hungry target task, and pretraining data that plausibly covers the
+target's features at a matched scale make transfer worth testing.
 Consider how many target labels are available, how closely the
 source and target images match, and how much adaptation the
 budget permits. Compare a frozen probe, partial fine-tuning,
 and a scratch baseline under an explicit selection procedure.
 These comparisons test whether the pretrained representation
 is useful for the target task. Knowing *which regime you are in*
-is the skill; the mechanics (`requires_grad`, learning-rate splits) are the easy
+is the skill. The mechanics (`requires_grad`, learning-rate splits) are the easy
 part.
 :::
 
-You will use these mechanics constantly from Part V onward. Here we fine-tune
-SqueezeNet's last block with two learning rates, fast for the fresh head and slow for
-the pretrained layers:
+Returning to the 30-image shoe task, we now implement partial fine-tuning: SqueezeNet's last
+block and a fresh head train at different learning rates, fast for the head and slow for the
+pretrained layers.
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
@@ -1168,13 +1169,13 @@ with torch.no_grad():
           f"{(head(z).argmax(1) == y_shoe_te).float().mean():.1%}")
 ```
 ::::
-Fine-tuning edges the frozen probe on this seed and finishes close to
+Fine-tuning scores slightly above the frozen probe on this seed and close to
 scratch. This is consistent with the regime analysis above: adaptation helps at the margin,
-but on this seed it does not open a clear lead over scratch.
+but on this seed it does not give a clear advantage over scratch.
 
-Keep the pattern, though: *this* loop, scaled to real backbones and feature-hungry
-tasks, is how most
-of applied deep learning ships today. The recipe "pretrain big, adapt cheaply" is not a vision trick.
+The pattern still matters: *this* loop, scaled to real backbones and feature-hungry
+tasks, is how most applied deep learning systems are built. The recipe "pretrain big, adapt
+cheaply" is not specific to vision.
 It is *the* recipe for language too, and BERT (@sec-15-bert-pretraining) runs it at scale.
 
 ::: {.callout-note}
@@ -1187,25 +1188,26 @@ Close the book for one minute and reconstruct the architecture and transfer choi
 - Which evidence here is a mechanism study, and which comes from the pinned full-data runs?
 :::
 
-## Okay, so: modern CNNs are an optimization story
+## Okay, so: modern CNNs combine architectural and training advances {#okay-so-modern-cnns-are-an-optimization-story}
 
 1. **Small kernels, stacked**: two $3\times3$s cover the receptive field of one $5\times5$, for
-   $18C^2$ against $25C^2$, with twice the nonlinearity, provided width holds
+   $18C^2$ against $25C^2$, with two ReLUs instead of one, provided width holds
    constant through the stack. Design in blocks, repeat the block.
 2. **BatchNorm** re-standardizes every channel over the batch and spatial axes, then applies a learnable scale and
-   shift ($\gamma, \beta$); conv→BN→ReLU with `bias=False`; *train and eval are
-   different machines*, so flip the switch. Its per-token cousin, LayerNorm,
+   shift ($\gamma, \beta$) before the activation, with `bias=False` on the convolution.
+   Training and evaluation use different statistics, so the mode must be set explicitly. Its
+   per-token cousin, LayerNorm,
    appears in @sec-14-self-attention-transformer. Readers who want
    normalization treated as a choice of invariance, finite-sample state, and derivative
    path will find that treatment in *Deep Learning: Making It Trainable* (Shakeri, 2026), Chapter 15,
-   [*Normalization Chooses an Invariance*](https://shakeri-lab.github.io/opt-book/chapters/act2/15-normalization.html#c15).
-3. **$1\times1$ convolutions** run @sec-01-linear-regression's linear model across channels at every
-   pixel. With **global average pooling**
+   ["Normalization Chooses an Invariance"](https://shakeri-lab.github.io/opt-book/chapters/act2/15-normalization.html#c15).
+3. **$1\times1$ convolutions** run the linear model of @sec-01-linear-regression across channels
+   at every pixel. With **global average pooling**
    they replace the flatten head: parameters collapse (218k $\rightarrow$ 35k) and
    the head has no position-specific weights. On our small dataset, NINSmall lost less
-   accuracy under shift than LeNet but trailed it on centered images; the trunks also
+   accuracy under shift than LeNet but scored below it on centered images; the trunks also
    differ, so neither difference isolates GAP. Boundaries and downsampling still prevent exact invariance.
-4. **Residual connections rescued a deep stack**: our plain 40-layer net
+4. **Residual connections made a deep stack trainable**: our plain 40-layer net
    did not fit its own training set within the 30-epoch training budget. The residual
    connection $H(x) = F(x) + x$ adds an identity term to the Jacobian, and the
    same-depth twin trains to 100%. Transformer stacks will
@@ -1232,10 +1234,10 @@ Close the book for one minute and reconstruct the architecture and transfer choi
 - [Iandola et al., *SqueezeNet: AlexNet-level accuracy with 50x fewer parameters and
   <0.5MB model size*](https://arxiv.org/abs/1602.07360): the compact pretrained
   architecture used in the chapter's first transfer experiment.
-- [Simonyan & Zisserman, *Very Deep Convolutional Networks for Large-Scale Image Recognition*](https://arxiv.org/abs/1409.1556): the small-kernel, repeated-block argument behind VGG.
+- [Simonyan and Zisserman, *Very Deep Convolutional Networks for Large-Scale Image Recognition*](https://arxiv.org/abs/1409.1556): the small-kernel, repeated-block argument behind VGG.
 - [Szegedy et al., *Going Deeper with Convolutions*](https://openaccess.thecvf.com/content_cvpr_2015/html/Szegedy_Going_Deeper_With_2015_CVPR_paper.html): GoogLeNet's Inception block, parallel branches of several kernel sizes joined by channel concatenation.
-- [Lin, Chen, & Yan, *Network In Network*](https://arxiv.org/abs/1312.4400): introduces the $1\times1$ channel mixer and global-average-pooling classifier.
-- [Ioffe & Szegedy, *Batch Normalization*](https://proceedings.mlr.press/v37/ioffe15.html): the original normalization method, its train/evaluation distinction, and the backward pass through the batch statistics that Exercise 7 audits.
+- [Lin, Chen, and Yan, *Network In Network*](https://arxiv.org/abs/1312.4400): introduces the $1\times1$ channel mixer and global-average-pooling classifier.
+- [Ioffe and Szegedy, *Batch Normalization*](https://proceedings.mlr.press/v37/ioffe15.html): the original normalization method, its train/evaluation distinction, and the backward pass through the batch statistics that Exercise 7 audits.
 - [He et al., *Deep Residual Learning for Image Recognition*](https://openaccess.thecvf.com/content_cvpr_2016/html/He_Deep_Residual_Learning_CVPR_2016_paper.html): the degradation experiment and residual-block solution.
 - [He et al., *Identity Mappings in Deep Residual Networks*](https://doi.org/10.1007/978-3-319-46493-0_38): pre-activation residual blocks, which place BatchNorm and ReLU before each convolution in the learned branch and drop the ReLU after the sum, so the sum passes straight through.
 - [Huang et al., *Densely Connected Convolutional Networks*](https://openaccess.thecvf.com/content_cvpr_2017/html/Huang_Densely_Connected_Convolutional_CVPR_2017_paper.html): dense connectivity through feature-map concatenation and transition layers.
@@ -1270,21 +1272,22 @@ Close the book for one minute and reconstruct the architecture and transfer choi
    Then repeat the `bn-drift` cell's measurement on both trained networks. Does
    training itself fix the activation scales?
 5. **(Code.)** Try data augmentation as a third road: on the 30-image shoe task, train
-   from scratch with random horizontal flips and ±3-pixel shifts (@sec-06-generalization-inductive-bias's
-   exercise, now as a tool). Does augmentation improve the scratch model relative to the
+   from scratch with random horizontal flips and ±3-pixel shifts (the exercise in
+   @sec-06-generalization-inductive-bias, now as a tool). Does augmentation improve the scratch model relative to the
    transfer baselines on the same shoe test images? Why might augmentation and transfer
    help in *different* regimes?
-6. **(Audit.)** Retrain `VGGSmall` and `NINSmall` under one fixed seed, then collect the
-   20 Fashion-MNIST test items on which the models disagree with each other or with
-   the supplied label while at least one model assigns its prediction probability
-   above 0.9. Preserve the images, supplied labels, predictions, and confidences
-   before adjudication. Have a second reader independently label the 20 items, report
-   agreement and a binomial interval for the suspected-label-error share, and list
-   ambiguous cases separately. Explain why confident disagreement is a biased sample
+6. **(Audit.)** Retrain `VGGSmall` and `NINSmall` under one fixed seed. With a stated
+   selection rule, select up to 20 Fashion-MNIST test items on which the models disagree
+   with each other or with the supplied label while at least one model assigns its
+   prediction probability above 0.9, and report how many items qualified. Preserve the
+   images, supplied labels, predictions, and confidences before adjudication. Have a second
+   reader independently label the selected items and report agreement. State which
+   population a binomial interval for the suspected-label-error share would describe,
+   compute it, and list ambiguous cases separately. Explain why confident disagreement is a biased sample
    of the full test set, in which direction that selection can distort prevalence,
    and what the audit can still reveal.
-7. **(Pencil.)** Derive $\partial\loss/\partial x$ through @eq-batchnorm's batch mean
-   and variance. Mark the direct normalized-input term and the two terms created by
+7. **(Pencil.)** Derive $\partial\loss/\partial x$ through the batch mean and variance
+   of @eq-batchnorm. Mark the direct normalized-input term and the two terms created by
    coupling every example through those statistics.
    **(Code.)** Verify all three terms against autograd on the experimentation
    interlude's BatchNorm module. Then delete the two coupling terms deliberately,
