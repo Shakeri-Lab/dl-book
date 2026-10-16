@@ -17,55 +17,48 @@
            (running translator v2, the counterpart of Assignment 3's GRU seq2seq;
            a research bridge to sequence-level training). -->
 
-Chapter [-@sec-10-sequences-rnn] trained a language model: a recurrent network that
-predicts the next token of one sequence. We now condition that prediction on a second
-sequence, the source: an encoder processes the source, and a decoder uses the encoder's
-final state to generate the target sequence. The architecture is simple, but training
-and evaluation require several choices: how to handle padding, which previous tokens to
-supply during training, and how to select a complete output at inference.
+Chapter [-@sec-10-sequences-rnn] trained a character-level language model: a recurrent
+network that predicts the next token of one sequence. We now condition that prediction
+on a second sequence, the source: an encoder processes the source, and a decoder uses
+the encoder's final state to generate the target sequence. The architecture is simple,
+but training and evaluation require several choices: how to handle padding, which
+previous tokens to supply during training, and how to select a complete output at
+inference.
 
 The components are not new. In the autoencoder interlude, an encoder compressed a fixed
-object and a decoder reconstructed it; here both maps are recurrent, and every source
+object and a decoder reconstructed it. Here both maps are recurrent, and every source
 detail the decoder uses still crosses one fixed-size context.
 
-Before recurrence, every model we built used a
-**fixed-size contract**: 784 pixels in, 10 logits out; $28 \times 28$ garments in, one
-verdict out. Many real tasks break that contract on both ends at once:
-translation maps a sentence of *any* length to a sentence of *some other* length, in a
-different vocabulary. The six design goals of the previous chapter concerned reading a
-sequence. The sequence-to-sequence setting adds three goals for writing one:
+The six design goals of the previous chapter concerned reading a sequence. A model that
+translates also writes one, in another vocabulary and at a length of its own, and writing
+adds three goals:
 
-1. **Output of any length.** The model decides where the output ends.
-2. **Reordering.** An output token may depend on input that arrives after it: the year
-   comes last in `march 5, 2021` and first in `2021-03-05`.
-3. **Conditioning on both sides.** Each output token depends on the whole input and on
-   every token already written.
+1. **Output of any length.** The sequence terminates when the decoder emits a stop token.
+2. **Reordering.** A token that appears late in the source may be needed early in the
+   target: the year comes last in `march 5, 2021` and first in `2021-03-05`.
+3. **Conditioning on source and target history.** Each output token may use information
+   from the whole source and from the target tokens already generated.
 
-The smallest design that meets all three reuses two recurrent machines already built:
-one that reads a sequence into a state, and the character model that writes
-one token at a time from a state.
+A simple design that meets all three reuses two recurrent machines already built: one
+that reads a sequence into its final state, as the networks of the memory test in
+@sec-10-sequences-rnn do, and the character-level language model of that chapter, which
+writes one token at a time from a state. The rules for training and decoding that we
+develop for this pair do not depend on recurrence, and they carry over to the
+attention-based decoders of Parts IV and V.
 
-Four earlier ideas return in new roles: the one-hot linear map of @sec-01-linear-regression
-becomes an embedding table; the estimator cases of @sec-04-estimator-cases fix which
-tokens a loss averages over; the masked update of @sec-10-sequences-rnn becomes the
-framework's packed sequences; and the hard max of @sec-02-logistic-softmax returns as
-greedy decoding, which commits to the most likely token one step at a time. The rules
-for training and decoding do not depend on recurrence: targets shifted by one token, a
-token-level log-likelihood, separate loss and input masks, and greedy or beam search
-carry over to the attention-based decoders of Parts IV and V.
-
-## Two RNNs and a handoff
+## The encoder's final state initializes the decoder {#two-rnns-and-a-handoff}
 
 An **encoder** reads the source sequence into a **context**, and a **decoder**
 generates the output from that context token by token, feeding each token back in, as
-the character model did. The encoder may be any network that maps the source to a
-context. Here both networks are RNNs: the context is the encoder's final state, the
-entire input compressed into fixed-size memory, and the decoder starts *from* that
-state. The pair is a language model conditioned on the source.
+the character-level language model did. The encoder may be any network that maps the
+source to a context. Here both networks are RNNs: the context is the encoder's final
+state, the entire input compressed into fixed-size memory, and the decoder starts *from*
+that state. Passing the encoder's final state to the decoder is the **handoff**. The
+pair is a language model conditioned on the source.
 
 Our laboratory task keeps the core mechanics of translation:
-**date normalization**. The source language is human-written dates in several
-dialects; the target language is ISO 8601:
+**date normalization**. The source language consists of human-readable dates in several
+formats, or dialects. The target language is ISO 8601:
 
 ```
 march 5, 2021        -> 2021-03-05
@@ -75,10 +68,10 @@ march 5, 2021        -> 2021-03-05
 
 The task has variable-length input, a different output alphabet, and long-range
 structure: the year arrives *last* in most sources but must be emitted *first*. Every
-target has ten characters, so target padding is **not** tested. A dialect ambiguity
-gives beam search two readings to rank: numeric dates are written `mm/dd/yyyy` by 70% of
-our imaginary writers (the US convention) and `dd/mm/yyyy` by 30%, and nothing in
-`03/05/2021` says which.
+target has ten characters, so target padding is **not** tested. Many numeric dates have
+two readings: 70% of numeric source dates follow `mm/dd/yyyy` (the US convention) and
+30% follow `dd/mm/yyyy`, with nothing in `03/05/2021` indicating which convention was
+used.
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
@@ -152,25 +145,27 @@ V_src, V_tgt = len(SRC) + 3, len(TGT) + 3
 print(f"source vocab {V_src}, target vocab {V_tgt}")
 ```
 ::::
-The rejection loop is evaluation hygiene: it removes duplicate source strings
-**before** the 8,000/500/500 train/validation/test split, so no source string occurs in
-two splits. We use validation sources for every learning curve and reserve test sources
+The rejection loop prevents duplicate source strings across the data splits: it runs
+**before** the 8,000/500/500 train/validation/test split, so exact-string memorization
+cannot help. We use validation sources for every learning curve and reserve test sources
 for one final audit after the design is fixed. The same underlying date may appear in
-another written dialect, which is the structural generalization we want; exact-string
-memorization is no longer available.
+another written dialect, testing structural generalization across formats.
 
 We use three special tokens, the same conventions as a full
 translation pipeline: `<pad>` fills the short sequences of a batch out to a
 rectangle, `<bos>` is the decoder's first input, and `<eos>` ends every target, so the
-*model* decides where its output ends by emitting it. A token here is one character;
+output ends where the model emits it. A token here is one character;
 words or subword pieces would change sequence lengths and vocabulary sizes, not the
 rules for training and decoding.
 
-The character model fed characters in as one-hot vectors; here each token gets a
-learned vector from `nn.Embedding`, a table with one trainable row per vocabulary
-entry. An embedding is exactly a one-hot vector times a weight matrix, computed as a
-table lookup: *the address is hard, the content is learned*. Row 17 is fetched by its
-index, rigidly; the vector in row 17 is trained like any other weight.
+The character-level language model fed each character in as a one-hot vector, and a
+weight matrix times a one-hot vector selects one column of the matrix, as the product
+$\matr{W}_{xh}\vect{x}_t$ of the vanilla RNN (@eq-rnn-cell) does. `nn.Embedding` is a
+weight matrix of its own, a table with one trainable row per vocabulary entry. A
+token's one-hot row vector times the table selects the token's row, its embedding.
+`nn.Embedding` fetches that row by its index instead of multiplying: *the address is
+hard, the content is learned*. The token with index 17 always fetches row 17 of its
+table, and the numbers in that row are trained like any other weight.
 
 :::: {.plan-code}
 ::: {.plan}
@@ -289,7 +284,7 @@ ax.text(9.1, 0.6, "decoder (outputs fed back as inputs)", ha="center",
 plt.tight_layout(); plt.show()
 ```
 
-## What the loss grades and what the encoder reads {#the-padding-trap}
+## Loss masking and source-sequence processing {#the-padding-trap}
 
 Batching variable-length sequences means
 padding them to a rectangle. Unless we account for it, padding affects
@@ -297,9 +292,11 @@ two computations:
 
 1. **The loss.** With the mean reduction used here, `ignore_index=PAD` excludes padded
    target positions from both the cross-entropy sum and its denominator. Our targets
-   have equal length, so target padding is not tested here. With variable lengths, the
-   calculation is a token mean within each batch; interpreting it as an estimator of
-   corpus-wide token risk also requires specifying how batches are sampled.
+   have equal length, so target padding is not tested here, and the loss is a mean of
+   per-example terms, Case 1 of @sec-04-estimator-cases. With variable lengths, the
+   calculation is a token mean within each batch, a ratio of two minibatch sums, which
+   puts it in Case 2: as an estimate of the corpus-wide token risk it is generally
+   biased, by an amount that depends on how batches are sampled.
 2. **The encoder.** A zero padding embedding does not make an LSTM update the identity.
    Processing padded positions can change the final state, making it depend on the
    padding length as well as the source. Decoding an unpadded sequence can then supply a
@@ -464,8 +461,9 @@ plt.tight_layout(); plt.show()
 
 The masked update of @eq-masked-update keeps the old state on
 every padded step, so each sequence ends holding the state of its own last real token.
-`pack_padded_sequence` is the framework's version of that bookkeeping: rather than
-computing the padded steps and throwing them away, it never runs them. If that reading
+Its mask $m_t$ marks the source positions the encoder may read, not the target positions
+the loss grades. `pack_padded_sequence` is the framework's version of that update: rather
+than computing the padded steps and throwing them away, it never runs them. If that reading
 is right, a hand-written masked loop must reproduce the packed encoder's final states,
 and the naive encoder must disagree with them for exactly the sources that carried
 padding.
@@ -524,13 +522,13 @@ Packing is the masked update, minus the padded steps it never computes.
 ::: {.callout-warning}
 ## Trap: padding is read unless it is masked
 
-Nothing in the tensor marks `<pad>` as meaningless; meaning is something *you*
+Nothing in the tensor marks `<pad>` as meaningless. That meaning is something *you*
 enforce, in two places: the loss mask (`ignore_index`) for the loss, and an input mask
 (packing, for a recurrent encoder) for the encoder. When a sequence model underperforms
-unexpectedly, audit both masks before changing the architecture. Telling a model *which
-positions it may not look at* is called **masking**; the loss mask applies the same idea
-to grading. In a transformer, a *causal* mask is what turns the model into a language
-model.
+unexpectedly, audit both masks before changing the architecture. Restricting a network
+from accessing invalid positions is called **masking**. The loss mask applies this
+principle to grading. In a transformer, a *causal* mask is what turns the model into a
+language model.
 :::
 
 ## Teacher forcing: conditioning on target prefixes {#teacher-forcing-training-on-the-gold-rail}
@@ -546,16 +544,16 @@ When the decoder is trained, what should it receive as *its own previous output*
 
 **Free-running** ("fr") feeds the decoder its own most likely token from the step
 before, as at inference. Early in training those predictions are mostly wrong,
-so the decoder is trained on prefixes that contain its own errors. Every sequence must
-also be generated token by token in a Python loop, because step $t$'s input does not
-exist until step $t-1$ is computed.
+so the decoder is trained on prefixes that contain its own errors. Free-running also
+executes sequentially across steps, because step $t$'s input does not exist until step
+$t-1$ is computed.
 
 **Teacher forcing** ("tf") conditions each step on the *observed* previous token
 instead. It fixes every decoder input before the forward pass, so the whole target goes
 through the decoder in **one fused decoder call** (the `model(S, L, T[:, :-1])` line)
-instead of a Python feedback loop. Whether the positions are then computed one after
-another or all at once is a property of the decoder, not of teacher forcing: the
-recurrent decoder still computes each state from the previous one inside that call.
+instead of a Python feedback loop. Whether positions then run one after another or all
+at once is a property of the decoder, not of teacher forcing: inside that call the
+recurrent decoder still computes each state from the previous one.
 From the first epoch, every step is nevertheless conditioned on a correct prefix. The
 comparison below measures how the two modes differ in validation
 accuracy during training. The computational difference can be read off the training
@@ -589,8 +587,8 @@ for label, candidate in [("naive padding", naive),
 ```{python}
 #| echo: false
 #| label: fig-tf-vs-fr
-#| fig-alt: "Exact-match accuracy rises with epoch for both training modes. Teacher forcing leads strongly in early and middle epochs, then the free-running curve catches it near the top by epoch twenty. At the last checkpoint the teacher-forcing curve dips while the free-running curve stays near the top."
-#| fig-cap: "Exact match of the two training modes at eight checkpoint epochs, on the first 400 unambiguous validation sources. Teacher forcing leads from epoch 4 through the middle epochs (53.75% vs. 23.75% at epoch 6; 95.00% vs. 81.25% at epoch 12); by epoch 20 the validation curves meet."
+#| fig-alt: "Exact-match accuracy rises with epoch for both training modes. The teacher-forcing curve lies well above the free-running curve in early and middle epochs, and the two curves meet near the top by epoch twenty. At the last checkpoint the teacher-forcing curve dips while the free-running curve stays near the top."
+#| fig-cap: "Exact match of the two training modes at eight checkpoint epochs, on the first 400 unambiguous validation sources. Teacher forcing scores higher from epoch 4 through the middle epochs (53.75% vs. 23.75% at epoch 6; 95.00% vs. 81.25% at epoch 12); by epoch 20 the validation curves meet."
 plt.figure(figsize=(6, 3.2))
 plt.plot(cps, [tf_curve[c] for c in cps], "o-", color="#232D4B", lw=2,
          label="teacher forcing")
@@ -599,13 +597,14 @@ plt.plot(cps, [fr_curve[c] for c in cps], "s-", color="#E57200", lw=2,
 plt.xlabel("epoch"); plt.ylabel("exact match")
 plt.legend(); plt.tight_layout(); plt.show()
 ```
-On the 400 validation sources of the curves, the teacher-forced model peaks at 99.50% at
-epoch 20 and ends at 95.75% at epoch 25, so the comparison depends on which checkpoint
-each model keeps. That choice is part of the design and must be fixed before the test
-split is opened; here every model is kept as it stands after its last epoch.
-Free-running, ahead on validation only at the last checkpoint, also finishes ahead in
-the test audit above; with one seed for each mode, these runs do not show whether that
-lead would hold on other seeds.
+On the first 400 unambiguous validation sources, which @fig-tf-vs-fr scores at every
+checkpoint, the teacher-forced model peaks at 99.50% at epoch 20 and ends at 95.75% at
+epoch 25, so the comparison depends on which checkpoint we keep for each model. That
+choice is part of the design and must be fixed before the test split is opened; here
+every model is kept as it stands after its last epoch. Free-running, which scores
+higher on validation only at the last checkpoint, also scores higher in the test audit
+above. Evaluated on a single seed per mode, these runs do not establish whether that
+advantage generalizes across initializations.
 
 Teacher forcing is the common default, and in this comparison it gained validation
 accuracy faster early in training. It also creates a mismatch called **exposure bias**:
@@ -658,17 +657,18 @@ before the forward pass. In Exercise 3 you implement it and compare its learning
 with both training modes.
 :::
 
-## Getting answers out: search
+## Sequence decoding: search {#getting-answers-out-search}
 
 Given a trained decoder, we want to find the output sequence with the highest
 probability. That is a *search problem* over a tree whose nodes branch
 $V=V_{\text{tgt}}$ ways; exhaustive search examines $V^{T}$ sequences, so practical
 searches walk that tree heuristically.
 
-**Greedy search**, which `translate` performs for every exact-match score above, takes
-the single most probable token at each step and never revises a choice; its cost is
-$O(V \cdot T)$. The most probable token at each step need not lead to the most probable
-sequence, as a tiny decoder shows.
+**Greedy search**, which `translate` performs for every exact-match score above, applies
+the hard argmax of @fig-soft-vs-hard to each next-token distribution: it takes the
+single most probable token at each step and never revises a choice. Token selection
+examines $V$ scores at each of $T$ steps. The most probable token at each step need not
+lead to the most probable sequence, as illustrated by the stylized example below.
 
 <!-- lecture-source: Video_lectures/6050-Ch11/lecture.jsx, SGreedyTree;
      Video_lectures/audit-ch11-encoder-decoder.py, toy_search_tree_evidence.
@@ -686,8 +686,8 @@ Each row in @tbl-greedy-tree is a conditional distribution over the next token;
 
 : A tiny decoder with normalized next-token choices at each listed prefix. {#tbl-greedy-tree}
 
-Greedy chooses `A`, then `x`, then `<eos>`. Multiplying along that path and along the
-alternative gives
+Greedy search selects `A`, then `x`, and terminates at `<eos>`. Multiplying along that
+path and along the alternative gives
 
 $$
 \begin{gathered}
@@ -705,15 +705,16 @@ continuation overturns this result: the largest probability mass entering an
 `other` branch is $0.60\times0.45=0.27$, and multiplying by further probabilities
 cannot increase it. This is a specified toy decoder, not a measured model.
 
-**Beam search** carries the $k$ best partial sequences (the *beam*), expands each by
-all $V$ tokens and keeps the $k$ best by *cumulative* log-probability, at a cost of
-$O(k \cdot V \cdot T)$.
+**Beam search** carries a *beam* of the $k$ best partial sequences, called
+*hypotheses*, expands each by all $V$ tokens and keeps the $k$ best by *cumulative*
+log-probability. With beam width $k$, the search considers up to $kV$ next-token
+extensions per step, or $O(kVT)$ across $T$ steps.
 
 In this tree, a beam of width two keeps both `A` and `B`. At the next step it
 keeps `B y` (0.38) and `A x` (0.33). Every omitted prefix has probability at
 most its branch's total mass (0.27 or 0.02), so none can displace those two.
-The retained `<eos>` continuations finish at 0.361 and 0.264. The beam recovers the
-winner here; a finite beam does not guarantee the best sequence in every tree.
+The retained `<eos>` continuations finish at 0.361 and 0.264. Beam search identifies the
+optimal sequence in this tree, though a finite beam does not guarantee the best sequence in every tree.
 
 :::: {.plan-code}
 ::: {.plan}
@@ -754,9 +755,11 @@ def beam_search(model: Seq2Seq, src: str, k: int = 5,
 
 ### Search exposes alternatives
 
-An ambiguous date, which the exact-match scores exclude, has two readings, and the
-generator used the two conventions in the ratio 70/30. Greedy decoding returns one
-sequence; beam search shows which complete alternatives the model ranks highly:
+Call a numeric date **ambiguous** when both of its first two fields are at most 12.
+These are the dates the exact-match scores exclude, and unless the two fields are
+equal, each has two readings. The generator used the two conventions in the ratio
+70/30. Greedy decoding returns one sequence; beam search shows which complete
+alternatives the model ranks highly:
 
 :::: {.plan-code}
 ::: {.plan}
@@ -785,8 +788,8 @@ model assigns to that whole output given the source. These **raw joint log score
 log-probabilities of single sequences, not a normalized distribution over the printed
 beam, so two of them, exponentiated, cannot be read as a 70/30 posterior. The last three
 dates pair the month/day and day/month readings; the first pairs the month/day reading
-with `1995-09-20`, a hybrid that matches neither convention: beam search searches the
-model and installs no rule that copies each source field.
+with `1995-09-20`, a hybrid that matches neither convention: beam search ranks
+sequences under the model and does not enforce copying of the source fields.
 
 For 200 random test dates, ambiguous ones included, we compare the best sequence of a
 beam of width 5 with the greedy output:
@@ -809,9 +812,9 @@ n_diff = sum(beam_search(tf_model, s, k=5)[0][0] != translate(tf_model, s)
 print(f"beam-5 disagrees with greedy on {n_diff} of {len(sub)} test dates")
 ```
 ::::
-The two decodings differ once: on this small, well-trained model, beam search changes
-almost nothing. It became a standard decoder in machine translation, with vocabularies
-of tens of thousands of tokens and long outputs.
+The two decodings differ once: on this small, well-trained model, beam search yields
+outputs nearly identical to greedy decoding. It became a standard decoder in machine
+translation, with vocabularies of tens of thousands of tokens and long outputs.
 
 ::: {.callout-note}
 ## Length normalization
@@ -822,21 +825,23 @@ scored tokens and $\alpha$ chosen on validation data, counteracts this; $\alpha 
 ranks by the mean token log-probability. The normalized score is a different decoding
 objective, which a reported result should name. Every ten-character output has 11
 scored tokens (`<eos>` included), and a common divisor cannot reorder candidates of
-equal length; in Exercise 4 you inspect the erroneous ones.
+equal length. Exercise 4 inspects what happens when candidate lengths differ.
 :::
 
 ## The fixed-size state in the middle
 
-Every source fact the decoder uses crosses one bridge: the encoder's final
-$(\vect{h},\vect{c})$ pair, the 256 scalars of @fig-encoder-decoder-handoff. Our task
-fits because a date is three facts. The teacher-forced model's residual digit and order
-errors are consistent with reconstruction from a compressed summary rather than direct
-access to source positions; by themselves, they do not prove that compression caused
-each error. A forty-word sentence would have to cross the same pair, and a wider state
-may help but gives no direct access to earlier source positions. States for those
-positions already exist: the encoder computes one at every source position, and this
-model keeps only the last. A decoder that could consult them at each output step would
-no longer need one state to carry the whole source.
+Every source fact the decoder uses passes through the handoff: the encoder's final
+$(\vect{h},\vect{c})$ pair, the 256 scalars of @fig-encoder-decoder-handoff. The date
+task fits within that handoff because a date holds only three facts: a day, a month and
+a year. The teacher-forced model's residual digit and order errors are consistent with
+reconstruction from a compressed summary rather than direct access to source positions.
+By themselves, they do not prove that compression caused each error. A forty-word
+sentence must pass through the same pair, and a wider state may add capacity but gives
+no direct access to earlier source positions. States for those positions already exist:
+the encoder computes one at every source position (the gray states
+of @fig-encoder-decoder-handoff), and this model keeps only the last. A decoder that
+could consult them at each output step would no longer need one state to carry the
+whole source.
 
 ::: {.callout-note}
 ## Check yourself
@@ -850,7 +855,7 @@ Close the book for one minute and reconstruct the sequence pipeline.
 - Why does packing leave every final state exactly where the masked update would?
 :::
 
-## Okay, so: one training contract, one fixed-size handoff {#okay-so-the-fixed-size-handoff-is-the-bottleneck}
+## Okay, so: training and decoding differ, but the bottleneck remains {#okay-so-the-fixed-size-handoff-is-the-bottleneck}
 
 1. **A sequence-to-sequence model is a conditional language model**, here two RNNs and
    a handoff: `<bos>` starts the decoder, `<eos>` lets it choose its length, and
@@ -859,34 +864,35 @@ Close the book for one minute and reconstruct the sequence pipeline.
    removes padded targets from the sum and its denominator, and the encoder, where packing
    (`pack_padded_sequence`, the framework's form of the masked update) keeps
    padding out of the final state. On the test set, the same model and budget score
-   34.3% naive versus 93.1% packed. Audit bookkeeping before architecture.
+   34.3% naive versus 93.1% packed. Check the masks and the loss before changing the
+   architecture.
 3. **Teacher forcing** conditions the decoder on observed prefixes; its token
    losses sum to the conditional negative log-likelihood of the observed target, and our
    loop averages them over nonpadding positions. The decoder's inputs are known in
    advance, so one fused call replaces the Python feedback loop, but each step still
    waits for the state of the previous step. **Exposure bias** is the mismatch between
    training on observed prefixes and generating from the model's own. Teacher forcing
-   gained validation accuracy faster early in training; free-running finished ahead on
+   gained validation accuracy faster early in training; free-running scored higher on
    the test set, with one seed per mode and last-epoch checkpoints. Scheduled sampling
    mixes the two per token, so its decoder inputs are no longer all known before the
    forward pass.
-4. **Decoding is approximate search.** Greedy maximizes steps, not sequences, and
-   can miss the highest-probability sequence; beam search carries $k$ partial sequences
-   for $O(k V T)$ and surfaces high-scoring alternatives, but a finite beam does not
-   guarantee the best sequence in every tree. Its raw joint log scores are
+4. **Decoding is approximate search.** Greedy maximizes each step, not the sequence,
+   and can miss the highest-probability sequence. Beam search carries $k$ partial
+   sequences, considers up to $kV$ extensions per step and surfaces high-scoring
+   alternatives, but a finite beam does not guarantee the best sequence in every tree. Its raw joint log scores are
    log-probabilities of single sequences, not a posterior over the beam, and a beam can
    contain invalid hybrids. Length normalization ($L^{\alpha}$) changes the decoding
    objective.
 5. **The handoff is the bottleneck.** In this model, one fixed-size
    $(\vect{h},\vect{c})$ pair, 256 scalars, carries all the source information the
-   decoder can use, regardless of input length; the encoder's per-position states exist
-   and are discarded.
+   decoder can use, regardless of input length. The encoder's per-position states exist
+   but are not supplied to the decoder.
 
 ## Sources and further reading {.unnumbered}
 
-- [Sutskever, Vinyals, & Le, *Sequence to Sequence Learning with Neural Networks*](https://proceedings.neurips.cc/paper_files/paper/2014/hash/5a18e133cbf9f257297f410bb7eca942-Abstract.html): the canonical fixed-state LSTM encoder–decoder and source-reversal result.
+- [Sutskever, Vinyals, and Le, *Sequence to Sequence Learning with Neural Networks*](https://proceedings.neurips.cc/paper_files/paper/2014/hash/5a18e133cbf9f257297f410bb7eca942-Abstract.html): the canonical fixed-state LSTM encoder–decoder and source-reversal result.
 - [Bengio et al., *Scheduled Sampling for Sequence Prediction with Recurrent Neural Networks*](https://proceedings.neurips.cc/paper/2015/hash/e995f98d56967d946471af29d7bf99f1-Abstract.html): the original exposure-bias intervention used in Exercise 3.
-- [Bahdanau, Cho, & Bengio, *Neural Machine Translation by Jointly Learning to Align and Translate*](https://arxiv.org/abs/1409.0473): removes the single-state bottleneck with a learned weighting of the encoder states at each output step; @sec-13-attention builds that mechanism.
+- [Bahdanau, Cho, and Bengio, *Neural Machine Translation by Jointly Learning to Align and Translate*](https://arxiv.org/abs/1409.0473): removes the single-state bottleneck with a learned weighting of the encoder states at each output step; @sec-13-attention builds that mechanism.
 <!-- print 2026-10-09, author-approved: Sources entry for Park et al. (Grammar-Aligned Decoding), per-step token forbidding and Exercise 9 -->
 - [Park et al., *Grammar-Aligned Decoding*](https://proceedings.neurips.cc/paper_files/paper/2024/hash/2bdc2267c3d7d01523e2e17ac0a754f3-Abstract-Conference.html): shows that a sampler that forbids, at each step, every token that cannot lead to a grammatical output can return grammatical outputs at rates not proportional to the model's probabilities, as in Exercise 9.
 - [Papineni et al., *BLEU: a Method for Automatic Evaluation of Machine
@@ -908,30 +914,34 @@ score.
    components hold most of the parameters, and why is the answer different
    from @sec-08-cnn's LeNet audit?
 2. **(Pencil.)** With vocabulary $10^4$ and output length 10, compare the number
-   of sequences examined by exhaustive search, greedy, and beam-5. Then explain
+   of complete sequences that exhaustive search scores with the number of next-token
+   extensions that greedy and beam-5 consider. Then explain
    why beam search with $k = V^{T}$ is exact and with $k = 1$ is greedy, why exhaustive
    search is infeasible at this scale, and why greedy decoding can miss the
    highest-probability sequence.
 3. **(Code.)** Implement scheduled sampling: per token, use the observed previous
    token with probability $\epsilon$, the model's own prediction otherwise, annealing
    $\epsilon$ linearly $1 \to 0$ over 25 epochs. Compare its learning curve with
-   both curves in @fig-tf-vs-fr. Does it inherit teacher forcing's fast start
-   *and* free-running's finish?
+   both curves in @fig-tf-vs-fr. Does it match teacher forcing's early accuracy
+   *and* free-running's final accuracy?
 4. **(Code.)** Add length normalization ($/L^{\alpha}$) to `beam_search` and
-   sweep $\alpha \in \{0, 0.7, 1\}$ on the date task. Confirm that correct
-   ten-character outputs are unaffected, inspect whether any erroneous beams change,
-   and design the smallest change to the *task* that would make $\alpha$ matter.
+   sweep $\alpha \in \{0, 0.7, 1\}$ on the date task. Confirm that a common length
+   divisor preserves the ranking within a set of equal-length candidates, then inspect
+   whether normalization changes the selected output when candidates have different
+   lengths, and design the smallest change to the *task* that would make $\alpha$
+   matter.
 5. **(Code.)** Sutskever et al. (2014) famously improved translation by feeding
    the source sentence *reversed*. Try it here. Whatever you observe, explain it
    with this chapter's tools: which source-target dependencies does reversal
    shorten in their setting, and which does it shorten (or lengthen) for dates,
    where the year sits at the end of the source but the start of the target?
-6. **(Code.)** Implement BLEU from clipped $n$-gram counts and the brevity penalty,
-   then score the ambiguous-date task's 70/30 output distribution with a fixed seed.
-   Compute corpus BLEU and the mean of sentence BLEU separately, verify the clipped
-   counts on two hand-worked examples, and state which aggregation the evaluation
-   should report. *Named wrong answer:* “average the sentence BLEUs”: corpus
-   clipping and the brevity penalty do not commute with that mean.
+6. **(Code.)** Implement BLEU from clipped $n$-gram counts and the brevity penalty.
+   Before scoring, specify how the candidate outputs are generated, which dates serve
+   as references, and how the strings are tokenized. Then compute corpus BLEU and the
+   mean of sentence BLEU separately, verify the clipped counts on two hand-worked
+   examples, and state which aggregation the evaluation should report.
+   *Common misconception:* “average the sentence BLEUs”: corpus clipping and the
+   brevity penalty do not commute with that mean.
 7. **(Code.)** **Running translator, v2.** Keep version 0's corpus, split, and
    evaluation (Exercise 6 of @sec-interlude-autoencoders), and replace version 1's slot
    decoder (Exercise 7 of @sec-10-sequences-rnn) with a recurrent decoder that
@@ -949,7 +959,8 @@ score.
    sampled from $p_\theta(\cdot\mid\vect{x})$, show that the gradient of
    $\E_{\vect{y}}[R(\vect{y})]$ equals
    $\E_{\vect{y}}[R(\vect{y})\,\nabla_\theta\log p_\theta(\vect{y}\mid\vect{x})]$,
-   and that subtracting a baseline $b(\vect{x})$ from $R$ leaves it unchanged.
+   and that subtracting a baseline $b(\vect{x})$ from $R$ leaves the gradient
+   unchanged.
    **(Code.)** Starting from the teacher-forced date model, fine-tune on sampled
    outputs with exact match as $R$ and a running-average baseline, then compare test
    exact match and the residual errors with the teacher-forced model's. What did
