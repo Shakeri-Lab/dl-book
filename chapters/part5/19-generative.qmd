@@ -18,7 +18,7 @@ drawing new observations from it.
 
 A reconstruction model supplies a decoder, but reconstruction alone does not specify how
 to choose a new code. A variational autoencoder introduces a latent probability model; a
-GAN trains a sampler through a discriminator; a diffusion model learns denoising across a
+generative adversarial network (GAN) trains a sampler through a discriminator; a diffusion model learns denoising across a
 sequence of noise levels. We compare their training objectives, sampling procedures, and
 the evidence needed to evaluate their outputs.
 
@@ -111,9 +111,9 @@ plt.tight_layout()
 plt.show()
 ```
 
-The first construction puts an explicit probability law around the code.
+The first construction places an explicit probability law on the latent code.
 
-## Variational autoencoders (VAEs): put probability around the code {#put-probability-around-the-code}
+## Variational autoencoders: probabilistic latent-variable modeling {#put-probability-around-the-code}
 
 A **variational autoencoder (VAE)** begins by defining generation, not reconstruction.
 Let $\vect{z}\in\mathbb{R}^{k}$ be a latent variable with a chosen prior, commonly
@@ -137,13 +137,13 @@ p_\theta(\vect{x})
 =\int p(\vect{z})p_\theta(\vect{x}\mid\vect{z})\,d\vect{z}.
 $$ {#eq-vae-marginal}
 
-Generation is now a declared procedure: draw $\vect{z}\sim p(\vect{z})$, then draw
-or decode $\vect{x}\sim p_\theta(\vect{x}\mid\vect{z})$. The encoder is not used
+Generation is now a declared procedure: draw $\vect{z}\sim p(\vect{z})$, then sample
+$\vect{x}$ from the decoder distribution $p_\theta(\vect{x}\mid\vect{z})$. The encoder is not used
 on this path; it belongs to inference and training.
 
 Training is harder because the posterior
 $p_\theta(\vect{z}\mid\vect{x})$ in Bayes' rule contains the integral in
-@eq-vae-marginal. A VAE introduces an **approximate posterior**, or inference model,
+@eq-vae-marginal. A VAE introduces an **approximate posterior** $q_\phi$, or inference model,
 whose parameters come from an encoder. The distribution family for $q_\phi$ is a
 modeling choice; we use the common diagonal Gaussian, with its own mean and variance for
 each latent coordinate:
@@ -162,8 +162,11 @@ probabilistic roles are not symmetric.
 
 ### The ELBO is an exact gap identity
 
-Why does this approximate posterior give us a trainable objective? Start from the log
-evidence and add a quantity that equals zero:
+To see why this approximate posterior gives a trainable objective, use Bayes' rule,
+$\log p_\theta(\vect{x})=\log p_\theta(\vect{x},\vect{z})-\log p_\theta(\vect{z}\mid\vect{x})$,
+then add and subtract $\log q_\phi(\vect{z}\mid\vect{x})$ and take the expectation under
+$q_\phi$, which leaves the left side unchanged because it does not depend on
+$\vect{z}$:
 
 $$
 \begin{aligned}
@@ -200,9 +203,8 @@ q_\phi(\vect{z}\mid\vect{x})\,\|\,p(\vect{z})
 $$ {#eq-vae-elbo}
 
 KL divergence is nonnegative, so the **evidence lower bound (ELBO)** is no larger than
-$\log p_\theta(\vect{x})$. More importantly, @eq-elbo-gap says exactly how loose it
-is; the gap is the KL divergence from the approximate posterior to the model's true
-posterior. This is not merely a convenient inequality; it is an identity.
+$\log p_\theta(\vect{x})$. @eq-elbo-gap identifies the gap: the difference is the
+KL divergence from the approximate posterior to the true posterior. This is not merely a convenient inequality; it is an identity.
 
 For the diagonal Gaussian in @eq-vae-encoder and a standard-normal prior, the
 regularizer is available coordinate by coordinate:
@@ -218,8 +220,8 @@ D_{\mathrm{KL}}\!\left(q_\phi(\vect{z}\mid\vect{x})\,\|\,p(\vect{z})\right)
 \right).
 $$ {#eq-vae-diagonal-kl}
 
-This closed form is why an encoder commonly returns $\vect{\mu}$ and
-$\log\vect{\sigma}^2$: the KL does not need Monte Carlo estimation.
+Given the encoder outputs $\vect{\mu}$ and $\log\vect{\sigma}^2$, this KL is evaluated
+analytically, without Monte Carlo estimation.
 
 We can compute every term exactly in a case where the true posterior is known. Take
 
@@ -318,7 +320,7 @@ print(f"KL(q || posterior): {posterior_gap:.12f}")
 
 ```{python}
 #| label: fig-vae-gap
-#| fig-cap: "The VAE lower bound is audited in a one-dimensional Gaussian model. For x = 1.2 and observation variance 0.36, the exact posterior has mean 0.882353 and variance 0.264706. The log evidence and exact-posterior ELBO are both -1.602093. For q = N(0.35, 0.75), the ELBO is -2.533343; its 0.931250 gap to the evidence exactly matches KL(q || p(z | x))."
+#| fig-cap: "The VAE lower bound is audited in a one-dimensional Gaussian model. For x = 1.2 and observation variance 0.36, the exact posterior has mean 0.882353 and variance 0.264706. The log evidence and exact-posterior ELBO are both -1.602093. For q = N(0.35, 0.75), the ELBO is -2.533343; its 0.931250 gap to the log evidence exactly matches KL(q || p(z | x))."
 #| fig-alt: "The left panel separates the prior-to-decoder generation path from the input-to-encoder inference path. The middle panel plots the prior, exact posterior, and mismatched approximate posterior densities. The right panel shows the exact posterior bound touching the log evidence and the mismatched bound lying lower by the posterior KL gap."
 #| fig-width: 10
 #| fig-height: 4.2
@@ -370,7 +372,7 @@ plt.tight_layout()
 plt.show()
 ```
 When $q$ equals the true posterior, the gap vanishes to floating-point tolerance. The
-mismatched $q$ leaves almost one nat of evidence unexplained. We can improve the ELBO
+mismatched $q$ makes the lower bound looser by 0.931250 nats. We can improve the ELBO
 by improving the decoder likelihood, the approximate posterior, or both. One scalar
 objective couples those jobs.
 
@@ -393,22 +395,21 @@ the $N$ training examples,
 $$
 \frac{1}{N}\sum_{i}\Big[\,\mathbb{E}_{q_\phi(\vect{z}\mid\vect{x}_i)}
 \log p_\theta(\vect{x}_i\mid\vect{z})
-\;-\;\beta\,\mathrm{KL}\big(q_\phi(\vect{z}\mid\vect{x}_i)\,\|\,p(\vect{z})\big)\Big],
+\;-\;\beta\,D_{\mathrm{KL}}\big(q_\phi(\vect{z}\mid\vect{x}_i)\,\|\,p(\vect{z})\big)\Big],
 $$
 
 so, at fixed parameters, the mean over a uniformly sampled minibatch is an unbiased
 estimate of this finite-data objective, by the same linearity of expectation
-that justified SGD in @sec-04-training-loss-sgd. The KL that looks like "one global term" in
-the single-$\vect{x}$ derivation is, in training, one KL *per datapoint* inside the
-sum. The reduction sequence to remember: **sum coordinates within an example, then
+that justified SGD in @sec-04-training-loss-sgd. The KL divergence in the single-$\vect{x}$
+derivation is, in training, evaluated *per datapoint* inside the sum. The reduction sequence to remember: **sum coordinates within an example, then
 average examples across the batch.** For the VAE, the *Target* is this
 finite-data objective, which for $\beta=1$ is the training-set average of the ordinary ELBO,
 and the *Estimator* is the batch mean of the per-example terms. The
 *Reduction* sums over pixels and latent coordinates and averages over examples. The
 *Validity* condition is that the objective is a per-example sum (Case 1). The
-*Boundary* is any term defined through the
+*Boundary* is a nonlinear term in the
 *aggregate* posterior $q_{\mathrm{agg}}(\vect{z}) = \frac{1}{N}\sum_i
-q_\phi(\vect{z}\mid\vect{x}_i)$. Such a term is a
+q_\phi(\vect{z}\mid\vect{x}_i)$, such as $D_{\mathrm{KL}}(q_{\mathrm{agg}}\,\|\,p)$. Such a term is a
 nonlinear functional of the whole dataset (Case 2), and naive per-batch code for it
 is silently biased. Exercise 4 breaks the reduction rule; the optional Exercise 5 breaks the aggregate boundary.
 :::
@@ -457,16 +458,16 @@ The KL term pressures each approximate posterior toward the prior, but it does n
 that every prior draw decodes to a valid sample, that latent distance equals semantic
 distance, or that coordinates recover independent true factors. Too much pressure can
 also make $q_\phi(\vect{z}\mid\vect{x})$ ignore $\vect{x}$, a failure called
-**posterior collapse**. A VAE puts a probability law around the code; its fit and coverage
+**posterior collapse**. A VAE places a probability law on the latent code; its fit and coverage
 still need evaluation.
 
-## Generative adversarial networks (GANs): let the judge move {#an-adversarial-detour-let-the-judge-move}
+## Generative adversarial networks: joint training of generator and discriminator {#an-adversarial-detour-let-the-judge-move}
 
 A VAE writes down a latent-variable likelihood and optimizes a lower bound. A
 **generative adversarial network (GAN)** takes a different route: a generator
 $G_\theta$ turns noise $\vect{z}\sim p_z$ into samples. A discriminator
 $D_\phi(\vect{x})\in[0,1]$ is a binary classifier; a sigmoid with finite logits keeps
-its output in that interval. The discriminator tries to separate data from generated
+its output in that interval. The discriminator is trained to separate data from generated
 samples, and its output is the probability it assigns to $\vect{x}$ being real data:
 
 $$
@@ -481,8 +482,8 @@ $$ {#eq-gan-minimax}
 Write $V(D_\phi,G_\theta)$ for the expression inside the braces and $V(D,G)$ for the
 same sum when $D$ is any function into $[0,1]$ rather than a network.
 
-In @sec-18-alignment the judge stayed fixed. Here the judge and generator both
-move. The discriminator is not a fixed reward model, and its score is not a stationary
+In the reward-model route of @sec-18-alignment, the reward model stayed fixed during
+policy optimization. Here both the discriminator and the generator are updated. The discriminator is not a fixed reward model, and its score is not a stationary
 evaluation metric.
 
 Training therefore alternates roles. Hold $G_\theta$ fixed while updating
@@ -545,8 +546,8 @@ V(D^*,G)
 $$ {#eq-gan-js}
 
 The ideal function-space minimum occurs at $p_g=p_{\mathrm{data}}$, where $D^*=1/2$.
-An observed neural discriminator near one half does not certify that equilibrium; it
-may also be weak, undertrained, or locally confused.
+An observed neural discriminator near one half does not certify that equilibrium, as it
+may also be capacity-limited, undertrained, or ill-fitted.
 
 <!-- NOVEL: needs sign-off -->
 
@@ -661,10 +662,10 @@ which modes are missing.
 
 ## Diffusion models: corrupt, then generate {#diffusion-models-corrupt-then-generate}
 
-### Destroy data on purpose {#destroy-data-on-purpose}
+### The forward noising process {#destroy-data-on-purpose}
 
-Diffusion begins with a procedure that looks backward: add noise until structure is
-almost gone. In the formulation used here, the **forward, or noising, process** is
+Diffusion begins by adding noise to data until little structure
+remains. In the formulation used here, the **forward, or noising, process** is
 fixed, not learned. Choose a schedule
 $0<\beta_t<1$ for $t=1,\ldots,T$, and define
 
@@ -848,12 +849,12 @@ plt.tight_layout()
 plt.show()
 ```
 At $t=100$, a trace of the original mixture remains because
-$\bar\alpha_T>0$. The endpoint is close to (but not exactly) a standard normal. That
+$\bar\alpha_T>0$. The endpoint is close to, but does not coincide with, a standard normal. That
 detail matters when generation starts from $p(\vect{x}_T)=\mathcal{N}(\vect{0},
 \matr{I})$: the schedule must make this starting law a good approximation to the
 actual forward marginal $q(\vect{x}_T)$.
 
-### Learn the path back {#learn-the-path-back}
+### Learning the reverse process {#learn-the-path-back}
 
 If the clean $\vect{x}_0$ were known, Gaussian conditioning would give the exact
 posterior for one reverse step:
@@ -896,7 +897,7 @@ $$
 \right).
 $$ {#eq-diffusion-reverse-mean}
 
-One widely used training objective samples $t$, $\vect{x}_0$, and
+One widely used training procedure samples $t$, $\vect{x}_0$, and
 $\vect{\epsilon}$, builds $\vect{x}_t$ directly, and minimizes
 
 $$
@@ -919,8 +920,8 @@ the clean input.
 At the population MSE optimum, the network predicts
 $\E[\vect{\epsilon}\mid\vect{x}_t,t]$. It cannot recover the unknowable realized
 noise perfectly when several clean examples could have produced the same noisy point.
-For Gaussian corruption, that conditional mean is also related to the score of the
-noisy marginal:
+By Tweedie's formula, for Gaussian corruption that conditional mean also gives the
+score of the noisy marginal:
 
 $$
 \nabla_{\vect{x}_t}\log p_t(\vect{x}_t)
@@ -931,7 +932,8 @@ $$ {#eq-diffusion-score}
 
 The score points locally toward higher noisy-data density; generation is not simple
 gradient ascent and not literal subtraction of one predicted noise image. It follows a
-time-dependent sequence of learned means plus calibrated stochastic terms.
+time-dependent sequence of learned means plus Gaussian noise with a specified reverse
+variance.
 
 For a one-dimensional Gaussian mixture with component means $\mu_j$, shared variance
 $s^2$, and mixture weights $\pi_j$, the normalized weights from @sec-12-kernel-regression
@@ -949,7 +951,7 @@ $$
 ```{python}
 #| label: fig-score-mixture
 #| echo: false
-#| fig-cap: "A Gaussian-mixture score as a normalized local pull. The upper panel shows posterior component weights: each location asks which noisy component could have produced it. The lower panel adds the two responsibility-weighted pulls. Their sum is the score, which vanishes at critical points and points locally toward increasing density. This static field explains the score identity; reverse diffusion is a time-dependent stochastic process, not plain gradient ascent on this curve."
+#| fig-cap: "A Gaussian-mixture score as a normalized local pull. The upper panel shows posterior component weights: at each location, the probability that each noisy component produced it. The lower panel adds the two responsibility-weighted pulls. Their sum is the score, which vanishes at critical points and points locally toward increasing density. This static field explains the score identity; reverse diffusion is a time-dependent stochastic process, not plain gradient ascent on this curve."
 #| fig-alt: "Two aligned plots over a one-dimensional coordinate. Posterior responsibility shifts smoothly from the left Gaussian component to the right. Below, two weighted pull curves add to a wine score curve that crosses zero at the symmetric midpoint and near the mixture modes; arrows point in the sign of the local score."
 #| fig-width: 8.8
 #| fig-height: 5.2
@@ -1085,17 +1087,17 @@ first noising step, a point beside $+2$ is probably a lightly perturbed right-mo
 example. Near $t=T$, the same coordinate carries much less evidence about its origin.
 This is why a diffusion denoiser receives the timestep along with $\vect{x}_t$.
 
-We can test that claim without images or a large network. The target is the known
+To see this dependency without images or a large network, consider the known
 two-Gaussian mixture used above. A 4,417-parameter MLP with two 64-unit SiLU hidden
 layers predicts scalar noise for the 100-step schedule. The time-conditioned version
-receives $(x_t,t)$; the ablation has the identical architecture and seeded
-initialization, but we fix its time channel at zero, so it sees only $x_t$. We train both
-for 5,000 updates on the same seeded draws of data, timesteps, and noise, for each of five seeds. Each
+receives $(x_t,t)$. The ablation shares the same architecture and initial
+weights, but its time channel is fixed at zero, so it receives only $x_t$. Both models
+train for 5,000 updates on identical draws of data, timesteps, and noise across five seeds. Each
 sampler then draws 20,000 points from a standard-normal endpoint and takes 100 reverse
 steps with variance $\tilde\beta_t$.
 
-The equations count timesteps from $t=1$, while arrays use zero-based index
-$j=t-1$. Model index zero therefore represents the equation's first noising step.
+The equations count timesteps from $t=1$, while arrays use the zero-based index
+$j=t-1$. Model index zero therefore represents the equations' first noising step.
 
 <!-- NOVEL: needs sign-off -->
 
@@ -1380,8 +1382,8 @@ plt.show()
 
 The time-conditioned network nearly matches the fixed-evaluation MSE of the analytic
 conditional-mean oracle and recovers the mixture's two-mode geometry. With its time
-channel zeroed, the identically initialized network must use one answer for
-incompatible noise regimes. It places about ten times too much mass in the low-density
+channel zeroed, the identically initialized network must make the same prediction at a
+given $x_t$, whatever noise level produced it. It places about ten times too much mass in the low-density
 interval $|x|<1$. The experiment isolates one design requirement; it does not rank
 diffusion against VAEs or GANs.
 
@@ -1411,7 +1413,8 @@ $$
 The noisy representation supplies the queries; the condition supplies keys and values.
 
 For images, a U-Net is a natural denoiser. Its encoder gathers broad
-context; its decoder returns to the original resolution. Skip connections carry
+context; its decoder returns to the original resolution and outputs an image-shaped
+prediction, such as the estimated noise. Skip connections carry
 fine-resolution features across the bottleneck so that global and local evidence can
 meet. This is the same architectural issue we met in @sec-11-encoder-decoder: a fixed
 summary alone can discard detail that the output still needs. The diffusion-specific
@@ -1455,6 +1458,8 @@ $$
 \widetilde{\vect{x}}.
 $$
 
+The first arrow constructs the training codes. A new sample starts from latent noise and
+runs the learned reverse process and then the decoder, without an observed $\vect{x}$.
 This is the mechanism behind **latent diffusion**. It separates two sources of
 error: the autoencoder may discard information, and the latent diffusion model may
 miss parts of the code distribution. Running the reverse process in a smaller space
@@ -1492,21 +1497,22 @@ that $p_\theta=p_{\mathrm{data}}$.
 | PCA / deterministic AE | Reconstruction on encoded observations | No built-in random start | None by itself | Held-out reconstruction; behavior between and outside codes |
 | VAE | ELBO: expected decoder log-likelihood minus posterior-to-prior KL | $\vect{z}\sim p(\vect{z})$, then decoder | A latent-variable density, commonly evaluated through a bound | Held-out ELBO, prior-sample quality, collapse, coverage; exact gap only when the true posterior is known |
 | GAN | A moving discriminator--generator game | $\vect{z}\sim p_z$, then one generator pass | Usually implicit rather than tractable | Mode coverage, optimization balance, memorization |
-| Diffusion | Denoising or score predictions across a noise schedule | $\vect{x}_T$ from a declared terminal law, then reverse steps | Variational or score-based connections; simple MSE is not itself likelihood | Terminal match, schedule coefficients, reverse calibration, coverage, step cost |
+| Diffusion | Denoising or score predictions across a noise schedule | $\vect{x}_T$ from a declared terminal law, then reverse steps | Variational or score-based connections; simple MSE is not itself a likelihood | Terminal match, schedule coefficients, reverse calibration, coverage, step cost |
 
-A generator tells us how to draw a
-sample; a judge or metric tells us how that draw will be evaluated. A complete system
+A generator specifies how to draw a
+sample. An evaluation metric determines how that draw is scored. A complete system
 may need both, but neither makes the other correct.
 
 <!-- print 2026-10-09, author-approved: sampler settings belong with the weights in a sample-based result, with a link to the run record of the experiment interlude. HTML-only: the pointer to the optional practice bridge of the self-attention chapter marks where this edition defines temperature, top-k, and nucleus sampling. Print defines them in the encoder-decoder chapter's sampling subsection, which this edition does not yet have. Drop the pointer when that move lands, as print does. -->
-How the draw is made can change after training, with every weight left as it was. An
+The sampling procedure can change after training while every weight remains fixed. An
 autoregressive network computes each next-token distribution. Greedy and beam search in
 @sec-11-encoder-decoder use those conditionals to find a probable sequence, and
 temperature, top-$k$, and nucleus sampling in the optional practice bridge of
 @sec-14-self-attention-transformer reshape or truncate each one before a draw. A
-diffusion network offers no such distribution. At each step it returns a denoising
-prediction, and the distribution of its samples is fixed
-only once the sampler is specified: the terminal law, the number of reverse steps, the
+diffusion noise predictor does not output such a distribution directly. At each step it
+returns a denoising prediction, which becomes a reverse transition only once the sampler
+sets that transition's mean and variance. The distribution of its samples is therefore
+fixed only once the sampler is specified: the terminal law, the number of reverse steps, the
 reverse variance when it is fixed rather than learned, and, for a guided model, the
 guidance scale. The central mass and Wasserstein-1 distance of the scalar diffusion
 mixture describe the time-conditioned noise predictor under one such sampler, a
@@ -1539,7 +1545,7 @@ Close the book for one minute and recall how each model draws a new sample.
 
 - Why can a discriminator score samples but not, by itself, generate them?
 - What must a reconstruction model gain to become a sampler?
-- Why must a diffusion denoiser know the timestep?
+- Why must a diffusion denoiser receive the timestep?
 :::
 
 ## Okay, so: generation needs a rule for drawing samples {#okay-so-generation-needs-a-sampling-contract}
@@ -1549,13 +1555,13 @@ Close the book for one minute and recall how each model draws a new sample.
 2. **A code is not yet a distribution.** An autoencoder supplies a decoder
    but no random start; a generative model must add a latent law or
    another sampling procedure.
-3. **A VAE puts a probability law around the code.** Its ELBO is expected decoder log
-   likelihood minus prior KL, and the exact gap to log evidence is posterior KL.
+3. **A VAE places a probability law on the latent code.** Its ELBO is expected decoder
+   log-likelihood minus prior KL, and the exact gap to log evidence is posterior KL.
    Reparameterization moves randomness outside the learned map; it does not remove it.
-4. **A GAN lets a judge train a sampler.** The ideal discriminator yields a
+4. **In a GAN, a discriminator supplies the sampler's training signal.** The ideal discriminator yields a
    Jensen--Shannon identity, while finite networks still face saturation, coupled
    optimization, and mode-coverage failures.
-5. **Diffusion learns denoising across calibrated noise levels.** The forward marginal
+5. **Diffusion learns denoising across specified noise levels.** The forward marginal
    is available in closed form, the reverse coefficients must be pinned, and the
    denoiser needs the timestep. A finite endpoint and learned reverse law remain
    approximations that must be audited.
@@ -1576,7 +1582,7 @@ Close the book for one minute and recall how each model draws a new sample.
 - [Ho and Salimans, *Classifier-Free Diffusion Guidance*](https://arxiv.org/abs/2207.12598): combines conditional and unconditional denoiser predictions without a separate classifier.
 - [Chen et al., *Isolating Sources of Disentanglement in Variational Autoencoders*](https://arxiv.org/abs/1802.04942):
   the total-correlation decomposition, whose aggregate-posterior KL is the term
-  Exercise 5 audits: naive per-batch estimates of it are biased.
+  Exercise 5 audits, since naive per-batch estimates of it are biased.
 - [Rombach et al., *High-Resolution Image Synthesis with Latent Diffusion Models*](https://openaccess.thecvf.com/content/CVPR2022/html/Rombach_High-Resolution_Image_Synthesis_With_Latent_Diffusion_Models_CVPR_2022_paper.html): composing learned compression with diffusion in latent space.
 
 ## Exercises {.unnumbered}
@@ -1584,7 +1590,7 @@ Close the book for one minute and recall how each model draws a new sample.
 1. **(Pencil.)** (a) Derive the posterior and marginal evidence for the scalar
    Gaussian VAE audit.
    **(Code.)** (b) Verify @eq-elbo-gap for three approximate posteriors. Then use
-   reparameterized samples to estimate its gradient with respect to the approximate
+   reparameterized samples to estimate the ELBO's gradient with respect to the approximate
    posterior mean; compare it with the analytic gradient and report Monte Carlo
    uncertainty.
 2. **(Code.)** Implement @eq-diffusion-direct-sample for a batch whose
@@ -1594,32 +1600,32 @@ Close the book for one minute and recall how each model draws a new sample.
    two schedules without promising which will train better.
 3. **(Pencil.)** Maximize the GAN value pointwise to derive
    $D^*(x)=p(x)/(p(x)+q(x))$, then substitute it back and recover
-   $2\operatorname{JSD}(p\Vert q)-\log 4$.
+   $2D_{\mathrm{JS}}(p\,\|\,q)-\log 4$.
    **(Code.)** Verify the identity by numerical integration for two one-dimensional
    Gaussians as the mean of $q$ moves toward the mean of $p$.
    **(Audit.)** Explain why an observed $D\approx0.5$ does not prove convergence,
    then design separate fidelity, coverage, and memorization checks for supplied
    samples from a VAE, GAN, and diffusion model. State the boundary explicitly: the
    divergence identity describes the objective at the inner optimum, not the
-   dynamics that attempt to reach it.
+   dynamics meant to reach it.
 
 4. **(Audit.)** A colleague's $\beta$-VAE uses `F.mse_loss(recon, x) + beta * kl.mean()`,
    with `kl` holding one KL per example. Before any algebra, predict the *direction*
    of the defect: which term was silently divided by what? Then prove the identity:
    with default `mean` reductions the loss equals
-   $\tfrac{1}{D_x}\big[\text{recon}_{\text{sum}} + (\beta D_x)\,\mathrm{KL}\big]$
-   exactly. Thus, relative to the pixel-summed reconstruction convention, a nominal
+   $\tfrac{1}{D_x}\big[\text{recon}_{\text{sum}} + (\beta D_x)\,\mathrm{KL}\big]$.
+   Thus, relative to the pixel-summed reconstruction convention, a nominal
    $\beta=1$ on $28\times28$ inputs gives an effective KL coefficient of 784. This
-   substantially changes the reconstruction–regularization trade-off; the identity
-   alone does not establish posterior collapse. *Named wrong answer:* "the two
+   substantially changes the reconstruction–regularization trade-off, although the identity
+   alone does not establish posterior collapse. *Common misconception:* "the two
    `mean`s cancel, so the trade-off is unchanged"; they average over different axis
    sets ($B\!\cdot\!D_x$ versus $B$), and the mismatch is the bug.
 5. **(Audit.)** **Statistical extension (optional).** Now audit a "diversity" term that penalizes
-   $\mathrm{KL}(q_{\mathrm{agg}}\,\|\,p)$ by computing it on each batch's mixture
+   $D_{\mathrm{KL}}(q_{\mathrm{agg}}\,\|\,p)$ by computing it on each batch's mixture
    and averaging. Which of the three estimator cases is this, and in which direction
    is the batch estimate biased? Verify numerically on synthetic Gaussian posteriors:
    KL is convex in its first argument and a size-$B$ batch mixture is a noisier
-   $q_{\mathrm{agg}}$, so Jensen drives the estimate *upward* (in one run of this
-   audit: true 0.100, batch estimate 0.148 ± 0.006, while the per-example mean KL
-   stayed unbiased). *Named wrong answer:* "it averages out over batches like any
-   minibatch loss"; averaging removes noise around a biased center, not the bias.
+   $q_{\mathrm{agg}}$, so Jensen's inequality drives the estimate *upward*, while the
+   mean of the per-example KL terms stays unbiased. *Common misconception:* "it averages
+   out over batches like any minibatch loss." Averaging removes noise around a biased
+   center, not the bias.
