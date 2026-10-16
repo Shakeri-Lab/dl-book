@@ -100,7 +100,7 @@ test('template score: the chapter owns the identity; the geometry is a declared 
   // The two sentences this scene exists to make visible, and the baseline reading of b.
   assert.match(chapter, /a large dot product can mean strong alignment, large magnitude,\nor both/);
   assert.match(chapter, /orthogonal inputs leave it at \$\\parameterpart\{b\}\$, and opposing inputs lower it/);
-  assert.match(chapter, /default prediction when the input\ncarries no relevant information/);
+  assert.match(chapter, /is the prediction at \$\\featurepart\{\\vect\{x\}\}=\\vect\{0\}\$\./);
   // The scene's own schematic contract: a right angle really is in the schedule, the pulse
   // really shortens the template, and the slider can reach both declared lengths.
   assert.equal(source.angles.length, 4);
