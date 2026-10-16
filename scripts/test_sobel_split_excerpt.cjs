@@ -240,6 +240,6 @@ test('integration: the excerpt precedes the zoo\'s whole Plan -> Code panel, nev
   const zoo = chapter.indexOf('## Examples of fixed filters {#the-filter-zoo}');
   assert(zoo > 0, 'the zoo section keeps its heading and its old anchor');
   assert(wrapper > zoo, 'the zoo cell sits in a Plan -> Code wrapper inside the zoo section');
-  assert(chapter.lastIndexOf("whether intensity changes there along the kernel's direction.", wrapper) > zoo,
+  assert(chapter.lastIndexOf("and its transpose measures top-to-bottom changes.", wrapper) > zoo,
     'so the panel lands after the zoo\'s three bullets and before its code');
 });
