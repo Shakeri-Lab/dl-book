@@ -17,20 +17,23 @@
      pre-LayerNorm Transformer rather than the original encoder-decoder,
      post-LayerNorm architecture. It makes no measured hardware-speed claim. -->
 
-@sec-13-attention ended with a question that the attention operator itself had already
-answered. A query, key, and value need not come from an encoder or a decoder. They
-need not come from a recurrent network at all. If all three come from the same
-sequence, each token can ask every token, including itself, what matters and route the answers
-directly. The recurrent state, the last serial bottleneck left standing, becomes
-optional.
+In @sec-13-attention, cross-attention removed the fixed-state bottleneck by connecting
+the decoder to every encoder state through content-dependent weights, and scaled dot
+products turned query–key comparison into matrix multiplication. Yet the serial nature
+of recurrence remained.
 
-That substitution is the core of a
-[*Transformer*](https://papers.nips.cc/paper_files/paper/2017/hash/3f5ee243547dee91fbd053c1c4a845aa-Abstract.html). It is also easy to state too
-quickly. Removing recurrence creates a position problem. Splitting one attention
-operation into heads creates a bookkeeping problem. Stacking the resulting
-operations creates an optimization problem. We solve each one from its equations, then train a
-deliberately small causal Transformer on the book-corpus benchmark from
-@sec-10-sequences-rnn.
+Queries, keys, and values require neither two separate sequences nor a recurrent state.
+If a sequence queries itself, every token can pool context from every position, its own
+included, in one parallel operation.
+
+That departure is the central idea of the
+[*Transformer*](https://papers.nips.cc/paper_files/paper/2017/hash/3f5ee243547dee91fbd053c1c4a845aa-Abstract.html).
+Abandoning recurrence, however, raises three problems: the model has no built-in
+representation of token order, a single attention distribution must combine several
+relationships at once, and stacking unconstrained routing layers destabilizes deep
+optimization. This chapter constructs the Transformer by addressing each problem from
+first principles, then trains a deliberately small causal Transformer on the book-corpus
+benchmark from @sec-10-sequences-rnn.
 
 <!-- NOVEL: needs sign-off - opening preview of the seeded book-corpus rematch. -->
 
@@ -41,17 +44,21 @@ has learned, and position matters in this run, but the LSTM is still ahead.
 
 <!-- /NOVEL -->
 
-## Let the sequence query itself
+## Self-attention: when a sequence queries itself {#let-the-sequence-query-itself}
 
-Suppose the sentence contains the words *bank*, *river*, and *boats*. A useful
+With the scaled dot-product operator established, self-attention alters only the origin
+of the three inputs: rather than coming from two distinct sequences (such as an encoder
+and a decoder), all three come from the same sequence.
+
+Consider a sentence containing the words *bank*, *river*, and *boats*. An effective
 representation of *bank* should route information from *river* and *boats*, while
-another occurrence, now near *loan* and *interest*, should route different information.
-@sec-13-attention built exactly this kind of content-dependent routing. Self-attention
-changes only the source of the three inputs.
+another occurrence, flanked by *loan* and *interest*, must integrate different context.
+@sec-13-attention routed context between two sequences and reduced the score to scaled
+dot products. Here each token uses that operator to query the surrounding tokens of its
+own sequence.
 
-The three roles still fit: a query specifies what is needed, a key
-provides the features used for comparison, and a value carries the content
-to be combined.
+The three operational roles remain: a query specifies what information is sought, a key
+provides the features used for matching, and a value carries the content to be pooled.
 
 Let a batch of token representations be
 
@@ -59,8 +66,8 @@ $$
 X \in \mathbb{R}^{B \times n \times d},
 $$
 
-where $B$ is batch size, $n$ is sequence length, and $d$ is model width. Learned
-projections produce
+where $B$ is the batch size, $n$ is the sequence length, and $d$ is the model dimension.
+Learned linear projections produce
 
 $$
 Q=XW_Q,\qquad K=XW_K,\qquad V=XW_V,
@@ -74,22 +81,23 @@ $$
 \operatorname{softmax}\left(\frac{QK^\top}{\sqrt d}\right)V.
 $$
 
-For one sequence, $QK^\top$ has shape $n\times n$. Row $i$ contains the scores from
-query position $i$ to every key position $j$. The row-wise softmax makes each row a
-distribution, and multiplying by $V$ returns one weighted sum for each query:
+For a single sequence, $QK^\top$ has shape $n\times n$. Row $i$ contains the compatibility
+scores from query position $i$ to every key position $j$. A row-wise softmax normalizes
+each row into a probability distribution, and multiplying by $V$ computes a weighted
+combination of values for each query:
 
 $$
 (n,d)(d,n)\to(n,n),\qquad (n,n)(n,d)\to(n,d).
 $$
 
-@fig-self-attention-read follows one query, *bank*, through the four-token fragment
+@fig-self-attention-read traces one query, *bank*, across the four-token sequence
 *bank by the river*: the same sequence supplies the queries, keys, and values, and the
-query's row of the $n\times n$ grid becomes the weights on the rows of $V$.
+query's row of the $n\times n$ attention matrix gives the weights on the rows of $V$.
 
 ```{python}
 #| label: fig-self-attention-read
 #| echo: false
-#| fig-cap: "Self-attention keeps the operator of @sec-13-attention and changes only where its inputs come from: one sequence $X$, through the learned projections $W_Q$, $W_K$, $W_V$, supplies the queries, keys, and values. The query for *bank* scores every key, itself included, and the row-wise softmax turns the scores into weights that sum to one; the output for *bank* is the weighted sum of the rows of $V$ (arrow width shows each weight; the numbers and shading are illustrative). The fainter rows do the same for every other token, together."
+#| fig-cap: "Self-attention reuses the scaled dot-product operator within a single sequence, changing only where its inputs originate: one sequence $X$, transformed by learned projections $W_Q$, $W_K$, and $W_V$, supplies queries, keys, and values. The query for *bank* scores every key, itself included, and row-wise softmax normalizes the scores into weights summing to one. The output representation for *bank* is the weighted sum of the rows of $V$ (arrow widths reflect relative weights; numerical values and shading are illustrative). The remaining rows do the same for all other tokens concurrently."
 #| fig-alt: "Diagram of self-attention on the four-token sequence bank, by, the, river. The outlined token column X feeds three routes: arrows marked W Q to four query rows, a line marked W K to four key columns above a four-by-four grid, and a line marked W V to four value rows labeled by token. The grid is the row-wise softmax of Q times K transpose over the square root of d, shape n by n. Its top row, for bank, reads 0.20, 0.05, 0.05, 0.70 and sums to 1. Arrows from all four value rows, widest from river, form the output row for bank. The other rows are faint."
 #| code-summary: "Code: draw one sequence querying itself"
 import numpy as np
@@ -160,59 +168,62 @@ for x, y, s in [(g0 + 4 * c + 0.2, ys[0], "sums\nto 1"),
 plt.tight_layout(); plt.show()
 ```
 
-Weights were already shared across examples and across space; @sec-10-sequences-rnn
-made time the third axis of weight sharing. An RNN shares transition
-parameters across time. Self-attention shares projection parameters across positions
-and applies the same comparison rule to each permitted query–key pair. The weights
-in a particular attention row still depend on the content; what is shared is the
-machinery that produces them.
+Weight sharing was already established across examples and spatial grids, and
+@sec-10-sequences-rnn introduced time as a third axis of parameter sharing. An RNN
+shares recurrent transition weights across time. Self-attention shares projection
+parameters across positions, applying the same comparison rule to each permitted
+query–key pair. The weights in a particular attention row depend on content, but the
+machinery that computes them is shared.
 
 <!-- print 2026-10-09, author-approved: the learned score written as one matrix W_Q W_K^T, its possible asymmetry, the row-normalization caveat, a footnote on tied projections (Tsai et al. 2019), and the pointer to fig-self-attention-geometry -->
-For one sequence, that comparison rule comes down to one learned matrix. With
-$\vect{x}_i^\top$ as row $i$ of $X$, substituting the projections gives
+For a single sequence, that comparison rule reduces to a bilinear form governed by a
+single learned matrix. With $\vect{x}_i^\top$ denoting row $i$ of $X$, substituting the
+projections gives
 
 $$
 \frac{(QK^\top)_{ij}}{\sqrt d}
 =\frac{\vect{x}_i^\top W_QW_K^\top\vect{x}_j}{\sqrt d}.
 $$
 
-The kernel smoother of @sec-12-kernel-regression compared a query with a key through a
-fixed distance and a single bandwidth. Here training sets the $d\times d$ matrix
-$W_QW_K^\top$, which decides which features of the querying token are compared with
-which features of the token being read. Because $W_Q$ and $W_K$ are trained separately,
-$W_QW_K^\top$ need not be symmetric, so the score of *bank* against *river* need not
-equal the score of *river* against *bank*. @sec-13-attention called the learned kernel
-an analogy for this reason: a classical kernel is symmetric and positive semidefinite,
-and this score need be neither.^[Tying $W_Q=W_K$ makes the matrix symmetric and positive
-semidefinite. In the translation and sequence-prediction experiments of
-[Tsai et al.](https://aclanthology.org/D19-1443/), tying made little difference to
-performance at the same projection sizes and saved parameters.] Lopsided attention
-weights are not evidence of that asymmetry. Softmax normalizes each row on its own, so
-even a symmetric score can give *bank*'s row most of its weight on *river* while
-*river*'s row spreads its weight across other keys. @fig-self-attention-geometry draws
-one such row, *bank*'s, to scale in a two-dimensional toy, where each learned matrix
-appears as what it is, a function from one plane to another, and each score as a signed
-shadow on the line through the query.
+The kernel smoother of @sec-12-kernel-regression compared a query and key through a
+fixed distance metric and a single bandwidth. Here, training optimizes the $d\times d$
+matrix $W_QW_K^\top$, determining how features of the querying token interact with
+features of the token being read. Because $W_Q$ and $W_K$ are parameterized
+independently, $W_QW_K^\top$ is generally asymmetric, so the score of *bank* against
+*river* need not equal the score of *river* against *bank*. @sec-13-attention noted that
+the kernel connection is an analogy for this reason: a Mercer kernel is symmetric and
+positive semidefinite, whereas $W_QW_K^\top$ is typically neither symmetric nor positive
+semidefinite.^[Tying $W_Q=W_K$ constrains the matrix to be symmetric and positive
+semidefinite. In the sequence experiments of
+[Tsai et al.](https://aclanthology.org/D19-1443/), parameter tying yielded comparable
+empirical performance while reducing parameter count.] Asymmetric attention weights
+alone do not imply an asymmetric score matrix: because softmax normalizes each row
+independently, even a symmetric score matrix can assign most of *bank*'s weight to
+*river* while *river*'s row distributes its probability mass broadly across other keys.
+@fig-self-attention-geometry illustrates *bank*'s attention row geometrically in a
+two-dimensional toy setting, where each projection functions as a linear mapping between
+planes and each score appears as a signed projection along the query axis.
 
 <!-- print 2026-10-09, author-approved: figure fig-self-attention-geometry, bank's row of fig-self-attention-read as geometry in a d = 2 toy (HTML copy of the print TikZ, figures/tikz-src/14_self_attention_geometry.tex, drawn without the print panel letters a, b, c because the caption names the planes Left, Middle and Right) -->
-![*Bank*'s row of @fig-self-attention-read as geometry, in a toy with $d=2$ built to reproduce its illustrative weights. Each plane, drawn to scale, stands in for the $d$ dimensions of a real model. Orange marks only the learned maps. The query is computed by one, not learned, so it is drawn in black (orange in @fig-self-attention-read), as are *bank*'s token, key, value and output. Left: each map is a function of a token $\vect{x}_j^\top$, a row of $X$. So $\vect{q}^\top=\vect{x}_{\text{bank}}^\top W_Q$ is *bank*'s row of $Q$, and $\vect{k}_j^\top=\vect{x}_j^\top W_K$ and $\vect{v}_j^\top=\vect{x}_j^\top W_V$ are the rows of $K$ and $V$. Middle: a key's score $\vect{q}^\top\vect{k}_j/\sqrt2=\vect{x}_{\text{bank}}^\top W_QW_K^\top\vect{x}_j/\sqrt2$ is its signed shadow on the dashed line through $\vect{q}$, as in @fig-linear-response, times $\norm{\vect{q}}/\sqrt2$. *By* and *the* share one shadow and tie. Right: softmax over this one row gives the weights. The output (ring), the values' weighted average, lies inside their hull, nearest *river*. Not shown: the other rows, whether $W_QW_K^\top$ is symmetric, and what trained maps learn.](../../figures/generated/14_self_attention_geometry.svg){#fig-self-attention-geometry width=100% fig-alt="Three framed planes side by side, drawn at one scale and joined by thick orange arrows. The left panel, token plane, x j: four arrows from one origin, labeled bank (thicker and darker), by, the and river. Two curved orange arrows lead to the middle panel. The upper is labeled x bank transpose W Q, the lower x j transpose W K. The middle panel, query-key plane, q of bank and k j: a thick dark vertical arrow q with a dashed line through it, and four thinner key arrows from the same origin: river up and to the left, bank to the right and slightly up (darker), the down and to the left, by down and to the right. Dotted horizontal lines run from the dashed line through each key's tip to a vertical scale just outside the frame, headed q transpose k j over root 2, with marks 1.59 for river, 0.35 for bank, and minus 1.06 shared by the and by, whose tips lie on one dotted line. An arrow labeled softmax leads to the right panel, value plane, v j: four dots at the corners of a shaded quadrilateral, labeled bank 0.20 (darker), by 0.05, the 0.05 and river 0.70, and a ringed dot labeled output for bank inside it, nearest river. An orange line labeled x j transpose W V runs below the panels from the left panel to the bottom of the right panel."}
+![*Bank*'s row of @fig-self-attention-read interpreted geometrically, in a $d=2$ toy configuration constructed to reproduce its illustrative weights. Each plane, drawn to scale, represents the $d$ dimensions of a full model. Orange denotes learned maps. Because queries are activations rather than parameter weights, they are drawn in black (orange in @fig-self-attention-read), as are *bank*'s token, key, value, and output. Left: each map acts on a token $\vect{x}_j^\top$, a row of $X$. So $\vect{q}^\top=\vect{x}_{\text{bank}}^\top W_Q$ is *bank*'s row of $Q$, while $\vect{k}_j^\top=\vect{x}_j^\top W_K$ and $\vect{v}_j^\top=\vect{x}_j^\top W_V$ form the rows of $K$ and $V$. Middle: a key's score $\vect{q}^\top\vect{k}_j/\sqrt2=\vect{x}_{\text{bank}}^\top W_QW_K^\top\vect{x}_j/\sqrt2$ is its signed projection onto the line spanned by $\vect{q}$, as in @fig-linear-response, scaled by $\norm{\vect{q}}/\sqrt2$, where *by* and *the* share the same projection. Right: softmax over this row produces the weights, so the resulting output (ring), a convex combination of the values, lies inside their convex hull, nearest *river*. Not shown: the remaining rows, the possible asymmetry of $W_QW_K^\top$, and the representations learned by trained maps.](../../figures/generated/14_self_attention_geometry.svg){#fig-self-attention-geometry width=100% fig-alt="Three framed planes side by side, drawn at one scale and joined by thick orange arrows. The left panel, token plane, x j: four arrows from one origin, labeled bank (thicker and darker), by, the and river. Two curved orange arrows lead to the middle panel. The upper is labeled x bank transpose W Q, the lower x j transpose W K. The middle panel, query-key plane, q of bank and k j: a thick dark vertical arrow q with a dashed line through it, and four thinner key arrows from the same origin: river up and to the left, bank to the right and slightly up (darker), the down and to the left, by down and to the right. Dotted horizontal lines run from the dashed line through each key's tip to a vertical scale just outside the frame, headed q transpose k j over root 2, with marks 1.59 for river, 0.35 for bank, and minus 1.06 shared by the and by, whose tips lie on one dotted line. An arrow labeled softmax leads to the right panel, value plane, v j: four dots at the corners of a shaded quadrilateral, labeled bank 0.20 (darker), by 0.05, the 0.05 and river 0.70, and a ringed dot labeled output for bank inside it, nearest river. An orange line labeled x j transpose W V runs below the panels from the left panel to the bottom of the right panel."}
 
-All query positions can be evaluated together during training because none waits
-for a hidden state from the preceding position. That is a structural statement, not
-a timing result. Dense self-attention still forms $n^2$ pairwise scores, and
-autoregressive generation still emits one new token at a time.
+All query positions can be evaluated concurrently during training because no step
+depends on hidden states from preceding positions. This is a structural property of the
+computation graph, not an assertion of constant execution time: dense self-attention
+still computes $n^2$ pairwise scores, and autoregressive generation still emits
+one token at a time.
 
-### Permutation symmetry without positional signals or masks {#the-position-debt}
+### Permutation equivariance without positional signals or masks {#the-position-debt}
 
-First consider self-attention without positional signals or an attention mask.
-We will show that permuting the input rows permutes the output rows in the same way.
-A fixed causal mask changes this setting by assigning different visible prefixes
-to different positions.
+Consider first self-attention in the absence of positional encodings or attention masks.
+Permuting the input tokens permutes the output representations in the same way. (A
+causal mask breaks this symmetry by assigning distinct visible prefixes to different
+positions.)
 
-Let $P$ be an $n\times n$ permutation matrix, so $PX$ reorders the tokens. Then
+Let $P$ be an $n\times n$ permutation matrix, so that $PX$ reorders the input tokens. Then
 
 $$
-Q'=PQ,\quad K'=PK,\quad V'=PV
+Q'=PQ,\quad K'=PK,\quad V'=PV,
 $$
 
 and therefore
@@ -221,30 +232,33 @@ $$
 Q'K'^\top=P(QK^\top)P^\top.
 $$
 
-Write $S=QK^\top/\sqrt d$; then $S'=PSP^\top$. Row-wise softmax respects the
-same simultaneous row-and-column permutation:
+Writing $S=QK^\top/\sqrt d$, we have $S'=PSP^\top$. Because row-wise softmax operates
+along each row independently, it commutes with simultaneous row and column permutations:
 
 $$
 \operatorname{softmax}(PSP^\top)
 =P\operatorname{softmax}(S)P^\top.
 $$
 
-Putting the pieces together gives
+With $\operatorname{SA}$ denoting the self-attention operator, combining these steps yields
 
 $$
 \operatorname{SA}(PX)
 =P\operatorname{SA}(X).
 $$
 
-Self-attention is *permutation equivariant*: permute the inputs and the outputs
-permute in the same way. It is not permutation invariant; the token outputs do not
-all become identical. But without another signal, the operator has no basis for
-distinguishing “first” from “fifth.” A pooled sequence summary can consequently
-become invariant to order.
+Self-attention is therefore *permutation equivariant*: permuting the inputs induces
+the same permutation on the outputs. It is not permutation invariant, as reordering the
+input tokens permutes the output rows rather than leaving the output matrix unchanged.
+However, without an external positional signal, the operator has no mechanism for
+distinguishing “first” from “fifth.” Any pooling that treats all positions
+symmetrically (such as mean-pooling) is therefore permutation *invariant* and reduces
+the sequence to an unordered multiset.
 
-In @sec-08-cnn, convolution received locality “for free.” A convolution knows which
-values are neighbors because its kernel is tied to nearby offsets. Global attention
-drops that built-in geometry, so position has to be supplied explicitly.
+In @sec-08-cnn, convolution had locality by construction: a convolutional filter
+encodes neighborhood relationships because its kernel weights are tied to fixed relative
+offsets. Global attention discards this locality bias. Without positional encodings or
+structured masking, it has no intrinsic notion of sequence order.
 
 <!-- NOVEL: needs sign-off - seeded permutation/position audits and figures. -->
 
@@ -306,7 +320,7 @@ print(f"fixed-slot difference after adding position: {fixed_slot_change:.3f}")
 ```{python}
 #| echo: false
 #| label: fig-permutation-debt
-#| fig-cap: "The same content is permuted across slots (left). The audit (right) shows bare self-attention rematches after the same output permutation, while fixed positional signals break that rematch."
+#| fig-cap: "Token content permuted across sequence slots (left). The audit (right) shows that bare self-attention output rematches under permutation to within numerical precision, whereas fixed positional signals break this equivariance."
 #| fig-alt: "Two-panel permutation audit. The left panel moves five colored word tiles from the sequence 'bank by the river' into a new slot order. The right log-scale bars show a rematched bare-attention difference near machine precision and an order-one difference after fixed position vectors are added."
 #| fig-width: 10
 #| fig-height: 3.4
@@ -335,21 +349,22 @@ axes[1].set_title("position breaks the rematch")
 plt.tight_layout()
 plt.show()
 ```
-The first error is numerical roundoff, about $2.2\times10^{-16}$. Adding a fixed
-signal to each slot raises the same error to about 1.581 in this example.
-Position has not been inferred from content; it has been supplied.
+In the model without positional signals, the discrepancy is pure numerical roundoff,
+approximately $2.2\times10^{-16}$. Adding fixed positional vectors raises the error to
+1.581, breaking equivariance. Order is not inferred from content. It must be
+explicitly supplied.
 
-## Position as a bank of clocks
+## Positional encoding: a bank of clocks {#position-as-a-bank-of-clocks}
 
-The simplest additive code repeats $i/(n-1)$ in every coordinate. It supplies
-order, but every position vector lies on the same ray, so the vectors differ in
-magnitude, not in direction. A binary code supplies
-more coordinates, yet adjacent integers can flip many bits and have poor locality.
-These are not impossible designs; they are weak inductive biases for a model that
-must reason about shifts and distances.
+The simplest additive code repeats $i/(n-1)$ across every coordinate. While it supplies
+order, every position vector lies along the same ray, differing only in magnitude rather
+than direction. A binary code provides richer directional variation, yet adjacent
+integers can differ across multiple bits, yielding poor metric locality. These are not
+impossible designs. Rather, they provide weak inductive biases for a model that must
+reason about relative shifts and distances.
 
-Sinusoidal encoding gives every position a bank of clocks. For even model width
-$d$, define
+Sinusoidal encoding equips every position with a bank of harmonic clocks. For an even
+model dimension $d$ and frequency indices $j\in\{0,\dots,d/2-1\}$, define
 
 $$
 \begin{aligned}
@@ -360,17 +375,18 @@ $$
 \end{aligned}
 $$
 
-Small $j$ gives a fast clock; large $j$ gives a slow one. Every sine coordinate is
-paired with a cosine at the same frequency. The model receives
+Small $j$ yields a fast-turning clock, and large $j$ yields a slow one. Every sine
+coordinate is paired with a cosine at the same frequency. The model receives
 
 $$
 Z_i=\sqrt d\,E_i+\operatorname{PE}(i),
 $$
 
-where $E_i$ is the token embedding. Scaling the embedding keeps its initial
-magnitude comparable to that of the position vector.
+where $E_i$ is the token embedding. Scaling the embedding by $\sqrt d$ ensures its
+initial norm remains comparable to that of the positional vector.
 
-Why pair sine and cosine? For frequency $\omega$, advancing by offset $\delta$ is a
+Pairing sine and cosine expresses relative shifts as linear rotations. For an angular
+frequency $\omega$, advancing position $i$ by an offset $\delta$ is an exact planar
 rotation:
 
 $$
@@ -389,15 +405,17 @@ $$
 \end{bmatrix}.
 $$
 
-The rotation depends on the offset, not the absolute position. This gives learned
-linear maps a convenient raw material for representing relative shifts. It is a
-property of the positional pair itself, not a guarantee that arbitrary learned
-$W_Q$ and $W_K$ will preserve or use it.
+The transformation matrix depends only on the offset $\delta$, not on the absolute
+index $i$. This gives linear layers a convenient form for representing relative
+displacement. However, this is a property of the sinusoidal code itself, not a
+guarantee that unconstrained learned projections $W_Q$ and $W_K$ will preserve or
+exploit it.
 
-In @fig-position-clocks, the four clocks of a width-8 code show that one step
-turns row $j$ by the same $\omega_j$ from any start. At $i=44$ the fast
-$j=0$ hand has nearly come back to its angle at $i=0$, yet the slower clocks still tell
-positions 44 and 0 apart.
+In @fig-position-clocks, the four clocks of a width-8 code illustrate how a single step
+turns dial $j$ by a constant angle $\omega_j$ regardless of starting position. At
+$i=44$, the fastest clock ($j=0$) has completed approximately seven full revolutions and
+nearly returned to its orientation at $i=0$, while the slower clocks still distinguish
+the two positions.
 
 ```{python}
 #| label: fig-position-clocks
@@ -464,20 +482,22 @@ plt.tight_layout(); plt.show()
 ::: {.callout-note}
 ## Rotate the queries and keys
 
-Instead of adding the clock coordinates to the token, rotate each query and key
-directly. If $R_i$ is the block-diagonal rotation for position $i$, use
-$\widetilde{\vect{q}}_i=R_i\vect{q}_i$ and
-$\widetilde{\vect{k}}_j=R_j\vect{k}_j$. Their score becomes
+Instead of adding positional vectors to token embeddings, an alternative is to rotate
+the projected queries and keys directly. Letting $R_i$ be a block-diagonal rotation with
+angles proportional to $i$, define $\widetilde{\vect{q}}_i=R_i\vect{q}_i$ and
+$\widetilde{\vect{k}}_j=R_j\vect{k}_j$. Their compatibility score becomes
 
 $$
 \widetilde{\vect{q}}_i^\top\widetilde{\vect{k}}_j
 =\vect{q}_i^\top R_i^\top R_j\vect{k}_j
-=\vect{q}_i^\top R_{j-i}\vect{k}_j.
+=\vect{q}_i^\top R_{j-i}\vect{k}_j,
 $$
 
-The positional factor now depends on the relative offset $j-i$. This construction is
-called [**rotary positional embedding (RoPE)**](https://arxiv.org/abs/2104.09864). Content still matters through
-$\vect{q}_i$ and $\vect{k}_j$; RoPE changes how position enters their comparison.
+where the final equality follows because transposition inverts each orthogonal planar
+block ($R_i^\top=R_{-i}$), isolating the relative offset $j-i$. This formulation is
+[**rotary positional embedding (RoPE)**](https://arxiv.org/abs/2104.09864). Semantic
+content enters through $\vect{q}_i$ and $\vect{k}_j$, while RoPE injects relative
+position directly into their geometric comparison.
 :::
 
 :::: {.plan-code .plan-code-wide}
@@ -562,22 +582,21 @@ axes[1, 1].legend(frameon=False)
 plt.tight_layout()
 plt.show()
 ```
-For $d=32$, each position vector has norm $\sqrt{d/2}=4$ because every
-$\sin^2+\cos^2$ pair contributes one. Adding this vector does *not* preserve the
-norm of the combined token representation: the embedding and position vector can
-reinforce or cancel one another.
-[Layer normalization](https://arxiv.org/abs/1607.06450) will soon manage scale at the
-block level.
+At $d=32$, each positional vector has Euclidean norm $\sqrt{d/2}=4$ because each
+$\sin^2(\cdot)+\cos^2(\cdot)$ coordinate pair contributes one to the squared norm.
+Adding this vector does *not* preserve the norm of the combined token representation:
+the embedding and positional vector can reinforce or cancel each other depending on
+their alignment. [Layer normalization](https://arxiv.org/abs/1607.06450) will
+subsequently stabilize feature scale at the block level.
 
 <!-- /NOVEL -->
 
-## One routing operation, many heads
+## Multi-head attention: routing across parallel subspaces {#one-routing-operation-many-heads}
 
-A single attention distribution must make one compromise about what to retrieve.
-Multi-head attention runs several smaller routing systems in parallel, each
-with its own projections of the same residual stream.
-Choose a number of heads $h$ that divides $d$, and let $d_h=d/h$. For each head
-$r$,
+A single attention distribution forces a compromise among competing retrieval criteria.
+Multi-head attention runs several smaller routing systems in parallel, each operating on
+its own linear projection of the sequence representations. Let the number of heads $h$
+divide the model dimension $d$, with per-head width $d_h=d/h$. For each head $r$,
 
 $$
 Q_r=XW_Q^{(r)},\quad
@@ -592,12 +611,13 @@ $$
 H_r=
 \operatorname{softmax}\left(
 \frac{Q_rK_r^\top}{\sqrt{d_h}}+M
-\right)V_r.
+\right)V_r,
 $$
 
-Here $M$ is the visibility mask defined next; $M=0$ for unmasked attention.
+where $M$ is the visibility mask defined below ($M=0$ for unmasked attention).
 
-The complete operation concatenates the heads and mixes them:
+The complete operation concatenates the head representations and projects them back to
+model width:
 
 $$
 \operatorname{MHA}(X)
@@ -605,7 +625,7 @@ $$
 \qquad W_O\in\mathbb{R}^{d\times d}.
 $$
 
-Tensor shapes are the safest implementation guide:
+Tensor shapes provide the clearest operational guide:
 
 $$
 (B,n,d)
@@ -615,19 +635,19 @@ $$
 \to(B,n,d).
 $$
 
-Scaling uses $\sqrt{d_h}$, not $\sqrt d$, because a head's dot product sums $d_h$
-terms, and the previous chapter's variance argument applies to that sum. With fixed $d$,
-splitting into heads does not multiply the leading projection
-count: $W_Q,W_K,W_V,W_O$ together contribute about $4d^2$ weights regardless of
-$h$. Heads divide the model width among themselves; they do not each receive a fresh
-width-$d$ model.
+Scaling uses $\sqrt{d_h}$ rather than $\sqrt d$ because each head's dot product sums
+over $d_h$ coordinates, and the variance argument of @sec-13-attention applies to that
+sum. With fixed $d$, splitting into multiple heads does not increase parameter count: the
+projection matrices $W_Q$, $W_K$, $W_V$, and $W_O$ together contain $4d^2$ parameters
+regardless of $h$. Heads partition the model dimension rather than duplicating it.
 
 ### The mask is part of the model
 
-@sec-11-encoder-decoder called masking the rule that tells a model *which positions it may not
-look at*. Here that rule is causal: position $i$ may use tokens at positions
-$j\le i$ but must not inspect future tokens $j>i$. Rows are queries and columns
-are keys, so the forbidden region is the strict upper triangle. We add
+In @sec-11-encoder-decoder, masking specified which sequence positions were invalid.
+Here, the mask enforces causality: position $i$ may attend to tokens at earlier and
+current positions $j\le i$, but must not attend to future tokens $j>i$. Because rows
+correspond to queries and columns to keys, the forbidden region forms a strict upper
+triangle. We set
 
 $$
 M_{ij}=
@@ -637,16 +657,15 @@ M_{ij}=
 \end{cases}
 $$
 
-*before* softmax. Replacing forbidden probabilities with zero afterward would
-leave the remaining row unnormalized.
+*before* softmax. Zeroing forbidden probabilities after softmax would leave the
+surviving distribution unnormalized.
 <!-- print 2026-10-09, author-approved: adding minus infinity before softmax equals zeroing and renormalizing, so each row is the unmasked row conditioned on j <= i (the top-k and nucleus link is made where those samplers appear, in the practice bridge below) -->
-Adding $-\infty$ first gives the same row as zeroing those probabilities and then
-dividing the rest by their sum. Each row becomes the unmasked row conditioned on the
-event $j\le i$.
-Masking every key in a row is invalid; softmax
-would receive only negative infinity. Here the diagonal remains visible:
-the representation at a character may use that character while predicting the
-next one.
+Adding $-\infty$ prior to exponentiation is algebraically equivalent to setting
+forbidden probabilities to zero and renormalizing the remaining probabilities by their
+sum. Each row becomes the unmasked distribution conditioned on the causal event
+$j\le i$. Masking every key in a row is ill-defined, as softmax over all $-\infty$
+yields `NaN`. In a causal mask, the main diagonal remains visible: the representation at
+position $i$ may attend to token $i$ while predicting token $i+1$.
 
 <!-- NOVEL: needs sign-off - independent causal multi-head implementation and mask audit. -->
 
@@ -786,68 +805,72 @@ print(
 )
 ```
 ::::
-The assertions are part of the derivation. A visually plausible triangle can still
-be transposed, shifted by one, or applied after softmax. Executable shape and
-normalization checks catch those errors, before training can disguise them.
+Executable shape and normalization checks validate an implementation against its
+mathematical specification. A visually plausible triangular mask can still be
+transposed, offset along the diagonal by one, or applied after normalization, and
+explicit assertions catch these errors before training can hide them.
 
 <!-- /NOVEL -->
 
-The mask changes visibility, not dense computation. The implementation still
-forms all $n^2$ scores and stores $Bhn^2$ attention weights, alongside roughly
-$Bnd^2$ projection work and $Bndd_{ff}$ work in the FFN. Self-attention shortens
-the graph path between distant
-tokens to one routing step, but “one step away” is not “constant runtime.”
-@sec-a3-precision-performance returns to this $n^2$ cost through Roofline analysis
-and FlashAttention's I/O-aware schedule.
+The mask restricts information flow, not arithmetic volume: the implementation still
+evaluates all $n^2$ pairwise scores and instantiates $Bhn^2$ attention weights, in
+addition to the $\mathcal{O}(Bnd^2)$ projection FLOPs and $\mathcal{O}(Bndd_{\text{ff}})$
+work in the feedforward sublayer of [the Transformer block](#build-a-transformer-block).
+Self-attention reduces the shortest path between distant tokens to a single routing
+step, but unit graph diameter does not imply constant computational complexity.
+@sec-a3-precision-performance analyzes this quadratic bottleneck through Roofline
+modeling and FlashAttention's I/O-aware schedule.
 
-## Build a Transformer block
+## The Transformer block: residuals, normalization, and feedforward networks {#build-a-transformer-block}
 
-Attention routes information between token positions. A Transformer block needs
-two more ingredients: a stable path through depth and a nonlinear computation at
-each position.
+Attention routes information across token positions. Transforming this mechanism into a
+deep network requires two additional components: an unobstructed path through depth and
+a nonlinear transformation at each position.
 
 ### The residual stream
 
-@sec-09-modern-cnns-transfer introduced the residual stream: every block
-reads the stream and writes a correction back. If a sublayer computes $F(x)$, the
-residual update is
+@sec-09-modern-cnns-transfer introduced the residual stream: every sublayer reads from
+the stream and writes an additive correction back. If a sublayer computes
+$F(\vect{x})$, the residual update is
 
 $$
-x\leftarrow x+F(x).
+\vect{x}\leftarrow \vect{x}+F(\vect{x}).
 $$
 
-The identity branch provides a direct route for representations and gradients
-while the learned branch proposes a correction. It makes deep optimization more
-tractable; it does not guarantee that gradients can never vanish or explode.
+The identity branch provides a direct conduit for representations and gradients, while
+the learned branch proposes a local correction. This structure makes deep optimization
+more tractable, though it does not eliminate the risk of vanishing or exploding
+gradients.
 
-Layer normalization controls each token's feature scale. For one token vector
-$x\in\mathbb{R}^{d}$,
+Layer normalization controls feature scale along the representation axis. For a single
+token vector $\vect{x}\in\mathbb{R}^{d}$,
 
 $$
 \mu=\frac1d\sum_{k=1}^{d}x_k,\qquad
 \sigma^2=\frac1d\sum_{k=1}^{d}(x_k-\mu)^2,
 $$
 
+and
+
 $$
-\operatorname{LN}(x)_k
+\operatorname{LN}(\vect{x})_k
 =\gamma_k\frac{x_k-\mu}{\sqrt{\sigma^2+\epsilon}}+\beta_k,
-\qquad \gamma,\beta\in\mathbb{R}^d.
+\qquad \vect{\gamma},\vect{\beta}\in\mathbb{R}^d.
 $$
 
-This is @sec-09-modern-cnns-transfer's normalization equation applied along a different
-axis. @sec-09-modern-cnns-transfer's BatchNorm2d used batch and spatial axes for
-each channel. LayerNorm flips to the feature axis of each token: it computes
-statistics across the features within one token, without aggregating statistics
-across other tokens or examples. Its calculation is the same at training and
-evaluation time. Before the learned $\gamma$ and $\beta$, the vector is
-approximately zero mean and unit variance. After applying them, that claim need
-not remain true.
+This adapts the normalization principle of @sec-09-modern-cnns-transfer to a different
+tensor axis. Whereas `BatchNorm2d` pools statistics across batch and spatial dimensions
+for each channel, LayerNorm operates along the feature axis of each token: it computes
+empirical moments across the $d$ features within one token, without aggregating across
+neighboring tokens or batch examples. Its formulation remains identical during training
+and evaluation. Prior to applying the learned parameters $\vect{\gamma}$ and
+$\vect{\beta}$, the normalized vector has mean zero and approximately unit variance.
 <!-- print 2026-10-09, author-approved: LayerNorm's geometric reading, removing the projection onto the all-ones vector and rescaling to squared length just under d -->
-Geometrically, before $\gamma$ and $\beta$, subtracting $\mu$ from every entry removes
-$\mu(1,\ldots,1)$, the projection of $x$ onto the all-ones vector. Dividing by
-$\sqrt{\sigma^2+\epsilon}$ then brings the squared length to $d\sigma^2/(\sigma^2+\epsilon)$.
-When $\sigma^2$ is much larger than $\epsilon$, this is just under $d$, so the normalized
-token lies just inside the sphere of radius $\sqrt d$.
+Geometrically, subtracting $\mu$ removes $\mu(1,\ldots,1)$, the orthogonal projection of
+$\vect{x}$ onto the all-ones vector. Dividing by $\sqrt{\sigma^2+\epsilon}$ scales the
+squared Euclidean norm to $d\sigma^2/(\sigma^2+\epsilon)$. When $\sigma^2\gg\epsilon$,
+this quantity approaches $d$, so the normalized token lies approximately on the sphere
+of radius $\sqrt d$ within the zero-mean hyperplane.
 
 :::: {.plan-code}
 ::: {.plan}
@@ -980,39 +1003,34 @@ print("maximum token variance error:", (token_vars - 1).abs().max().item())
 The original Transformer normalized *after* each residual addition:
 
 $$
-x\leftarrow\operatorname{LN}(x+\operatorname{MHA}(x)),\qquad
-x\leftarrow\operatorname{LN}(x+\operatorname{FFN}(x)).
+\vect{x}\leftarrow\operatorname{LN}(\vect{x}+\operatorname{MHA}(\vect{x})),\qquad
+\vect{x}\leftarrow\operatorname{LN}(\vect{x}+\operatorname{FFN}(\vect{x})).
 $$
 
-Our small experiment uses the now-common pre-LayerNorm arrangement:
+Our implementation adopts the now-standard pre-LayerNorm design:
 
 $$
 \begin{aligned}
-x&\leftarrow x+\operatorname{MHA}(\operatorname{LN}(x)),\\
-x&\leftarrow x+\operatorname{FFN}(\operatorname{LN}(x)).
+\vect{x}&\leftarrow \vect{x}+\operatorname{MHA}(\operatorname{LN}(\vect{x})),\\
+\vect{x}&\leftarrow \vect{x}+\operatorname{FFN}(\operatorname{LN}(\vect{x})).
 \end{aligned}
 $$
 
 <!-- print 2026-10-09, author-approved: why the original Transformer needed warmup (Xiong et al. 2020), with the post-/pre-LayerNorm placement compared with the ResNet ReLU placement, answering the warmup pointer of the training chapter -->
-Post-LayerNorm normalizes after each residual addition, where the original ResNet block
-of @sec-09-modern-cnns-transfer applied its final ReLU. Pre-LayerNorm moves the
-normalization into the learned branch, as pre-activation ResNets did with that ReLU.
-[Xiong et al.](https://proceedings.mlr.press/v119/xiong20b.html) argued that the
-post-LayerNorm placement is one reason the original Transformer needed
-warmup (@sec-04-training-loss-sgd), which raises the learning rate gradually from a
-small value. In their analysis at initialization, post-LayerNorm gives large gradients
-to the parameters of the layers nearest the output. Starting at the full learning rate
-can then make training unstable, and warmup keeps the first steps small. In their
-experiments, pre-LayerNorm Transformers trained without warmup did about as well as
-post-LayerNorm baselines trained with it.
-
-Pre-LayerNorm leaves an unobstructed identity route along the residual stream and
-often improves optimization at initialization. This is an implementation choice,
-not a universal theorem that post-LayerNorm fails or that pre-LayerNorm eliminates
-every need for careful optimization.
+Post-LayerNorm normalizes the aggregated representation after each residual addition,
+analogous to applying an activation function after the shortcut merge in early ResNets
+(@sec-09-modern-cnns-transfer). Pre-LayerNorm moves normalization into the function
+branch, mirroring pre-activation ResNets.
+[Xiong et al.](https://proceedings.mlr.press/v119/xiong20b.html) argued that
+post-LayerNorm placement exacerbates gradient growth near output layers at
+initialization, often necessitating learning-rate warmup (@sec-04-training-loss-sgd) to
+prevent divergence. In contrast, pre-LayerNorm preserves an unobstructed identity path
+along the residual stream, and in their experiments pre-LayerNorm models trained without
+warmup matched post-LayerNorm baselines trained with it. This is a design choice rather
+than a guarantee against all optimization instabilities.
 
 [**RMSNorm**](https://proceedings.neurips.cc/paper/2019/hash/1e8a19426224ca89e83cef47f1e7f53b-Abstract.html)
-keeps the scale control but omits mean subtraction:
+retains the rescaling but omits mean centering:
 
 $$
 \operatorname{RMSNorm}(\vect{x})
@@ -1021,124 +1039,127 @@ $$
 {\sqrt{\frac{1}{d}\sum_{j=1}^{d}x_j^2+\epsilon}}.
 $$
 
-It normalizes each token by its root-mean-square magnitude and retains a learned
-per-feature scale $\vect{g}$.
+It divides each token by its root-mean-square magnitude and applies a learned
+per-feature gain $\vect{g}$.
 <!-- print 2026-10-09, author-approved: RMSNorm rescales to length about sqrt(d) like LayerNorm but keeps the projection onto the all-ones vector -->
-Before $\vect{g}$, it rescales $\vect{x}$ to length about $\sqrt d$, as LayerNorm does,
-but leaves the projection onto the all-ones vector in place.
-This removes one statistic from the computation; it
-does not imply universal superiority over LayerNorm. Architecture, optimizer, dtype,
-and scale still determine the observed trade-off.
+Prior to modulation by $\vect{g}$, it rescales $\vect{x}$ to a sphere of radius
+approximately $\sqrt d$ without shifting the representation into the zero-mean subspace.
+This omits one reduction operation per token. Whether this computational saving
+translates into empirical gains depends on model scale, precision format, and memory
+bandwidth.
 
 ### The position-wise feedforward network
 
-After tokens communicate through attention, the same two-layer network processes
-each position independently:
+Once tokens exchange information through attention, the same two-layer feedforward
+network processes each sequence position independently:
 
 $$
-\operatorname{FFN}(z)
-=W_2\operatorname{ReLU}(W_1z+b_1)+b_2.
+\operatorname{FFN}(\vect{z})
+=W_2\operatorname{ReLU}(W_1\vect{z}+\vect{b}_1)+\vect{b}_2,
 $$
 
-Here $W_1\in\mathbb{R}^{d_{ff}\times d}$,
-$b_1\in\mathbb{R}^{d_{ff}}$, $W_2\in\mathbb{R}^{d\times d_{ff}}$, and
-$b_2\in\mathbb{R}^{d}$.
+where $W_1\in\mathbb{R}^{d_{\text{ff}}\times d}$,
+$\vect{b}_1\in\mathbb{R}^{d_{\text{ff}}}$, $W_2\in\mathbb{R}^{d\times d_{\text{ff}}}$,
+and $\vect{b}_2\in\mathbb{R}^{d}$.
 
-If $w_{1j}^\top$ is row $j$ of $W_1$ and $v_j$ is column $j$ of $W_2$, the same
-operation can be written
+With $\vect{w}_{1j}^\top$ as row $j$ of $W_1$ and $\vect{v}_j$ as column $j$ of $W_2$,
+the transformation decomposes as
 
 $$
-\operatorname{FFN}(z)
-=\sum_j [w_{1j}^\top z+b_{1j}]_+\,v_j+b_2.
+\operatorname{FFN}(\vect{z})
+=\sum_j [\vect{w}_{1j}^\top \vect{z}+b_{1j}]_+\,\vect{v}_j+\vect{b}_2.
 $$
 
-This form suggests reading the FFN as an associative memory. Each first-layer row tests whether
-the current representation lies in a learned half-space; its positive activation
-controls how much of the corresponding output vector is written. Empirically,
-Transformer FFNs can behave like key-value memories. The analogy has limits; the
-selectors are half-spaces rather than point anchors, the coefficients do not sum to one,
-and the operation is not literally kernel regression or a normalized lookup.
+This decomposition highlights an interpretation of the feedforward network as a
+key–value associative memory. Each row of $W_1$ acts as a pattern detector, testing
+whether the input falls within a learned half-space, and its rectified activation
+determines the degree to which the value vector $\vect{v}_j$ is written to the representation.
+While Transformer feedforward layers can exhibit associative-memory behavior
+empirically, this remains an operational analogy: the activations are unnormalized,
+graded half-space responses rather than localized kernel weights that sum to one.
 
-The complete block therefore alternates two kinds of computation:
+The complete block therefore alternates between two complementary operations:
 
-1. causal multi-head attention moves information *between positions*; and
-2. the FFN transforms information *within each position*.
+1. causal multi-head attention routes information *between sequence positions*; and
+2. the feedforward network transforms representations *within each individual
+   position*.
 
-Residual additions keep both results in one shared stream: a common workspace that
-survives the full stack.
+Residual connections add the results of both operations to a single residual stream
+that persists across the depth of the network.
 
 <!-- print 2026-10-09, author-approved: box on what attention alone does to a stack of tokens (rank collapse, Dong, Cordonnier, and Loukas 2021), so residuals do an additional job in a Transformer: they keep the tokens distinct -->
 ::: {.callout-note}
 ## What attention alone does to a stack of tokens
 
-An attention layer replaces each token's vector with a weighted average of the value
-vectors, with nonnegative weights that add up to one. An average lies between the
-vectors it averages, so unless rows put nearly all of their weight on single tokens,
-the outputs sit closer together than the values did. Without the residual additions and
-the FFN, a second layer averages those averages. In a stack of such layers, every
-position ends up carrying nearly the same vector, and whatever distinguished one token
-from another is averaged away.
+An attention sublayer replaces each token representation with a convex combination of
+value vectors. Consequently, every output vector lies within the convex hull of the
+value vectors. Without residual shortcuts or feedforward layers, subsequent attention
+operations repeatedly average these convex combinations and can contract the token
+representations toward a single shared representation.
 
-[Dong, Cordonnier, and Loukas](https://proceedings.mlr.press/v139/dong21a.html) bound
-how fast this happens in unmasked attention. When the query, key, and value matrices
-are small enough in norm and the tokens already lie close together, their bound on the
-distance to a state with all token rows equal shrinks doubly exponentially with depth,
-the exponent tripling at each layer. Their experiments find the same rapid collapse in
-three pretrained Transformer language models once the residuals are removed.
+[Dong, Cordonnier, and Loukas](https://proceedings.mlr.press/v139/dong21a.html)
+formalized this rank collapse for unmasked attention. When the projection matrices are
+small enough in norm and the token embeddings are clustered, the authors' bound on the
+distance from the token matrix to a rank-one subspace shrinks doubly exponentially with
+depth, with the exponent tripling at every layer. Their empirical evaluations reproduced
+this collapse across pretrained language models when residual connections were removed.
 
-The residual update $x\leftarrow x+F(x)$ keeps a path around every attention layer. The
-differences the tokens arrive with pass through each sum unchanged, and attention only
-adds its average to them, so the collapse is no longer forced. The FFN cannot do this on
-its own. It acts on each position separately, so two identical tokens leave it
-identical. In their analysis, an FFN that can stretch the remaining differences slows
-the collapse but does not remove it. In @sec-09-modern-cnns-transfer, residuals made a
-deep stack easier to optimize. In a Transformer they do an additional job before any
-gradient is computed: they keep the tokens distinct.
+The residual update $\vect{x}\leftarrow \vect{x}+F(\vect{x})$ provides a bypass around
+every attention layer. The identity branch propagates token differences forward directly
+without averaging, so the collapse is no longer forced. Position-wise feedforward
+networks cannot prevent this collapse on their own: acting on each position identically,
+an FFN maps identical inputs to identical outputs. While feedforward layers can dilate
+existing token differences and slow the collapse, only the residual connections keep it
+from being forced across a deep stack of attention operations.
 :::
 
-## From the original Transformer to this experiment
+## From encoder–decoder translation to a causal language model {#from-the-original-transformer-to-this-experiment}
 
-The 2017 Transformer was an encoder–decoder system for translation. Its encoder
-stack uses unmasked self-attention to build a representation of the source
-sentence. Its decoder stack uses causal self-attention over the partial target,
-then cross-attention whose queries come from the decoder while keys and values
-come from the encoder. In compact form:
+The original Transformer of [Vaswani et al.](https://papers.nips.cc/paper_files/paper/2017/hash/3f5ee243547dee91fbd053c1c4a845aa-Abstract.html) was an encoder–decoder architecture
+designed for bilingual translation. Its encoder stack uses bidirectional (unmasked)
+self-attention to construct contextual representations of the source sequence. Its
+decoder stack applies causal self-attention over the target prefix, followed by
+cross-attention whose queries originate in the decoder while keys and values are
+retrieved from the encoder memory:
 
 $$
 \begin{array}{lll}
-\text{encoder:}&X_s\to\text{self-attention}\to\text{FFN},\\
-\text{decoder:}&X_t\to\text{causal self-attention}
-\to\text{cross-attention to encoder}\to\text{FFN}.
+\text{encoder:}& \matr{X}_s \to \text{self-attention} \to \text{FFN},\\
+\text{decoder:}& \matr{X}_t \to \text{causal self-attention}
+\to \text{cross-attention to encoder} \to \text{FFN}.
 \end{array}
 $$
 
-The book-corpus task predicts the next character from earlier characters. It has no
-separate source sentence, so the encoder and cross-attention are unnecessary. What
-remains, a **decoder-only causal Transformer**, has token plus position embeddings,
-two pre-LayerNorm blocks, a final LayerNorm, and a linear map to vocabulary logits.
-The logits go directly to cross-entropy. Softmax belongs inside attention and,
-later, inside sampling, not between the output layer and the loss.
+The book-corpus task of @sec-10-sequences-rnn requires autoregressive next-character
+prediction from preceding context alone. Because there is no external source sequence,
+both the encoder stack and the cross-attention sublayers are unnecessary. The resulting
+architecture is a **decoder-only causal Transformer** that consists of token and
+positional embeddings, two pre-LayerNorm blocks, a final layer normalization, and a
+linear projection to vocabulary logits. These logits feed directly into the
+cross-entropy loss. Softmax normalization belongs inside attention routing and
+autoregressive sampling, not between the output projection and the loss.
 
 <!-- NOVEL: needs sign-off - exact-schedule book-corpus rematch, positional ablation,
      learned-map audit, and deterministic samples. -->
 
-## The book reads itself, again
+## Character-level language modeling with a causal Transformer {#the-book-reads-itself-again}
 
-We keep every setting that both architectures can share. @sec-10-sequences-rnn trained on
-a committed snapshot of Chapters [-@sec-01-linear-regression]–[-@sec-06-generalization-inductive-bias] and [-@sec-07-filters-convolution]–[-@sec-09-modern-cnns-transfer] with executable code cells and HTML comments
+To compare the causal Transformer directly against the recurrent baseline of
+@sec-10-sequences-rnn, the experiment holds fixed every training setting that both
+architectures share. @sec-10-sequences-rnn trained on a committed snapshot of Chapters [-@sec-01-linear-regression]–[-@sec-06-generalization-inductive-bias] and [-@sec-07-filters-convolution]–[-@sec-09-modern-cnns-transfer] with executable code cells and HTML comments
 removed: 148,594 characters,
 vocabulary 104, a contiguous 90/10 split, 100-character windows, batch size 64, and
-2,501 updates with Adam at learning rate 0.002 and gradient clipping at norm 1. The
-snapshot keeps later copyedits from moving the benchmark. The held-out metric resets
-state at each fixed window.
+2,501 updates with Adam at learning rate 0.002 and gradient clipping at norm 1.
+Freezing this text snapshot keeps the benchmark invariant across subsequent manuscript
+edits. The held-out evaluation scores each fixed window independently.
 
-The two architectures cannot be made identical (one has recurrent gates and the
-other has attention blocks), but the training targets each one sees can be.
-The code below reconstructs @sec-10-sequences-rnn's exact random-window schedule, then gives
-both Transformer variants the same initial weights and all 16,006,400 target
-characters in the same order. We have inspected the held-out tail repeatedly
-across chapters, so we treat it as a stable validation benchmark, not a newly sealed
-test set.
+Although the two architectures differ in structure (recurrent gates versus attention
+blocks), their training inputs and parameter budgets can be matched. The code below
+reconstructs @sec-10-sequences-rnn's exact random-window schedule, then gives both
+Transformer variants the same initial parameter tensors and all 16,006,400 target
+characters in the same order. Because the held-out tail has been inspected across
+chapters, it serves here as a fixed validation benchmark rather than an untouched test
+set.
 
 ```{python}
 #| label: transformer-harness
@@ -1268,7 +1289,10 @@ class TinyTransformerLM(nn.Module):
 
 ```
 ::::
-The paired protocol *is* the experimental design. Both variants share windows and initial tensors:
+To match the window sequence of @sec-10-sequences-rnn, an isolated generator steps
+through the same random state that produced the LSTM's minibatches and precomputes the
+start indices for every update before training begins. Both Transformer variants then
+load the same saved initial parameter snapshot:
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
@@ -1319,30 +1343,32 @@ print(f"initial tensors: {initial_hash[:12]}…")
 print(f"window schedule: {schedule_hash[:12]}…")
 ```
 ::::
-The model has 132,488 trainable parameters, 736 fewer than @sec-10-sequences-rnn's 133,224.
-That difference is only 0.55%, close enough to remove model size as an easy
-explanation. The model width is 84, split into four 21-dimensional heads; each of
-the two FFNs expands to 168 features. We initialize token embeddings with
-coordinate standard deviation $1/\sqrt d$ before the displayed $\sqrt d$ scaling,
-so their coordinates and the sinusoidal coordinates begin on comparable scales.
-`ModuleList` registers the two repeated blocks with the model. The nonpersistent
-position buffer moves with the model but is neither optimized nor included in the
-state-dictionary fingerprint; its contents follow deterministically from the
-displayed formula. There is no dropout, so resetting the trainable/state-dictionary
-tensors and window schedule makes the positional ablation exact and repeatable.
+The architecture contains 132,488 trainable parameters, 736 fewer than the LSTM of
+@sec-10-sequences-rnn (133,224 parameters), so the parameter counts match to within
+0.55%. Its model dimension is $d=84$, divided into $h=4$ heads of width $d_h=21$. Each
+of the two feedforward sublayers expands to $d_{\text{ff}}=168$ features. We initialize
+token embeddings with coordinate standard deviation $1/\sqrt d$ prior to the $\sqrt d$
+scaling, ensuring embedding features and sinusoidal coordinates begin on comparable
+scales. `ModuleList` registers the two repeated blocks with the model. The position
+table is registered as a non-persistent buffer: it moves with the module across devices
+but is neither optimized nor included in the state-dictionary fingerprint, as its
+entries derive deterministically from the closed-form formula. With dropout disabled,
+resetting the parameter tensors and window sequence makes the positional ablation
+reproducible.
 
 ::: {.callout-tip}
-## One seed call was not enough
+## One shared seed does not guarantee identical minibatches
 
-Calling the same random seed before both training runs would not, by itself, prove
-that they saw the same windows. Model construction consumes random numbers, and
-different construction paths can silently shift every later draw. We precompute the
-full start-index tensor with an explicit generator and copy one saved initialization
-into both models. We also print fingerprints for both artifacts.
+Setting the same random seed before two training runs does not guarantee that both
+models encounter identical minibatches. Module instantiation consumes random draws, so
+differing architectural graphs silently shift the stream of random draws for all
+subsequent operations. To enforce a controlled ablation, we precompute the full
+window-index tensor with an isolated generator and initialize both models from an
+identical parameter snapshot, logging SHA-256 fingerprints for both artifacts.
 :::
 
-We import @sec-10-sequences-rnn's training and evaluation code unchanged. The trainer's
-signature:
+We reuse the training and evaluation harnesses of @sec-10-sequences-rnn unchanged. The
+trainer's signature:
 
 :::: {.plan-code}
 ::: {.plan}
@@ -1476,7 +1502,7 @@ print(f"positional Transformer minus LSTM: {lstm_gap:.4f} loss")
 ```{python}
 #| echo: false
 #| label: fig-book-corpus-rematch
-#| fig-cap: "Matched training curves (left) and fixed-window held-out loss (right). Position helps in this seed, while the @sec-10-sequences-rnn LSTM has the lowest held-out loss of the three models."
+#| fig-cap: "Matched training curves (left) and fixed-window held-out loss (right). Position lowers loss in this run, while the @sec-10-sequences-rnn LSTM has the lowest held-out loss of the three models."
 #| fig-alt: "Two-panel matched comparison. Training losses start together near 4.7, then the positional Transformer falls steadily to about 1.1 while the no-position model ends near 1.85. Held-out bars rank the Chapter 12 LSTM lowest at 1.8881, the positional Transformer at 1.9190, and the no-position Transformer highest at 2.3405."
 #| fig-width: 10
 #| fig-height: 4
@@ -1502,44 +1528,43 @@ axes[1].bar_label(bars, fmt="%.4f", padding=3)
 plt.tight_layout()
 plt.show()
 ```
-The positional model finishes at 1.1132 on a deterministic pass over the training
-text and 1.9190 on the held-out tail. Removing position raises those values to
-1.8672 and 2.3405. Position lowers
-held-out loss by 0.4214, or 18.0% relative to the no-position variant.
+The positional model has a loss of 1.1132 on a full deterministic pass over the
+training corpus and 1.9190 on the held-out tail. Removing positional encodings raises
+these values to 1.8672 and 2.3405, respectively. Positional encodings lower held-out
+loss by 0.4214, or 18.0% relative to the variant without them.
 
 ::: {.callout-warning}
-## What this matched run can and cannot show
+## Trap: overinterpreting a single controlled run
 
-The causal mask already gives a position some weak structural information: row
-$i$ sees a prefix of length $i+1$, and stacked layers can propagate clues from
-those nested prefixes. That is why the no-position model does better than a purely
-orderless caricature might suggest.
+The causal mask inherently leaks ordinal information: row $i$ attends only to a prefix
+of length $i+1$, allowing stacked layers to infer position from expanding receptive
+fields. That is why the model without positional encodings performs better than an
+orderless model would.
 <!-- print 2026-10-09, author-approved: Haviv et al. 2022, larger causal language models without positional encodings, the shrinking gap, and position recoverable from their representations. These sentences are approved on their own, while the surrounding NOVEL block still awaits sign-off. Print places them after its hedge 'This structure may be why ... would test this explanation.' That hedge is NOVEL proposal N25-1, still awaiting the author (the 2026-10-05 ledger declined it under Q12), so this edition keeps 'That is why' and splits that sentence at its semicolon -->
-[Haviv et al.](https://aclanthology.org/2022.findings-emnlp.99/) trained much larger
-causal language models without positional encodings. Their held-out loss came close to
-that of models with sinusoidal encoding, and the gap shrank as the models grew. In their
-no-position models, a small network trained on the internal representations could still
-predict each token's approximate position, and the authors proposed that the causal
-mask supplies this information.
-Fixed sinusoidal encoding still produces a
-large improvement in this run.
+[Haviv et al.](https://aclanthology.org/2022.findings-emnlp.99/) trained causal
+language models up to 1.3 billion parameters without positional encodings and found
+that held-out perplexity closely approached that of sinusoidal baselines as scale
+increased. A small probe network trained on internal activations recovered approximate
+token positions, and the authors conjectured that the causal mask supplies this signal
+through the count of predecessors. At our compact scale, however, explicit sinusoidal
+encodings provide a substantial empirical advantage.
 
-But @sec-10-sequences-rnn's LSTM remains ahead by 0.0309 held-out loss, or 1.64%. At 100
-characters of context and roughly 133,000 parameters, the LSTM has lower held-out
-loss in this run.
-This comparison matches corpus, parameter scale, updates,
-minibatch order, optimizer, clipping, and evaluation. It does not match internal
-architecture, and it does not show that either model reached its own tuned optimum.
-We did not repeat the comparison across initialization seeds, so the 0.4214 and 0.0309
-gaps are a controlled case study, not an estimate of an average effect.
+Yet the LSTM of @sec-10-sequences-rnn still has a held-out loss 0.0309 (1.64%) lower
+than that of the positional Transformer. In this regime, with 100 characters of context
+and approximately 133,000 parameters, the sequential inductive bias of recurrence
+remains competitive. This experiment matches corpus, parameter count, gradient updates,
+minibatch order, and optimization settings, but it does not imply that either
+architecture reached its tuned optimum. Because the experiment uses a single
+initialization seed, these results are a controlled case study rather than an average
+over random trials.
 :::
 
 ### What did the heads route?
 
-An attention map records routing weights, not reasons, confidence, or a guaranteed
-explanation of a prediction. Still, inspecting real learned maps can verify the
-mask and reveal the kinds of patterns a trained model happened to use. The next
-cell sends the prompt *The gradient* through the positional model and plots the
+An attention map records internal routing weights, not causal explanations, predictive
+confidence, or mechanistic justifications. Nonetheless, inspecting learned weight
+distributions can verify the mask and reveal the patterns that emerged during training.
+The next cell sends the prompt *The gradient* through the positional model and plots the
 second block's four heads.
 
 :::: {.plan-code .plan-code-wide}
@@ -1602,18 +1627,22 @@ for head, axis in enumerate(axes.flat):
 fig.colorbar(image, ax=axes, fraction=0.025, shrink=0.8, pad=0.02)
 plt.show()
 ```
-The maps pass both assertions: no future key receives weight and every row
-sums to one. The heads also differ from one another, but naming one “the previous
-character head” or another “the word head” from this single prompt would outrun
-the evidence. Attention shows where values were mixed; the rest of the network can
-transform, cancel, or ignore what was retrieved.
+The learned maps satisfy both specifications: future positions receive identically
+zero weight, and each query row sums to one within single-precision floating-point
+tolerance. While the four heads exhibit distinct routing behaviors, labeling them as
+“the previous-character head” or “the word head” from a single prompt exceeds what the
+evidence establishes. Attention weights merely indicate where representations were
+pooled. Downstream feedforward layers and residual connections can transform, modulate,
+or neutralize what was retrieved.
 
-### Listen, but do not grade by fluency
+### Autoregressive sampling and qualitative evaluation {#listen-but-do-not-grade-by-fluency}
 
-Both Transformer variants can now generate by repeatedly truncating to the most
-recent 100 characters, predicting a distribution for the next one, sampling, and
-feeding the result back. Unlike @sec-10-sequences-rnn's LSTM, this simple implementation does
-not carry a recurrent state; it recomputes the current context on every step.
+Both Transformer variants can generate text autoregressively: at each step, the model
+truncates the context to the most recent 100 characters, evaluates a categorical
+distribution over the vocabulary, samples a character, and appends it to the prefix.
+Unlike the LSTM of @sec-10-sequences-rnn, this baseline implementation maintains no
+persistent recurrent state. It evaluates the entire context window afresh at every
+generation step.
 
 <!-- NOVEL: needs sign-off - concise generation bridge requested in the course review. -->
 ::: {.callout-tip}
@@ -1668,99 +1697,107 @@ print("\n\nWITHOUT POSITION\n")
 print(transformer_sample(no_position_model, "The gradient "))
 ```
 ::::
-The positional sample has the book's punctuation, fragments of mathematical
-vocabulary, and stretches that resemble prose. It still loses its argument. The
-no-position sample is visibly rougher. Neither qualitative judgment replaces the
-held-out loss; a sample is one stochastic path, while the loss evaluates every
-held-out target under the model's full probability distribution.
+The positional sample exhibits book-specific punctuation, recognizable LaTeX
+fragments, and localized syntactic coherence, even if it lacks global semantic
+consistency. In contrast, the model without position produces mostly degraded character
+sequences. Yet qualitative fluency must not be conflated with generalization: an
+autoregressive sample represents a single stochastic trajectory, whereas held-out loss
+evaluates every held-out target under the model's conditional probability distribution.
 
 <!-- /NOVEL -->
 
-## What the architecture bought
+## Architectural trade-offs: gains and costs of self-attention {#what-the-architecture-bought}
 
-This comparison covers one small Transformer. It shows what that model gained and
-what it cost.
+This comparison evaluates a single compact Transformer, demonstrating both what the
+architecture gains and what computational trade-offs it introduces.
 
-**Direct content routing.** Any earlier visible token can contribute to the next
-representation in one attention sublayer. The recurrent state no longer has to
-compress the entire past before the current token can consult it.
+**Direct content routing.** Any visible token can contribute to downstream
+representations through a single attention sublayer. The recurrent state is no longer
+forced to compress the entire historical prefix into a fixed-width vector before
+subsequent positions can access it.
 
-**Short paths, dense work.** The graph distance between visible tokens is short,
-but the routing matrix is quadratic in context length. Global access is a
-different tradeoff, not free memory.
+**Short paths, quadratic work.** The graph distance between any two visible tokens drops
+to one, but the attention score matrix scales quadratically with context length. Global
+connectivity is a different trade-off, not free memory.
 
-**Position becomes a modeling choice.** Convolution and recurrence bake in local
-order. Attention asks the designer to supply position and to decide visibility.
-@sec-15-bert-pretraining will change visibility itself; @sec-16-vit-scaling will
-revisit what happens
-when global routing trades away an image model's locality bias.
+**Position becomes an explicit modeling choice.** While convolution and recurrence
+enforce spatial and temporal order by construction, self-attention decouples content
+routing from sequence geometry. Positional signals and visibility patterns must
+therefore be supplied explicitly. @sec-15-bert-pretraining modifies visibility itself,
+while @sec-16-vit-scaling explores what occurs when global routing trades away an image
+model's locality bias.
 
-**A modular residual stream.** Attention moves information, the FFN transforms it,
-and residual additions let both write into a shared representation. LayerNorm
-keeps each token's feature scale manageable along the way.
+**A modular residual stream.** Attention routes representations across sequence
+positions, feedforward layers apply nonlinear transformations within each position, and
+residual additions aggregate both into a shared representation. Layer normalization
+regulates feature scale throughout the deep stack.
 
-The causal mask is therefore more than an implementation detail. It says which
-information a representation is allowed to use: **visibility is a modeling
-decision**.
+The causal mask is therefore more than an implementation detail. It establishes the
+information boundary of every representation: **visibility is an architectural modeling
+choice**.
 
-During autoregressive generation, exact softmax attention also turns the past into
-a memory and compute cost: each new query must read every earlier key and value. A **key/value (KV) cache** retains each layer's earlier key and value
-rows so a new query can reuse them instead of recomputing the whole prefix. In the
-regression language of @sec-12-kernel-regression, the KV cache is the nonparametric estimator's
-dataset: one new query still reads a table that grows with $t$, but the earlier rows
-do not have to be rebuilt. Our sampler instead recomputes a cropped 100-character window.
-A persistent full-prefix cache would retain a different context once that window
-moves. A cached implementation therefore needs an explicit context and position
-policy; it is not simply a drop-in acceleration of this sampler. Appendix C
-separates caching from FlashAttention's I/O schedule.
+During autoregressive generation, exact attention converts past context into both a
+memory footprint and a computational bottleneck: every newly generated query must attend
+over all preceding keys and values. A **key–value (KV) cache** stores the projected key
+and value tensors from earlier steps, allowing new queries to attend over the prefix
+without recomputing historical activations. In the nonparametric regression framework
+of @sec-12-kernel-regression, the KV cache serves as the estimator's dataset: an
+incoming query at step $t$ reads a table that grows with $t$, but earlier rows no longer
+require recomputation. In contrast, our sampler re-evaluates a sliding 100-character
+window with absolute slot encodings: when the window slides, every retained token shifts
+to a new slot index, changing its input representation. Caching past the window limit
+therefore requires a new positional or memory policy, not a drop-in speedup.
+@sec-a3-precision-performance separates KV caching from FlashAttention's I/O-aware
+kernel scheduling.
 
-What if we keep the regression perspective but change the kernel, the predictor
-class, or the update rule? The next interlude
-compares the growing KV cache with a finite sufficient state and a delta update.
+Varying the kernel, predictor class, or update rule within this regression perspective
+yields alternative memory formulations. The following interlude contrasts the growing KV
+cache with finite sufficient statistics and delta updates.
 
-Readers who want the diagnostic side of these mechanisms will find kernel geometry,
-exact I/O-aware algorithms, parallel recurrence, and feature-learning regimes in
-Shakeri (2026), [*Beyond This
-Volume*](https://shakeri-lab.github.io/opt-book/chapters/beyond-this-volume.html#beyond).
-
+Readers seeking deeper mathematical analysis of these architectures will find kernel
+geometry, exact I/O-aware algorithms, parallel recurrence, and feature-learning regimes
+in Shakeri (2026), [“Beyond This
+Volume”](https://shakeri-lab.github.io/opt-book/chapters/beyond-this-volume.html#beyond).
 
 ::: {.callout-note}
 ## Check yourself
 
-Close the book for one minute and rebuild the Transformer block.
+Close the book for one minute and reconstruct the Transformer block.
 
 - Without positional signals or a mask, why is self-attention permutation equivariant?
-- Which three paths write into the residual stream?
-- What changes when a causal mask restricts visibility?
+- What distinct roles do the identity path, the attention branch, and the FFN branch
+  play in the residual stream?
+- What structural properties change when a causal mask restricts visibility?
 :::
 
-## Okay, so: the Transformer routes, then computes
+## Okay, so: the Transformer routes, then transforms {#okay-so-the-transformer-routes-then-computes}
 
-1. **Self-attention reuses @sec-13-attention's operator within one sequence.** $Q$, $K$,
-   and $V$ all come from $X$; one learned comparison rule is shared over every
-   permitted query–key pair. Training positions can be evaluated together, while
+1. **Self-attention reuses the scaled dot-product operator within a single sequence.**
+   Queries, keys, and values $Q,K,V$ all derive from the same input $X$, and one
+   learned comparison rule is shared across every permitted query–key pair. All
+   sequence positions can be evaluated in parallel during training, while
    autoregressive generation remains sequential.
 2. **Without positional signals or a mask, self-attention is permutation
    equivariant, not invariant.**
-   $\operatorname{SA}(PX)=P\operatorname{SA}(X)$. Sinusoidal clocks supply the sense of
-   order that @sec-08-cnn's kernels had built in and global routing lacks, and their sine/cosine pairs turn relative
-   shifts into rotations.
-3. **Multi-head attention is shape discipline.** Split
-   $(B,n,d)\to(B,h,n,d_h)$, divide scores by $\sqrt{d_h}$, form
-   $(B,h,n,n)$ routing weights, concatenate, and project. At fixed $d$, the four
-   leading projections remain about $4d^2$ parameters.
-4. **The causal mask defines visibility.** Future scores become negative infinity
-   before softmax. The dense operator still performs quadratic work; the mask does
-   not make the forbidden half computationally disappear.
-5. **The block alternates routing and computation.** Multi-head attention mixes
-   positions, the FFN transforms each position, and both write corrections into
-   @sec-09-modern-cnns-transfer's residual stream. LayerNorm is the same normalization equation over
-   a token's feature axis.
-6. **Position wins this seed's controlled ablation.** It lowers held-out loss from
-   2.3405 to 1.9190. **In this run, the LSTM has slightly lower held-out loss than the
-   small Transformer**, 1.8881 versus 1.9190.
-   Architecture changes inductive bias; it does not guarantee victory in every
-   data and scale regime.
+   $\operatorname{SA}(PX)=P\operatorname{SA}(X)$. Sinusoidal clocks supply the order that
+   global routing lacks (and that the convolutions of @sec-08-cnn built in), while
+   sine–cosine coordinate pairs express relative displacements as planar rotations.
+3. **Multi-head attention routes in parallel through partitioned subspaces.** The
+   computation partitions $(B,n,d)\to(B,h,n,d_h)$, scales scores by $\sqrt{d_h}$, forms
+   $(B,h,n,n)$ routing weights, concatenates, and projects. At fixed $d$, the four
+   projection matrices hold $4d^2$ weights regardless of head count $h$.
+4. **The causal mask defines visibility, not computational cost.** Future
+   compatibility scores are set to $-\infty$ prior to softmax. The underlying operator
+   remains quadratic in sequence length.
+5. **The block alternates routing across positions and transformation within them.**
+   The attention and feedforward sublayers both add corrections to the residual stream
+   of @sec-09-modern-cnns-transfer, and layer normalization standardizes the features of
+   each token independently.
+6. **Position lowers held-out loss in this controlled benchmark.** Explicit positional
+   encodings reduce held-out loss from 2.3405 to 1.9190. Under this matched protocol,
+   the compact LSTM has a slightly lower held-out loss than the small Transformer
+   (1.8881 versus 1.9190). An architecture changes inductive bias but does not
+   guarantee lower loss in every scale and data regime.
 
 ## Sources and further reading {.unnumbered}
 
@@ -1771,7 +1808,7 @@ Close the book for one minute and rebuild the Transformer block.
 <!-- print 2026-10-09, author-approved: Xiong et al. entry extended with pre-LayerNorm training without warmup -->
 - [Xiong et al., *On Layer Normalization in the Transformer Architecture*](https://proceedings.mlr.press/v119/xiong20b.html): a qualified comparison of pre- and post-LayerNorm optimization, including pre-LayerNorm training without warmup.
 <!-- print 2026-10-09, author-approved: Sources entry for Dong, Cordonnier, and Loukas (rank collapse without residuals) -->
-- [Dong, Cordonnier, and Loukas, *Attention Is Not All You Need: Pure Attention Loses Rank Doubly Exponentially with Depth*](https://proceedings.mlr.press/v139/dong21a.html): without residuals, a stack of attention layers drives the token vectors toward a common row, and MLPs only slow that collapse.
+- [Dong, Cordonnier, and Loukas, *Attention Is Not All You Need: Pure Attention Loses Rank Doubly Exponentially with Depth*](https://proceedings.mlr.press/v139/dong21a.html): without residuals, a stack of attention layers drives the token vectors toward a common row, and FFNs only slow that collapse.
 - [Geva et al., *Transformer Feed-Forward Layers Are Key-Value Memories*](https://aclanthology.org/2021.emnlp-main.446/): empirical evidence behind the associative-memory interpretation of FFNs.
 <!-- print 2026-10-09, author-approved: Sources entry for Haviv et al. (language models without positional encodings) -->
 - [Haviv et al., *Transformer Language Models without Positional Encodings Still Learn Positional Information*](https://aclanthology.org/2022.findings-emnlp.99/): causal language models trained without positional encodings come close to models with them in held-out loss and still carry each token's approximate position, and the authors conjecture that the causal mask supplies it.
@@ -1797,11 +1834,12 @@ Close the book for one minute and rebuild the Transformer block.
    the leading parameter count does not.
 3. **(Code.)** Deliberately transpose the causal mask in
    @fig-causal-multihead, then design an assertion that identifies the first
-   leaked query-key pair. Next set forbidden probabilities to zero *after*
+   leaked query–key pair. Next set forbidden probabilities to zero *after*
    softmax and measure the row-sum error.
 4. **(Code.)** Replace the fixed sinusoidal table with a learned
-   $\text{Embedding}(100,d)$ while preserving the exact initialization and window
-   schedule protocol. Compare held-out loss. Then extend the sinusoidal buffer by
+   $\text{Embedding}(100,d)$ while matching the initial weights of all shared
+   parameters and preserving the window schedule. State how the new position table is
+   initialized. Compare held-out loss. Then extend the sinusoidal buffer by
    evaluating its formula beyond position 99, and propose an explicit extension
    rule for the learned table before testing either model on a longer context.
    Which design has a natural extension, and which has to invent one?

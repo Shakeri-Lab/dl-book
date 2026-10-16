@@ -113,7 +113,7 @@ test('both axes: the declared fixture is the chapter figure\'s tokens and weight
   for (const row of d.A) close(row.reduce((a, b) => a + b, 0), 1, 1e-12);
   assert(chapter.includes('(0.8 if hot else 0.6) * A[i, j] + 0.12'), 'the opacity map is the figure\'s');
   assert(chapter.includes('f"{A[0, j]:.2f}"'), 'the figure prints bank\'s row to two decimals');
-  assert(chapter.includes('the numbers and shading are illustrative'));
+  assert(chapter.includes('numerical values and shading are illustrative'));
   // Every bound literal occurs exactly once, so the audit's binding is unambiguous.
   for (const literal of scene.fixture.literals) assert.equal(chapter.split(literal).length, 2, literal.slice(0, 60));
   // The frozen page prints none of the hidden rows: the cell is echo: false.
@@ -665,7 +665,7 @@ test('integration: the excerpt is HTML-only, manifest-driven, and placed before 
   assert.match(resources, /^\s+- interactives\/both-axes\/player\.js$/m);
   assert(!resources.includes('both-axes/panel.html'));
   const chapter = chapterSource(NAME);
-  assert.deepEqual(scene.anchor, {type: 'before-heading', target: 'Permutation symmetry without positional signals or masks'});
+  assert.deepEqual(scene.anchor, {type: 'before-heading', target: 'Permutation equivariance without positional signals or masks'});
   // The heading keeps its pre-rename id, {#the-position-debt}, so older links still land.
   const heading = `### ${scene.anchor.target} {#the-position-debt}`;
   assert.equal(chapter.split('\n').filter(line => line.startsWith(`### ${scene.anchor.target}`)).length, 1);
@@ -674,13 +674,13 @@ test('integration: the excerpt is HTML-only, manifest-driven, and placed before 
   // After the figure it replays and the paragraph that closes the section's opening; before
   // the scope statement, the proof, the name and the audit.
   assert(chapter.indexOf('#| label: fig-self-attention-read') < at);
-  assert(chapter.indexOf('one new token at a time.') < at);
-  for (const later of ['First consider self-attention without positional signals or an attention mask.', 'Let $P$ be an $n\\times n$ permutation matrix',
-    'Self-attention is *permutation equivariant*', '<!-- NOVEL: needs sign-off - seeded permutation'])
+  assert(chapter.indexOf('one token at a time.') < at);
+  for (const later of ['Consider first self-attention in the absence of positional encodings or attention masks.', 'Let $P$ be an $n\\times n$ permutation matrix',
+    'Self-attention is therefore *permutation equivariant*', '<!-- NOVEL: needs sign-off - seeded permutation'])
     assert(chapter.indexOf(later) > at, later);
   // The chapter's other replay sits two sections later, on a different anchor.
   const layernorm = entry('layernorm-axis-excerpt');
   assert.equal(layernorm.qmd, scene.qmd);
-  assert(chapter.indexOf('## Build a Transformer block') > at);
+  assert(chapter.indexOf('## The Transformer block: residuals, normalization, and feedforward networks') > at);
   assert.notDeepEqual(layernorm.anchor, scene.anchor);
 });
