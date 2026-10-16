@@ -22,14 +22,13 @@
 
 We have learned vision and language in separate coordinate systems. @sec-16-vit-scaling turned
 an image into patch tokens. Chapters [-@sec-14-self-attention-transformer] and [-@sec-15-bert-pretraining] turned text into contextual token
-representations. Those encoders can each organize their own modality, but nothing says
-that an image vector and a text vector mean the same thing merely because they have the
-same length.
+representations. Those encoders can each organize their own modality, but equal embedding
+dimensions do not imply a shared cross-modal representation.
 
-Suppose row 7 of an image table and row 7 of a text
-table describe the same event. The image has 14 measured coordinates; the text has 11.
-We do not need either raw coordinate system to imitate the other. We need two learned
-maps that preserve the *pair relation*:
+In the synthetic example developed below, row 7 of an “image” table and row 7 of a
+“text” table describe the same event. Their measurement vectors have 14 and 11
+coordinates. We do not need either raw coordinate system to imitate the other. We need
+two learned maps that preserve the *pair relation*:
 
 $$
 \text{image view}
@@ -162,7 +161,7 @@ should select column 2, and so on. We have seen this machine before.
 Let a minibatch contain $B$ declared pairs
 $(x_i^{(I)},x_i^{(T)})$. The image encoder
 $f_\theta:\mathbb{R}^{d_I}\to\mathbb{R}^{d}$ and text encoder
-$g_\phi:\mathbb{R}^{d_T}\to\mathbb{R}^{d}$ may have completely different internal
+$g_\phi:\mathbb{R}^{d_T}\to\mathbb{R}^{d}$ may have different internal
 architectures. Both encoders must return vectors of
 the same width. We normalize each output to unit length:
 
@@ -182,16 +181,17 @@ S_{ij}=\frac{u_i^\top v_j}{\tau},
 $$ {#eq-multimodal-score}
 
 where $\tau>0$ is the **temperature**. Dividing by a small temperature spreads the
-logits farther apart; a larger temperature softens them. Temperature does not decide
-which pair is correct; it decides how sharply the softmax reacts to score differences.
+logits farther apart, whereas a larger temperature softens them. Temperature does not
+determine which pair is correct: it determines how sharply the softmax reacts to score
+differences.
 
 ::: {.callout-note}
 ## What if the temperature were learnable?
 
 In @sec-12-kernel-regression, temperature acted as a bandwidth: for the Gaussian
-score, $\tau=2h^2$. In @sec-13-attention, the comparison became learnable but the
-scale stayed fixed. Here the temperature can be learned too. Write the inverse temperature as
-$a=e^\gamma=1/\tau$:
+score with bandwidth $h$, $\tau=2h^2$. In @sec-13-attention, the comparison became
+learnable without a separately parameterized temperature. Here the temperature can be
+learned too. Write the inverse temperature as $e^\gamma=1/\tau$:
 
 $$
 S_{ij}=e^\gamma u_i^\top v_j.
@@ -225,22 +225,23 @@ $$ {#eq-image-text-infonce}
 
 This form is commonly called a contrastive or **InfoNCE-style** objective. The batch
 does two jobs at once: it supplies $B$ declared matches along the diagonal, and for each
-query it supplies $B-1$ alternative candidates off the diagonal. We do not need to
-write a separate binary loss for every pair; the score matrix organizes the whole
-comparison. And note which estimator case from @sec-04-estimator-cases this is:
-**Case 3**. The batch does not estimate a full-data contrastive loss: the
-$B-1$ candidates *define* the objective. Changing $B$ changes what is being
-optimized, so batch size belongs to the protocol and is reported like any other
-design choice.
+query it supplies $B-1$ alternative candidates off the diagonal. Without a separate
+binary loss for every pair, the score matrix organizes the whole comparison. In the
+taxonomy of @sec-04-estimator-cases, this objective belongs to **Case 3**. Here the
+batch defines the candidate competition: its $B-1$ alternatives determine the
+denominator. Changing $B$ therefore changes the objective being optimized, so batch
+size belongs to the protocol and is reported like any other design choice.
 
-But one direction asks only whether each image can choose its text. Turn the score
-matrix around and ask whether each text can choose its image:
+The preceding loss evaluates image queries against candidate texts. Transposing the
+score matrix evaluates text queries against candidate images:
 
 $$
 \mathcal{L}_{T\rightarrow I}
 =-\frac{1}{B}\sum_{j=1}^{B}
 \log\frac{\exp(S_{jj})}{\sum_{k=1}^{B}\exp(S_{kj})}.
 $$ {#eq-text-image-infonce}
+
+Here text $j$ is the query and the images $k$ are its candidates.
 
 The **symmetric batch contrastive loss** is
 
@@ -250,7 +251,7 @@ $$
 \left(\mathcal{L}_{I\rightarrow T}+\mathcal{L}_{T\rightarrow I}\right).
 $$ {#eq-symmetric-infonce}
 
-Notice the exact reuse: @eq-image-text-softmax is @sec-02-logistic-softmax's multiclass classifier,
+@eq-image-text-softmax reuses the multiclass classifier of @sec-02-logistic-softmax,
 but the classes are the candidates currently in the batch. The class set changes with
 the batch; what remains fixed is the rule that the paired row and column share an index.
 
@@ -265,7 +266,7 @@ those pairs, their noise, or questions of consent and provenance.
 
 ### What counts as a negative?
 
-The loss knows **declared mates**, not semantic truth. An off-diagonal caption may
+The loss uses **declared mates**, not semantic truth. An off-diagonal caption may
 describe the same concept as the diagonal caption. Two photographs may show the same
 event. In those cases the standard one-positive loss treats a plausible match as an
 alternative to suppress. Larger batches provide more alternatives, but they can also
@@ -313,34 +314,33 @@ assert torch.isfinite(loss_check)
 ```
 ::::
 
-The two encoders end at the same width; normalization makes
-the dot product angular; the transpose reverses retrieval direction; and the target
+The two encoders end at the same width, normalization makes
+the dot product angular, the transpose reverses the retrieval direction, and the target
 indices assert that the batch diagonal contains the pair relation. If the data loader
-shuffles one modality without shuffling the other, the program still runs; the
-supervision has simply become false.
+shuffles one modality without shuffling the other, the program still runs, but the
+supervision has become false.
 
 ## Make the pair relation learnable
 
-Now test that last claim directly. We will not download images or tokenize a
-corpus. Instead, we generate two noisy nonlinear views from one hidden five-dimensional
+To test this claim, we generate two noisy nonlinear views from one hidden five-dimensional
 event: a 14-coordinate “image” measurement and an 11-coordinate “text” measurement.
-The raw features differ, but row $i$ in one table really does share a latent event with
-row $i$ in the other.
+The raw features differ, but row $i$ in one table shares a latent event with
+row $i$ in the other. The study downloads no images and tokenizes no corpus.
 
 We fix the protocol before we open the endpoint:
 
 - We generate 1,200 unique pairs once, then split them into 720 fit, 180 validation, and
-  300 held-out endpoint rows. Standardization uses fit statistics only; the validation
+  300 held-out endpoint rows. Standardization uses fit statistics only, so the validation
   and endpoint rows contribute no preprocessing estimates.
 - Each tower is a two-layer MLP and ends at a normalized 16-dimensional embedding.
   The complete model has 2,392 parameters.
-- Five model seeds share the same paired initialization and minibatch schedule
-  between conditions. We hold AdamW, 160 epochs, batch size 120, and
+- For each of five model seeds, the two conditions use identical initial weights and
+  the same minibatch schedule. We hold AdamW, 160 epochs, batch size 120, and
   $\tau=0.08$ fixed.
 - In the control, we replace the fit-pair relation with one study-wide fixed
   derangement that assigns every fit image the wrong text, with no fixed points.
   Architecture, initialization, optimizer, update count, and schedules stay matched.
-- In both conditions, we select checkpoints by the correct validation-pair loss. We do
+- In both conditions, we select checkpoints by the loss on the correct validation pairs. We do
   not use the 300-row endpoint for model, hyperparameter, checkpoint, stopping, or
   analysis-design decisions within this study; we consult it after we have fixed those
   choices.
@@ -590,8 +590,9 @@ print(
 ::::
 Across the five seeds, the paired condition reaches validation Recall@1 of 0.9911
 image-to-text and 0.9900 text-to-image. The shuffled control reaches only 0.0044 and
-0.0078. That validation separation is the predeclared mechanism check: the towers can
-align unseen views only when the fit pairs carry the true correspondence.
+0.0078. That validation separation is the predeclared mechanism check: under this
+protocol, correctly paired training supports retrieval on unseen events, while the fixed
+derangement does not.
 
 On the single held-out endpoint, paired image-to-text Recall@1 is **0.9747** (sample
 SD 0.0038 across model seeds), and paired text-to-image Recall@1 is **0.9660** (SD
@@ -694,13 +695,13 @@ fig.suptitle(
 )
 plt.show()
 ```
-The control is stronger than showing a falling training loss; with shuffled pairs, the
+The control is stronger than showing a falling training loss: with shuffled pairs, the
 model can spend capacity fitting accidental associations in the fit table. Validation on
 the correct pairs does not reward that memorization. The claim is that paired
 correspondence teaches alignment, so the ablation breaks the pairing and keeps
 everything else matched. That is the rule from [the experimentation
-interlude](../interludes/learning-by-experiment.qmd): **tune the contender; ablate the
-claim**.
+interlude](../interludes/learning-by-experiment.qmd): **tune for performance, ablate to
+test the claim**.
 
 To see how training changed the geometry, project the two
 towers' embeddings of the same held-out rows into two dimensions, before and after
@@ -762,9 +763,9 @@ plt.tight_layout(); plt.show()
 
 ## Retrieval is not generation
 
-What has the two-tower model learned to do? Given an image query and a finite text
+A two-tower model operates as a ranking function: given an image query and a finite text
 candidate set, it ranks the candidates. Given a text query and a finite image set, it
-ranks those. This is **cross-modal retrieval**:
+ranks the images. This is **cross-modal retrieval**:
 
 $$
 \hat{j}(x^{(I)})
@@ -775,7 +776,8 @@ $$ {#eq-cross-modal-retrieval}
 The answer must already be present among the $M$ candidates. The model has no decoder
 over text tokens and no sampling distribution over images. @sec-19-generative described
 what a generator needs: a random source, a conditional or marginal distribution,
-and a sampling rule. A similarity function supplies none of those by itself.
+and a sampling rule. A similarity function alone does not specify how to generate new
+text or images beyond the supplied candidates.
 
 This distinction prevents a common category error, treating every shared embedding as a
 generator:
@@ -795,7 +797,7 @@ and its objective, not from renaming retrieval.
 
 ### Zero-shot classification is retrieval over descriptions
 
-Suppose a task supplies $C$ class names. Write one description for each class, encode
+Suppose a task supplies $C$ class names. Write one description $t_c$ for each class, encode
 those descriptions once, and retrieve the description closest to a new image:
 
 $$
@@ -819,7 +821,7 @@ evaluation.
 ::: {.callout-warning}
 ## Trap: a softmax score is conditional on its candidate set
 
-Add a near-synonym, remove a competing description, or change the prompt template and
+Add a near-synonym, remove a competing description, or change the prompt template, and
 the softmax denominator changes. A high weight within one candidate set is not a
 candidate-independent probability that the description is true. Report the candidate
 construction and prompt policy with the metric.
@@ -827,22 +829,22 @@ construction and prompt policy with the metric.
 
 ## Shortcuts enter through the pair definition
 
-Contrastive learning rewards whatever makes the diagonal distinguishable. We hope that
-the useful signal is semantic: the image and text describe the same scene. The model
-may find an easier route.
+Contrastive learning rewards whatever makes the diagonal distinguishable. Although the
+intended signal is semantic, with paired inputs describing the same scene, optimization
+can exploit non-semantic statistical shortcuts.
 
 - A camera watermark and a caption-source tag may identify the same website. The
   towers can align sources rather than content.
 - Near-duplicate images may cross the split with paraphrased captions. Retrieval then
   measures leakage, not transfer.
 - A broad caption such as “an outdoor scene” may fit many images. The diagonal-only
-  target pretends there is one correct mate.
+  target assumes there is one correct mate.
 - A candidate pool may make the task artificially easy. Retrieving a dog caption among
   unrelated equations is different from retrieving it among fine-grained dog breeds.
 - Aggregate recall may hide poor behavior for a language, geographic region, image
   style, or social group that is rare in the paired data.
 
-These are not side issues; the declared pairs define what the objective can learn.
+These are not side issues: the declared pairs define what the objective can teach.
 Natural-language supervision is attractive because paired text is abundant and rich.
 The same scale can carry noise, stereotypes, copyrighted material, private information,
 and uneven coverage. A responsible model card therefore describes how pairs were
@@ -884,24 +886,25 @@ Close the book for one minute and answer these questions from memory.
 - Why can a dual encoder retrieve a caption without being able to generate one?
 :::
 
-## Okay, so: paired data learns a cross-modal comparison {#okay-so-two-towers-learn-a-comparison-not-a-world-model}
+## Okay, so: what we pair is what we teach {#okay-so-two-towers-learn-a-comparison-not-a-world-model}
 
 Multimodal learning begins with a relation between views. Separate encoders map those
 views into normalized shared coordinates; cosine similarities fill a cross-modal score
-matrix; and @sec-02-logistic-softmax's scores-to-weights machine turns each row and column into a
+matrix; and the scores-to-weights machine of @sec-02-logistic-softmax turns each row and column into a
 contrastive classification problem. The symmetric objective teaches retrieval in both
 directions.
 
 The shuffled-pair study shows what carries the supervision. With the true fit relation,
 small towers retrieve held-out mates far above random ranking. Break the relation while
 holding the training budget fixed, and the generalizable signal disappears. Matching
-embedding width was never enough; the rows had to mean something together.
+embedding width was never sufficient. Paired rows also had to share a latent event.
 
 From there, keep the capability boundary clear. Retrieval selects an existing
 candidate. Zero-shot classification retrieves among human-supplied descriptions.
 Generation needs a decoder and a sampling rule. In every case, the pair definition,
-candidate pool, split unit, and failure slices belong beside the metric. The model can
-only learn the alignment that the data actually declares.
+candidate pool, split unit, and failure slices belong beside the metric. The declared pair
+relation determines which alignments the loss directly rewards, and retrieval on unseen
+pairs tests what generalizes.
 
 ## Sources and further reading {.unnumbered}
 
@@ -912,9 +915,9 @@ only learn the alignment that the data actually declares.
 - Radford et al., [“Learning Transferable Visual Models From Natural Language
   Supervision”](https://arxiv.org/abs/2103.00020) (2021), introduced CLIP's paired
   image–text dual-encoder training and zero-shot transfer program; the reported study
-  used 400 million internet image–text pairs. The paper directly optimized a
+  used 400 million internet image–text pairs. The paper optimized a
   log-parameterized score scale, initialized it at the equivalent of $\tau=0.07$,
-  and reports capping the scale at $100$. The
+  and reported capping the scale at $100$. The
   [released reference model](https://github.com/openai/CLIP/blob/main/clip/model.py)
   initializes and exponentiates that parameter but does not implement the cap.
 - Jia et al., [“Scaling Up Visual and Vision-Language Representation Learning With
@@ -934,16 +937,18 @@ only learn the alignment that the data actually declares.
    the text-to-image loss for column 2. Then explain why transposing the logits changes
    the competition even though both losses send gradients into both encoders.
 
-2. **(Code.)** Re-run the synthetic study with only
+2. **(Code.)** Rerun the synthetic study with only
    $\mathcal{L}_{I\rightarrow T}$. Report both retrieval directions and use an
    open-ended conclusion: does one-sided training change the two directions equally in
    this finite regime? Keep the initialization and minibatch schedule paired with the
    symmetric run.
 
-3. **(Code.)** Duplicate 20% of the validation texts so that several image
-   rows have the same valid description. Explain why diagonal Recall@1 can now mark a
-   semantically acceptable retrieval wrong. Design either a multi-positive loss or a
-   group-aware retrieval metric, then state exactly what counts as correct.
+3. **(Code.)** Construct a validation variant in which 20% of the events have
+   several valid text views, for example fresh noisy text measurements of the same
+   latent event, and record every valid image–text match. Explain why diagonal
+   Recall@1 can now mark a semantically acceptable retrieval wrong. Then compare
+   diagonal-only Recall@1 with a group-aware retrieval metric, and define what counts
+   as correct.
 
 4. **(Code.)** Add a shared one-coordinate “source tag” to both fit modalities and
    train the paired model. At validation, randomize the tag while preserving the true
