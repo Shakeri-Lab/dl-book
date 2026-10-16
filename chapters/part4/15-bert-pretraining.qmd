@@ -32,12 +32,12 @@ for word senses.
 
 That move depends on what @sec-14-self-attention-transformer showed:
 **visibility is a modeling decision**. A next-token model used a causal triangle
-because looking right would reveal its target. A representation model can instead
+because attending to future positions would reveal its target. A representation model can instead
 let every nonpadding token consult both sides, provided enough selected positions
 are masked or replaced in the input that copying cannot solve the whole task. Full visibility over a
-corrupted input, scored on the original selected tokens, gives **masked language modeling (MLM)**, and pretraining on raw text changed
-the default workflow
-from “initialize and train” to “pretrain, then adapt.”
+corrupted input, scored on the original selected tokens, gives **masked language
+modeling (MLM)**. Pretraining on raw text changed the default workflow from “initialize and
+train” to “pretrain, then adapt.”
 
 ## Separate controls, not one mask
 
@@ -52,8 +52,8 @@ $$
 
 There are four distinct decisions in play.
 
-1. **Attention visibility** decides which key positions each query may use. A
-   causal decoder blocks future keys; a BERT encoder permits all nonpadding keys.
+1. **Attention visibility** determines which key positions each query may use. A
+   causal decoder blocks future keys, whereas a BERT encoder permits all nonpadding keys.
 2. **The MLM target selector** chooses which ordinary positions contribute loss.
 3. **The corruption branch** replaces some selected tokens by `[MASK]`, replaces
    some by random tokens, and deliberately leaves some unchanged.
@@ -93,7 +93,7 @@ selector[0, 2] = 1
 ```{python}
 #| echo: false
 #| label: fig-visibility-corruption
-#| fig-cap: "Visibility and supervision are separate controls. A causal decoder sees a lower triangle (left); BERT-style attention sees every nonpadding key (center). The MLM selector marks one selected target position (right)."
+#| fig-cap: "Visibility and supervision are separate controls. A causal decoder permits a lower triangle (left). BERT-style attention permits every nonpadding key (center). The MLM selector marks one selected target position (right)."
 #| fig-alt: "Three aligned matrices for the tokens CLS, the, bank, rose, SEP, and PAD. Causal visibility forms a dark lower triangle and excludes PAD; full nonpadding visibility forms a dark rectangle over the first five key columns for every query; the separate one-column loss selector highlights only the token bank."
 #| fig-width: 10
 #| fig-height: 3.2
@@ -137,23 +137,23 @@ Every ordinary token may attend to `[MASK]`, because `[MASK]` is an input token,
 an attention prohibition. Only the selector says that position 2 contributes MLM
 loss. The padding mask separately blocks the final slot as a key. Reusing *mask*
 for visibility, selection, corruption, and padding is convenient shorthand, and a
-reliable source of bugs.
+common source of bugs.
 
 ::: {.callout-warning}
 ## The copy trap
 
 If full attention received the original token at *every* selected position, the
-model could copy answers through the residual stream. BERT's policy corrupts 90%
-of selected sites, so copying cannot solve the whole task; the deliberate 10%
-unchanged branch has a separate purpose below. Conversely, replacing a token by
-`[MASK]` does not make it invisible; its neighbors still see the placeholder and
-one another. Always audit visibility, selection, corruption, and padding
+model could copy answers through the residual stream. BERT assigns 90% of selected
+positions to the mask or random-replacement branches, so copying cannot solve the whole
+task; the deliberate 10% unchanged branch has a separate purpose, explained below.
+Conversely, replacing a token by `[MASK]` does not make it invisible. Its neighbors still
+attend to the placeholder and one another. Always audit visibility, selection, corruption, and padding
 separately.
 :::
 
 ## Text supplies supervision
 
-In ordinary supervised learning, an external label $y$ accompanies input $x$.
+In ordinary supervised learning, an external label $y$ accompanies an input $x$.
 Masked language modeling derives both from one unlabeled sequence: the corrupted
 sequence is the input, and the original selected tokens are the targets. This is
 *self-supervised learning*: the supervision is constructed from the data rather
@@ -176,7 +176,7 @@ sets four of its works side by side.
 | ELMo | Forward and backward LSTM language models | Fixed contextual features |
 | ULMFiT | Causal language modeling | The entire adapted language model |
 | GPT | Causal Transformer language modeling | A pretrained Transformer plus task head |
-| BERT | Masked tokens in full context, plus NSP | A deeply bidirectional Transformer encoder plus task head |
+| BERT | Masked tokens in full context, plus next sentence prediction | A deeply bidirectional Transformer encoder plus task head |
 
 Four 2018 works, with the pretraining signal of each and what moved downstream.
 :::
@@ -186,7 +186,7 @@ should depend on its sentence. [ULMFiT](https://aclanthology.org/P18-1031/) supp
 a robust recipe for adapting a pretrained language model rather than freezing it.
 [GPT](https://cdn.openai.com/research-covers/language-unsupervised/language_understanding_paper.pdf)
 paired Transformer pretraining with supervised fine-tuning.
-BERT's decisive change was to pretrain every encoder layer with joint left-and-right
+BERT pretrained every encoder layer with joint left-and-right
 context. The workflow mattered as much as the architecture: learn broadly from
 raw text first, then spend scarce labels on adaptation.
 
@@ -198,7 +198,7 @@ $$
 x=(x_1,\ldots,x_T),\qquad x_t\in\{1,\ldots,|V|\},
 $$
 
-where $T$ is sequence length and $V$ is the vocabulary. Choose a random set $M$ of
+where $T$ is the sequence length and $V$ is the vocabulary. Choose a random set $M$ of
 eligible positions, then apply a corruption operator $c$ to obtain
 $\widetilde{x}=c(x,M)$. A bidirectional encoder with parameters $\theta$ produces
 
@@ -218,10 +218,11 @@ $$
 $$
 
 Every term conditions on the same jointly corrupted sequence $\widetilde{x}$, not on its own
-clean sequence with only $x_i$ removed. With batches,
-token IDs have shape $(B,T)$, hidden states $(B,T,d)$, and dense vocabulary logits
-$(B,T,|V|)$. Boolean selection gathers $|M|$ rows, so cross-entropy receives
-selected logits $(|M|,|V|)$ and targets $(|M|,)$. Unselected positions can affect
+clean sequence with only $x_i$ removed. For a batch, let $M$ denote the selected
+example–position pairs across all sequences. Token IDs have shape $(B,T)$, hidden states
+$(B,T,d)$, and dense vocabulary logits $(B,T,|V|)$. Boolean selection gathers $|M|$ rows,
+so cross-entropy receives a logit matrix of shape $(|M|, |V|)$ and a target vector of $|M|$
+token indices. Unselected positions can affect
 the representations but contribute no direct MLM loss.
 
 ### Fifteen percent, then 80/10/10
@@ -238,21 +239,22 @@ $$
 1000\longrightarrow150\longrightarrow
 \begin{cases}
 120 & [\text{MASK}],\\
-15 & \text{random token},\\
+15 & \text{random tokens},\\
 15 & \text{unchanged}.
 \end{cases}
 $$
 
-All 150 selected positions are scored against their original token. The 120 mask
-replacements are 12% of all eligible positions, not the complete supervision
-rate. Random ordinary-looking replacements force the encoder to cross-check a
+All selected positions, 150 in expectation in this example, are scored against their
+original tokens. The 120 expected mask replacements constitute 12% of eligible positions,
+while the supervision rate is the full 15%: every selected position is scored, whether
+masked, replaced or unchanged. Random ordinary-looking replacements force the encoder to cross-check a
 token against its context rather than trusting the visible identity. The unchanged
 branch prevents the opposite shortcut: the assumption that every selected
 ordinary-looking token must be wrong. It also reduces the mismatch between
 pretraining, where `[MASK]` exists, and downstream inputs, where it ordinarily
-does not. An unchanged selected token exposes its answer on purpose; only about
-1.5% of all eligible positions follow that branch, and the encoder is not told
-which normal-looking tokens were selected.
+does not. An unchanged selected token exposes its answer on purpose. Only about
+1.5% of all eligible positions follow that branch, and no input marker indicates
+which ordinary-looking tokens were selected.
 
 :::: {.plan-code}
 ::: {.plan}
@@ -377,11 +379,11 @@ plt.show()
 ```
 
 Original BERT pre-generated several masked versions of its training examples;
-[RoBERTa](https://arxiv.org/abs/1907.11692) later redrew masks as examples were presented. Our controlled lab uses the
-latter *dynamic corruption* choice: the same sentence can ask different questions
-on later passes. Reproducibility therefore requires a separate random generator.
-Seeding model initialization while leaving the corruption stream implicit is not
-an exact experiment.
+[RoBERTa](https://arxiv.org/abs/1907.11692) later redrew masks as examples were presented. Our controlled experiment uses the
+latter *dynamic corruption* choice: the same sentence presents different prediction targets
+on later passes. To keep the corruption draws separate from model initialization, the
+experiment uses a dedicated seeded generator. Reproducing a run requires controlling the
+corruption stream as well as the initial weights.
 
 ::: {.callout-tip}
 ## Audit the selector before the loss
@@ -397,11 +399,14 @@ can decrease while a selector silently trains on padding or on the wrong tokens.
 The original BERT input at position $i$ adds three learned vectors:
 
 $$
-z_i=e_{\text{token}(i)}+e_{\text{position}(i)}+e_{\text{segment}(i)}.
+z_i=e_{\text{tok}}(x_i)+e_{\text{pos}}(i)+e_{\text{seg}}(s_i),
 $$
 
-The token comes from a **WordPiece** vocabulary: frequent character sequences are
-stored whole, while rarer words can be assembled from reusable subword pieces.
+where $x_i$ is the token identifier, $i$ is the sequence position, and $s_i$ is the segment
+index. The token comes from a **WordPiece** vocabulary: frequent character sequences are
+stored whole, while rarer words can be assembled from reusable subword pieces. The optional
+example below uses the related byte pair encoding to show how a subword vocabulary is built
+from data.
 
 <!-- NOVEL: needs sign-off - original BPE mechanism bridge requested in the course review. -->
 ::: {.callout-tip}
@@ -478,14 +483,14 @@ build `low` from seven. The word `lower` is therefore represented as
 `low | e | r | </w>` even though the whole word was never granted its own token.
 This is the mechanism, not BERT's tokenizer: WordPiece uses a different merge-scoring
 criterion, and practical byte-level tokenizers begin from bytes rather than the toy
-character alphabet. All three share one idea: the vocabulary becomes a
-learned compromise between sequence length and reusable coverage.
+character alphabet. All three share one idea: a learned vocabulary trades sequence length
+against reusable coverage.
 
 :::
 <!-- /NOVEL -->
 
-Learned absolute position
-embeddings replace @sec-14-self-attention-transformer's fixed sinusoidal table. Segment A/B embeddings
+Returning to BERT's input representation, learned absolute position embeddings replace
+the fixed sinusoidal table of @sec-14-self-attention-transformer. Segment A/B embeddings
 mark which of two packed text spans supplied a token; they do not block
 cross-segment attention. `[CLS]` begins the sequence, and `[SEP]` ends each span:
 
@@ -519,38 +524,37 @@ $$
 
 Original BERT combined MLM with **next sentence prediction** (NSP). Half the
 training pairs used the actual following segment and half used a random segment;
-the `[CLS]` state was trained to predict which kind it saw.
+the `[CLS]` state was trained to predict which pairing was presented.
 MLM alone gives `[CLS]` no token-reconstruction target, although information can
-still route through it. Later recipes such as RoBERTa showed
-that strong BERT-style training did not require NSP in their settings. That is a
+still route through it. Later recipes such as RoBERTa trained strong BERT-style
+models without NSP. That is a
 recipe result, not proof that a sentence-relation objective can never help.
 
 ### `[CLS]` supplies a sequence-level representation {#cls-is-a-learned-meeting-place}
 
-`[CLS]` is an ordinary learned token with an unusual assignment: place it first,
-allow it to attend through every layer, then give its final hidden state to a
-sequence-level head. For $K$ classes,
+`[CLS]` is an ordinary learned token with an unusual assignment: it is placed first, and
+its final hidden state feeds a sequence-level head. In a bidirectional encoder, every token
+can read `[CLS]` and `[CLS]` reads every token, in every layer. For $K$ classes,
 
 $$
 \ell=W_{\mathrm{cls}}h_{\mathrm{CLS}}+b,
 \qquad W_{\mathrm{cls}}\in\mathbb{R}^{K\times d}.
 $$
 
-This is @sec-02-logistic-softmax's classification head, reading the `[CLS]` state instead of raw
-inputs.
+This is the classification head of @sec-02-logistic-softmax, reading the `[CLS]` state, not
+raw inputs.
 
 For token labeling, apply a head to every $h_i$. For extractive question
-answering, score candidate start and end positions. The encoder interface stays
-the same while the small task head changes.
+answering, score candidate start and end positions. Only the small task head changes.
 
 `[CLS]` carries no sentence meaning at initialization. Pretraining and downstream
-gradients determine the representation it supplies. @sec-16-vit-scaling will reuse this learned-summary
-pattern after replacing words by image patches.
+gradients determine the representation it supplies. @sec-16-vit-scaling reuses this
+learned-summary pattern after replacing words with image patches.
 
-## Fine-tuning means the backbone moves
+## Fine-tuning the pretrained backbone {#fine-tuning-means-the-backbone-moves}
 
 Let $\theta_0$ denote pretrained encoder weights and $\phi$ a newly initialized
-task head. Standard BERT fine-tuning solves
+task head. Standard BERT fine-tuning seeks
 
 $$
 (\theta^*,\phi^*)
@@ -563,7 +567,7 @@ $$
 starting at $\theta=\theta_0$. Gradients update both $\theta$ and $\phi$.
 Freezing $\theta_0$ and training only $\phi$ is a useful *linear probe* or feature
 probe, but it is not the standard fine-tuning procedure. This distinction matters
-when the task needs the representation itself to move.
+when the task requires the representation itself to change.
 
 ```{python}
 #| label: fig-bert-adaptation
@@ -624,26 +628,25 @@ plt.tight_layout()
 plt.show()
 ```
 
-Pretraining needs a matched baseline. The scratch and pretrained
-arms must share labeled examples, head initialization, minibatch order, update
+To isolate the effect of pretrained initialization under a fixed downstream protocol, the
+scratch and pretrained arms must share labeled examples, head initialization, minibatch order, update
 count, evaluation, and downstream hyperparameters. The pretrained arm has already
 used extra compute on unlabeled data. The comparison estimates what pretraining adds,
 not performance at equal total compute.
 
-## A controlled transfer lab
+## A controlled transfer-learning experiment {#a-controlled-transfer-lab}
 
 In @sec-09-modern-cnns-transfer, we listed three conditions that bear on whether
 transfer helps: scarce target labels, a feature-hungry target task, and pretraining
-data that plausibly covers the target's features at a matched scale. They are easy to
-state and surprisingly hard to test. A first pilot asked a tiny encoder to tell true continuations of passages in
+data that plausibly covers the target's features at a matched scale. Testing these
+conditions requires separate controls. A first pilot asked a tiny encoder to tell true continuations of passages in
 this book from segments spliced in from distant passages. The five-seed MLM gain was small, faded as labels increased, and
-lost decisively to a weighted lexical-overlap baseline. We rejected that task as
+lost to a weighted lexical-overlap baseline. We rejected that task as
 the chapter's affirmative experiment: this pilot did not isolate what pretraining
 contributed.
 
-The replacement lab is synthetic by design, and each condition is a choice that its
-construction controls. The construction removes spelling, frequency, and
-downstream-context shortcuts so that source coverage is a controllable variable.
+The replacement experiment is synthetic: its generator controls which strings appear
+during pretraining while removing spelling, frequency, and downstream-context shortcuts.
 
 <!-- NOVEL: needs sign-off - synthetic distributional-transfer experiment. -->
 
@@ -652,7 +655,7 @@ downstream-context shortcuts so that source coverage is a controllable variable.
 We generate eighty random four-letter token strings and divide them into two latent
 families. Family assignment is independent of spelling. Forty *covered* strings (20
 per family) each appear eight times in an unlabeled MLM corpus. Forty more (20 per
-family) live in the input vocabulary, but we withhold them from MLM input sequences,
+family) belong to the input vocabulary, but we withhold them from MLM input sequences,
 random replacements, and prediction targets.
 
 Each covered word receives eight source sentences. Six contain cues from its own
@@ -665,7 +668,7 @@ on average.
 ```{python}
 #| label: fig-bert-lab-design
 #| echo: false
-#| fig-cap: "The controlled transfer lab makes source exposure and downstream evaluation separate, auditable choices. Family is independent of spelling. Only the 40 covered types enter MLM inputs, random replacements, or targets; each contributes eight source sentences with six own-family and two cross-family cues. The neutral downstream template then separates labeled covered types, held-out covered test types, and all 40 source-invisible controls."
+#| fig-cap: "The controlled transfer-learning experiment makes source exposure and downstream evaluation separate, auditable choices. Family is independent of spelling. Only the 40 covered types enter MLM inputs, random replacements, or targets; each contributes eight source sentences with six own-family and two cross-family cues. The neutral downstream template then separates labeled covered types, held-out covered test types, and all 40 uncovered controls."
 #| fig-alt: "A two-lane flow diagram. In the source-construction lane, 80 random strings split into two families of 40, and each family splits into 20 covered and 20 uncovered types. Covered types feed an MLM corpus with eight sentences per type, six own-family cues and two cross-family cues, while uncovered types are marked never seen in inputs, replacements, or targets. In the downstream-audit lane, one neutral sentence template feeds labeled covered types, remaining covered test types, and all uncovered controls."
 #| fig-width: 10
 #| fig-height: 5.4
@@ -843,7 +846,7 @@ plt.show()
 Read @fig-bert-lab-design from top to bottom. We decide source exposure before
 we form the neutral downstream sentence, so the covered test pool measures
 transfer to covered types excluded from the downstream labeled set, and the
-uncovered pool audits what vocabulary membership alone can buy.
+uncovered pool audits what vocabulary membership alone contributes.
 
 The downstream input is always the neutral, previously unseen template
 
@@ -856,11 +859,11 @@ receives only 1, 2, or 4 labeled word types from each family. We evaluate on the
 remaining, held-out covered types, never on the labeled types. The 40 uncovered controls use
 the same neutral sentence. Source and target use the same atomic token granularity
 and similarly short sequences, making “matched scale” explicit rather than
-assuming it from a shared domain.
+assumed from a shared domain.
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
-1. Fix the lab constants, draw 80 four-letter strings, split them by family and
+1. Fix the experiment's constants, draw 80 four-letter strings, split them by family and
    coverage, and list eight cue pairs.
 2. Define the reusable helpers: `source_sentences` and `encode`.
 3. Construct the controlled source and target distributions.
@@ -964,9 +967,9 @@ print(f"source: {len(sentences)} sentences; vocabulary: {len(vocabulary)} tokens
 print(f"covered/uncovered token strings: 40 / {len(uncovered_ids)}")
 ```
 ::::
-This is an atomic word-level vocabulary, not WordPiece. That simplification is
-intentional: splitting the generated strings into subwords could let spelling leak family
-identity. The source generator, not natural language, defines the latent regularity,
+This is an atomic word-level vocabulary, not WordPiece. The simplification is
+intentional: keeping each generated string atomic prevents shared subword pieces from
+offering a second route for transfer. The source generator, not natural language, defines the latent regularity,
 so the experiment can demonstrate a mechanism but cannot estimate real-world BERT
 performance.
 
@@ -974,9 +977,10 @@ performance.
 
 The encoder has two post-LayerNorm blocks, width 48, four heads, learned absolute
 positions, full nonpadding attention, and GELU feedforward layers. Here
-$\operatorname{GELU}(x)=x\Phi(x)$, where $\Phi$ is the standard-normal cumulative
-distribution function. Original BERT used GELU, which scales each input by a smooth
-gate that depends on that input. The lab omits
+$\operatorname{GELU}(x)=x\Phi(x)$ ([Hendrycks and Gimpel (2016)](https://arxiv.org/abs/1606.08415)),
+where $\Phi$ is the standard-normal cumulative distribution function. Original BERT used
+GELU, which scales each input by a smooth multiplier that depends on that input. The
+experiment omits
 segment embeddings, NSP, and dropout. Its 43,920 encoder parameters make the study
 fast enough to repeat end to end, while preserving the relevant path from
 bidirectional attention to MLM to fine-tuning.
@@ -1127,7 +1131,7 @@ print(f"encoder parameters: {encoder_parameters:,}")
 We deliberately *untie* the MLM decoder from the input embedding table. The
 [original released BERT code](https://github.com/google-research/bert/blob/master/run_pretraining.py)
 explicitly tied those weights, but tying would update an uncovered input row
-through the vocabulary softmax even when that token never appeared. The lab goes
+through the vocabulary softmax even when that token never appeared. The experiment goes
 further: we draw random replacements only from source tokens, and the
 code later asserts that every uncovered input embedding remains bitwise unchanged
 through pretraining. Untied decoder rows for the controls still participate as
@@ -1136,8 +1140,9 @@ control token's context or identity to the encoder input.
 
 ### Pretrain, then adapt
 
-We save one encoder at initialization and pretrain that same encoder with MLM. The two
-downstream arms then receive the same labeled word types, identical classifier-head
+We save the encoder's initial weights, then pretrain it with MLM. The scratch arm starts
+from the saved initialization, and the pretrained arm starts from the weights after MLM.
+Both arms receive the same labeled word types, identical classifier-head
 tensors, the same number of full-batch updates, and the same learning rates. We give
 the encoder 600 MLM updates and each downstream arm 160 full-batch updates. All
 encoder weights move in both arms. We run the study once for each of five seeds, and
@@ -1364,9 +1369,14 @@ for count in LABEL_COUNTS:
 ```
 ::::
 Across 1,032,096 eligible positions, the five runs select 155,019 (15.020%). The
-realized branches are 80.04% mask, 9.98% random, and 9.99% unchanged. (The MLM loss is
-@sec-04-estimator-cases's Case 1, a mean over exactly the *selected* positions. The corruption policy defines the scored population, the batch mean
-estimates it without bias, and these counts make that denominator visible.) Both scratch
+realized branches are 80.04% mask, 9.98% random, and 9.99% unchanged. Each update
+averages cross-entropy over the selected positions in the jointly corrupted batch, and its
+expectation need not equal a corpus-wide token-weighted mean. The number of selected
+positions varies from batch to batch, so this objective assigns equal weight to every
+minibatch, and a selected token in a batch with few selections has more influence on the
+update. A token-weighted loss would instead weight every selected token equally across the
+corpus. The minibatch size (64 sentences) is therefore part of the objective's definition,
+matching Case 3 of @sec-04-estimator-cases. Both scratch
 and pretrained models reach 100% on their tiny labeled training sets in every
 run; failure to fit the labels therefore does not explain the scratch result.
 
@@ -1375,7 +1385,7 @@ run; failure to fit the labels therefore does not explain the scratch result.
 Did pretraining organize covered representations in a way
 that scarce labels could reuse, or did the classifier merely learn the tiny label
 set? The downstream task, the uncovered controls, and the representation geometry each
-answer a different part.
+answer a different part of the question.
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
@@ -1442,8 +1452,8 @@ print(f"after MLM within/between: {pretrained_geometry}")
 
 ```{python}
 #| label: fig-pretraining-pays
-#| fig-cap: "Five paired end-to-end seeds in the synthetic transfer lab. MLM initialization separates covered latent families and improves every covered-type comparison (left and center); both arms stay near chance on input-vocabulary controls withheld from MLM inputs, replacements, and targets (left). Centered cosine similarity is a representation diagnostic, not a task metric (right)."
-#| fig-alt: "Three-panel transfer audit. Covered-token accuracy after MLM stays near one for one, two, and four labeled words per family, while scratch and both unexposed controls remain around chance. All 15 paired MLM-minus-scratch gains are positive, roughly 0.37 to 0.62. For one seed, centered cosine similarity changes from near zero for both pair types to positive within-family and negative between-family values after MLM."
+#| fig-cap: "Five paired end-to-end runs in the synthetic transfer-learning experiment. MLM initialization separates covered latent families and improves every covered-type comparison (left and center). Both arms stay near chance on the 40 uncovered controls (“unexposed” in the legend), which were withheld from MLM inputs, replacements, and targets (left). Centered cosine similarity, for one run alone, is a representation diagnostic, not a task metric (right)."
+#| fig-alt: "Three-panel transfer audit. Covered-token accuracy after MLM stays near one for one, two, and four labeled words per family, while scratch and both uncovered controls remain around chance. All 15 paired MLM-minus-scratch gains are positive, roughly 0.37 to 0.62. For one seed, centered cosine similarity changes from near zero for both pair types to positive within-family and negative between-family values after MLM."
 #| fig-width: 11
 #| fig-height: 3.7
 #| echo: false
@@ -1507,25 +1517,26 @@ axes[2].legend(frameon=False, fontsize=8)
 plt.tight_layout()
 plt.show()
 ```
-| Labels / family | Scratch, covered | MLM, covered | Gain | Scratch, unexposed | MLM, unexposed |
+| Labels / family | Scratch, covered | MLM, covered | Gain | Scratch, uncovered | MLM, uncovered |
 |---:|---:|---:|---:|---:|---:|
 | 1 | 0.468 | 0.995 | +0.526 | 0.475 | 0.425 |
 | 2 | 0.489 | 1.000 | +0.511 | 0.500 | 0.440 |
 | 4 | 0.494 | 1.000 | +0.506 | 0.550 | 0.430 |
 
-MLM initialization wins all 15 paired covered-type comparisons. At two labels per
-family, for example, mean covered accuracy moves from 0.489 to 1.000. On the 40
-unexposed controls, scratch and MLM-initialized means stay around chance at every
+MLM initialization yields higher accuracy in all 15 paired covered-type comparisons. At two
+labels per family, for example, mean covered accuracy moves from 0.489 to 1.000. On the 40
+uncovered controls, scratch and MLM-initialized means stay around chance at every
 budget. MLM therefore helps types whose source contexts contain the latent
 regularity, not arbitrary rows that merely exist in the input vocabulary.
 
-Within each seed, larger label budgets add word types to the labeled training set and
-remove those same types from the test pool. The within-budget scratch-versus-MLM
-comparison is exact; movement across budgets is not a controlled learning curve.
+Within each run, larger label budgets add word types to the labeled training set and
+remove those same types from the test pool. Within each label budget, the scratch and MLM
+arms use the same training and test types. Across budgets the test pool changes, so the
+results do not form a learning curve on a fixed evaluation set.
 
-The representation diagnostic agrees with the task result. In the seed chosen for the
+The representation diagnostic agrees with the task result. In the run evaluated for
 geometry, mean centered cosine similarity starts at $-0.0347$ within a family and $-0.0160$
-between families: no useful separation. After MLM, it is $0.5323$ within and
+between families, showing no initial separation. After MLM, it reaches $0.5323$ within and
 $-0.5517$ between. *Centered cosine* first subtracts the mean representation,
 then unit-normalizes each vector and takes a dot product: a positive value means two
 centered vectors point in similar directions, a negative value that they point in
@@ -1540,18 +1551,19 @@ from @sec-09-modern-cnns-transfer:
 - **Scarce labels:** the task supplies only 2, 4, or 8 labeled words total.
 - **A feature-hungry target:** spelling, frequency, and task-context
   cues are neutralized; the label must transfer through the token representation.
-- **Source coverage at a matched scale:** the generator decides which strings
-  MLM sees, and source and target use atomic tokens and similarly short sequences.
+- **Source coverage at a matched scale:** the generator determines which strings
+  MLM receives, and source and target use atomic tokens and similarly short sequences.
   Covered strings transfer, while the uncovered strings, balanced across families and withheld from
   MLM inputs, replacements, and targets, remain near chance in both arms.
 
-The result is an existence proof for a mechanism. A co-occurrence method could
-also recover the synthetic families; the experiment does not establish
-Transformer superiority. Three limits remain: the data generator builds the
-regularity, the pretrained arm receives extra compute, and five toy seeds do not
-estimate natural-language performance. The conclusion is narrower: **in this controlled
-construction and across five seeds, MLM initialization lets a few labels recover a
-latent regularity for covered types excluded from the downstream labeled set; in one seed, MLM organizes covered token
+The result demonstrates this mechanism in a controlled synthetic setting. A co-occurrence
+method could also recover the synthetic families; the experiment does not establish
+Transformer superiority. Three conditions define the scope of this experiment: the data
+generator controls the latent regularity, the pretrained model uses additional compute on
+unlabeled text, and the five-run panel measures consistency rather than natural-language
+transfer. The conclusion is narrower: **in this controlled construction and across five
+seeds, MLM initialization lets a few labels recover a latent regularity for covered types
+excluded from the downstream labeled set. In one run, MLM organizes covered token
 representations around that regularity.**
 
 <!-- /NOVEL -->
@@ -1570,12 +1582,12 @@ objective determine what a model can learn, and how it will later be used.
 : Three pretraining families separate visibility, objective, and characteristic use. {#tbl-pretraining-families}
 
 The visibility column becomes concrete in @fig-pretraining-visibility. Each matrix
-uses queries as rows and keys as columns, exactly as in @fig-visibility-corruption.
+uses queries as rows and keys as columns, as in @fig-visibility-corruption.
 
 ```{python}
 #| label: fig-pretraining-visibility
 #| echo: false
-#| fig-cap: "Three pretraining families differ first in what each position may retrieve. A BERT-style encoder has full nonpadding self-attention; a GPT-style decoder has causal self-attention. T5 uses three routes in two stacks: full encoder self-attention, causal decoder self-attention, and decoder-to-encoder cross-attention. The combined T5 block summarizes the visibility of those separate sublayers; it is not one mask applied by the implementation."
+#| fig-cap: "Three pretraining families differ first in what each position may retrieve. A BERT-style encoder has full nonpadding self-attention, whereas a GPT-style decoder has causal self-attention. T5 uses three routes in two stacks: full encoder self-attention, causal decoder self-attention, and decoder-to-encoder cross-attention. The combined T5 block summarizes the visibility of those separate sublayers, not one mask applied by the implementation."
 #| fig-alt: "A three-panel visibility triptych. The BERT panel is a full square attention matrix. The GPT panel is a lower-triangular causal matrix. The T5 panel is a block matrix: a full encoder self-attention square at upper left, a blank encoder-to-decoder block at upper right, a full decoder-to-encoder cross-attention band at lower left, and a causal decoder self-attention triangle at lower right."
 #| fig-width: 10
 #| fig-height: 3.9
@@ -1669,7 +1681,7 @@ sequential: the model must emit a token before that token can join the next
 prefix. Training and inference share a factorization and visibility rule, not an
 execution schedule.
 
-Once those next-token logits exist, @sec-11-encoder-decoder's greedy and beam-search machinery
+Once those next-token logits exist, the greedy and beam-search machinery of @sec-11-encoder-decoder
 can rank continuations; the architecture changes, but decoding remains a separate
 decision. @sec-17-peft-quantization will return to how prompts alter the context supplied
 to that decoder.
@@ -1677,9 +1689,9 @@ to that decoder.
 [T5](https://www.jmlr.org/papers/v21/20-074.html) turns tasks into text-to-text problems and marks removed spans with learned
 sentinel tokens. Its encoder produces a *sequence* of
 memory states under full visibility; its causal decoder cross-attends to that
-sequence while generating the target. It does not squeeze the input into one
-fixed bottleneck vector. These families trade representation, generation, and
-input–output structure differently; they are not a ranking from old to new.
+sequence while generating the target. It does not compress the input into a single
+fixed-size vector. These families trade representation, generation, and
+input–output structure differently, and do not form a ranking from old to new.
 
 ## What changed after 2018
 
@@ -1691,11 +1703,11 @@ interface fit the task?
 Three consequences follow.
 
 **Optimization starts elsewhere.** The downstream run begins in a parameter
-region already shaped by a broad source objective. The task is not asking a few
-labels to invent syntax and semantics from scratch.
+region already shaped by a broad source objective. Syntax and semantics
+need not be learned from a few labels alone.
 
 **Data work moves upstream.** Corpus choice, tokenization, corruption, and source
-coverage become part of model design. Pretraining is curriculum at dataset scale.
+coverage become part of model design.
 
 **One backbone serves many interfaces.** A sequence head, token head, or span head
 can reuse the same encoder. That modularity makes comparison easier, but also makes
@@ -1706,9 +1718,9 @@ features. A vocabulary can represent a token without supplying useful exposure.
 Full fine-tuning can forget source behavior or become too expensive as the
 backbone grows.
 
-A learned summary token can gather image patches instead of words; @sec-16-vit-scaling
+A learned summary token can gather image patches instead of words. @sec-16-vit-scaling
 moves the encoder from text to images and asks what scaling changes. Fine-tuning
-changed every encoder weight here; @sec-17-peft-quantization asks what adaptation
+changed every encoder weight here. @sec-17-peft-quantization asks what adaptation
 remains when most, or all, of those weights must stay fixed.
 
 ::: {.callout-note}
@@ -1735,10 +1747,10 @@ Close the book for one minute and reconstruct masked-language-model pretraining.
 4. **Fine-tuning updates the encoder.** Training only a new head over frozen
    features is a probe. Standard BERT adaptation moves the pretrained backbone and
    task head together.
-5. **In the toy lab, transfer reaches only the covered types.** Across five full
-   seeds, MLM initialization wins every covered-type comparison under 2–8 total
-   labels; input-vocabulary controls withheld from MLM inputs, replacements, and
-   targets remain near chance in both arms.
+5. **In the synthetic experiment, transfer reaches only the covered types.** Across five
+   full runs, MLM initialization yields higher accuracy in every covered-type comparison
+   under 2–8 total labels, while input-vocabulary controls withheld from MLM inputs,
+   replacements, and targets remain near chance in both arms.
 6. **Pretraining changed the unit of work.** The field moved from one random model
    per task toward reusable backbones and specialized adaptation. Corpus,
    objective, visibility, and adaptation now belong to one design decision.
@@ -1760,8 +1772,8 @@ Close the book for one minute and reconstruct masked-language-model pretraining.
 ## Exercises {.unnumbered}
 
 1. **(Pencil.)** For `[CLS] the wug is calm [SEP] [PAD] [PAD]`, suppose *wug*
-   is selected and replaced by `[MASK]`. Draw @sec-14-self-attention-transformer's causal visibility
-   matrix and BERT's full nonpadding visibility matrix, using queries as rows and
+   is selected and replaced by `[MASK]`. Draw the causal visibility matrix of @sec-14-self-attention-transformer
+   and BERT's full nonpadding visibility matrix, using queries as rows and
    keys as columns. Separately mark the one position that contributes MLM loss.
    Why may neighboring tokens attend to `[MASK]`, and why would full visibility
    leak information in a next-token generator?
@@ -1771,15 +1783,15 @@ Close the book for one minute and reconstruct masked-language-model pretraining.
    loss? Explain why 12% is not the supervision rate.
 3. **(Code.)** For token IDs $(B,T)$, width $d$, and vocabulary size $|V|$, add
    assertions for hidden states $(B,T,d)$, dense logits $(B,T,|V|)$, selected
-   logits $(|M|,|V|)$, and selected targets $(|M|,)$. Assert that `[PAD]`, `[CLS]`,
+   logits of shape $(|M|,|V|)$, and a target vector of length $|M|$. Assert that `[PAD]`, `[CLS]`,
    and `[SEP]` are never selected. Show numerically that selected-only
    cross-entropy matches dense cross-entropy when unselected targets use
    `ignore_index`.
 4. **(Code.)** Starting from the same pretrained checkpoint and split, compare a
-   frozen encoder probe with full fine-tuning in the generated-token lab. Match head
-   tensors, labeled types, updates, and seeds. Plot all five paired results rather
-   than only their means. Which regime wins here, and what broader claim would
-   outrun the experiment?
+   frozen encoder probe with full fine-tuning in the generated-token experiment. Match
+   head tensors, labeled types, updates, and seeds. Plot all five paired results rather
+   than only their means. Which regime performs better under this protocol, and which
+   broader conclusions remain unsupported?
 5. **(Audit.)** Reproduce paired gains for covered and control
    strings at all three label budgets. Map the evidence to the three transfer conditions
    from @sec-09-modern-cnns-transfer. Explain the assertion that uncovered input
@@ -1789,8 +1801,8 @@ Close the book for one minute and reconstruct masked-language-model pretraining.
    $\operatorname{PLL}(x)=\sum_{i=1}^{T}\log p(x_i\mid x_{\setminus i})$ and explain
    why ordinary masked scoring costs $T$ forward passes. Show why the collection of
    conditionals need not define one normalized joint distribution.
-   **(Code.)** Score minimal sentence pairs from the controlled lab by masking each
+   **(Code.)** Score minimal sentence pairs from the controlled experiment by masking each
    ordinary token once. Train a small causal model on that same corpus and vocabulary
-   with @sec-10-sequences-rnn's trainer, then compare rankings under one declared length
+   with the trainer of @sec-10-sequences-rnn, then compare rankings under one declared length
    convention. Assert that special and padding tokens contribute neither PLL score nor
    mask position. Report PLL as a *score*, not a normalized sentence likelihood.
