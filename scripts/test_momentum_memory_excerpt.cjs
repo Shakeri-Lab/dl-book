@@ -97,7 +97,7 @@ test('momentum memory: the mechanism it draws is the chapter\'s own printed pass
     'with $\\beta \\in [0.9, 0.99]$.',
     'the iterate zigzags across the steep direction while inching along the\nshallow one.',
     'in directions where\ngradients keep agreeing, speed builds; in directions where they flip sign every step,\nthey cancel.',
-    'The fix is to give the update a memory. Keep a running **velocity** that\naccumulates gradients, and move along the velocity instead of the raw gradient:',
+    'Momentum gives the update a memory. A running **velocity** accumulates\ngradients, and each step follows the velocity instead of the raw gradient:',
     // The declared beta is the low end of the printed range, and the chapter's own value.
     'momentum=0.9',
     // The chapter's rule-of-thumb step length, and the race that this panel is not.
