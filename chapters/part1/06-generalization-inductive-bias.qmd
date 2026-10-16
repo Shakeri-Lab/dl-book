@@ -1,4 +1,4 @@
-# When It Fails: Generalization in Pictures, and Inductive Bias {#sec-06-generalization-inductive-bias}
+# Generalization, Distribution Shift, and Inductive Bias {#sec-06-generalization-inductive-bias}
 
 <!-- lecture-source: m04_lecture-4-convolutional-neural-networks-cnns_s6xDEvdz3tY.txt (opening),
      m03 sessions; outline approved by author 2026-07-08 (drafts/part1/06-outline.md)
@@ -11,12 +11,12 @@ We now have
 [likelihood-derived losses](02-logistic-softmax.qmd#sec-02-logistic-softmax),
 [an optimizer that scales](04-training-loss-sgd.qmd#sec-04-training-loss-sgd), and
 [an efficient way to compute gradients](05-backpropagation.qmd#sec-05-backpropagation).
-Applied to Fashion-MNIST, this machinery reaches respectable accuracy on held-out
-validation images.
+Applied to Fashion-MNIST, this machinery classifies most held-out validation images
+correctly.
 
-Yet a validation score only estimates performance under the original
-data-generating distribution. It does not tell us which transformations of the
-data the classifier will tolerate. A small shift, for example, preserves the
+Yet a clean validation score estimates performance only under the distribution sampled
+by that validation set. It does not establish tolerance to transformations we have not
+tested. A small shift, for example, preserves the
 garment's visual identity, so we expect a robust model to keep its prediction. A
 complete pixel scramble, by contrast, destroys the two-dimensional spatial
 arrangement; requiring a model to preserve its output under arbitrary scrambling is
@@ -32,7 +32,7 @@ sharing developed in Part II.
 
 ## The baseline fit: empirical risk and clean validation
 
-We use a subset of Fashion-MNIST, a classic benchmark of 28×28 grayscale images of
+We use a subset of Fashion-MNIST, a classic benchmark of $28 \times 28$ grayscale images of
 clothing in ten classes. The model and training loop come from earlier chapters: we
 train an MLP from @sec-03-nonlinearity-mlp exactly as in @sec-04-training-loss-sgd:
 
@@ -111,7 +111,7 @@ Before probing the model, separate three questions that are often collapsed into
 |---|---|---|
 | **Representation:** can the model family express a useful rule? | A construction, approximation argument, or fitted witness | Whether the optimizer will find that rule |
 | **Optimization:** did this training procedure reach low empirical risk? | The loss trace, gradients, restarts, and a final training-set check | Behavior on fresh or shifted data |
-| **Generalization:** does the fitted procedure work on the distribution we care about? | Independent evaluation drawn from that declared distribution | Performance under an undeclared deployment shift |
+| **Generalization:** does the fitted procedure work on the distribution we care about? | Independent evaluation data drawn from that declared distribution | Performance under an undeclared deployment shift |
 
 : Three claims that require three kinds of evidence. Low training error is evidence
 about one optimization run and, indirectly, the available capacity. It is not a
@@ -203,10 +203,9 @@ $$ {#eq-shifted-risk}
 where $T_\#P$ is the distribution obtained by transforming inputs drawn
 from $P$ while retaining their labels.
 The MLP generalized moderately from its fitting sample to fresh clean examples from
-$P$, but it was not robust under $T_\#P$. There is no
-contradiction. Clean validation and shift robustness answer different questions. We trained
-the model on clean images, then asked it to recognize shifted ones. The loss did not
-require robustness to that shift.
+$P$, but it was not robust under $T_\#P$. Clean validation and shift robustness answer
+different questions: minimizing empirical risk on samples from $P$ places no constraint on
+predictions under $T_\#P$.
 @sec-a5-statistical-learning gathers the $P$, $T_\#P$, and deployment-distribution
 notation in one place.
 
@@ -244,7 +243,7 @@ plt.tight_layout(); plt.show()
 
 We choose one fixed random permutation of the 784 pixel positions and apply it to
 *every* image, fitting and validation alike. We keep the original labels attached to
-the examples. The displayed arrays are no longer recognizable garments: the ordinary grid
+the examples. The scrambled arrays are no longer recognizable garments: the ordinary grid
 adjacency has been destroyed.
 
 Unlike a small shift, this is not a transformation under which we require the
@@ -280,7 +279,7 @@ print(f"shuffled pixels:  validation accuracy "
       f"{accuracy(net_shuffled, X_val[:, pixel_perm], y_val):.1%}")
 ```
 ::::
-The two validation accuracies are close in this one deterministic run. This is
+The two validation accuracies are close in this one deterministic comparison. This is
 not an uncertainty estimate; it shows that the training recipe can learn a useful
 classifier in the scrambled representation.
 
@@ -355,8 +354,9 @@ the scrambled coordinates.
 
 This is a property of the **model family**, not invariance of one fitted model.
 The equation changes the first-layer weights along with the inputs; keeping the
-weights fixed does not give the same identity. The initialization is exchangeable
-across input coordinates, and Adam applies the same coordinate-wise rule, so the
+weights fixed does not give the same identity. The initialization is *exchangeable*
+across input coordinates (permuting the coordinates leaves the distribution of the
+initial weights unchanged), and Adam applies the same coordinate-wise rule, so the
 training procedures correspond in distribution under a fixed permutation
 (Exercise 1). Resetting the seed does not itself permute the initial weights,
 so the two particular runs need not have identical accuracies.
@@ -425,8 +425,8 @@ The transformations of interest are **label-preserving**: small shifts of the ga
 within the frame, or a symmetry such as the left–right reflection of a shirt, after which
 the garment remains recognizable and its class is unchanged. A shift moves each intensity
 to a neighboring coordinate, where it is multiplied by a different coefficient, one that
-the dense parameterization leaves free of any tie to the first; only training decides how
-similar the two are. For a shift of $s$ columns to the right, the ink in the $s$
+the dense parameterization leaves free of any tie to the first; only training determines how
+similar the two are. For a shift of $s$ columns to the right, the intensity in the $s$
 rightmost columns leaves the frame and changes the score as zeroing those columns in place
 would, the crop that Experiment 1 measured on its own. Every other pixel $p$ moves to the
 position $p+s$, $s$ columns to its right, and these pixels contribute the rest of the
@@ -434,8 +434,10 @@ difference, $\sum_p (w_{j,p+s}-w_{j,p})\,x_p$, with the sum taken over them. The
 change is therefore set by how each coefficient compares with its neighbor $s$ columns
 away, a relation the dense layer leaves untied.
 
-Asking each unit's score to stay fixed would be the wrong remedy: for $s=1$ it would
-force a template that is constant along every row and blind to horizontal arrangement.
+Asking each unit's score to stay fixed would be the wrong remedy. Ignoring the pixels
+lost at the border, requiring the displacement term to vanish for arbitrary images would
+force equal neighboring coefficients: a template constant along every row and blind to
+horizontal arrangement. Instead, we want a detector's response to move with the input.
 What the dense layer lacks is a unit tied to the shifted copy of $\vect{w}_j$, so that
 the response could move with the garment, as the response of a shared local detector does.
 A change in one hidden score does not by itself settle the classifier's decision either:
@@ -443,11 +445,12 @@ the ReLU and the output layer combine all 256 hidden scores, whose changes can c
 accumulate. Tolerance must therefore be measured at the output, as in Experiment 1.
 
 During training, the gradient for row $j$ is a weighted sum of the input images,
-$\sum_i\delta_{ij}\,\vect{x}_i$, from the batched form of @eq-bp3.
-Adam rescales the coordinates separately, but neither that update nor the
-parameterization enforces a compact template or shared coefficients across
-positions. Expressive power alone does not supply the particular invariances
-we want. We next examine how clean performance changes with capacity.
+$\sum_i\delta_{ij}\,\vect{x}_i$, from the batched form of @eq-bp3, where $\delta_{ij}$ is
+the sensitivity of hidden unit $j$ on image $i$. Adam rescales the coordinates
+separately, but neither that update nor the parameterization enforces a compact
+template or shared coefficients across positions. Expressive power alone does not supply
+the particular invariances we want. We next examine how clean performance changes with
+capacity.
 
 ## Diagnosing the failure: capacity versus geometry
 
@@ -455,7 +458,7 @@ Is the model too flexible, or is the data too sparse for 784 dimensions?
 
 ### Capacity: testing the classical U-curve {#capacity-hunting-the-u-curve}
 
-The classical picture, the cartoon of @sec-01-linear-regression, predicts that as
+The classical picture, the schematic in @sec-01-linear-regression, predicts that as
 capacity grows, validation error first falls and then *rises* as the model overfits.
 A width sweep at two dataset sizes tests that prediction on real data:
 
@@ -494,12 +497,12 @@ for n, color in [(300, "#5379AA"), (1000, "#232D4B")]:
 plt.xlabel("hidden width (capacity)"); plt.ylabel("validation error")
 plt.legend(); plt.tight_layout(); plt.show()
 ```
-The left side of the cartoon appears in both curves: networks with too little capacity
+The left side of the schematic appears in both curves: networks with too little capacity
 underfit badly. The right side barely appears: a slight upturn at $n = 300$ and a flat
 plateau at $n = 1000$. The classical picture predicts a sustained rise in validation
-error once the width passes its best value; neither curve shows one. The U is a useful
-cartoon, not a law of nature (@sec-01-linear-regression): the optimizer, the sample
-size, and the structure of the data can all shape the curve. A
+error once the width passes its best value; neither curve shows one. The U-shaped curve
+is a useful schematic, not a universal relationship (@sec-01-linear-regression): the
+optimizer, the sample size, and the structure of the data can all shape the curve. A
 single seeded Adam sweep describes its own regime, so it cannot separate their effects,
 estimate a scaling law, or establish a $1/n$ variance law.
 
@@ -511,8 +514,9 @@ capacity and the response to a transformation require separate measurements.
 
 The width sweep leaves the shift failure unexplained, so we turn from the model to the
 representation it receives. How informative is distance between raw pixel vectors? Our
-images use 784 numbers; a small color image (32×32×3) uses 3,072, a one-megapixel color
-photo three million, and a 224×224×3 input 150,528. Covering every combination of
+images use 784 numbers; a small color image ($32 \times 32 \times 3$) uses 3,072, a
+one-megapixel color photo three million, and a $224 \times 224 \times 3$ input 150,528.
+Covering every combination of
 pixel values is out of reach: a grid with 9 values per coordinate contains
 $9^2$ points in two dimensions and $9^d$ in $d$ dimensions.
 
@@ -630,11 +634,12 @@ about the task: complete pixel scrambling is not included in that invariance
 requirement. Retraining on one fixed scramble instead changes the encoding of the
 whole dataset. The empirical augmented
 objective used in training replaces the outer expectation with the sample average.
-Drawing one fresh $T$ when an example enters a batch then gives a Monte Carlo estimate
-of the inner expectation. Exercise 2 asks you to include those shifts in the training
-batches and measure both what the augmentation buys on the shift curve and what it costs on clean
-images. @sec-a5-statistical-learning summarizes the corresponding estimators and
-distributions.
+Drawing one fresh $T$ when an example enters a batch then gives a *Monte Carlo* estimate
+of the inner expectation: a random sample stands in for the average over all
+transformations. Exercise 2 asks you to include those shifts in the training batches and
+measure both how augmentation changes the shift-response curve of @fig-shift-cliff and
+what it costs on clean images. @sec-a5-statistical-learning summarizes the corresponding
+estimators and distributions.
 
 Augmentation encourages translation tolerance by training on shifted examples.
 It does not tie parameters across positions: a dense network still assigns them
@@ -675,8 +680,8 @@ third as many.
 ## Why a constraint can add knowledge
 
 Local connectivity and weight sharing constrain a corresponding dense network
-with the same layer sizes. Through @sec-01-linear-regression's
-bias–variance lens, we accept assumptions about image structure to reduce the
+with the same layer sizes. Through the bias–variance lens of
+@sec-01-linear-regression, we accept assumptions about image structure to reduce the
 space of solutions considered. When those assumptions are appropriate, the
 restriction can improve data efficiency. The choice remains task-dependent:
 we want tolerance to small position changes, not indifference to arbitrary
@@ -686,11 +691,6 @@ as Vision Transformers illustrate in @sec-16-vit-scaling.
 :::
 
 ## Toward local, shared detectors {#the-pivot-toward-local-shared-detectors}
-
-The dense templates of @fig-templates assign separate coefficients across
-the whole image. Our next model will instead use **small, local** templates
-and apply the **same weights at each position**. Learning a local detection
-rule will then determine how that rule is applied elsewhere in the image.
 
 Sliding a local template across the image and scoring each position by an inner
 product is a classical operation, decades older than deep learning. Part II opens by
@@ -736,7 +736,7 @@ Close the book for one minute and test the argument on these three questions.
 - Why can high clean validation accuracy coexist with collapse after a two-pixel shift?
 :::
 
-## Okay, so: the missing ingredient is inductive bias
+## Okay, so: build in the structure the task needs {#okay-so-the-missing-ingredient-is-inductive-bias}
 
 <!-- NOVEL: needs sign-off -->
 1. **Clean accuracy and shift robustness are different claims.** The MLP
@@ -763,7 +763,7 @@ Close the book for one minute and test the argument on these three questions.
 ## Deeper dive {.unnumbered}
 
 ::: {.callout-note collapse="true"}
-## For the curious: memorization, confidence, and double descent
+## Further discussion: memorization, confidence, and double descent
 
 **Networks can memorize random labels.** Zhang et al. reported 100% training accuracy
 on randomly labeled CIFAR-10 and 95.20% on randomly labeled ImageNet under their finite
@@ -783,7 +783,7 @@ training data. This is a separate question from the label-preserving shift test.
 
 **The bias–variance picture, updated.** Test error can sometimes
 *descend again* beyond the interpolation threshold, where the model first becomes
-able to fit the training sample exactly: "double descent." The width sweep above does
+able to interpolate the training sample: "double descent." The width sweep above does
 not establish that pattern. It illustrates why a classical U-shaped curve
 should not be assumed in every training regime.
 
@@ -794,7 +794,7 @@ should not be assumed in every training regime.
   (ICLR 2017), the primary source for the random-label experiment.
 - Neal,
   ["On the Bias-Variance Tradeoff: Textbooks Need an Update"](https://arxiv.org/abs/1912.08286)
-  (2019), the source of the "cartoon, not a law" view.
+  (2019), the source of the view that the U-shaped curve is not universal.
 - Belkin et al.,
   ["Reconciling modern machine-learning practice and the classical bias–variance trade-off"](https://doi.org/10.1073/pnas.1903070116)
   (PNAS 2019), a primary account of double descent.
@@ -838,10 +838,10 @@ should not be assumed in every training regime.
    Which random choices do the two runs share, and which of them do not correspond
    under the permutation?
 2. **(Code.)** Augment the training set with random shifts of ±3 pixels and retrain.
-   Re-plot the cliff. How much shift robustness did augmentation buy, what did it cost
-   in clean accuracy and compute, and what data-side inductive bias
-   did augmentation encode, compared with imposing locality and weight sharing in the
-   architecture?
+   Re-plot the shift-response curve of @fig-shift-cliff. How much shift robustness did
+   augmentation add, what did it cost in clean accuracy and compute, and what data-side
+   inductive bias did augmentation encode, compared with imposing locality and weight
+   sharing in the architecture?
 3. **(Code.)** The width sweep used widths up to 256. Push to 1024 and 4096 at
    $n = 300$, repeating each width across several seeds. Then compare Adam with
    minibatch SGD from @sec-04-training-loss-sgd. Which patterns are stable enough to
@@ -853,9 +853,9 @@ should not be assumed in every training regime.
    is convex, nor that bad local minima are absent, nor that the fitted rule will
    generalize.
 5. **(Pencil.)** Estimate the first-layer parameter count of an MLP with 1,000 hidden
-   units on an ImageNet-scale input (224×224×3). At one float32 per parameter, how
-   much memory is that, and how does the number change if each unit instead sees only
-   a 7×7×3 patch?
+   units on an ImageNet-scale input ($224 \times 224 \times 3$). At one float32 per
+   parameter, how much memory is that, and how does the number change if each unit
+   instead receives only a $7 \times 7 \times 3$ patch?
 6. **(Pencil.)** Count the labelings of $N$ ordered points realizable by (a)
    positive rays on a line, (b) intervals on a line, and (c) affine linear
    separators for $N$ points in general position in two dimensions. Obtain
