@@ -18,23 +18,32 @@
      Self-attention, causal masking, and the full multi-head implementation wait
      for Chapter 14. -->
 
-@sec-12-kernel-regression built the whole attention operator except for one piece. It had a query,
-a bank of keys and values, a score for every query--key pair, softmax weights, and a
-weighted read. But Euclidean distance decided what counted as similar. The task
-could tune the bandwidth; it could not invent a better notion of relevance.
+@sec-12-kernel-regression assembled the mechanics of reading a memory bank:
+compare a query to stored keys, normalize the scores with row-wise softmax, and retrieve
+a weighted blend of values. But its scoring rule was rigid. Euclidean distance treated all
+coordinates equally, and validation tuned only a single scalar bandwidth $h$, which
+scaled space uniformly, with no way to learn which features matter. With a fixed score,
+only the input representation could adapt.
 
-An embedding can learn what lives at row 17, but fetching row 17 is still a rigid act
-of indexing: learned content behind a hard address. Replace the one address with a distribution over addresses, let the
-gradient reach every score, and the model can learn which rows deserve weight.
-Compare one request with every stored candidate, normalize the scores with
-@sec-02-logistic-softmax's softmax, and blend the stored values with the resulting weights. This content-dependent
-weighted read is **attention**.
+To break the sequence-to-sequence bottleneck of @sec-11-encoder-decoder, the
+decoder must query the encoder's retained hidden states. In high dimensions, however,
+fixed Euclidean distance is brittle. The decoder needs a similarity function that can
+learn what constitutes a match for the task. This chapter gives the score its
+own parameters.
+
+Contrast this soft read with the hard lookup of an embedding table, which selects one row
+by index. Selecting an encoder state by $\operatorname{argmax}$ would be piecewise constant
+in the scores, leaving candidates that nearly matched with zero gradient. Instead, a
+continuous softmax distribution over all keys lets the gradient of the training loss reach
+the scoring parameters. Replacing fixed geometric distance with learned projections yields
+**attention** (@fig-attention-lookup): a content-dependent, fully differentiable read whose
+geometry adapts to the data.
 
 ```{python}
 #| label: fig-attention-lookup
 #| echo: false
-#| fig-cap: "The lookup table, softened. A hard lookup would follow exactly one arrow to one row. Attention scores the query against every key, softmax turns the scores into row weights (arrow thickness; the numbers here are illustrative), and the output is the weighted blend of all values. Every arrow is differentiable, so the loss can teach the scoring itself."
-#| fig-alt: "A query box on the left sends arrows of different thickness to four key rows; each key row pairs with a value row whose shading matches the arrow weight; all values merge into a single output box labeled weighted blend of all rows."
+#| fig-cap: "The lookup table, softened. A hard lookup would follow one arrow to one row. Attention scores the query against every key, softmax turns the scores into row weights (arrow thickness; the numbers here are illustrative), and the output is the weighted blend of all values. The weighted read is differentiable with respect to the scores, so the loss can train the scoring rule."
+#| fig-alt: "A query box on the left sends arrows of different thickness to four key rows; arrows to keys display weights 0.62, 0.23, 0.10, and 0.05; each key row pairs with a value row whose shading matches the arrow weight; all values merge into a single output box labeled weighted blend of all rows."
 import matplotlib.pyplot as plt
 from matplotlib.patches import FancyBboxPatch
 
@@ -85,18 +94,19 @@ validation source
 may 17, 1971  ->  1971-05-17
 ```
 
-the trained decoder emits the year first even though those four characters sit at
-the end of the source. Across the fixed 400-example validation audit, its first four
-attention rows place **97.5%** of their mass on the four contextual encoder states
-indexed by the source-year characters. When the example above emits its second
-character, **9**, the largest weight is 0.856 on the state indexed by the source's
-9; when it emits **7**, the largest weight is 0.985 on the state indexed by the 7
-in the year region. Those weights were not supervised as alignments. The date loss
-taught the model where useful information lived.
+the trained decoder emits the year first, even though those four characters reside at
+the end of the source string. Across the fixed 400-example validation audit, the first
+four attention rows place **97.5%** of their probability mass on the contextual encoder
+states corresponding to the source-year characters. In the example above, emitting the
+second character (`9`) allocates a maximum weight of 0.856 to the encoder state at the
+source position of `9`, and emitting `7` assigns a peak weight of 0.985 to the encoder
+state at the `7` in the year. These soft alignments emerge without explicit
+supervision. The cross-entropy loss on the target characters alone determines where
+the weights concentrate.
 
 <!-- /NOVEL -->
 
-## The scores-to-weights machine, one more time {#the-scores-to-weights-machine-one-more-time}
+## The soft lookup and cross-attention {#the-scores-to-weights-machine-one-more-time}
 
 Let the encoder retain its full memory
 
@@ -113,8 +123,8 @@ $$
 e_{t,i}=a_\theta(\vect{s}_{t-1},\vect{h}_i).
 $$
 
-For each padded batch item $b$, let $M_{b,i}=0$ at real source positions and
-$M_{b,i}=-\infty$ at padding. Suppress the batch index below. Then
+To exclude padding in variable-length sequences, let $M_i=0$ at valid source
+positions and $M_i=-\infty$ at padded positions. Then
 
 $$
 \alpha_{t,i}
@@ -123,30 +133,30 @@ $$
 \vect{c}_t=\sum_{i=1}^{n}\alpha_{t,i}\vect{h}_i.
 $$ {#eq-learned-cross-attention}
 
-This is @sec-12-kernel-regression's fixed matrix $\matr{A}\matr{V}$ with a learned score. The
-softmax is unchanged; we now learn the scoring rule. A hard source-position choice would use argmax and one-hot
-indexing. The soft weights move continuously when the scores move, so backpropagation
-can tell the scorer how each valid address affected the loss. We have
-**softened the hard**.
+This preserves the familiar $\matr{A}\matr{V}$ read of @sec-12-kernel-regression,
+retaining the softmax normalization while replacing the rigid metric with a learned
+scoring rule. Backpropagation can thus deliver gradients to the scoring parameters
+through every valid memory slot. We have **softened the hard lookup**.
 
-Because the query comes from the decoder and the memory comes from the encoder, this
-is **cross-attention**. It bridges two sequences. The model still initializes the
-decoder from the encoder's final state, but that fixed bridge is no longer the only
-path from source to output: every decoder step receives its own context
-$\vect{c}_t$. The old handoff was a **finite-state
-bottleneck**. @sec-12-kernel-regression kept the memory bank; cross-attention now learns the rule that
-reads it.
+Because the query originates in the decoder while the memory resides in the encoder,
+this operation is **cross-attention**: an interface bridging two distinct sequences.
+The encoder's final state still initializes the decoder, but that initial handoff is no
+longer the only path from source to output. By supplying every decoding step with its
+own adaptive context vector $\vect{c}_t$, the architecture removes the **fixed-size state
+bottleneck**. @sec-12-kernel-regression built the memory bank, and cross-attention now
+learns the rule that reads it.
 
-In @sec-08-cnn, a CNN saw the whole input only by stacking local
-operations until its receptive field spanned it. One cross-attention read can
-score every encoder position in a single layer. It reaches the whole input directly,
-at the cost of every query--key comparison. For now, the encoder states it reads still
-come from RNNs that compute them one step at a time.
+In @sec-08-cnn, stacked convolutions expanded receptive fields gradually through depth,
+leaving a dense head to combine features across the image. By contrast, a single
+cross-attention read scores every encoder position directly in one step, at the cost of
+evaluating all query–key pairs. For now, however, the representations it queries still
+originate from an RNN, which computes them sequentially, one step at a time.
 
 ## Additive attention: learn the comparison itself
 
-The most literal answer to "make similarity learnable" is a small neural network.
-Choose an alignment width $d_a$. For one decoder query and one encoder state,
+The most direct way to make similarity learnable is to parameterize the compatibility
+function with a shallow neural network. With the decoder query and the encoder key both
+projected into a shared alignment space of width $d_a$, the additive score is
 
 $$
 e_{t,i}
@@ -167,30 +177,32 @@ $$
 \vect{v}_a\in\mathbb{R}^{d_a}.
 $$
 
-The two projections put objects of different native sizes into one alignment space.
-The tanh creates match features, and $\vect{v}_a$ selects which of those features
-matter for the scalar score. The same parameters are reused for every decoder
-step $t$ and source position $i$. Remember @sec-08-cnn's sliding filter, which applied one
-learned rule everywhere. Attention shares a compatibility rule across pairs.
+The two projections put vectors of different native widths, $d_d$ and $d_e$, into a
+common alignment space. The $\tanh$ nonlinearity extracts joint match features, while
+$\vect{v}_a$ weights their individual contributions to produce the scalar score. These
+parameters are shared across all decoder steps and source positions: as the sliding
+filter of @sec-08-cnn applied one learned template across an entire grid, attention
+evaluates a single compatibility rule across all decoder–source pairs.
 
-For a batch, let
-$\matr{S}_{t-1}\in\mathbb{R}^{B\times1\times d_d}$ collect the queries. The
-row-major shapes make the broadcasting explicit:
+In batched execution, inserting a singleton sequence axis into the query tensor
+$\matr{S}_{t-1}\in\mathbb{R}^{B\times1\times d_d}$ allows it to broadcast across all
+$n$ encoder positions in $\matr{H}$:
 
 $$
-\matr{S}_{t-1}\matr{W}_q^\top: (B,1,d_a),
+\matr{S}_{t-1}\matr{W}_q^\top \in \mathbb{R}^{B\times 1\times d_a},
 \qquad
-\matr{H}\matr{W}_k^\top: (B,n,d_a).
+\matr{H}\matr{W}_k^\top \in \mathbb{R}^{B\times n\times d_a}.
 $$
 
-Their sum produces $(B,n,d_a)$ match features. Reduction by $\vect{v}_a$ produces
-$(B,n)$ scores, softmax runs over the $n$ source positions, and the weighted read
-returns a $(B,d_e)$ context. Softmax over the wrong
-dimension would answer the wrong question.
+Passing their broadcast sum through $\tanh$ forms joint match features of shape
+$(B,n,d_a)$, which $\vect{v}_a$ contracts into a $(B,n)$ score matrix. Normalizing
+across the source axis via softmax produces a valid probability distribution over the
+$n$ positions, and the resulting weighted read over $\matr{H}$ yields a $(B,d_e)$
+context, one $d_e$-dimensional row for each sequence in the batch.
 
-We freeze one simple parameter snapshot so we can watch the
-arithmetic. With identity projections and an all-ones selector, three source states
-receive scores $(1.015,1.562,1.124)$ and therefore weights
+We fix one parameter setting to trace the arithmetic directly. With identity
+projections and an all-ones selector, the scores of three source states evaluate to
+$(1.015,1.562,1.124)$, which softmax converts into the weights
 $(0.260,0.450,0.290)$:
 
 :::: {.plan-code}
@@ -233,7 +245,7 @@ snapshot_weights /= snapshot_weights.sum()
 #| label: fig-additive-scorer
 #| echo: false
 #| fig-alt: "A query branch and key branch pass through separate projections, merge, then pass through tanh and a learned selector to produce one score. The adjacent three-bar chart gives the middle key the largest softmax weight."
-#| fig-cap: "Additive attention learns a compatibility function. Query and key enter separate projections, their alignment features interact through tanh, and a learned selector reduces those features to one score. The right panel freezes one parameter setting to show the resulting scores-to-weights calculation; it is arithmetic, not a trained result."
+#| fig-cap: "Additive attention learns a compatibility function. Query and key enter separate projections and interact through $\\tanh$, and a learned selector reduces the result to one score. The right panel fixes one parameter setting to show the resulting scores-to-weights calculation as an explicit arithmetic example rather than a trained result."
 #| code-summary: "Figure: the additive scorer and a three-key numerical snapshot"
 
 fig, axes = plt.subplots(1, 2, figsize=(7.5, 3.0),
@@ -288,24 +300,40 @@ plt.show()
 ## "Learned kernel" is an analogy
 
 Exponentiating a learned score and normalizing it reproduces the
-Nadaraya--Watson algebra. It does not make every attention score a classical kernel.
-Separate query and key projections can make $a_\theta(q,k)$ asymmetric and not
-positive semidefinite. What survives exactly is the operational pattern:
+Nadaraya--Watson algebra. Yet this does not make the scoring function a kernel in the
+positive-semidefinite sense of kernel methods. Separate query and key projections leave
+$a_\theta(\vect{q},\vect{k})$ neither symmetric nor positive semidefinite. What survives
+is the operational pattern:
 compare $\rightarrow$ normalize $\rightarrow$ mix.
 :::
 
-## Scaled dot product: learn the spaces, simplify the score
+## Scaled dot product: from additive alignment to matrix products {#scaled-dot-product-learn-the-spaces-simplify-the-score}
 
-For $m$ decoder queries, additive attention is vectorized, but it forms a
-$(B,m,n,d_a)$ intermediate,
-applies an elementwise tanh, and reduces it. Dense matrix multiplication has a
-simpler computational path. @sec-01-linear-regression introduced the dot product as a similarity
-score against a template. Here the key is the template, and training learns the
-space in which that comparison is useful.
+Vectorizing additive attention over all $m$ decoder queries at once forms a
+$(B,m,n,d_a)$ intermediate tensor, applies an elementwise tanh, and reduces it to
+scalar scores. Scoring each query–key pair by its dot product avoids that intermediate
+tensor and turns all comparisons into a single matrix multiplication. As in
+@sec-01-linear-regression, where the dot product measured similarity against a
+template, each key now acts as a template in a space learned during training.
 
-First walk one four-dimensional query past three keys. Its raw dot
-products are $(1.10,-0.60,0.15)$. Since $\sqrt{4}=2$, scaling gives
-$(0.55,-0.30,0.075)$, and softmax gives $(0.488,0.209,0.303)$:
+To see how one query goes through the computation, compare a four-dimensional query
+against three keys:
+
+$$
+\vect{q}=(0.9,\,-0.3,\,0.2,\,0.6),
+\qquad
+\begin{aligned}
+\vect{k}_1&=(0.8,\,-0.2,\,0.1,\,0.5),\\
+\vect{k}_2&=(-0.5,\,0.9,\,0.0,\,0.2),\\
+\vect{k}_3&=(0.3,\,0.0,\,0.6,\,-0.4).
+\end{aligned}
+$$
+
+Because $\vect{k}_1$ matches the sign pattern of $\vect{q}$ while $\vect{k}_2$ opposes its
+largest coordinates, the raw dot products $\vect{q}^\top\vect{k}_j$ are
+$(1.10,-0.60,0.15)$. Dividing by $\sqrt{d_k}=\sqrt{4}=2$ tempers these scores to
+$(0.55,-0.30,0.075)$, and softmax converts them into the attention weights
+$(0.488,0.209,0.303)$, placing nearly half the mass on the first key:
 
 :::: {.plan-code}
 ::: {.plan}
@@ -334,33 +362,26 @@ print("scaled scores:", scaled_walk.numpy())
 print("weights:", weight_walk.numpy(), "sum:", weight_walk.sum().item())
 ```
 ::::
-Now let raw decoder features
-$\matr{D}\in\mathbb{R}^{B\times m\times d_d}$ and encoder memory
-$\matr{H}\in\mathbb{R}^{B\times n\times d_e}$ enter learned projections:
+To run this comparison across an entire batch of sequences, project the decoder features
+$\matr{D}\in\mathbb{R}^{B\times m\times d_d}$ and encoder representations
+$\matr{H}\in\mathbb{R}^{B\times n\times d_e}$ into learned query, key, and value spaces:
 
 $$
 \begin{aligned}
-\matr{Q}&=\matr{D}\matr{W}_Q,
+\matr{Q}&=\matr{D}\matr{W}_Q\in\mathbb{R}^{B\times m\times d_k},
 &\matr{W}_Q&\in\mathbb{R}^{d_d\times d_k},\\
-\matr{K}&=\matr{H}\matr{W}_K,
+\matr{K}&=\matr{H}\matr{W}_K\in\mathbb{R}^{B\times n\times d_k},
 &\matr{W}_K&\in\mathbb{R}^{d_e\times d_k},\\
-\matr{V}&=\matr{H}\matr{W}_V,
+\matr{V}&=\matr{H}\matr{W}_V\in\mathbb{R}^{B\times n\times d_v},
 &\matr{W}_V&\in\mathbb{R}^{d_e\times d_v}.
 \end{aligned}
 $$
 
-The resulting tensors have shapes
-
-$$
-\matr{Q}\in\mathbb{R}^{B\times m\times d_k},\qquad
-\matr{K}\in\mathbb{R}^{B\times n\times d_k},\qquad
-\matr{V}\in\mathbb{R}^{B\times n\times d_v}.
-$$
-
-Only the projected query and key widths must agree. The raw encoder and decoder
-widths need not. Let
-$\matr{M}\in\mathbb{R}^{B\times1\times n}$ broadcast across queries.
-**Scaled dot-product attention** is
+The raw encoder and decoder widths $d_e$ and $d_d$ need not match: $\matr{W}_Q$ and
+$\matr{W}_K$ map both into a shared comparison space of width $d_k$, while $\matr{W}_V$
+projects values to an output width $d_v$. With an additive mask
+$\matr{M}\in\mathbb{R}^{B\times1\times n}$ broadcast across the $m$ queries to exclude
+padded keys, **scaled dot-product attention** is
 
 $$
 \operatorname{Attention}(\matr{Q},\matr{K},\matr{V})
@@ -369,32 +390,35 @@ $$
 \right)\matr{V},
 $$ {#eq-scaled-dot-product}
 
-where $\matr{K}^{\top}$ transposes the last two axes within each batch.
-Softmax runs over the last, key-position axis. The hot path is two dense products:
-$\matr{Q}\matr{K}^{\top}$ and $\matr{A}\matr{V}$. Additive attention remains
-useful and accelerator-compatible; scaled dot product maps more directly to
-the matrix operations modern numerical libraries optimize heavily.^[Appendix C turns
-that intuition into a conditional performance model: dense products can earn high
-arithmetic intensity through reuse, but shapes, data movement, implementation, and
-hardware decide the actual regime (@sec-a3-precision-performance).]
+where $\matr{K}^{\top}$ transposes the last two axes of $\matr{K}$ to shape
+$(B,d_k,n)$. The first matrix product $\matr{Q}\matr{K}^{\top}$ forms all $m\times n$
+compatibility scores per batch item in a $(B,m,n)$ tensor. Applying softmax along the
+last axis normalizes each query's scores over the $n$ keys into a weight matrix
+$\matr{A}\in\mathbb{R}^{B\times m\times n}$, and the second matrix product
+$\matr{A}\matr{V}$ pools the values into an output of shape $(B,m,d_v)$. Whereas additive
+attention forms a four-dimensional intermediate tensor, scaled dot-product attention
+reduces the forward pass to two batched matrix multiplications ($\matr{Q}\matr{K}^{\top}$
+and $\matr{A}\matr{V}$) that map directly onto optimized dense linear algebra
+routines.^[@sec-a3-precision-performance turns that intuition into a conditional
+performance model: dense products can reach high arithmetic intensity through reuse,
+but shapes, data movement, implementation, and hardware determine the actual regime.]
 
-[Luong](https://aclanthology.org/D15-1166/) and colleagues compared unscaled dot,
-general, and concat scores in recurrent translation.
-[Vaswani](https://papers.nips.cc/paper/7181-attention-is-all-you-need) and colleagues
-later introduced the $1/\sqrt{d_k}$ scaling in the Transformer formulation. The mechanisms belong in one conceptual family, not a
-single inevitable historical derivation.
-
-The dot product is not magically semantic. $\matr{W}_Q$ and $\matr{W}_K$ learn
-which features to compare, including their magnitudes, while the surrounding RNN
-has already built nonlinear sequence features.^[In @sec-14-self-attention-transformer, a feedforward
-network will help provide that nonlinear feature transformation after recurrence
-disappears.]
+Although a raw dot product is linear in each argument, the projections $\matr{W}_Q$ and
+$\matr{W}_K$ learn which features and magnitudes to align on top of representations
+that have already undergone nonlinear transformations.^[In @sec-14-self-attention-transformer,
+a position-wise feedforward network will provide that nonlinear feature transformation
+after recurrence disappears.] In recurrent
+translation, [Luong et al.](https://aclanthology.org/D15-1166/) compared unscaled
+dot-product, bilinear (*general*), and additive (*concat*) alignment scores as members
+of one family, and
+[Vaswani et al.](https://papers.nips.cc/paper/7181-attention-is-all-you-need)
+subsequently introduced the $1/\sqrt{d_k}$ scaling factor in the Transformer.
 
 ### Why divide by $\sqrt{d_k}$?
 
 Suppose, for the moment, that projected coordinates $q_\ell$ and $k_\ell$ are
-independent, mean zero, and variance one, and that their products are independent
-across coordinates. Then
+independent and identically distributed with zero mean and unit variance, and that
+their products are independent across coordinates. Then
 
 $$
 \E[\vect{q}^{\top}\vect{k}]=0,
@@ -403,13 +427,21 @@ $$
 =\sum_{\ell=1}^{d_k}\var(q_\ell k_\ell)=d_k.
 $$
 
-The score's standard deviation grows as $\sqrt{d_k}$. Dividing by that quantity
-returns the idealized variance to one. Trained projections need not stay independent or unit variance.
+The score's standard deviation grows as $\sqrt{d_k}$, and dividing by that factor
+returns the idealized variance to one. Geometrically, vectors in $\mathbb{R}^{d_k}$
+with unit-variance coordinates concentrate near a thin spherical shell of radius
+$\sqrt{d_k}$ ($\E[\norm{\vect{q}}^2]=\E[\norm{\vect{k}}^2]=d_k$). Although two
+independent directions on that shell are nearly orthogonal, with typical $\cos\theta$
+of order $1/\sqrt{d_k}$, multiplying both radii scales
+$\vect{q}^{\top}\vect{k}=\norm{\vect{q}}\,\norm{\vect{k}}\cos\theta$ to order $\sqrt{d_k}$.
 
 <!-- NOVEL: needs sign-off - seeded sqrt(d_k) variance/softmax audit and results. -->
 
-We test both the score variance and the average largest softmax weight. For each width, we
-draw 20,000 queries and 16 independent keys per query:
+To illustrate how this growing spread concentrates the softmax weights, we draw
+20,000 queries and 16 independent keys per query with standard normal coordinates at
+widths $d_k\in\{8,32,128,512\}$. Each query's 16 raw scores are its dot products with
+its keys. We compare the sample variance of the scores and the mean largest softmax
+weight at each width, with and without division by $\sqrt{d_k}$:
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
@@ -478,22 +510,25 @@ axes[1].set(xscale="log", ylim=(0, 1), xlabel=r"projected width $d_k$",
 axes[1].legend(frameon=False, fontsize=8)
 plt.show()
 ```
-Raw variance rises from $8.02$ to $510.35$ as $d_k$ grows from 8 to 512. Scaled
-variance stays between $0.997$ and $1.004$. Over the same range, the average
-largest unscaled softmax weight climbs from $0.564$ to $0.944$; the scaled value
-stays between $0.24$ and $0.25$. This is @sec-02-logistic-softmax's **temperature dial**, set by the
-dimension. Scaling corrects the dimension-induced spread; it does
-not normalize the vectors.
+As $d_k$ increases from 8 to 512, raw variance rises from $8.02$ to $510.35$, whereas
+scaled variance remains between $0.997$ and $1.004$. Over the same range, the mean
+largest unscaled softmax weight climbs from $0.564$ to $0.944$, while the scaled value
+stays between $0.24$ and $0.25$, well above the uniform baseline of $1/16=0.0625$
+and far below one-hot saturation at $1.0$. This is the **temperature dial** of
+@sec-02-logistic-softmax, set by the dimension. Scaling corrects the
+dimension-induced spread without normalizing the vectors, and trained projections need
+not remain independent or keep unit variance.
 
 <!-- /NOVEL -->
 
-## Mask before softmax, and mask the right thing
+## Excluding padded positions before softmax {#mask-before-softmax-and-mask-the-right-thing}
 
 Padding affects two computations, as @sec-11-encoder-decoder showed: the loss and an
-encoder's final state. Attention creates
-a third place to enforce sequence lengths: the score matrix. A padded key must not
-receive a merely mediocre score. It must be excluded before normalization. Setting
-its score to zero is wrong because $\exp(0)=1$ still earns weight.
+encoder's final state. Attention introduces a third site where sequence lengths must be
+enforced: the score matrix. A padded key must not merely receive a low score. It must be
+excluded from normalization entirely. Setting its score to zero fails because
+$\exp(0)=1$ still contributes a positive term to the normalizing sum. Instead, scores at
+padded positions must be set to $-\infty$ before softmax so that $\exp(-\infty)=0$.
 
 <!-- NOVEL: needs sign-off - independent mask implementation and all-masked guard. -->
 
@@ -561,7 +596,7 @@ print("maximum padded weight:",
 #| echo: false
 #| label: fig-padding-mask
 #| fig-alt: "A two-row by four-column attention heatmap contains numeric weights in the first two key columns. The final two columns are labeled PAD in both rows and have zero weight."
-#| fig-cap: "A source-padding mask acts before softmax. The second example has only two real keys; its last two score cells are excluded and receive exactly zero weight. Cross-attention may read every real source position, so no causal triangle belongs here."
+#| fig-cap: "A source-padding mask acts before softmax. The second example has only two real keys, so its last two score cells are excluded and receive exactly zero weight. Cross-attention may read every real source position, so no causal triangle belongs here."
 fig, ax = plt.subplots(figsize=(5.8, 2.5), constrained_layout=True)
 shown = mask_weights[1].detach().numpy()
 image = ax.imshow(shown, vmin=0, vmax=shown.max(), cmap="magma", aspect="auto")
@@ -577,27 +612,27 @@ fig.colorbar(image, ax=ax, label="attention weight", fraction=0.05, pad=0.04)
 plt.show()
 ```
 ::: {.callout-warning}
-## Trap: three masks are not one mask
+## Trap: conflating the three sequence masks
 
-The target loss mask says which output positions should not be graded; it remains
-good general hygiene but is dormant for this fixed-length ISO target. The
-cross-attention padding mask says which source positions do not exist. A causal mask
-says which future target positions may not be seen. Our recurrent decoder generates
-one step at a time and the entire source is already available, so the source-padding
-attention mask is the one exercised here. @sec-14-self-attention-transformer will use causal masking inside
-decoder self-attention.
+The target loss mask specifies which output positions should not be graded. It is
+included for generality, although all ISO targets here share the same length. The
+cross-attention padding mask specifies which source positions do not exist. A causal mask
+prevents positions from attending to future tokens. Because our recurrent decoder
+generates one step at a time and the full source is already available, only the
+source-padding mask is needed here. @sec-14-self-attention-transformer will
+introduce causal masking inside decoder self-attention.
 
-An all-masked row has no sensible distribution and would make softmax of all
-$-\infty$ undefined. Good hygiene is to assert that every example has at least one
-real key, as the function does above.
+An all-masked row has no valid probability distribution and makes softmax over all
+$-\infty$ undefined (`NaN`). An implementation should assert that every example
+contains at least one real key, as the function above does.
 :::
 
 <!-- /NOVEL -->
 
-## Return to @sec-11-encoder-decoder's date task {#return-to-chapter-11s-date-task}
+## Return to the date task of @sec-11-encoder-decoder {#return-to-chapter-11s-date-task}
 
-We rerun the date task, change one architectural idea, and keep these settings
-fixed:
+We rerun the date task, altering a single architectural component while holding these
+settings fixed:
 
 - the same date generator and duplicate-source rejection;
 - the same train/validation/test split;
@@ -605,10 +640,10 @@ fixed:
 - the same optimizer, learning rate, batch size, 25 epochs, teacher forcing, gradient
   clipping, and seed;
 - the same first 400 unambiguous validation sources for every learning curve;
-- one final scalar audit on the same 437 unambiguous test sources.
+- one final exact-match evaluation on the same 437 unambiguous test sources.
 
-Below, we copy @sec-11-encoder-decoder's generator and split byte for byte, so
-both models see the same examples:
+Below, we copy the generator and split of @sec-11-encoder-decoder byte for byte,
+ensuring both models train on identical examples:
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
@@ -681,28 +716,29 @@ V_src, V_tgt = len(SRC) + 3, len(TGT) + 3
 print(f"source vocab {V_src}, target vocab {V_tgt}")
 ```
 ::::
-Numeric dates can be ambiguous, so we retain the same unambiguous subsets as @sec-11-encoder-decoder.
-We base design decisions and the heatmap on the validation split only, and we
-evaluate on the test set once, reporting a single number at the end.
+Because numeric dates can be ambiguous, we retain the unambiguous subsets defined
+in @sec-11-encoder-decoder. We base design decisions and heatmap inspections on the
+validation split alone, evaluating on the test set only once at the conclusion.
 
 ### Put the learned read inside the recurrent decoder
 
-The packed encoder now returns three things: its final $(\vect{h},\vect{c})$ state,
-which still initializes the decoder; a padded memory tensor containing every
-real encoder output; and a validity mask that excludes the padded slots. At step $t$:
+The packed encoder now returns three outputs: its final $(\vect{h},\vect{c})$ state,
+which still initializes the decoder; a padded memory tensor containing all
+real encoder representations; and a validity mask excluding padded slots. At step $t$:
 
-1. use decoder hidden state $\vect{s}_{t-1}$ as the query;
+1. use the previous decoder hidden state $\vect{s}_{t-1}$ as the query;
 2. compute additive scores over the encoder memory and mask padding;
-3. form the context $\vect{c}_t$;
+3. form the context vector $\vect{c}_t$;
 4. concatenate $\vect{c}_t$ with the embedding of the previous target token;
-5. advance one decoder LSTM step, then predict from
+5. advance the decoder LSTM by one step, then predict from
    $[\vect{s}_t;\vect{c}_t]$.
 
-This timing follows the [Bahdanau](https://arxiv.org/abs/1409.0473)-style formulation. Luong-style variants often score
-with the current decoder state instead; both are valid, but silently mixing their
-indices makes an implementation impossible to audit.
+This timing follows the [Bahdanau](https://arxiv.org/abs/1409.0473)-style formulation.
+Luong-style variants often score with the current decoder state instead. Both are valid,
+but silently mixing their indexing obscures which decoder state supplied the query for
+each context vector.
 
-For this date model, every shape is concrete:
+For this date model, every tensor shape is concrete:
 
 | quantity | shape |
 |---|---|
@@ -871,20 +907,20 @@ def exact_match(
     ) / len(prs)
 ```
 ::::
-Notice what changed relative to @sec-11-encoder-decoder. The embeddings and encoder width are
-untouched. Values are the contextual encoder states themselves; learned projections
-create match features for keys and queries. The decoder must now advance one target
-step at a time because its next context depends on its previous state. Teacher forcing
-still supplies the true previous token, but it no longer permits one fused decoder
-call.
+Several elements change relative to @sec-11-encoder-decoder. The embeddings and
+encoder width remain untouched. Values are now the contextual encoder states themselves,
+while learned linear projections construct match features for keys and queries.
+The decoder must now advance one step at a time because each subsequent context
+depends on the preceding decoder state. Teacher forcing still supplies the true previous
+token, but it no longer permits a single fused RNN call over the target sequence.
 
 ### Attention on the matched schedule {#the-matched-schedule-rematch}
 
-The @sec-11-encoder-decoder validation curve below comes from a byte-identical
-re-execution of that chapter's baseline; we do not retrain it here. We
-train the attentive model once and inspect only validation alignments. @sec-11-encoder-decoder
-already reported its test score, so the test set is not fresh; we evaluate it once,
-after the attention choices are fixed:
+The fixed-state baseline curve is the validation trajectory recorded for the packed,
+teacher-forced model in @sec-11-encoder-decoder (@fig-tf-vs-fr). We reuse those
+recorded values, train the attentive model once, and inspect its validation alignments.
+Because @sec-11-encoder-decoder already reported test performance, that test split is
+no longer untouched, so we evaluate on it once after the model is fixed:
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
@@ -970,7 +1006,7 @@ print(f"one final test audit ({len(test_unamb)} sources): "
 #| echo: false
 #| label: fig-attention-rematch
 #| fig-alt: "The left learning curves show the attention model reaching high exact-match accuracy much earlier than the fixed-state baseline. The right character-by-character heatmap concentrates the first four output rows inside a box around the source year positions."
-#| fig-cap: "Left: exact-sequence accuracy on @sec-11-encoder-decoder's fixed 400-source validation subset. Both models use the same data, embedding and recurrent hidden widths, optimizer, top-level seed, and epoch schedule; attention adds parameters and a stepwise decoder, so this is not a parameter- or compute-matched ablation. Right: the predeclared first validation example. Rows are emitted ISO characters, columns are contextual encoder states indexed by source character, and the orange box marks the source year. The first four rows concentrate there."
+#| fig-cap: "Left: exact-match accuracy on the fixed 400-source validation subset of @sec-11-encoder-decoder. Both models use the same data, embedding and recurrent hidden widths, optimizer, top-level seed, and epoch schedule. Because attention adds parameters and a stepwise decoder, this is not a parameter- or compute-matched ablation. Right: the predeclared first validation example. Rows are emitted ISO characters, columns are contextual encoder states indexed by source character, and the orange box marks the source year. The first four rows concentrate there."
 from matplotlib.patches import Rectangle
 
 fig, axes = plt.subplots(
@@ -1014,67 +1050,63 @@ fig.colorbar(
 )
 plt.show()
 ```
-At epoch 6, the fixed-state baseline is at $53.75\%$ and the attentive model is at
-$93.25\%$, a 39.5-point lead. At epoch 12 the comparison is $95.0\%$ versus
-$99.75\%$. The one final test audit is $93.1\%$ versus $100.0\%$ on 437
-unambiguous sources.
+At epoch 6, the fixed-state baseline reaches $53.75\%$ while the attentive model attains
+$93.25\%$, a difference of 39.5 percentage points. By epoch 12, the gap is narrower:
+$95.0\%$ versus $99.75\%$. On the final test audit of 437 unambiguous sources, the
+models score $93.1\%$ and $100.0\%$, respectively.
 
 ::: {.callout-warning}
-## Faster convergence is not a one-variable proof
+## Trap: confounding bottleneck removal with model capacity
 
-We matched examples, embedding and recurrent hidden widths, optimizer, top-level
-seed, number of updates, and epochs. We did **not** match parameter count,
-computation, or minibatch order: constructing models with different parameter counts
-consumes different random draws before their first permutation. The attentive model
-has 269,550 parameters versus 169,326, an increase of 59.2%, and its input-feeding
-decoder uses a Python step loop where @sec-11-encoder-decoder's teacher-forced baseline uses one
-fused target-sequence call. This one seeded synthetic run shows that the
-attention-equipped model reaches higher accuracy in fewer epochs and optimizer
-updates, not in less wall-clock time. It does not isolate bottleneck removal as the
-only possible cause.
+Although we matched the dataset, hidden dimensions, optimizer, initial seed, and epoch
+budget, this comparison is **not** a single-variable ablation. The attentive model
+has 269,550 parameters compared to the baseline's 169,326 (a 59.2% increase), and its
+per-step attention mechanism incurs more FLOPs. Initializing these additional
+projection layers also consumes pseudo-random draws before the first shuffle, subtly
+altering minibatch ordering. Faster convergence across epochs shows an empirical
+advantage of the attentive architecture in this single seeded run, but it does not
+isolate bottleneck removal from added model capacity as the sole underlying cause.
 :::
 
-The heatmap answers a narrower question. On the fixed validation example, the year
-must travel from the last four source positions to the first four outputs. The boxed
-region catches that movement, and across all 400 fixed validation examples, 97.5% of
-those four rows' mass lands on states indexed by the source-year region. The
-top-weighted state is indexed inside that region 99.7% of the time.
+The heatmap addresses a more specific question. On the fixed validation example, the
+year must travel from the last four source positions to the first four outputs. The
+boxed region catches that movement, and across all 400 fixed validation examples, the
+first four attention rows place 97.5% of their probability mass on the contextual
+encoder states corresponding to the source-year characters. The top-weighted state
+falls within that region 99.7% of the time.
 
 ::: {.callout-note title="Reading the heatmap"}
-Columns are indexed by source characters, but their values are encoder states. Each
-state summarizes a recurrent prefix, so a delimiter can legitimately carry
-information about a field that just ended. Attention weights are internal allocation
-weights, not calibrated confidence and not a causal explanation of the model.
+Columns are indexed by source characters, but their values are contextual hidden states.
+Because each state summarizes a recurrent prefix, the representation at a delimiter can
+readily encode information about preceding tokens. Attention weights reflect internal
+computational routing, not calibrated predictive confidence or a causal explanation of
+the model.
 :::
 
 <!-- /NOVEL -->
 
 ## One head in the date model {#one-learned-view-for-now}
 
-The date model uses one learned additive scorer and one weighted context vector. Its
-query and key maps determine the scores; the encoder states themselves supply the values.
-In multi-head scaled dot-product attention, each head instead has its own query, key, and
-value projections. The head outputs are concatenated and passed through an output
-projection. Multi-head attention works for cross-attention as well as
-self-attention, and different heads *can* learn different relationships without any
-guarantee that they will. We keep one head here so its alignment stays
-easy to inspect. @sec-14-self-attention-transformer derives the multi-head shapes and implements the full
-operator in its self-attention setting.
+The date model uses a single learned additive scorer and one weighted context vector.
+Its query and key projections compute alignment scores, while the encoder states supply
+retrieval values. Multi-head routing, in which parallel projections allow distinct
+heads to attend to multiple features simultaneously, is developed
+in @sec-14-self-attention-transformer.
 
-## The bottleneck that remains
+## Recurrence remains: the serial bottleneck {#the-bottleneck-that-remains}
 
-Cross-attention has repaired the fixed handoff. A decoder output can read any encoder
-state through one learned allocation. Yet both surrounding LSTMs remain recurrent:
-$\vect{h}_i$ waits for $\vect{h}_{i-1}$, and $\vect{s}_t$ waits for
-$\vect{s}_{t-1}$. Within either sequence, training cannot create all recurrent
-states at once.
+Cross-attention resolves the fixed-state bottleneck of sequence-to-sequence models:
+every decoder output can read any encoder state through a learned, differentiable soft
+address. For the year field of the date task, the learned weights concentrate on the
+encoder states indexed by the source-year characters, without explicit alignment
+supervision.
 
-The Q/K/V operator itself does not care where its three inputs came from. What if
-every position in one sequence supplied queries, keys, and values to every other
-position? Using self-attention in place of recurrence removes the sequential state update
-within each layer. It also changes how order enters the computation. @sec-14-self-attention-transformer
-develops positional representations and distinguishes them from masks that restrict which
-positions may contribute.
+Yet the host networks are still recurrent: $\vect{h}_i$ depends on $\vect{h}_{i-1}$,
+and $\vect{s}_t$ depends on $\vect{s}_{t-1}$. Because the hidden states of a sequence
+cannot be computed in parallel during training, the number of sequential steps grows
+with sequence length. This constraint motivates the next architectural transition:
+can self-attention replace recurrence entirely by allowing every token to attend across
+its own sequence in parallel? @sec-14-self-attention-transformer answers that question.
 
 ::: {.callout-note}
 ## Check yourself
@@ -1083,67 +1115,78 @@ Close the book for one minute and reconstruct the soft lookup.
 
 - What distinct jobs do queries, keys, and values perform?
 - Why does masking belong inside score normalization?
-- What did making the compatibility function learnable buy over the fixed kernel?
+- What does a learnable compatibility function gain over a fixed kernel?
 :::
 
 ## Okay, so: attention softens the address
 
-1. **Attention softens the address.** @sec-11-encoder-decoder learned embedding content while
-   keeping lookup indices hard. @sec-02-logistic-softmax's softmax makes the lookup
-   differentiable: learned scores become a distribution over memory locations.
-2. **Additive attention learns the compatibility function.** Query and key enter a
-   shared alignment space, tanh creates match features, and one selector produces
-   each score. The same scorer is reused across all decoder/source pairs.
-3. **Scaled dot product learns comparison spaces.** Projected
+1. **Attention softens the address.** @sec-11-encoder-decoder learned embedding
+   representations while keeping lookup indices hard. The softmax of
+   @sec-02-logistic-softmax makes the lookup differentiable: learned scores become a
+   probability distribution over memory locations.
+2. **Additive attention learns the compatibility function.** Query and key are
+   projected into a shared alignment space, a $\tanh$ nonlinearity creates match
+   features, and a linear selector produces each scalar score. The same scorer is
+   reused across all decoder–source pairs.
+3. **Cross-attention bridges two sequences.** Queries originate in the decoder while
+   keys and values reside in the encoder. Each step forms its own context vector, so the
+   final state of @sec-11-encoder-decoder is no longer the only path from source to
+   output.
+4. **Scaled dot product learns comparison spaces.** Projected
    $\matr{Q}\matr{K}^{\top}/\sqrt{d_k}$ maps directly to dense matrix products.
    Under the idealized independent unit-variance model, scaling holds score variance
    near one instead of letting it grow with $d_k$.
-4. **Masking is part of the operator.** Padding is excluded before softmax; zero is
-   not a mask. Cross-attention sees all real source positions, while causal masking
-   belongs to the self-attentive decoder in @sec-14-self-attention-transformer.
-5. **On dates, attention learns where to read.** Under the shared schedule, attention
+5. **Masking is part of the operator.** Padding must be excluded before softmax.
+   Setting a padded score to zero fails to mask it. Cross-attention attends over all
+   valid source positions, while causal masking belongs to the self-attentive
+   decoder in @sec-14-self-attention-transformer.
+6. **On dates, attention learns where to read.** Under the shared schedule, attention
    reaches 93.25% validation exact match at epoch 6 and 100.0% on the final test
-   audit. Its year rows route 97.5% of validation weight to states indexed by the
-   source-year region. Parameter count and compute were not matched: the attentive
-   model has 59.2% more parameters.
+   audit. Across the validation set, the four rows that emit the year allocate 97.5% of
+   their weight to states indexed by the source-year region. Parameter count and
+   compute were not matched: the attentive model has 59.2% more parameters.
 
-The recurrent networks that write the memory stay in place for now; @sec-14-self-attention-transformer lets a
-sequence query itself, so every position learns where to look and recurrence becomes
-optional.
+The recurrent networks that construct this memory bank remain in place for now.
+@sec-14-self-attention-transformer lets a sequence query itself, routing context across
+positions so that recurrence becomes optional.
 
 ## Sources and further reading {.unnumbered}
 
-- [Bahdanau, Cho, & Bengio, *Neural Machine Translation by Jointly Learning to Align and Translate*](https://arxiv.org/abs/1409.0473): conjectures that the fixed-length encoder vector is a bottleneck, then tests differentiable soft search with an additive scorer.
-- [Luong, Pham, & Manning, *Effective Approaches to Attention-based Neural Machine Translation*](https://aclanthology.org/D15-1166/): compares dot, general, and concat scoring functions and clarifies a second recurrent-attention timing convention.
-- [Vaswani et al., *Attention Is All You Need*](https://papers.nips.cc/paper/7181-attention-is-all-you-need): introduces scaled dot-product and multi-head attention in the architecture @sec-14-self-attention-transformer builds.
+- [Bahdanau, Cho, and Bengio, *Neural Machine Translation by Jointly Learning to Align and Translate*](https://arxiv.org/abs/1409.0473): conjectures that the fixed-length encoder vector is a bottleneck, then tests differentiable soft search with an additive scorer.
+- [Luong, Pham, and Manning, *Effective Approaches to Attention-based Neural Machine Translation*](https://aclanthology.org/D15-1166/): compares dot, general, and concat scoring functions and clarifies a second recurrent-attention timing convention.
+- [Vaswani et al., *Attention Is All You Need*](https://papers.nips.cc/paper/7181-attention-is-all-you-need): introduces scaled dot-product and multi-head attention in the Transformer architecture that @sec-14-self-attention-transformer develops.
 
 ## Exercises {.unnumbered}
 
 1. **(Pencil.)** Starting from @eq-additive-attention, write every batched shape for
    $B=32$, source length 17, $d_e=128$, $d_d=96$, and $d_a=64$. Which axis must
    softmax normalize, and why can the raw encoder and decoder widths differ?
-2. **(Code.)** Extend the scaled-dot function with a deliberately all-false mask row.
-   Confirm the guard catches it. Remove the guard and inspect the result of softmax
-   over all $-\infty$. Then replace the mask with zero scores and explain why padding
-   receives weight.
-3. **(Pencil.)** (a) Generalize the scaling derivation to independent coordinates
+2. **(Code.)** Pass a batch whose mask contains one all-false row to
+   `LearnedAlignment`, and inspect the result of softmax over all $-\infty$. Add an
+   assertion that every row keeps at least one real key. Then set the padded scores to
+   zero instead of $-\infty$ and explain why padding receives weight.
+3. **(Pencil.)** For encoder width $d_e$, decoder width $d_d$, and alignment width
+   $d_a$, count the parameters in $\matr{W}_q$, $\matr{W}_k$, and $\vect{v}_a$. Show
+   that the parameter count is independent of both sequence lengths $m$ and $n$, and
+   identify the tensor shape that depends on both.
+4. **(Pencil.)** (a) Generalize the scaling derivation to independent coordinates
    with variances $\sigma_q^2$ and $\sigma_k^2$.
    **(Code.)** (b) Modify the seeded audit and check which divisor returns score
    variance near one.
-4. **(Code.)** Replace the date model's additive scorer with learned projected
-   scaled-dot attention. Keep the split, schedule, and validation subset fixed. Select
-   any design choices on validation, report the reused test endpoint once, and compare
-   both convergence and year-region alignment. Explain why a large weight is neither
-   calibrated confidence nor a causal explanation.
-5. **(Pencil.)** The heatmap labels columns by source characters even though each
-   value is a recurrent prefix state. Give two reasons a delimiter state might carry
-   useful month or day information. Then state one conclusion the heatmap supports
-   and one conclusion it cannot support.
+5. **(Code.)** Retrain the date model with the `LearnedAlignment` scorer at alignment
+   widths $d_a\in\{32,64,256\}$. Keep the split, schedule, and validation subset fixed.
+   Select any design choices on validation, report the score on the previously used
+   test set once, and compare both convergence and year-region alignment. Explain why
+   a large weight is neither calibrated confidence nor a causal explanation.
+6. **(Pencil.)** The heatmap of @fig-attention-rematch labels columns by source
+   characters even though each value is a recurrent prefix state. Give two reasons the
+   encoder state at a delimiter might carry useful month or day information. Then state
+   one conclusion the heatmap supports and one conclusion it cannot support.
 
-6. **(Audit.)** The date model's `nn.Embedding` learned a vector for each
-   of the characters `0`–`9`. Predict their geometry before looking. *Named wrong answer:* a clean
-   number line ordered by numeric value, which is tempting but not what the
-   training pressure rewards. Extract the ten rows, project them
-   to two dimensions, and compare against the same rows from an untrained model
-   (the falsifying control). What structure did training actually build, and
-   which of the model's jobs (months, days, years) explains it?
+7. **(Audit.)** The date model's `nn.Embedding` learned a vector for each
+   of the characters `0`–`9`. Predict their geometry before inspection. *Common
+   misconception:* "the embeddings must form a clean number line ordered by numeric
+   value." The training objective does not require that geometry. Extract the ten
+   rows, project them to two dimensions, and compare against the same rows from an
+   untrained model, an initialization baseline. What structure did training actually
+   build, and which of the model's jobs (months, days, years) explains it?
