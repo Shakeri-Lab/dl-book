@@ -50,7 +50,7 @@ test('detach cut: the sentences the schematic illustrates are the chapter\'s own
   // The closing caption is the chapter's sentence, verbatim.
   const closing = f.$('[data-caption]').textContent.trim();
   assert.equal(closing, 'The values cross the boundary; the gradient graph does not.');
-  assert(chapter.includes('The values cross the boundary; the') && chapter.includes('gradient graph does not.'));
+  assert(chapter.includes('The values cross the boundary, but the') && chapter.includes('gradient graph does not.'));
   // The formula is the chapter's recurrence at the first step after the cut, in its macros.
   assert(chapter.includes('\\vect{h}_t = f(\\vect{h}_{t-1}, \\vect{x}_t),'));
   const [carry, reset] = f.formulas().map(span => span.textContent);

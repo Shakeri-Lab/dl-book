@@ -91,7 +91,7 @@ test('gru blend: the equation, the keep convention and the range are the chapter
   // z weights the old state ("so it reads as keep"), and the candidate is shaped by tanh,
   // so the drawn line is tanh's range and both declared values sit strictly inside it.
   assert(chapter.includes('$\\vect{z}_t$ weights the old\nstate, so it reads as **keep**.'));
-  assert(chapter.includes('content is shaped by $\\tanh$, keeping it bounded and centered.'));
+  assert(chapter.includes('content passes through $\\tanh$, which keeps each coordinate between $-1$ and $1$.'));
   assert.deepEqual(k.range, [-1, 1]);
   for (const v of [k.old, k.cand]) assert(v > k.range[0] && v < k.range[1] && cents(v) === v * 100, `declared toy ${v}`);
   assert.notEqual(k.old, k.cand);
@@ -472,5 +472,5 @@ test('integration: the excerpt follows the GRU figure and precedes the reset con
   while (!/^```\s*$/.test(lines[fence])) fence++;
   let next = fence + 1;
   while (!lines[next].trim()) next++;
-  assert.match(lines[next], /^One convention matters before you compare code\./, 'the panel lands between the figure and this paragraph');
+  assert.match(lines[next], /^One convention matters before we compare code\./, 'the panel lands between the figure and this paragraph');
 });

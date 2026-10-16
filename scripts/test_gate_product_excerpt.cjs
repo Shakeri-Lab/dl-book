@@ -220,9 +220,9 @@ test('gate-product: the declared attributes reproduce the chapter literals they 
   // scripts/audit_excerpt_fixtures.py.
   assert.equal(values.half, 0.5);
   assert.equal(values.half, sigma(0), 'the declared half-open gate is not sigma(0)');
-  assert(chapter.includes(`sequences of ${values.horizon} random tokens`),
+  assert(chapter.includes(`read an ${values.horizon}-token sequence`),
     'the declared horizon is not the recall task\'s lag');
-  assert(chapter.includes('near $\\sigma(0) = \\tfrac12$'),
+  assert(chapter.includes('near $\\\\sigma(0)=\\\\tfrac12$'),
     'the chapter no longer says a default-initialized forget gate sits near sigma(0) = 1/2');
   assert(chapter.includes(`The code sets their **sum** to $+${values.bias}$`),
     'the declared bias does not spell the chapter\'s +1 forget-gate bias');
@@ -234,7 +234,7 @@ test('gate-product: the declared attributes reproduce the chapter literals they 
     'the chapter no longer bounds the direct-path product, which the boundary repeats');
   for (const level of values.measured) assert(chapter.includes(String(level)),
     `the diagnostic caption no longer reports a mean gate of ${level}`);
-  assert(chapter.includes(`holds its gates flat around ${values.measured[0]} for all eighty steps`));
+  assert(chapter.includes(`holds its mean gate flat around ${values.measured[0]} for all eighty steps`));
   assert(chapter.includes(`at about ${values.measured[1]}`));
   for (const literal of scene.fixture.literals) assert(chapter.includes(literal));
 });
