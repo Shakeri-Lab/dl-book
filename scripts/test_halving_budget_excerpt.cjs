@@ -265,7 +265,7 @@ test('integration: the excerpt is HTML-only, manifest-driven, and declared in th
   // before the split section. The intervening "A practical search order" heading is
   // inside a callout, which is why it is not the anchor.
   assert(chapter.indexOf('$27+9(2)+3(6)+1(18)=81$') < chapter.indexOf(`## ${scene.anchor.target}`));
-  assert(chapter.indexOf('The saving comes with an assumption') < chapter.indexOf(`## ${scene.anchor.target}`));
+  assert(chapter.indexOf('The reduced epoch count comes from pruning.') < chapter.indexOf(`## ${scene.anchor.target}`));
   const callout = chapter.indexOf('## A practical search order');
   assert(chapter.lastIndexOf('::: {.callout-tip}', callout) > chapter.indexOf('$27+9(2)+3(6)+1(18)=81$'),
     'the nearer heading really does sit inside a callout');

@@ -6,8 +6,8 @@
 
 As @sec-06-generalization-inductive-bias showed, our fitted
 MLP was sensitive to small changes in image position. Its dense
-parameterization imposed neither locality nor weight sharing.
-After the experimental interlude, we return to these two design
+parameterization imposed neither local connectivity nor weight sharing across spatial
+positions. After the experimental interlude, we return to these two design
 choices: restrict a detector to a local patch and apply the same
 weights at every position.
 
@@ -37,9 +37,9 @@ These principles suggest a small detector applied to each image
 patch with the same weights. We begin with hand-designed kernels
 whose responses are easy to interpret.
 
-## Start in 1D: the moving average
+## One-dimensional filtering: the moving average {#start-in-1d-the-moving-average}
 
-The core operation appears in its friendliest form when smoothing a noisy signal. A
+The core operation is simplest in one dimension when smoothing a noisy signal. A
 moving average replaces each point by the mean of its neighborhood: locality, with
 *uniform* weights:
 
@@ -72,7 +72,7 @@ We slide a symmetric window along the signal. At each stop, we average the sampl
 the window and record that mean as the output at the window's center. The positive and
 negative fluctuations of the noise largely cancel in the sum, so the rapid jitter is damped
 while the slow variation of the signal survives. @fig-moving-average shows the
-operation on a noisy sinusoid; its bottom panel magnifies one nine-point window and the
+operation on a noisy sinusoid, and its bottom panel magnifies one nine-point window and the
 averaging step that produces one point of the smoothed curve.
 
 ```{python}
@@ -151,7 +151,7 @@ print(f"recipe vs. torch.conv2d: max |diff| = {gap:.1e}")
 As the markers show, steps 2 and 5 share a line. The plan moves one window at a time,
 while the code computes every dot product at once: the two `unfold` calls
 return all the windows of the image as one view, and the next line scores each window
-against the kernel. The second function, `conv2d`, wraps PyTorch's `F.conv2d`; the rest of
+against the kernel. The second function, `conv2d`, wraps PyTorch's `F.conv2d`. The rest of
 the chapter uses it, and the two functions agree to float32 rounding.^[A vectorized rewrite
 of a sliding loop is easy to get wrong by one index or one axis, so we check it against the
 framework before relying on it. On a random $10 \times 12$ image and a random $3 \times 3$
@@ -159,12 +159,12 @@ kernel, the largest absolute difference between the outputs of `manual_conv2d` a
 `conv2d` is $4.8 \times 10^{-7}$, the size of float32 rounding.]
 
 The feature map is smaller than the image. We take an odd kernel size, $k = 2\Delta + 1$,
-so the kernel has a center entry and reaches $\Delta$ pixels to each side of it; a
+so the kernel has a center entry and reaches $\Delta$ pixels to each side of it. A
 $3 \times 3$ kernel has $\Delta = 1$. A window that stays inside the frame keeps its center
 at least $\Delta$ pixels from every edge, which leaves $n - 2\Delta = n - k + 1$ positions
 in each row and each column of an $n \times n$ image. The output is therefore
 $(n - k + 1) \times (n - k + 1)$. Padding the image with extra pixels controls this
-shrinkage, and a stride moves the window in larger steps; @sec-08-cnn treats both.
+shrinkage, and a stride moves the window in larger steps. @sec-08-cnn treats both.
 
 ## Examples of fixed filters {#the-filter-zoo}
 
@@ -176,9 +176,9 @@ subset:
 - **Blur** uses uniform positive weights summing to 1, the 2-D moving average.
 - **Sharpen** amplifies each pixel's difference from its neighbors.
 - **Edge detection** (Sobel) uses positive and negative weights summing to *zero*.
-  Over any flat region the products cancel and the output is silent; over an edge, a
-  sharp change in values, the sum swings large. Its response at each position indicates
-  whether intensity changes there along the kernel's direction.
+  Over any flat region the products cancel and the output vanishes. Over an edge, a
+  sharp change in values, the sum is large in magnitude. The vertical-edge kernel
+  measures left-to-right intensity changes, and its transpose measures top-to-bottom changes.
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
@@ -243,9 +243,9 @@ for ax in axes.flat:
 plt.tight_layout(); plt.show()
 ```
 ::::
-Study the two Sobel columns for a moment. The vertical-edge detector lights up on the
-rectangle's sides and stays silent on its top and bottom; the horizontal detector does
-the reverse; the diagonal stripes excite both. With nine numbers we have built a
+In the two Sobel columns, the vertical-edge detector responds to the
+rectangle's sides and not to its top and bottom. The horizontal detector does
+the reverse, and the diagonal stripes excite both. With nine numbers we have built a
 primitive *feature detector*, the patch-by-patch detector that the two principles
 suggest, and none of its coefficients was learned.
 
@@ -253,7 +253,7 @@ suggest, and none of its coefficients was learned.
 
 This sliding sum of products is called **cross-correlation**. To write it down, we index
 the kernel $V$ by offsets from its center: the entry $[V]_{u,v}$ sits $u$ rows and $v$ columns
-from the center, with $u$ and $v$ running from $-\Delta$ to $\Delta$; negative $u$ lies
+from the center, with $u$ and $v$ running from $-\Delta$ to $\Delta$. Here negative $u$ lies
 above the center and negative $v$ to its left, so in a $3 \times 3$ kernel $[V]_{-1,-1}$ is
 the top-left entry. With the kernel centered on pixel $(i, j)$ of the image $X$, the entry
 $[V]_{u,v}$ lies over the pixel $[X]_{i+u,\,j+v}$, and the output $[H]_{i,j}$ sums these
@@ -284,8 +284,8 @@ the same kernel at every position. On the interior of the image, shifting the in
 therefore shifts the feature map by the same displacement and leaves its values unchanged.
 This property is **translation equivariance**.
 
-We test it as a question of order: does shifting before filtering give the same result as
-filtering before shifting?
+To see this property in action, frame it as a question of order: does shifting before
+filtering give the same result as filtering before shifting?
 
 :::: {.plan-code}
 ::: {.plan}
@@ -324,18 +324,19 @@ every input pixel its own coefficient in every output, so its weights are tied t
 positions in the frame. Cross-correlation ties its weights to offsets from the window's
 center, so a pattern produces the same response wherever it appears. Near the edges the
 equality can fail, because a window there covers pixels that the shift filled with zeros
-or pushed out of the frame; exact equivariance holds on the interior, which is why the code
+or pushed out of the frame. Exact equivariance holds on the interior, which is why the code
 excludes the border columns.
 
-Before going further, keep two related properties distinct:
+We distinguish two related properties:
 
 - **Equivariant** means that the output transforms along with the input: if the input
   moves, the feature map moves by the same displacement. Convolution provides this.
 - **Invariant** means that the output does not change at all: a garment classifier
   should predict the same category wherever the garment sits in the image.
 
-Equivariance tracks *where* a feature is; classification needs invariance, because the
-label depends on *what* is present. Equivariance is the raw material for invariance.
+Equivariance tracks *where* a feature is. For garment classification, we want the label
+to remain unchanged under small, label-preserving shifts. Equivariance is the raw material
+for that invariance.
 In @sec-08-cnn, pooling discards some position information to gain local shift
 tolerance, and @sec-09-modern-cnns-transfer pools each feature map over the whole image.
 Edge effects, strides and pooling windows can still change intermediate responses under a
@@ -354,16 +355,16 @@ With $v_1 = v_2 = v_3 = 1/3$, the matrix computes a three-point moving average.
 
 The matrix has two kinds of structure. Half its entries are zero here, and nearly all of
 them for an image, because each output depends only on its window (locality). The nonzero
-entries repeat, because every row holds the same three weights, one column further right
-than the row above (weight sharing). A dense $4 \times 6$ matrix has 24 independent
-entries; this one has 3.
+entries repeat along each diagonal in a banded *Toeplitz* pattern, because each row shifts
+the same three weights one column to the right (weight sharing). Whereas a dense
+$4 \times 6$ matrix has 24 independent entries, this one has 3.
 
 The saving grows with the input. A dense layer from our 28×28 images to an equal-sized
-output (with padding) would have $784 \times 784 \approx 615{,}000$ weights; the Sobel
-detector has **nine**, reused at every position. These are the constraints
+output (with padding) would have $784 \times 784 \approx 615{,}000$ weights, whereas the
+Sobel detector has **nine**, reused at every position. These are the constraints
 of @sec-06-generalization-inductive-bias made concrete: locality zeroes out most of the
-matrix, weight sharing ties the remaining entries together, and what is left is a linear
-map with almost nothing to specify.
+matrix, weight sharing ties the remaining entries across positions, and the entire linear
+map is parameterized by the kernel alone.
 
 :::: {.plan-code}
 ::: {.plan}
@@ -405,29 +406,26 @@ ax.tick_params(which="minor", bottom=False, left=False)
 ax.set_title(r"$\mathbf{h}=\mathbf{T}(\mathbf{v})\mathbf{x}$: local and weight-shared")
 plt.tight_layout(); plt.show()
 ```
-## The bottleneck: someone has to design the kernel
+## Limitations of hand-designed kernels {#the-bottleneck-someone-has-to-design-the-kernel}
 
-Why did this classical machinery not solve vision decades ago? The kernels
-are only as good as their designers, and hand-crafted kernels have three limitations:
+For the classification problem we are building toward, fixed hand-designed kernels leave
+three limitations:
 
 1. **Predefined features.** These kernels were selected for
    specific low-level operations, such as smoothing or detecting
    intensity changes, rather than fitted to the classification task.
 2. **Manual feature engineering.** Choosing which kernels to use, and how to combine
-   them, takes deep domain expertise and extensive experimentation for every new task.
-3. **No adaptation.** A fixed kernel cannot adjust to a dataset. What works for one
-   task fails for another.
+   them, can require task-specific expertise and experimentation.
+3. **No adaptation.** A fixed kernel does not adapt automatically when the task or data
+   changes.
 
-An entire era of computer vision operated under these constraints, chaining
-hand-engineered filters into multi-stage heuristic pipelines. The architectural
-geometry (local receptive fields with shared spatial weights) was sound; the manually
-tuned coefficients formed the bottleneck.
+We can retain the local, shared operation while fitting its coefficients to the task.
 
 A $3 \times 3$ kernel contains nine scalar coefficients. We can
 treat them as a parameter tensor
-$\matr{V} \in \mathbb{R}^{3 \times 3}$ and optimize a task loss using
+$V \in \mathbb{R}^{3 \times 3}$ and optimize a task loss using
 the gradients from @sec-05-backpropagation. Locality and
-weight sharing remain fixed; the coefficients become learnable.
+weight sharing remain fixed, while the coefficients become learnable.
 This gives a trainable convolutional layer. @sec-08-cnn
 combines such layers into a classifier.
 
@@ -441,24 +439,25 @@ Close the book for one minute and reconstruct the sliding operation.
 - What remains hand designed at the end of this chapter?
 :::
 
-## Okay, so: the machine before the learning
+## Okay, so: convolution builds in locality and weight sharing {#okay-so-the-machine-before-the-learning}
 
 1. **One operation, many kernels**: slide a small template, take a dot product at
    every position (@eq-crosscorr). Blur, sharpen, and edge detection differ only in
    the kernel's numbers.
-2. **Locality and sharing are built in**: as a matrix, convolution is almost-all-zero
-   with nine numbers repeating: 615,000 weights collapsed to 9.
+2. **Locality and sharing are built in**: in the $3\times3$ example, locality fixes
+   most matrix entries at zero, while sharing reduces the independent weights from about
+   615,000 to 9.
 3. **Equivariance is exact on the interior**, not approximate: filter-then-shift equals
    shift-then-filter wherever both operations use the same pixels. Boundary handling
    must be specified separately. Pooling in @sec-08-cnn adds some local shift tolerance
    on top of that equivariance.
-4. **Hand-crafting is the bottleneck**: predefined features, engineering cost, no
+4. **Hand-designed kernels have three limitations**: predefined features, engineering cost, no
    adaptation. Gradient descent can learn the kernel's numbers instead.
 
 ## Sources and further reading {.unnumbered}
 
 - Fukushima,
-  ["Neocognitron: A Self-organizing Neural Network Model"](https://doi.org/10.1007/BF00344251)
+  ["Neocognitron: A Self-Organizing Neural Network Model"](https://doi.org/10.1007/BF00344251)
   (1980): an early hierarchy of local, shift-tolerant feature detectors.
 - LeCun et al.,
   ["Gradient-Based Learning Applied to Document Recognition"](https://doi.org/10.1109/5.726791)
@@ -472,21 +471,21 @@ Close the book for one minute and reconstruct the sliding operation.
 
 ## Exercises {.unnumbered}
 
-1. **(Pencil.)** Compute by hand the full output of cross-correlating with the
-   vertical Sobel kernel the $4\times4$ image whose rows are all
-   $(0,0,1,1)$. Before computing: where should the detector fire?
+1. **(Pencil.)** Compute by hand the full output of cross-correlating the
+   $4\times4$ image whose rows are all $(0,0,1,1)$ with the vertical Sobel
+   kernel. Before computing: where should the detector fire?
 2. **(Pencil.)** (a) Design a $3\times3$ kernel that detects *diagonal* edges
    (bottom-left to top-right). State your design rule: what must the weights sum to,
    and why?
    **(Code.)** (b) Run it on `make_shapes()` and check that it fires on the stripes.
 3. **(Pencil.)** Prove translation equivariance from @eq-crosscorr: substitute the
-   shifted image $X'_{i,j} = X_{i-s,j}$ and show $H'_{i,j} = H_{i-s,j}$. Why does the
+   shifted image $[X']_{i,j} = [X]_{i-s,j}$ and show $[H']_{i,j} = [H]_{i-s,j}$. Why does the
    same argument fail for the MLP of @sec-06-generalization-inductive-bias? State where the proof applies at a
    finite image boundary.
 4. **(Code.)** True convolution flips the kernel: run `conv2d` with `k` and with
    `k.flip(0, 1)` for the blur and for Sobel. Which outputs differ, which do not,
-   and what property of the kernel decides it?
+   and what property of the kernel determines the difference?
 5. **(Code.)** The box blur is *separable*: show that convolving with the $3\times3$
    uniform kernel equals convolving with a $3\times1$ column of $\tfrac13$s and then a
    $1\times3$ row of $\tfrac13$s. Count multiplications per output pixel for each
-   route. This trick mattered in the hand-crafted era.
+   route. Separability mattered in the hand-crafted era.

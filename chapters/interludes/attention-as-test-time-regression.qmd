@@ -5,13 +5,19 @@
      appear below. Equations, code, figures, and the sealed CPU study are original
      to the book. -->
 
-@sec-14-self-attention-transformer retained earlier keys and values so that each new query
-could form a weighted read. This interlude compares three ways to construct that memory
-computation: a query-local fit over stored pairs, running statistics for a factorized kernel,
-and an online linear predictor updated by the delta rule.
+During autoregressive generation, a causal Transformer can retain the keys and values of
+earlier tokens in a key--value (KV) cache, described in the
+[architectural trade-offs](../part4/14-self-attention-transformer.qmd#what-the-architecture-bought)
+section of @sec-14-self-attention-transformer, so that each new query attends to all prior
+tokens without recomputing them. This interlude
+compares three ways to construct that memory computation: a query-local fit over stored
+pairs, running statistics for a factorized kernel, and an online linear predictor updated by
+the delta rule.
 
-The constructions share a regression perspective, but they need not solve the same
-optimization problem. The kernel, predictor class, regularization, and update rule determine
+Read this way, attention is an online regression estimator at test time. The constructions
+share a regression perspective, but they need not solve the same optimization problem.
+Softmax attention, linear attention, state-space models and DeltaNet differ in the kernel,
+the predictor class, the regularization and the update rule, and these choices determine
 both the answer and the information that must be retained.
 
 ```{python}
@@ -22,20 +28,21 @@ import numpy as np
 
 ## Three memory constructions through regression {#one-regression-three-solvers}
 
-The recurrent networks of @sec-10-sequences-rnn squeezed the evidence into a fixed-size
-state. The Transformer resolved that bottleneck by keeping all the visible evidence
-available. Its routing cost is quadratic in sequence length. There is another resolution:
+The recurrent networks of @sec-10-sequences-rnn compressed the history into a fixed-size
+state. The Transformer resolved that bottleneck by keeping the visible key--value rows
+available. Reading those rows becomes more expensive as the prefix grows, and across a
+complete sequence dense routing has quadratic cost. There is another resolution:
 return to the regression perspective of @sec-12-kernel-regression and change the kernel,
 the predictor class, or the update rule. Some of these choices permit a state of fixed size.
 
 Recent sequence models make that move under names such as test-time
-regression, fast weights, linear attention, DeltaNet, and state-space sequence models.
-The names matter less than two questions about each solver: what does it keep, and
-what does it give up?
+regression, test-time training, fast weights, linear attention, DeltaNet, Titans, MesaNet,
+and state-space sequence models. Each solver is characterized by what information it
+retains and what computational trade-offs it accepts.
 
 ### Choices within the regression framework {#one-objective-four-dials}
 
-At time $t$, let learned projections turn token representation $\vect{x}_\tau$ into
+At time $t$, let learned projections turn each token representation $\vect{x}_\tau$ into
 two views,
 
 $$
@@ -44,7 +51,8 @@ $$
 \vect{v}_\tau=\matr{W}_V\vect{x}_\tau.
 $$
 
-A memory layer can be described as building an online predictor
+Following [Wang, Shi, and Fox (2025)](https://arxiv.org/abs/2501.12352), we describe memory
+construction as a weighted regression problem. A memory layer builds an online predictor
 $M_t:\mathbb{R}^{d_k}\rightarrow\mathbb{R}^{d_v}$:
 
 $$
@@ -58,33 +66,33 @@ M_t
 \quad \vect{q}_t=\matr{W}_Q\vect{x}_t.
 $$
 
-This is Wang, Shi, and Fox's test-time-regression frame, written for vector values.
 The display specifies a reference fitting problem. An online update need not attain its
 minimizer. Query-local attention also makes the observation weights depend on the query,
 as the next construction shows.
 
 Here the keys and values are computed from the input sequence. The memory state changes
-during the forward computation; the projection parameters are held fixed during that
-evaluation. The frame exposes four dials.
+during the forward computation, while the projection parameters are held fixed during that
+evaluation. The frame exposes four design choices.
 
-**The views.** $W_Q,W_K,W_V$ are the learned projections of @sec-13-attention: queries
-and keys are compared, and values are what the comparison passes on.
-The token is not assigned one permanent meaning; the three projections give it a query,
-a key that provides the features used for comparison, and a value.
+**The views.** $\matr{W}_Q,\matr{W}_K,\matr{W}_V$ are the learned projections of @sec-14-self-attention-transformer:
+queries and keys are compared, and values are what the comparison passes on. The token is
+not assigned one permanent meaning. The three projections give it a query, a key that
+provides the features used for comparison, and a value.
 
-**The history weights.** $w_{t,\tau}$ decide how much an older residual matters to
-the fitting problem. @sec-10-sequences-rnn's forget gates already made retention
+**The history weights.** $w_{t,\tau}$ determine how much an older residual matters to
+the fitting problem. The forget gates of @sec-10-sequences-rnn already made retention
 depend on time and content. A geometric schedule can privilege recent errors; an
 input-dependent schedule can keep some tokens longer than others.
 
-**The model and regularizer.** The class $\mathcal{M}$ decides whether the predictor
+**The model and regularizer.** The class $\mathcal{M}$ determines whether the predictor
 is a local constant, a linear map, or something richer. $\Omega$ brings back ridge
 penalties from @sec-01-linear-regression and weight decay from @sec-04-training-loss-sgd. Regularization controls the
-fitted map; it is not, by itself, the same operation as forgetting old observations.
+fitted map. It is not, by itself, the same operation as forgetting old observations.
 
 **The solver.** A closed-form local fit, a running sufficient statistic, and one
-gradient step do different work and preserve different information. This is the new dial: *what if the
-solver itself were a design choice, or even learned?*
+gradient step do different work and preserve different information. A layer may compute a
+closed-form solution or execute an iterative or approximate update, whose rule may itself be
+learned.
 
 This objective is an umbrella, not an equivalence theorem. Its
 methods can restrict different function classes, use different weights, and stop at
@@ -92,9 +100,10 @@ different approximations.
 
 ### Solver 1: keep the data and fit at the query
 
-@sec-12-kernel-regression was more precise than saying “attention minimizes
-the shared objective.” For a query $\vect{q}$, softmax attention solves the
-local-constant problem
+Softmax attention instantiates the framework as a query-local constant estimator. For a
+query $\vect{q}$, the predictor class $\mathcal{M}$ is restricted to constant vectors
+$\vect{c}\in\mathbb{R}^{d_v}$, and observation weights are the query-dependent affinities,
+yielding the local-constant problem
 
 $$
 \vect{c}^{*}(\vect{q})
@@ -116,8 +125,8 @@ $$
 
 Choose
 $\kappa(\vect{q},\vect{k})=\exp(\vect{q}^{\top}\vect{k}/\sqrt{d_k})$ and the
-normalized coefficients are exactly a row of scaled dot-product softmax. The kernel
-supplies the weights; the constant fit supplies the average. An unrestricted $M$ with
+normalized coefficients form a row of scaled dot-product softmax. The kernel
+supplies the weights, and the constant fit supplies the average. An unrestricted $M$ with
 unit observation weights and no regularizer would instead interpolate compatible
 training pairs and be undetermined away from them.
 
@@ -234,14 +243,15 @@ print("streaming equals traversal:", np.allclose(ms_streaming, ms_traversal))
 print(f"max |difference|: {np.abs(ms_streaming-ms_traversal).max():.3e}")
 ```
 ::::
-The equality is exact up to floating-point order: the full dataset traversal has
-collapsed into two running sums. With $r$ and $d_v$ fixed, storage no longer grows
+The identity is exact in real arithmetic. In floating point the two results can differ
+slightly, because the sums are accumulated in a different order. The traversal of the full
+dataset has collapsed into two running sums. With $r$ and $d_v$ fixed, storage no longer grows
 with the prefix. Causal **linear** attention can therefore run as a recurrence:
 its state stores the sufficient statistics of this regression.
 
 <!-- print 2026-10-09, author-approved: why softmax's exponential kernel has no finite exact feature map (Taylor series, features from all products of m coordinates), with a footnote on truncation and positive random features -->
-There is a price. Ordinary softmax's exponential dot-product kernel does not have the
-finite exact feature map used above. With the scale $1/\sqrt{d_k}$ absorbed into
+This construction has a limitation. Ordinary softmax's exponential dot-product kernel does
+not have a finite exact feature map like the one used above. With the scale $1/\sqrt{d_k}$ absorbed into
 $\vect{q}$, the kernel has the Taylor series
 $\exp(\vect{q}^{\top}\vect{k})=\sum_{m\ge0}(\vect{q}^{\top}\vect{k})^{m}/m!$. Each power
 $(\vect{q}^{\top}\vect{k})^{m}$ is a dot product of features built from all products of
@@ -254,8 +264,8 @@ use $r$ positive features built from random projections, chosen so that
 $\phi(\vect{q})^{\top}\phi(\vect{k})$ equals the kernel on average over the random draw
 (Choromanski et al.). In both cases the relative error can rise quickly as
 $\norm{\vect{q}}$ and $\norm{\vect{k}}$ grow.]
-Collisions in $(S_t,z_t)$ cannot be undone by revisiting a
-discarded row. The traversal equality is exact for the chosen factorized kernel, not a
+The state preserves the chosen kernel's readout for every query, but not the individual
+stored pairs: a discarded row cannot be revisited. The traversal equality is exact for the chosen factorized kernel, not a
 proof that finite-state linear attention reproduces exact softmax for arbitrary
 prefixes.
 
@@ -312,8 +322,8 @@ print("SGD equals Delta recurrence:", np.allclose(ms_sgd, ms_delta))
 print(f"max |difference|: {np.abs(ms_sgd-ms_delta).max():.3e}")
 ```
 ::::
-For vector values, store
-$\matr{H}_t\in\mathbb{R}^{d_v\times d_k}$ and replace the update by
+For vector values, store $\matr{H}_t\in\mathbb{R}^{d_v\times d_k}$, read a query as
+$M(\vect{q})=\matr{H}_t\vect{q}$, and replace the update by
 
 $$
 \matr{H}_t
@@ -321,23 +331,29 @@ $$
 +\eta_t(\vect{v}_t-\matr{H}_{t-1}\vect{k}_t)\vect{k}_t^{\top}.
 $$
 
-Each outer product writes the residual left by the current key. Geometrically, the write
-changes the state only along that key, so a query orthogonal to the key reads the same value
-before and after the update. DeltaNet turns that
-classical online least-squares step into a sequence layer. The recurrence also exposes
-a state-space form: its transition is
-$\matr{A}_t=\matr{I}-\eta_t\vect{k}_t\vect{k}_t^{\top}$ and its input write is
-$\eta_t v_t\vect{k}_t$. The state transition is therefore determined by the current
-token's learned key.
+Each outer product writes the residual left by the current key. The update changes a
+query's readout in proportion to its inner product with that key,
+$\matr{H}_t\vect{q}-\matr{H}_{t-1}\vect{q}=\eta_t(\vect{v}_t-\matr{H}_{t-1}\vect{k}_t)(\vect{k}_t^{\top}\vect{q})$,
+so a query orthogonal to the key reads the same value before and after the update. DeltaNet
+turns that classical online least-squares step into a sequence layer. Expanding the update
+gives
+$\matr{H}_t=\matr{H}_{t-1}(\matr{I}-\eta_t\vect{k}_t\vect{k}_t^{\top})+\eta_t\vect{v}_t\vect{k}_t^{\top}$,
+where the transition matrix acts on the state from the right. In transposed form,
+$\matr{H}_t^{\top}=(\matr{I}-\eta_t\vect{k}_t\vect{k}_t^{\top})\matr{H}_{t-1}^{\top}+\eta_t\vect{k}_t\vect{v}_t^{\top}$,
+exposing a state-space form where $\matr{A}_t=\matr{I}-\eta_t\vect{k}_t\vect{k}_t^{\top}$
+acts on the key space from the left and the input write is the outer product
+$\eta_t\vect{k}_t\vect{v}_t^{\top}$. The state transition is therefore determined by the
+current token's learned key.
 
-Where does forgetting enter? Exponential history weights
-$w_{t,\tau}=\gamma^{t-\tau}$ define an exponentially weighted least-squares
+Exponential history weights
+$w_{t,\tau}=\gamma^{t-\tau}$ introduce forgetting into the least-squares
 *objective*, but its exact minimizer generally requires a recursive least-squares
 covariance state. Writing $\gamma\matr{H}_{t-1}$ into a one-step delta recurrence is
 a fading-memory solver choice, not an algebraic consequence of those weights. Gates
 can make that retention and the step size depend on the current token.
 
-Such gates link this recurrence to the wider SSM family. Mamba makes parts of
+Such gates link this recurrence to the wider state-space model (SSM) family (connected to
+the parallel-recurrence bridge of Exercise 8 of @sec-10-sequences-rnn). Mamba makes parts of
 its state transition, input injection, and readout depend on the token; in the regression
 frame, those mechanisms play roles analogous to a learnable schedule for what to keep and
 what to write. Gated DeltaNet adds learned gating around delta-style updates. That reading is an
@@ -407,7 +423,8 @@ plt.show()
 ```
 
 The solver map compares retained state and per-token work. Its positions are
-qualitative; the formulas and direct labels give the exact costs.
+qualitative; the formulas and direct labels give the asymptotic costs for the stated dense
+setup.
 :::
 
 The asymptotic labels in @fig-solver-costs describe this dense setup, not
@@ -419,31 +436,31 @@ schedules change the constants and sometimes the order of growth.
 ## Trap: attention's memory is a dataset, not a hidden box
 
 Attention does not *have* a separate memory in the recurrent sense. The attention
-operation is the estimator; during causal decoding, the KV cache is the observed
-key--value dataset it must retain. A nonparametric query rule keeps growing data so it
+operation is the estimator. During causal decoding, the KV cache is the observed
+key--value dataset it must retain. A nonparametric query rule keeps a growing dataset so it
 can form a new local fit. A parametric state instead compresses those data into a
-fixed-size object. FlashAttention changes how the uncompressed fit is scheduled; it
+fixed-size object. FlashAttention changes how the uncompressed fit is scheduled, but it
 does not compress the history into a fixed-size state. “Retains every
-row” does not mean “recalls every association exactly.” Softmax still returns a convex
+row” does not mean “recalls every association without error.” Softmax still returns a convex
 mixture whose quality depends on keys, temperature, and interference.
 :::
 
 ### Mechanism test: recall under a fixed capacity
 
-The storage comparison motivates a recall experiment: how does the one-pass delta
-update behave as more associations are written into a state of fixed dimension?
+The storage comparison motivates a recall experiment to evaluate how the one-pass delta
+update behaves as more associations are written into a state of fixed dimension.
 We store $N$ random unit key--value pairs, query every stored key, and decode each
 retrieved vector to the nearest stored value. Exact softmax attention keeps all pairs. A dense
 delta state has $d^2$ numbers regardless of $N$. A selective delta arm receives one
-extra priority bit and writes ordinary pairs at only one-tenth strength, so it can
-choose what to sacrifice.
+extra priority bit and writes ordinary pairs at only one-tenth strength, so the bit
+marks the pairs that the arm favors.
 
-We designed the study on two development seed branches. On those branches we fixed
-$\eta=0.20$, the 25% priority rate, the 0.10 ordinary write gate, dimensions
-$(8,16,32)$, and loads $N/d\in(0.5,1,2,4,8)$. Only then did we open the disjoint, held-out
-third branch for 30 endpoint repetitions. All methods in a trial receive the same keys, values,
-order, queries, and decoder. The endpoint code below is the frozen protocol; it runs
-on CPU in under a second on the reference machine.
+We developed the study on two groups of seeds. On those groups we fixed $\eta=0.20$, the
+25% priority rate, the 0.10 ordinary write gate, dimensions $(8,16,32)$, and loads
+$N/d\in(0.5,1,2,4,8)$. After fixing these settings, we evaluated a third, disjoint group,
+the held-out group, with 30 repetitions for each dimension and load. All methods in a trial
+receive the same keys, values, order, queries, and decoder. The code below is the frozen
+protocol; it runs on CPU in under a second on the reference machine.
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
@@ -584,21 +601,22 @@ A sealed synthetic mechanism test.
 The uncompressed table keeps perfect top-1 identification in this sharp-softmax
 construction, while the fixed delta state loses associations as $N/d$ grows. The
 selective arm receives a priority bit that the other arms lack and trades ordinary
-recall for priority recall. Keys, values, order, queries, decoder, and state width are matched;
-stored data, side information, and inference arithmetic are not.
+recall for priority recall. Keys, values, order, queries, decoder, and feature dimension $d$
+are matched; stored data, side information, and inference arithmetic are not.
 :::
 At $N/d=8$, the gate raises priority recall over the plain delta state by 0.387 on
-average and lowers ordinary recall by 0.124. The gate decides which pairs to lose,
-and total recall barely moves. Overall gated recall is
-0.138 while plain Delta recall is 0.134 at that load. Given an extra signal,
-a fixed state can spend its capacity differently.
+average and lowers ordinary recall by 0.124. The gate favors the retention of priority
+pairs at the expense of ordinary pairs, and total recall barely moves. Overall gated recall is
+0.138 while plain delta recall is 0.134 at that load. Given an extra signal,
+a fixed state can allocate its capacity differently.
 
 These results show interference under the specified delta update as the number of stored
 pairs grows. They do not establish a universal recall limit for fixed-size recurrent
 states. Now we can compare the three solvers. Keeping the
-dataset buys uncompressed access at growing cost; sufficient statistics buy an exact
-stream for a restricted kernel; online updates buy a steerable fixed state and accept
-interference. The RNN state has returned as one of these statistical choices.
+dataset provides uncompressed access at growing cost. Sufficient statistics give exact
+streaming evaluation for the chosen factorized kernel. Delta updates instead maintain a
+fixed-size predictor whose stored associations can interfere. The RNN state has returned as
+one of these statistical choices.
 
 ::: {.callout-note}
 ## Check yourself
@@ -606,7 +624,7 @@ interference. The RNN state has returned as one of these statistical choices.
 Close the book for one minute and list what each solver keeps.
 
 - Which solver retains the original key--value rows?
-- Why does a factorized kernel need both $S_t$ and $z_t$?
+- Why does a factorized kernel need both $\matr{S}_t$ and $\vect{z}_t$?
 - What information can a fixed delta state overwrite as its load grows?
 :::
 
@@ -614,14 +632,15 @@ Close the book for one minute and list what each solver keeps.
 
 1. **The objective alone does not specify the memory system.** Views, history
    weights, function class, regularizer, and solver jointly define the result.
-2. **Softmax attention keeps a query-dependent dataset.** It preserves every
-   key--value row and pays a growing read cost.
-3. **A finite kernel feature map admits sufficient state.** The pair $(S_t,z_t)$
-   reproduces the chosen factorized-kernel traversal without retaining raw rows.
+2. **Softmax attention keeps the dataset for query-dependent reads.** It preserves every
+   key--value row, and its read cost grows with the prefix.
+3. **A finite kernel feature map admits sufficient state.** The pair
+   $(\matr{S}_t,\vect{z}_t)$ reproduces the chosen factorized-kernel traversal without
+   retaining raw rows.
 4. **One SGD step yields a delta update.** Its fixed matrix writes residuals online,
    which makes capacity and interference explicit.
-5. **Selective retention spends a budget.** The sealed recall study shows a gate
-   trading ordinary recall for priority recall; it does not establish a universal
+5. **Selective retention reallocates a fixed capacity.** The sealed recall study shows a
+   gate trading ordinary recall for priority recall, without establishing a universal
    architecture ranking.
 
 ## Sources and further reading {.unnumbered}
@@ -641,23 +660,35 @@ Close the book for one minute and list what each solver keeps.
   learned gating around delta-style associative updates.
 - [Wang, Shi, and Fox, *Test-Time Regression: A Unifying Framework for Designing Sequence Models with Associative Memory*](https://arxiv.org/abs/2501.12352):
   the shared regression objective and solver-design perspective.
+- [Sun et al., *Learning to (Learn at Test Time): RNNs with Expressive Hidden States*](https://proceedings.mlr.press/v267/sun25h.html):
+  a sequence model's hidden state as a learner updated by a self-supervised objective
+  during the forward pass.
+- [Behrouz et al., *Titans: Learning to Memorize at Test Time*](https://arxiv.org/abs/2501.00663):
+  a learned long-term memory updated at test time.
+- [von Oswald et al., *MesaNet: Sequence Modeling by Locally Optimal Test-Time Training*](https://arxiv.org/abs/2506.05233):
+  sequence layers derived from locally solved test-time objectives.
+- [Wang et al., *Beyond Test-Time Memory: State-Space Optimal Control for LLM Reasoning*](https://arxiv.org/abs/2603.09221):
+  the objective changed from regression to finite-horizon optimal control, a
+  reformulation that the [epilogue](../epilogue.qmd) treats as a research proposal rather
+  than an established equivalence.
 
 ## Exercises {.unnumbered}
 
 1. **(Pencil.)** Starting from the local-constant objective, derive its stationarity
-   equation and normalized solution. Identify exactly where the local-constant
+   equation and normalized solution. Identify where the local-constant
    restriction enters. Why would an unrestricted function with no regularizer not
    imply the same average?
 2. **(Code.)** Reproduce the factorized-kernel sufficient-state identity with a
-   positive feature map of your choice. Assert that full traversal and the running
-   pair $(S_t,z_t)$ agree for every prefix. Which assertion fails if you omit $z_t$?
+   positive feature map of your choice. Assert that the full traversal and the running
+   pair $(\matr{S}_t,\vect{z}_t)$ agree for every prefix. Which assertion fails if you
+   omit $\vect{z}_t$?
 3. **(Pencil.)** Derive the delta recurrence from one SGD step. Then multiply the old
    state by $\gamma$. Explain why this is a fading-memory solver choice rather than
    the exact minimizer of exponentially weighted least squares.
 4. **(Code.)** Sweep the capacity study over at least five state widths $d$. Preserve
    the sealed-seed protocol, plot recall against both $N$ and $N/d$, and report where
    the curves align. Do not call top-1 identification exact value recall.
-5. **(Audit.)** For each solver in the cost diagram, record state size, update cost,
+5. **(Audit.)** For each solver in @fig-solver-costs, record state size, update cost,
    query cost, and information that cannot be reconstructed. Identify what is
    compute-matched and storage-matched, then design one matched test for a claim you would
    be willing to make.

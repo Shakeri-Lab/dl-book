@@ -95,7 +95,7 @@ test('surprise loss: the chapter owns the formula; the belief schedule is a decl
   assert.equal(f.root.dataset.evidenceClass, 'computed');
   for (const literal of scene.fixture.literals) assert(chapter.includes(literal), literal);
   // The three sentences this scene exists to make visible, and the section it must not do.
-  assert.match(chapter, /explodes as that belief goes to zero\. The more/);
+  assert.match(chapter, /diverges as that probability approaches zero\. The more/);
   assert.match(chapter, /\nconfidently wrong the model is, the larger the loss\./);
   assert.match(chapter, /\\frac\{\\partial \\loss\}\{\\partial o\} = \\hat\{p\} - y/);
   // The panel links the chapter's own equations rather than printing a guessed number.

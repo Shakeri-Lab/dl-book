@@ -1,3 +1,43 @@
+# Rolling post-v1.4: the print edition's language pass (October 9 to 14, 2026)
+
+- **What carried over.** The Springer print edition's revisions of October 9 to 14, 2026: a language
+  pass, a formal-register pass, reviewer edits, seam and attribution fixes, a textbook-delivery audit,
+  and the author's own edits. They make up 653 ledger entries, one per changed paragraph group. 482
+  were applied and 79 applied in part. 48 were print-specific (companion lists, listings, the grey
+  figures' wording, TikZ figures and layout). The author's decisions of October 16 settled the rest.
+  Every chapter, the Preface, the Part I, IV and V pages, the epilogue and the appendices changed.
+- **The author's decisions.** "I just want the language updated as I believe the book is more polished.
+  I want the interactive animations to stay intact."
+  - The new wording reaches every sentence, including those a replay quotes.
+  - Only the check strings follow the wording: the fixture literals and anchor targets in
+    `interactives/manifest.json`, and the scene tests' expected strings. No panel, player, timeline or
+    visual changed.
+  - Six sentences keep this edition's wording, because their replay shows their content: the momentum
+    range, "region of confusion", the BatchNorm batch-size sentence, the 20–50-step chunks, the
+    `fig-highway-time` caption tail, and the attention display.
+  - No figure changed. Code cells are untouched, so some plotted labels keep the earlier wording.
+  - This edition keeps its structure. Print's moves between chapters are not carried.
+- **Corrections.** Among the claims print corrected that this edition now takes:
+  - the bias term is the prediction at $\vect{x}=\vect{0}$;
+  - the learning-rate caption describes the climbing curve the figure shows;
+  - LayerNorm gives mean zero and approximately unit variance;
+  - Chapter 17 now introduces the regression framework as Wang, Shi and Fox's, without claiming to
+    generalize it;
+  - the BERT masked-language-model loss is Case 3 of the estimator cases.
+- **New references.** Leshno et al. at the universal approximation theorem, Hendrycks and Gimpel at
+  GELU, and Bradley and Terry at the preference model.
+- **Headings.** Retitled headings keep their old ids, so print's companion links and the public anchors
+  resolve. Chapter 2 is now "Linear Classification: Logistic Regression and Softmax", and Chapter 6
+  "Generalization, Distribution Shift, and Inductive Bias".
+- **Contracts.**
+  - The part-page sentence cap rises from 16 to 17 for the author's Part IV text.
+  - The Chapter 16 calibration-boundary string follows Exercise 6's new word order.
+  - The excerpt receipts record the new chapter digests.
+- **Unchanged.** No code line, printed number or figure changed. All 27 changed chapters with a freeze
+  were re-rendered on the reference machine, and every frozen stdout block is byte-identical. Figure
+  files that changed bytes but not pixels were discarded. Each entry, with its outcome, is in
+  `audits/voice/print_revisions_2026-10-14.md`.
+
 # Rolling post-v1.4: the print edition's additions of October 9, 2026
 
 - **What carried over.** The new material the author approved for the Springer print edition on

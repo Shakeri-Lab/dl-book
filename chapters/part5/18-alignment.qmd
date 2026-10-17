@@ -21,11 +21,13 @@ is not what the update optimizes**. Full fine-tuning, LoRA, and a soft prompt ch
 different places for the gradient to write. None of them says what should count as
 a good answer.
 
-This chapter changes what the update optimizes. Pretraining asks for the next corpus token.
-Instruction tuning asks a model to imitate demonstrated responses. Preference
-learning asks which response wins a comparison. Online policy optimization asks a
-changing model to produce responses that score well under a reward signal. These
-supervision interfaces can often be paired with different update locations:
+This chapter changes what the update optimizes. For the causal language models considered
+here, pretraining optimizes next-token prediction on corpus text.
+Instruction tuning trains a model to imitate demonstrated responses. Preference
+learning uses pairwise comparisons to model which of two responses is preferred. Online
+policy optimization trains a changing model to produce responses that score well under
+a reward signal. These supervision interfaces can often be paired with different update
+locations:
 
 <!-- NOVEL: needs sign-off -->
 
@@ -116,16 +118,16 @@ plt.show()
 ```
 
 The word **alignment** is sometimes used as though it named one algorithm or one
-finished property; here it will mean something narrower and checkable: changing a
+finished property. Here it will mean something narrower and checkable: changing a
 model's behavior toward a stated objective, for a stated prompt distribution and a
 stated population of evaluators. Helpful, honest, and harmless are useful names for
-the behavior we intend. They are not certificates that training can stamp onto a model.
+the behavior we intend, not guarantees established by training.
 
 The central problem is therefore a measurement problem. We need to specify whose
 judgment is collected, under which rubric, over which candidate responses, and what
 happens when optimization reaches beyond that coverage. Only then does it make sense
 to compare instruction tuning, reward-model pipelines, and direct preference
-optimization.
+optimization (DPO).
 
 ## Same model, different supervision
 
@@ -138,9 +140,9 @@ $$
 z=(x_1,\ldots,x_P,y_1,\ldots,y_T)
 $$
 
-be a serialized prompt $x$ followed by response $y$. Define $m_t=1$ when token $z_t$
+be a serialized prompt $x$ followed by a response $y$. Define $m_t=1$ when token $z_t$
 belongs to the response (including its end token) and $m_t=0$ for prompt or padding
-positions. A response-masked supervised fine-tuning objective is
+positions. A supervised fine-tuning (SFT) objective that scores only response tokens is
 
 $$
 \mathcal{L}_{\mathrm{SFT}}(\theta)
@@ -151,6 +153,9 @@ $$
 \right].
 $$ {#eq-sft-response-mask}
 
+The sum starts at $t=2$ because the first token has no earlier context, and since
+$m_t=0$ at prompt positions, only response tokens contribute.
+
 The displayed objective averages scored tokens within each
 response, then averages over prompt--response examples.
 Uniform sampling of examples gives a minibatch estimator of
@@ -158,11 +163,12 @@ this per-example objective. Pooling all scored tokens within
 a batch instead gives longer responses more weight.
 The mask and both reductions must therefore be specified.
 The prompt is still essential because it conditions every response probability. Its
-tokens are simply not scored as targets in this version.
+tokens are not scored as targets in this objective.
 
 The tensor contract is explicit: `logits` has shape $(B,L,V)$, token IDs and the mask
 have shape $(B,L)$, and the returned sequence score has shape $(B,)$. The helper below
-checks that excluded prompt and padding targets cannot change that score.
+checks that changing the logits used only for excluded prompt or padding targets leaves
+that score unchanged.
 
 <!-- NOVEL: needs sign-off -->
 
@@ -246,13 +252,14 @@ $$
 $$
 
 The subscript $w$ means *winner under this comparison*, not that the response
-is absolutely correct, harmless, or good. The label depends on the rubric, the
+is intrinsically correct, harmless, or good. The label depends on the rubric, the
 reviewer population, the order in which candidates were displayed, and the policy
 that generated the candidates. Ties and disagreement are data, too; silently forcing
 them into a total order hides uncertainty.
 
 To turn comparisons into a trainable scalar score, many pipelines use the
-**Bradley--Terry model**. A reward model $r_\phi(x,y)\in\mathbb{R}$ assigns a score to
+**Bradley--Terry model** ([Bradley and Terry (1952)](https://doi.org/10.2307/2334029)).
+A reward model $r_\phi(x,y)\in\mathbb{R}$ assigns a score to
 each completed response. The probability of preferring one response depends on the
 score difference:
 
@@ -282,8 +289,8 @@ differences. Bradley--Terry requires pairwise log-odds to be differences
 of the same scalar scores. Those log-odds must therefore
 sum to zero around every cycle. An acyclic preference
 ordering alone does not ensure this probability-level
-consistency. A cycle that prefers each response to the next
-cannot come from a score vector:
+consistency. A cycle in which each response beats the next with probability greater
+than one half cannot be represented by one Bradley--Terry score vector:
 
 <!-- NOVEL: needs sign-off -->
 
@@ -340,7 +347,7 @@ print(
 ```{python}
 #| echo: false
 #| label: fig-preference-consistency
-#| fig-cap: "A scalar reward can express the transitive comparisons generated by centered scores (1, 0, -1), but not a symmetric cycle in which A beats B, B beats C, and C beats A with probability 0.70. Least squares returns equal scalar scores for the cycle, so Bradley--Terry predicts 0.50 on every edge. Its mean log loss is log 2 = 0.693147, above the unconstrained per-edge entropy 0.610864 by 0.082283."
+#| fig-cap: "A scalar reward can express the transitive comparisons generated by centered scores (1, 0, -1), but not a symmetric cycle in which A beats B, B beats C, and C beats A with probability 0.70. Least squares returns equal scalar scores for the cycle, so Bradley--Terry predicts 0.50 on every edge. Its mean log loss is $\\log 2 = 0.693147$, above the unconstrained per-edge entropy 0.610864 by 0.082283."
 #| fig-alt: "The left triangle shows transitive arrows consistent with scores one, zero, and minus one. The middle triangle shows a cyclic 0.70 preference on all three arrows. The right bars compare the unconstrained and scalar-model log losses."
 #| fig-width: 10
 #| fig-height: 3.8
@@ -413,17 +420,16 @@ stay together, and state who supplied the judgments. Bradley--Terry is a useful 
 measurements, not proof that one population-independent reward exists.
 :::
 
-## Train a judge, then try to please the judge
+## Reward modeling and policy optimization {#train-a-judge-then-try-to-please-the-judge}
 
 What can we do with pairwise measurements? The classic language-model RLHF pipeline
 separates two learned objects:
 
 1. a **reward model** learns to score completed responses from comparisons; and
-2. a **policy** learns to generate responses that receive high score.
+2. a **policy** learns to generate responses that receive high scores.
 
-In one line: *train a judge, then try to please the
-judge*. The word *judge* matters. A reward model is a learned proxy for a feedback
-process, not the feedback process itself.
+The policy is optimized against the learned reward model. That model is a proxy for a
+feedback process, not the feedback process itself.
 
 <!-- NOVEL: needs sign-off -->
 
@@ -533,7 +539,8 @@ we negate it.
 
 ### The exact finite-response policy
 
-Before discussing an optimizer, we solve the finite problem. Add a Lagrange
+Before discussing an optimizer, we solve the finite optimization problem in closed
+form. Add a Lagrange
 multiplier $\lambda$ for $\sum_i\pi_i=1$. Differentiating with respect to one
 probability gives
 
@@ -566,7 +573,7 @@ which equals $\vect{\pi}_{\mathrm{ref}}$ because the reference already sums to o
 Without the offsets, the same limit would be the uniform distribution. $\beta$ controls
 drift, not truth or safety.
 
-Consider four possible responses with
+Consider four possible responses, A to D, with
 
 $$
 \vect{\pi}_{\mathrm{ref}}=(0.55,0.25,0.15,0.05),
@@ -637,7 +644,7 @@ print(
 ```{python}
 #| echo: false
 #| label: fig-reference-tilt
-#| fig-cap: "The exact four-response policy tilts the reference toward proxy reward. At beta 4, expected reward is 0.925670 and KL is 0.029159; at beta 1 they are 1.768029 and KL is 0.561398; at beta 0.5 they are 2.559982 and KL is 1.693801. Smaller beta raises proxy reward and measured drift together. This identity test assumes a complete finite response set and a correct scalar reward."
+#| fig-cap: "The exact four-response policy tilts the reference toward proxy reward. At beta 4, expected reward is 0.925670 and KL is 0.029159; at beta 1 they are 1.768029 and KL is 0.561398; at beta 0.5 they are 2.559982 and KL is 1.693801. Smaller beta raises proxy reward and measured drift together. This identity test assumes a complete finite response set and fixed scalar reward scores."
 #| fig-alt: "The left grouped bars show reference probabilities and exact policies at beta four, one, and one half for responses A through D. The right curve shows expected proxy reward increasing with KL divergence from the reference as beta decreases."
 #| fig-width: 10
 #| fig-height: 4.2
@@ -728,8 +735,8 @@ proxy exploitation. Measure the realized KL and the behaviors that matter.
 ## When the proxy becomes the target
 
 The pipeline now has a vulnerable handoff: the reward model is validated on
-comparisons, but the policy is optimized to seek responses with high predicted
-reward. The compared responses and the responses the policy seeks come from different
+comparisons, but the policy is optimized to favor responses with high predicted
+reward. The compared responses and the responses the policy generates come from different
 distributions. If the policy finds a region that the
 comparison data did not identify, excellent held-out reward-model loss can coexist
 with poor policy behavior.
@@ -737,8 +744,8 @@ with poor policy behavior.
 ::: {.callout-note}
 ## A designed mechanism study
 
-Evidence and length are planted features. The finite candidate set is fully known; its
-designed utility is available because we wrote it. The study demonstrates how coverage
+Evidence and length are planted features. The finite candidate set is fully known, and its
+designed utility is known by construction. The study demonstrates how coverage
 failure and proxy pressure can interact. It does not estimate the prevalence of reward
 hacking in natural-language systems or validate one alignment method over another.
 :::
@@ -768,8 +775,8 @@ $$
 =w_e e+w_\ell\ell+w_q\max(\ell-1,0)^2.
 $$
 
-We perform five complete runs with different seeds. A **narrow-feedback** arm sees only
-$\ell\in[0,1]$. A **coverage-repair** arm draws 20% of individual comparison
+We perform five complete runs with different seeds. The **narrow-feedback** arm receives comparison data
+restricted to $\ell\in[0,1]$. A **coverage-repair** arm draws 20% of individual comparison
 responses from $\ell\in[1,4)$, where the missing curvature becomes observable. Both
 models have the same feature class and optimizer:
 
@@ -900,10 +907,10 @@ print(
 )
 ```
 ::::
-The narrow model looks excellent where it was tested: its mean held-out log loss
-is 0.665633, only 0.000030 above the oracle that generated the labels, and its latent
-ordering accuracy is 0.992940. The coefficient $w_q$ remains exactly zero: that feature was zero
-in every narrow comparison, so no gradient could identify its coefficient. A
+The narrow model scores well where it was tested: its mean held-out log loss
+is 0.665633, 0.000030 above the oracle that generated the labels, and its latent
+ordering accuracy is 0.992940. The coefficient $w_q$ remains at its initial zero: that feature vanishes
+in every narrow comparison, so its gradient is identically zero. A
 validation split drawn from the same support cannot expose the missing behavior.
 
 Now place 401 candidate responses at fixed evidence $e=0.72$ and lengths from zero
@@ -1073,14 +1080,15 @@ plt.show()
 At moderate pressure, the narrow proxy helps: mean designed utility rises from 1.130480
 under the reference to 1.183447 at $\beta=0.5$. More pressure then reverses the
 result. At $\beta=0.125$, mean predicted reward has climbed to 1.969632 while designed
-utility has fallen to 0.484541. The KL penalty changes how quickly the policy reaches
-the failure; it cannot invent the missing curvature.
+utility has fallen to 0.484541. The KL penalty regulates how far the policy shifts toward
+high proxy reward. It cannot invent the missing curvature.
 
-The repair changes feedback coverage, not the policy optimizer; once 20% of individual
+The repair changes feedback coverage, not the policy optimizer. Once 20% of individual
 responses expose the longer regime, the mean fitted curvature coefficient is
 $-1.208128$ (designed value $-1.2$). At $\beta=0.125$, the repaired policies reach mean
-designed utility 1.316470 instead of 0.484541. In this controlled world, better feedback
-coverage matters more than choosing a fancier route to the same proxy.
+designed utility 1.316470 instead of 0.484541. In this controlled setting, expanding feedback
+coverage avoids the utility collapse observed when reward pressure increases under the
+narrow proxy.
 
 ::: {.callout-warning}
 ## Reward-model validation is not policy validation
@@ -1095,9 +1103,9 @@ not evidence that the intended behavior improved.
 ## DPO removes a stage, not the assumptions
 
 Reward-model RLHF fits an explicit proxy, freezes it, then optimizes a policy against
-it. Can we use preference pairs without that separately trained middle model? DPO
-solves the optimal-policy relation, @eq-gibbs-policy, for the reward, then
-substitutes that reward into the preference model.
+it. Direct preference optimization (DPO) uses preference pairs without that separately
+trained middle model: it solves the optimal-policy relation, @eq-gibbs-policy, for the
+reward, then substitutes that reward into the preference model.
 
 <!-- NOVEL: needs sign-off -->
 
@@ -1170,8 +1178,8 @@ s_\theta(x,y)
 =\log\pi_\theta(y\mid x)-\log\pi_{\mathrm{ref}}(y\mid x).
 $$
 
-Substituting @eq-reward-policy-inverse into Bradley--Terry gives **Direct
-Preference Optimization (DPO)**:
+Substituting @eq-reward-policy-inverse into Bradley--Terry gives **direct
+preference optimization (DPO)**:
 
 $$
 \mathcal{L}_{\mathrm{DPO}}(\theta)
@@ -1253,7 +1261,7 @@ comparisons, preferences generated by one scalar reward, adequate policy capacit
 and successful optimization. It does not show that natural-language DPO and PPO are
 universally equivalent.
 
-Several details are easy to overstate:
+Several practical conditions govern this formulation:
 
 - DPO avoids an **explicit standalone** reward model and an online rollout loop during
   the optimization pass. Its policy--reference log ratio is still an implicit reward
@@ -1269,10 +1277,10 @@ Several details are easy to overstate:
   stale or narrow preference dataset efficiently.
 
 ::: {.callout-note}
-## What the finite identity proves
+## What the finite check establishes
 
-The four-response test validates the derivation inside its scalar-preference, support,
-coverage, capacity, and optimization assumptions. The cyclic and proxy-pressure audits
+The four-response test checks numerical agreement with the derived optimum under its
+scalar-preference, support, coverage, capacity, and optimization assumptions. The cyclic and proxy-pressure audits
 test two ways those assumptions fail.
 :::
 
@@ -1286,29 +1294,29 @@ whether new responses must be explored during optimization, as
 
 | Route | Supervision | Fitted quantity | Fresh samples? | Main risk |
 |---|---|---|---|---|
-| Response-masked SFT | Demonstrated responses | Likelihood of demonstration tokens | No | Demonstration coverage and imitation target |
+| SFT on response tokens | Demonstrated responses | Likelihood of demonstration tokens | No | Demonstration coverage and imitation target |
 | DPO | Fixed preferred/rejected pairs | Reference-adjusted preference margin | No | Pair coverage, reference, scalar-preference assumptions |
 | Explicit RM + online policy optimization | Comparisons plus a reward model; current responses can be scored | Reward proxy, value function, and policy objective | Yes | Proxy shift, exploration, credit assignment, optimization stability |
 | Programmatic check + online policy optimization | Tests or exact answers applied to current responses | Value function and policy objective, with no reward model | Yes | Checker coverage, reward hacking |
 
 : Feedback source and exploration needs determine which alignment route is available. {#tbl-alignment-route-choice}
 
-SFT may be enough when demonstrations directly specify the desired behavior. Fixed
+Supervised fine-tuning may suffice when demonstrations specify the desired behavior. Fixed
 preference data may favor an offline direct method when comparison coverage is already
 good. Online methods can generate from the changing policy and request or compute
-fresh feedback, which matters when exploration is part of the task. They also have more
-ways to fail and more to evaluate.
+fresh feedback, which matters when exploration is part of the task. They also introduce
+additional failure modes and require more evaluation.
 
 <!-- print 2026-10-09, author-approved: a programmatic check as the reward (pass rate as the first term of the KL-regularized objective), a footnote on outcome and process supervision, and reward hacking against weak tests -->
 When a program can check a response, as in the last row of
-@tbl-alignment-route-choice, the judge need not be learned. Unit tests for
+@tbl-alignment-route-choice, the score need not come from a learned model. Unit tests for
 generated code, or a match against the known final answer of a math problem, can set
 $r_i=1$ when response $i$ passes and $r_i=0$ when it fails. The first term of
 @eq-kl-regularized-objective then becomes the expected pass rate.^[A check
 of the final result alone is called *outcome supervision*. It gives full reward to a
 correct final answer reached through wrong steps. *Process supervision* scores each
 intermediate step instead. Its step labels usually come from people, and a reward model
-trained on them is a learned judge again.]
+trained on them is again a learned proxy.]
 A checker has no fitting error, but it is still a proxy for the intended behavior.
 Generated code that handles only the tested inputs passes weak tests and earns full
 reward. Reward pressure can move the policy toward such responses, as it moved the
@@ -1384,7 +1392,7 @@ plt.show()
 
 The feedback report should identify the prompt distribution, selection policy for
 candidates, rubric, reviewer population, and aggregation rule. If several pairs came
-from one ranked set, they are correlated; keep pairs from the same prompt in the same
+from one ranked set, they are correlated: keep pairs from the same prompt in the same
 split and cluster uncertainty at the prompt level. Randomize A/B order, retain ties, and disclose
 disagreement rather than converting it silently into certainty.
 
@@ -1410,8 +1418,8 @@ certificate.
 ::: {.callout-warning}
 ## Trap: alignment is not the whole ethics of a system
 
-This chapter asks whether a model's behavior meets a declared feedback rubric and
-holds up under a declared evaluation. That question matters, but it does not absorb every sociotechnical question
+This evaluation assesses whether a model's behavior meets a declared feedback rubric
+and holds up under a declared evaluation protocol. That question matters, but it does not absorb every sociotechnical question
 around the system:
 
 - **Data and rights:** privacy, consent, ownership, and the legitimacy of collection.
@@ -1434,18 +1442,18 @@ measure. Then a rising training objective has a declared external test. Without 
 test, “better aligned” can collapse into “the optimizer increased its own score.”
 :::
 
-## The next question: where did the generator come from?
+## The next question: how else can we learn a generator? {#the-next-question-where-did-the-generator-come-from}
 
-**A judge is not a generator**: a reward model can rank or score completed responses;
+**A scoring model is not a generator**: a reward model can rank or score completed responses;
 it does not explain how a model learned a distribution from which responses can be
-sampled. RLHF and DPO begin with a generator already in hand.
+sampled. RLHF and DPO require an initial generator distribution.
 
 [The autoencoder interlude](../interludes/making-pca-learnable.qmd) already traced
 reconstruction from PCA's linear geometry to trainable nonlinear codes.
-@sec-19-generative asks how a model defines or learns a
-distribution and turns it into samples, then develops variational autoencoders,
-adversarial learning, and diffusion. @sec-18-alignment changes the behavior of a
-generator; @sec-19-generative studies the machinery that makes generation possible.
+This chapter changed the behavior of an autoregressive generator.
+@sec-19-generative develops three other constructions for learning a distribution
+and drawing samples from it: variational autoencoders, adversarial learning, and
+diffusion.
 
 ::: {.callout-note}
 ## Check yourself
@@ -1460,15 +1468,15 @@ Close the book for one minute and separate update location from objective.
 ## Okay, so: where to update and what to optimize are separate
 
 1. **Update location and objective are separate axes.** Full tuning, LoRA, and soft
-   prompts decide where gradients may write. SFT, preference margins, and sampled
-   rewards decide what those gradients optimize.
+   prompts determine where gradients may write. SFT, preference margins, and sampled
+   rewards determine what those gradients optimize.
 2. **SFT imitates demonstrated response tokens.** A completion mask keeps prompt and
    padding targets out of the loss. Demonstrations can encode quality; preference data
    supplies a different, comparative signal.
 3. **A preference is conditional evidence.** Bradley--Terry turns score differences
    into probabilities, but reward zero points are unidentified and cyclic aggregate
    preferences cannot fit one scalar ordering.
-4. **RLHF separates judge from actor.** The reward model scores completed responses,
+4. **RLHF separates the scoring model from the policy.** The reward model scores completed responses,
    the value function forecasts shaped return from prefixes, PPO uses a refreshed old
    policy, and reference KL uses a usually fixed anchor.
 5. **Reference KL is a pressure dial.** The finite optimum is
@@ -1486,6 +1494,7 @@ Close the book for one minute and separate update location from objective.
 ## Sources and further reading {.unnumbered}
 
 - [Wei et al., *Finetuned Language Models Are Zero-Shot Learners*](https://arxiv.org/abs/2109.01652).
+- [Bradley and Terry, *Rank Analysis of Incomplete Block Designs: I. The Method of Paired Comparisons*](https://doi.org/10.2307/2334029): the paired-comparison model that turns score differences into preference probabilities.
 - [Christiano et al., *Deep Reinforcement Learning from Human Preferences*](https://proceedings.neurips.cc/paper/2017/hash/d5e2c0adad503c91f91df240d0cd4e49-Abstract.html).
 - [Stiennon et al., *Learning to Summarize with Human Feedback*](https://proceedings.neurips.cc/paper/2020/hash/1f89885d556929e98d3ef9b86448f951-Abstract.html): feedback training and overoptimization.
 - [Askell et al., *A General Language Assistant as a Laboratory for Alignment*](https://arxiv.org/abs/2112.00861): helpful, honest, and harmless framing.
@@ -1521,7 +1530,8 @@ Close the book for one minute and separate update location from objective.
    different shared offsets and show that their margins can agree while probability
    mass between components remains unidentified.
 4. **(Code.)** Reproduce the proxy-pressure study. Predeclare one
-   repair: expand feedback support, add a missing feature, or both. Report held-out
+   repair: expand feedback support, or remove the curvature feature first and then
+   test restoring it, with and without expanded support. Report held-out
    comparison loss, learned coefficients, realized KL, proxy reward, and designed
    utility as mean $\pm$ seed SD over five seeds. Explain why improving in-range log
    loss alone may not change the policy failure.

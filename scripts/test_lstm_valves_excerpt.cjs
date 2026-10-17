@@ -380,7 +380,7 @@ test('valves: the picture never rests on the chapter\'s measured gate means', t 
   // The two numbers are the chapter's, from the fig-forget-gate-diagnostic caption, and they
   // are quoted in the boundary paragraph as that experiment's measurement.
   assert.deepEqual(fx.measured, [0.76, 0.56]);
-  assert(chapter.includes('holds its gates flat around 0.76 for all eighty steps'));
+  assert(chapter.includes('holds its mean gate flat around 0.76 for all eighty steps'));
   assert(chapter.includes('at about 0.56'));
   const boundary = f.$('.mechanism-boundary').textContent;
   for (const m of fx.measured) assert(boundary.includes(String(m)), `the boundary must quote the measured mean ${m}`);

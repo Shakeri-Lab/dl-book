@@ -90,7 +90,7 @@ test('identity lane: the equation and the three stops are the chapter\'s, the nu
   const [reinforced, nothing, cancelled] = k.slopes;
   assert(reinforced > 0, 'the first stop amplifies the identity term');
   assert.equal(nothing, 0, 'the second stop is the chapter\'s F = 0');
-  assert(chapter.includes('doing nothing is easy\nto represent: $F = 0$.') || chapter.includes('to represent: $F = 0$.'));
+  assert(chapter.includes('doing nothing is easy\nto represent: $F = 0$.') || chapter.includes('A zero correction is represented\nby $F = 0$.'));
   assert(cancelled < -0.5 && cancelled > k.range[0], 'the third stop cancels most of the identity term, but not all');
   assert.deepEqual(k.range, [-1, 1]);
   assert(k.slopes.every(s => s >= k.range[0] && s <= k.range[1]), 'every stop lies on the dial');

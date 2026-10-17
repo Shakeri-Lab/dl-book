@@ -32,21 +32,21 @@ costs:
    when sharing is abandoned;
 2. the **incremental task state**: the prompt, adapter, or unmerged delta that makes
    one task different from another; and
-3. the **transient work**: context tokens, activations, gradients, optimizer state,
-   and caches needed while adapting or running the model.
+3. the **transient work**: processing the context, and the memory that activations,
+   gradients, optimizer state, and caches occupy while adapting or running the model.
 
 These costs are related, but they are not interchangeable: every lever can affect more
 than one cost, and none removes all backbone storage or transient work. Freezing a billion
-weights removes their gradients; it does not make the billion weights disappear.
-Packing each weight into fewer bits reduces a storage lower bound; it does not prove
-that a particular kernel will run faster. Adding demonstrations changes no weight; it
+weights removes their gradients. It does not make the billion weights disappear.
+Packing each weight into fewer bits reduces a storage lower bound. It does not prove
+that a particular kernel will run faster. Adding demonstrations changes no weight, but it
 still lengthens the sequence the model must process. A merged LoRA or fully tuned
 checkpoint can collapse base and delta into one artifact, but then each task carries
 a full backbone-sized copy instead of sharing the original.
 
-So we ask not simply “How many parameters?” but
-**where does task-specific information live, and which object does the
-method change?** Hard prompts and retrieved documents place task information in
+The central question is not the parameter count alone, but
+**where task-specific information resides and which object the
+method modifies**. Hard prompts and retrieved documents place task information in
 context. Parameter-efficient fine-tuning (PEFT) places it in a restricted set of
 learned values. Quantization need not add task information at all; it changes the numerical
 representation of a base or adapter. QLoRA composes the last two.
@@ -133,8 +133,8 @@ plt.show()
 ## Prompting: move evidence into context
 
 A decoder in @sec-14-self-attention-transformer already defines a conditional
-distribution over the next token. Prompting changes the prefix on which that fixed
-distribution is conditioned. For an instruction $I$, demonstrations
+distribution over the next token. Prompting changes the prefix supplied to the fixed
+model, and therefore the conditional distribution it produces. For an instruction $I$, $k$ demonstrations
 $(x_i,y_i)$, and a query $x_\star$, a discrete prompted prediction can be written
 
 $$
@@ -155,12 +155,12 @@ word *learning* means that behavior changes with the context, not that a checkpo
 Brown and colleagues found that few-shot gains often grew with model scale in
 GPT-3, but that is an empirical result over particular models and tasks. It does
 not establish universal parameter thresholds, nor does it settle the mechanism by
-which a Transformer uses demonstrations. Attention lets later positions see earlier examples
-and route information from them; saying it literally “performs analogy” would outrun the evidence.
-Prompt order, label words, formatting, and example choice can all matter.
+which a Transformer uses demonstrations. Attention routes information from earlier examples
+to later positions, but describing this mechanism as analogical reasoning outruns the empirical evidence.
+Even with fixed weights, predictions remain sensitive to prompt design.
 Controlled ablations have found that demonstration inputs, the label space and its
 mapping, formatting, and ordering can contribute differently across tasks. Those
-results constrain simple stories about copying examples, but they do not settle one
+results constrain simple accounts of demonstration copying, but they do not settle one
 universal causal mechanism for ICL.
 
 Instructions that ask for intermediate steps can improve some multi-step tasks.
@@ -186,21 +186,23 @@ carefully constructed input.
 
 ### A frozen-context mechanism test
 
-Can a fixed network genuinely change its answer because examples in the prompt
-reveal a task? We can test that mechanism without claiming to reproduce
-natural-language ICL.
+Whether a fixed network adjusts its output when prompt demonstrations
+reveal a task is a mechanism question we can test without claiming to
+reproduce natural-language in-context learning.
 
 Each synthetic episode assigns four group symbols to four label symbols by a hidden permutation.
-A demonstration reveals one group–label pair; demo groups are distinct. A two-shot
+A demonstration reveals one group–label pair; demonstrated groups are distinct. A two-shot
 prompt might read `[BOS] group C, label A; group A, label D; [QUERY] group A`, whose
 target is `label D`. The query
 names one group, demonstrated or not, and asks for its label. We meta-train a tiny causal Transformer across
 many such episodes, cycling through one to four demonstrations. During evaluation,
 it receives a new random mapping and **no parameter update**.
 
-The information ceiling is known before training. With $k<4$ demonstrations, the
+The highest expected accuracy under this episode distribution, the **information
+ceiling**, is known before training. With $k<4$ demonstrations, the
 query group, drawn uniformly from the four groups, already appears among them with
-probability $k/4$. Otherwise, its label is uniform among the $4-k$ unused labels. Therefore
+probability $k/4$. Otherwise, its label is uniform among the $4-k$ unused labels.
+An optimal prediction rule therefore attains
 
 $$
 \Pr(\text{correct}\mid k)
@@ -213,7 +215,7 @@ $$
 $$ {#eq-icl-ceiling}
 
 At $k=3$, even an unseen query group is solvable by elimination. Accuracy on such
-queries will tell us whether the model merely copies a seen pair or uses the whole mapping.
+queries indicates whether the model copies a demonstrated pair or uses the complete mapping.
 
 The code uses `nn.TransformerEncoderLayer` as a compact container for the same
 pre-LayerNorm attention–residual–FFN structural pattern built from first principles
@@ -382,7 +384,7 @@ print("all evaluation passes left weights unchanged:",
 ```{python}
 #| echo: false
 #| label: fig-icl-coverage
-#| fig-cap: "A frozen model changes behavior as demonstrations reveal an episode's hidden label mapping. Across five independently trained seeds, overall accuracy (left) closely tracks the analytical information ceiling. Conditional accuracy (right) is perfect when the query group appeared; for unseen groups it follows the shrinking set of unused labels and reaches 1 at three demonstrations by elimination. Evaluation uses one nested episode bank per seed, and every parameter is bitwise unchanged across all five context lengths."
+#| fig-cap: "A frozen model changes behavior as demonstrations reveal an episode's hidden label mapping. Across five independently trained seeds, overall accuracy (left) closely tracks the analytic information ceiling. Conditional accuracy (right) is perfect when the query group appeared; for unseen groups it follows the shrinking set of unused labels and reaches 1 at three demonstrations by elimination. Evaluation uses one nested episode bank per seed, and every parameter is bitwise unchanged across all five context lengths."
 #| fig-alt: "Two line plots. Mean accuracy rises from one quarter with no examples to one with three examples and tracks the analytic ceiling. Seen queries are always correct; unseen-query accuracy rises from one quarter to one by elimination."
 #| fig-width: 9
 #| fig-height: 3.8
@@ -425,14 +427,14 @@ plt.show()
 ```
 The 39,268-parameter network lands at mean accuracies
 $0.252,0.500,0.749,1.000,1.000$ for $k=0,1,2,3,4$, respectively. The analytic
-ceilings are $0.25,0.50,0.75,1,1$. More revealingly, unseen-query accuracy rises
-from $0.252$ to $0.330$, $0.499$, and $1.000$. The model is not only copying a
+ceilings are $0.25,0.50,0.75,1,1$. Unseen-query accuracy rises
+from $0.252$ to $0.330$, $0.499$, and $1.000$ as $k$ advances from 0 to 3. The model is not only copying a
 matching demonstration; at $k=3$ it identifies the remaining label.
 
 ::: {.callout-warning}
-## An existence proof in a designed regime
+## A mechanism demonstration in a designed regime
 
-The model was meta-trained on exactly this family of random permutation tasks. The
+The model was meta-trained on this family of random permutation tasks. The
 study demonstrates that a frozen causal Transformer can use prompt evidence in this
 controlled distribution. It does not estimate natural-language ICL quality,
 explain the mechanism inside a large language model, or show that more examples
@@ -441,7 +443,7 @@ always help. From one run to the next, the initialization, the meta-training epi
 run-to-run repeatability, not task or domain diversity, and not optimization alone.
 :::
 
-### Retrieval is another context lever
+### Retrieval-augmented context {#retrieval-is-another-context-lever}
 
 A prompt can contain information selected at query time rather than written by
 hand. **Retrieval-augmented generation (RAG)** first searches an external corpus,
@@ -455,7 +457,7 @@ computation. Modern systems can learn the retriever, the generator, or both, but
 the basic context-augmentation move is distinct from PEFT.
 
 Retrieval moves rather than abolishes failure: a missed document cannot support the
-answer; a highly ranked irrelevant passage can distract it; retrieved text can
+answer; a highly ranked irrelevant passage can distract the generator; retrieved text can
 contain malicious instructions; and a plausible citation does not prove that the
 generated claim follows from the cited evidence. RAG is attractive when facts change
 faster than checkpoints or when provenance matters, but it is a pipeline whose
@@ -477,9 +479,9 @@ $$
 -\sum_i\log p_{\theta_0,\matr{P}}(y_i\mid x_i),
 $$ {#eq-prompt-tuning}
 
-while freezing $\theta_0$. Not counting any task head, the learned state contains exactly
-$md$ values. Those values are not words, and need not be nearest to any vocabulary
-embedding. They are virtual tokens optimized by gradient descent, and they still
+while freezing $\theta_0$. Not counting any task head, the learned state contains
+$md$ parameter values. These vectors are not restricted to the vocabulary embedding rows and
+need not correspond to readable words. They are virtual tokens optimized by gradient descent, and they still
 occupy $m$ virtual sequence positions during use.
 
 **Prefix tuning** moves a related idea deeper. At every Transformer layer $\ell$,
@@ -604,7 +606,7 @@ QLoRA section later in this chapter makes that composition explicit.
 ```{python}
 #| label: fig-lora-path
 #| echo: false
-#| fig-cap: "LoRA adds a trainable low-rank branch beside a frozen linear map. The gradient flows through both computational paths, but only A and B receive updates. Initializing A randomly and B to zero begins with an exact zero correction while leaving a nonzero first gradient for B; after training, the correction can be merged into a compatible base weight."
+#| fig-cap: "LoRA adds a trainable low-rank branch beside a frozen linear map. The gradient flows through both computational paths, but only $\\matr{A}$ and $\\matr{B}$ receive updates. Initializing $\\matr{A}$ randomly and $\\matr{B}$ to zero begins with an exact zero correction while allowing $\\matr{B}$ to receive a nonzero first gradient; after training, the correction can be merged into a compatible base weight."
 #| fig-alt: "A frozen W-zero path and a parallel trainable A-then-B path both receive x and are added to produce h. A merge equation above combines the two paths after training."
 #| fig-width: 9
 #| fig-height: 3.5
@@ -675,24 +677,24 @@ we merge; a quantized merge generally requires dequantization and requantization
 ::: {.callout-tip}
 ## A four-part freeze audit
 
-Count trainable values; assert the base tensor is bitwise unchanged; check that
-only permitted parameters receive gradients; and compare merged with unmerged
+Count trainable values, assert the base tensor is bitwise unchanged, check that
+only permitted parameters receive gradients, and compare merged with unmerged
 outputs. A small checkpoint is not evidence that the intended tensors were frozen.
 The assertions belong beside the implementation, not in a comment after training.
 :::
 
-### Make the rank bottleneck fail on purpose
+### A planted-correction test of the rank bottleneck {#make-the-rank-bottleneck-fail-on-purpose}
 
-Low rank is a hypothesis about the update, not a free compression theorem. We can
-make its boundary visible by planting a target correction with exactly six
+Low rank is a hypothesis about the update, not an unconditional compression guarantee. We can
+make its boundary visible by planting a target correction with six
 independent diagonal directions. The frozen base is a $32\times32$ map. Full tuning
 may move all 1,024 entries; LoRA may use ranks $1,2,4,6,$ or $8$. Inputs are fixed
-Gaussian vectors, targets are noiseless, and five LoRA initializations see the same
+Gaussian vectors, targets are noiseless, and five LoRA initializations share the same
 problem and optimizer schedule.
 
 Write the six planted magnitudes as $\sigma_1\ge\cdots\ge\sigma_6$. Their values are
 $1.20,0.90,0.65,0.40,0.22,0.10$. A correction whose rank $r$ is below six must leave some
-directions behind. Because the target is exactly low rank, we can compute the error each rank
+directions behind. Because the target correction has rank six, we can compute the error each rank
 must leave before we train.
 
 Because the six diagonal basis directions are mutually orthogonal, their squared
@@ -868,7 +870,7 @@ print("largest merged/unmerged difference:",
 ```{python}
 #| echo: false
 #| label: fig-lora-rank-capacity
-#| fig-cap: "LoRA's rank is a real capacity constraint in a problem constructed to expose it. Five factor initializations converge to the same rank-limited relative update errors (left), closely tracking the analytic best floors from the planted diagonal magnitudes. Validation error (right) falls sharply but remains nonzero below the planted rank six; rank six, rank eight, and the unrestricted full update reach numerical zero. The numbers above the validation points count the trainable adapter values in this small layer."
+#| fig-cap: "LoRA's rank is a real capacity constraint in a problem constructed to expose it. Five factor initializations converge to the same rank-limited relative correction errors (left), closely tracking the analytic best floors from the planted diagonal magnitudes. Validation error (right) falls sharply but remains nonzero below the planted rank six; rank six, rank eight, and the unrestricted full update reach numerical zero. The numbers above the validation points count the trainable adapter values in this small layer."
 #| fig-alt: "Two logarithmic line plots. Relative correction error follows a calculated floor at ranks one, two, and four, then drops near zero at the planted rank six. Validation MSE shows the same boundary."
 #| fig-width: 9
 #| fig-height: 3.8
@@ -924,24 +926,24 @@ for ax in axes:
 plt.tight_layout()
 plt.show()
 ```
-The failure is orderly. Rank 1 leaves relative correction error $0.710$; rank 2
-leaves $0.472$; rank 4 leaves $0.142$. Their mean validation MSEs are
+The error decreases systematically with rank: rank 1 leaves relative correction error $0.710$,
+rank 2 leaves $0.472$, and rank 4 leaves $0.142$. Their mean validation MSEs are
 $0.04535,0.02022,$ and $0.001888$. Rank 6 and rank 8 recover the target to below
 $10^{-6}$ relative correction error. The unrestricted update reaches numerical-zero
 validation MSE and $2.39\times10^{-7}$ relative correction error. Every frozen base
 is bitwise intact, and the largest merged–unmerged discrepancy is below
 $2\times10^{-6}$.
 
-In this toy $32\times32$ layer, rank 6 still trains 384 values, 37.5% of a full
+In this synthetic $32\times32$ layer, rank 6 still trains 384 values, 37.5% of a full
 matrix. The saving is small because the layer is small; real
 LoRA savings depend on wide matrices, small ranks, and which layers are targeted. The
-experiment was also built from a low-rank shift. If the chosen rank cannot capture the
+experiment was also built from a low-rank correction. If the chosen rank cannot capture the
 correction the task needs, some error will remain.
 
-## Quantization: put weights on a smaller grid
+## Quantized weight representations {#quantization-put-weights-on-a-smaller-grid}
 
-PEFT restricts which values may change. **Quantization** asks how precisely values
-must be represented. If a tensor contains $N$ values stored at $b$ bits each, its
+PEFT restricts which values may change. **Quantization** represents values using a
+chosen finite set of numerical levels. If a tensor contains $N$ values stored at $b$ bits each, its
 ideal packed payload is
 
 $$
@@ -1009,11 +1011,11 @@ q_{\min},q_{\max}
 \right).
 $$
 
-The zero-point lives in integer-code coordinates. Mixing it with a real-valued
+The zero-point is an integer code, in the same coordinates as $q$. Mixing it with a real-valued
 offset (subtracting $z$ before dividing by $s$, then adding $z$ after
 dequantization) is a units error.
 
-### One scale can erase a quiet channel
+### Shared quantization scales and low-magnitude channels {#one-scale-can-erase-a-quiet-channel}
 
 Scale granularity changes the trade: **per-tensor** quantization shares one scale
 across an entire matrix. **Per-row** quantization gives each output row its own
@@ -1021,11 +1023,11 @@ scale; for a linear layer this is often called per-output-channel quantization.
 More scales cost metadata, but a large row no longer sets the grid spacing for a
 small row.
 
-The next audit creates a $64\times256$ weight matrix whose row ranges span
+The next example constructs a $64\times256$ weight matrix whose row ranges span
 $0.01$ to $10$. It compares 8-bit and 4-bit symmetric grids, either global or
-per-row, on 4,096 fixed Gaussian inputs. The code reports relative weight error,
+per-row, on 4,096 fixed Gaussian inputs, reporting relative weight error,
 relative layer-output error, the distribution of row errors, and ideal packed
-payload plus FP32 scale metadata. It reports no runtime; the simple Python arithmetic
+payload plus FP32 scale metadata. It reports no runtime, because the Python arithmetic
 is not a quantized production kernel.
 
 :::: {.plan-code .plan-code-wide}
@@ -1123,7 +1125,7 @@ for row in quant_rows:
 ```{python}
 #| echo: false
 #| label: fig-quantization-granularity
-#| fig-cap: "Quantization is a grid plus a granularity decision. A 3-bit symmetric example (left) rounds real values to seven levels. In the unequal-row audit, per-row scales reduce relative layer-output error at both bit widths (center). At 8 bits, the global scale entirely erases the smallest rows (relative error 1) while per-row error stays near 0.7% across ranges (right). The improvement costs 256 rather than 4 bytes of FP32 scale metadata."
+#| fig-cap: "Quantization is a grid plus a granularity decision. A 3-bit symmetric example (left) rounds real values to seven levels. In the unequal-row audit, per-row scales reduce relative layer-output error at both bit widths (center). At 8 bits, the global scale erases the smallest rows (relative error 1) while per-row error stays near 0.7% across ranges (right). The improvement costs 256 rather than 4 bytes of FP32 scale metadata."
 #| fig-alt: "A number line shows real values rounding to seven grid points. Hatched bars show lower output error with per-row scales at eight and four bits. A log-log plot shows a global scale erasing small rows while per-row errors stay low."
 #| fig-width: 11
 #| fig-height: 3.7
@@ -1182,9 +1184,9 @@ axes[2].grid(alpha=0.18, which="both")
 plt.tight_layout()
 plt.show()
 ```
-The global 8-bit grid has only $2.13\%$ relative output error overall, which sounds
-reassuring until we inspect rows: the median relative row error is $22.13\%$, and the
-quietest rows are reconstructed as all zeros. Per-row scales lower overall output
+The global 8-bit grid has only $2.13\%$ relative output error overall, but individual
+row errors show substantial distortion: the median relative row error is $22.13\%$, and the
+rows with the smallest weight magnitudes are reconstructed as all zeros. Per-row scales lower overall output
 error to $0.689\%$ and maximum row error below $0.964\%$. At 4 bits, per-row scales
 improve output error from $26.95\%$ to $12.23\%$, but do not make the approximation
 exact.
@@ -1199,7 +1201,7 @@ nibbles. @eq-quant-payload is the payload a packing format could achieve.
 
 Bit count does not determine latency by itself. Real speed depends on supported
 kernels, hardware, packing, dequantization, memory bandwidth, batch shape, and which
-tensors remain in higher precision. Dettmers and colleagues even reported cases
+tensors remain in higher precision. Dettmers and colleagues reported cases
 where LLM.int8() overhead made smaller models slower than FP16. Measure the target
 system; do not turn a file-size ratio into a runtime claim. @sec-a3-precision-performance draws that distinction with the Roofline model
 and matched evidence.
@@ -1255,9 +1257,10 @@ $$
 +\frac{\alpha}{r}\matr{B}(\matr{A}\vect{x}).
 $$ {#eq-qlora-forward}
 
-The base codes $\matr{W}_q$ remain frozen. The gradient passes through the
-dequantized computation to the LoRA path, but ordinary updates do not rewrite the
-4-bit base. QLoRA is therefore not QAT of the backbone, and “4-bit storage” does
+The base codes $\matr{W}_q$ remain frozen. Backpropagation differentiates the whole
+adapted layer, and the gradient with respect to its input passes through the dequantized
+base on its way to earlier layers. Parameter updates change only the LoRA factors, not the
+frozen base codes. QLoRA is therefore not QAT of the backbone, and “4-bit storage” does
 not mean every multiply or accumulator is 4-bit.
 
 NF4 uses a nonuniform codebook with denser resolution where a standardized normal
@@ -1268,7 +1271,7 @@ it is not a universal optimal grid for arbitrary tensors.
 ```{python}
 #| label: fig-qlora-composition
 #| echo: false
-#| fig-cap: "QLoRA composes quantized storage with low-rank training without conflating the two. A frozen blockwise NF4 base is dequantized to the compute dtype for the main matrix multiplication. Higher-precision A and B factors form a trainable low-rank branch, and only that branch has optimizer state. The sum defines the adapted layer; storage dtype, compute dtype, and trainable dtype are separate choices."
+#| fig-cap: "QLoRA composes quantized storage with low-rank training without conflating the two. A frozen blockwise NF4 base is dequantized to the compute dtype for the main matrix multiplication. Higher-precision $\\matr{A}$ and $\\matr{B}$ factors form a trainable low-rank branch, and only that branch has optimizer state. The sum defines the adapted layer; storage dtype, compute dtype, and trainable dtype are separate choices."
 #| fig-alt: "A top path sends frozen NF4 codes and scales through dequantization into a base matrix product. A lower trainable A-then-B path processes the same input, and the two outputs are summed."
 #| fig-width: 10
 #| fig-height: 3.8
@@ -1344,8 +1347,8 @@ gradients and optimizer state.
 ::: {.callout-note}
 ## QLoRA is a composition, not a new objective
 
-NF4 decides how the frozen foundation is stored; LoRA decides where task gradients
-may write. The supervised, preference, or other loss still decides what behavior is
+NF4 determines how the frozen foundation is stored; LoRA determines where task gradients
+may write. The supervised, preference, or other loss still determines what behavior is
 rewarded. A parameter-efficient route can optimize a poor objective just as
 efficiently as a good one.
 :::
@@ -1355,7 +1358,7 @@ efficiently as a good one.
 | Method | Task state and permitted writes | Main consequence |
 |---|---|---|
 | Hard prompt / ICL | State in ordinary context; no gradients during use | No learned task checkpoint; longer context |
-| RAG | State in index and retrieved context; writes depend on design | Fresher evidence; retrieval failure surface |
+| RAG | State in index and retrieved context; writes depend on design | Can supply updated evidence; introduces retrieval errors |
 | Prompt tuning | State in continuous input vectors; write prompt vectors, plus any unfrozen head | Small learned state; virtual positions remain |
 | Prefix / adapters | State in per-layer prefixes or bottlenecks; write added modules | Small checkpoint; extra inference path |
 | LoRA | State in $\matr{A},\matr{B}$; write factors, plus any unfrozen head | Conditionally mergeable; rank bottleneck |
@@ -1366,11 +1369,11 @@ efficiently as a good one.
 A practical instinct remains useful: when a carefully evaluated
 prompt or retrieval pipeline solves the task, avoid fine-tuning merely because it
 is available. Treat that as a search heuristic, not a law. A stable format change
-may fit a small adapter; genuinely new knowledge may belong in retrieval or further
-training; a severe source-coverage mismatch may defeat all of them.
+may fit a small adapter, genuinely new knowledge may belong in retrieval or further
+training, and a severe source-coverage mismatch may defeat all of them.
 
 PEFT changes the cost **after**
-we choose transfer; it does not settle whether transfer helps. As in @sec-09-modern-cnns-transfer,
+we choose transfer. It does not settle whether transfer helps. As in @sec-09-modern-cnns-transfer,
 that question needs an explicit comparison on the target task.
 A frozen foundation
 cannot guarantee a reliable representation of what its source data never covered, and a
@@ -1398,8 +1401,8 @@ actual deployment representation.
 ## What should the update optimize? {#the-next-question-what-deserves-the-update}
 
 **Where the update lives is not what the update optimizes.** Prompt vectors,
-low-rank matrices, and full fine-tuning decide where task gradients may write.
-Quantization decides how values are stored. None decides which answer is helpful,
+low-rank matrices, and full fine-tuning determine where task gradients may write.
+Quantization determines how values are stored. None determines which answer is helpful,
 harmless, honest, or preferred.
 
 @sec-18-alignment will keep the adaptation machinery and change the question from
@@ -1423,22 +1426,22 @@ Close the book for one minute and separate adaptation's three costs.
    work must be reported separately. Zero trainable weights and fewer stored bits
    do not mean zero inference or training cost.
 2. **Prompting changes context, not weights.** The five-seed permutation study closely
-   tracks the analytical information ceilings while the weights stay bitwise fixed during evaluation.
-   RAG is another context lever, with a separate retrieval failure surface.
+   tracks the analytic information ceilings while the weights stay bitwise fixed during evaluation.
+   RAG is another way to supply context, and it introduces its own retrieval errors.
 3. **PEFT restricts where gradient updates may write.** Prompt tuning, prefixes,
    adapters, BitFit, and LoRA impose different parameterizations; they are not
    interchangeable labels for “small fine-tuning.”
 4. **LoRA learns a low-rank correction.** Its trainable count is
    $r(d_{\mathrm{in}}+d_{\mathrm{out}})$ per targeted matrix, and its rank is a real
-   capacity limit. The planted rank-six experiment fails exactly where it should.
-5. **Quantization is a grid, a granularity, and a workflow.** Per-row scales rescue
-   quiet rows in the controlled audit, but consume metadata. Payload size does not
+   capacity limit. The planted rank-six experiment confirms this capacity constraint.
+5. **Quantization is a grid, a granularity, and a workflow.** In the controlled audit,
+   per-row scales reduce quantization error in low-magnitude rows but consume metadata. Payload size does not
    predict runtime without kernels and hardware.
 6. **QLoRA composes representation and adaptation.** A frozen NF4 base is
    dequantized for compute while higher-precision LoRA factors train. Storage dtype,
    compute dtype, and trainable dtype are distinct.
-7. **The choice still needs evaluation on the target task.** None of these
-   methods creates source knowledge for free.
+7. **The choice still needs evaluation on the target task.** Lower storage or update
+   cost does not establish task quality or retained capabilities.
 
 ## Sources and further reading {.unnumbered}
 

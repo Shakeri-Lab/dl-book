@@ -204,7 +204,7 @@ test('integration: the excerpt is HTML-only and sits before LeNet', () => {
   assert.match(config, /^\s+- interactives\/what-where\/player\.js$/m);
   const chapter = chapterSource(NAME);
   assert.equal(scene.anchor.type, 'before-heading');
-  assert.equal(chapter.split('\n').filter(line => line === `## ${scene.anchor.target}`).length, 1);
+  assert.equal(chapter.split('\n').filter(line => line === `## ${scene.anchor.target} {#lenet-the-whole-machine}`).length, 1);
   assert(chapter.indexOf('## Pooling: trading exact location') < chapter.indexOf(`## ${scene.anchor.target}`));
   assert(chapter.indexOf('#| label: corner-detector-values') < chapter.indexOf(`## ${scene.anchor.target}`));
 });

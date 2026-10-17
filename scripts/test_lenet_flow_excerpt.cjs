@@ -120,5 +120,5 @@ test('integration: the excerpt follows LeNet\'s rhythm paragraph and precedes it
   assert.equal(scene.anchor.type, 'after-paragraph');
   assert.equal(prose.split(scene.anchor.target).length, 2);
   const at = prose.indexOf(scene.anchor.target);
-  assert(prose.indexOf('## LeNet: the whole machine') < at && at < prose.indexOf('#| label: lenet'));
+  assert(prose.indexOf('## The LeNet architecture') < at && at < prose.indexOf('#| label: lenet'));
 });

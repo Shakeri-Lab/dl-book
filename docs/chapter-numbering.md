@@ -32,11 +32,11 @@ the chapter number (Listing 12.1 is in Chapter 12, file `10-sequences-rnn.qmd`).
 |---:|---|---|---|
 |  | Preface | `index.qmd` | `` |
 | 1 | Linear Regression, the Mother Model | `chapters/part1/01-linear-regression.qmd` | `sec-01-linear-regression` |
-| 2 | Linear Models that Classify: Logistic and Softmax | `chapters/part1/02-logistic-softmax.qmd` | `sec-02-logistic-softmax` |
+| 2 | Linear Classification: Logistic Regression and Softmax | `chapters/part1/02-logistic-softmax.qmd` | `sec-02-logistic-softmax` |
 | 3 | Nonlinearity and the MLP | `chapters/part1/03-nonlinearity-mlp.qmd` | `sec-03-nonlinearity-mlp` |
 | 4 | Training: Loss and Stochastic Gradient Descent | `chapters/part1/04-training-loss-sgd.qmd` | `sec-04-training-loss-sgd` |
 | 5 | Backpropagation | `chapters/part1/05-backpropagation.qmd` | `sec-05-backpropagation` |
-| 6 | When It Fails: Generalization in Pictures, and Inductive Bias | `chapters/part1/06-generalization-inductive-bias.qmd` | `sec-06-generalization-inductive-bias` |
+| 6 | Generalization, Distribution Shift, and Inductive Bias | `chapters/part1/06-generalization-inductive-bias.qmd` | `sec-06-generalization-inductive-bias` |
 | 7 | Interlude: Who Trains the Trainer? Learning by Experiment | `chapters/interludes/learning-by-experiment.qmd` | `sec-learning-by-experiment` |
 | 8 | Filters and Convolution (Fixed Kernels) | `chapters/part2/07-filters-convolution.qmd` | `sec-07-filters-convolution` |
 | 9 | CNNs: Making the Filters Learnable | `chapters/part2/08-cnn.qmd` | `sec-08-cnn` |

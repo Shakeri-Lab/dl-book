@@ -284,6 +284,6 @@ test('integration: the excerpt is HTML-only and follows the 1 x 1 paragraph', ()
   assert.doesNotMatch(scene.anchor.target, /[*_`$\\[\]]/);
   // It follows the paragraph that introduces the 1 x 1 kernel and precedes NiN.
   const at = prose.indexOf(scene.anchor.target);
-  assert(prose.indexOf('A $1 \\times 1$ kernel does no spatial mixing at all') < at);
-  assert(at < prose.indexOf('That tool enables the **Network-in-Network** design'));
+  assert(prose.indexOf('The window of a $1 \\times 1$ kernel is a single pixel.') < at);
+  assert(at < prose.indexOf('The **Network-in-Network** design (Lin et al., 2013) combines this tool'));
 });

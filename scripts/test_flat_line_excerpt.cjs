@@ -496,7 +496,7 @@ test('integration: the excerpt closes "What if the map could bend?" before the n
   const headings = chapter.split('\n').filter(line => /^#{2,}\s/.test(line)).map(line => line.replace(/^#+\s+/, '').replace(/\s*\{.*\}\s*$/, ''));
   assert.equal(headings.filter(heading => heading === scene.anchor.target).length, 1, 'the heading occurs once');
   const at = chapter.indexOf(`## ${scene.anchor.target}`), end = 'true manifold or its preferred coordinates.';
-  const bend = chapter.indexOf('## What if the map could bend?'), figure = chapter.indexOf('::: {#fig-linear-nonlinear-ae}');
+  const bend = chapter.indexOf('## Nonlinear autoencoders'), figure = chapter.indexOf('::: {#fig-linear-nonlinear-ae}');
   const paragraph = chapter.indexOf(end);
   assert(bend >= 0 && bend < figure && figure < paragraph && paragraph < at, 'after the figure and the manifold-learning paragraph');
   assert.match(chapter.slice(paragraph + end.length, at), /^\s*$/, 'nothing between that paragraph and the heading');

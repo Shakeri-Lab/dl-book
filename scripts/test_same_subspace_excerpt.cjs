@@ -89,7 +89,7 @@ registerGrammarTests(NAME);
 test('same subspace: the manuscript owns the identity while the point and turn are explicitly schematic',t=>{
   const f=fixture(t,NAME),source=declared(f),chapter=chapterSource(NAME);
   assert.equal(scene.qmd,'chapters/interludes/making-pca-learnable.qmd');
-  assert.equal(scene.anchor.type,'before-heading');assert.equal(scene.anchor.target,'What if the map could bend?');
+  assert.equal(scene.anchor.type,'before-heading');assert.equal(scene.anchor.target,'Nonlinear autoencoders');
   assert.equal(scene.duration,40);assert.deepEqual(scene.beats,[0,5,10,15,20,25,30,35]);
   assert.equal(f.root.dataset.evidenceClass,'schematic');
   assert.equal(source.basis.length,3);assert.equal(source.input.length,3);

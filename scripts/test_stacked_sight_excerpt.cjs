@@ -132,5 +132,5 @@ test('integration: the excerpt follows the stacking paragraph and precedes the c
   assert.equal(scene.anchor.type, 'after-paragraph');
   assert.equal(prose.split(scene.anchor.target).length, 2);
   const at = prose.indexOf(scene.anchor.target);
-  assert(prose.indexOf('## Question 1:') < at && at < prose.indexOf('#| label: kernel-economics'));
+  assert(prose.indexOf('## Why $5 \\times 5$? Stack small kernels instead') < at && at < prose.indexOf('#| label: kernel-economics'));
 });

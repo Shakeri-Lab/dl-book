@@ -86,7 +86,7 @@ test('LayerNorm axis: the exact tensor and last-axis operation are the chapter a
   for(const literal of scene.fixture.literals)assert(chapter.includes(literal),literal);
   assert(chapter.includes('normalized = nn.functional.layer_norm(audit, (4,))'));
   assert(chapter.includes('normalized.var(dim=-1, unbiased=False)'));
-  assert.match(chapter,/without aggregating statistics\s+across other tokens or examples/);
+  assert.match(chapter,/without aggregating\s+across\s+neighboring\s+tokens\s+or\s+batch\s+examples/);
   assert.equal(typeof f.w.BookLayerNormAxis.buildState,'function');
   verifyState(f.w.BookLayerNormAxis.buildState(40),FIXTURE,40);
 });

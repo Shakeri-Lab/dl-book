@@ -87,12 +87,12 @@ test('batch ruler: the formula and the two machines are the chapter\'s own', t =
   assert(chapter.includes(`$$\n${first},\n\\qquad\n${second} .\n$$ {#eq-batchnorm}`), `the formula drifted from the chapter: ${bare}`);
   // The two machines, in the chapter's words: the panel's evaluation captions and scope say
   // what the warning after the panel says, and the question asks what that warning answers.
-  assert(prose.includes('so it uses running averages collected during training.'));
+  assert(prose.includes('use stored running averages collected during training, including when they process one image at a time.'));
   assert(f.$('.mechanism-scope').textContent.includes('running averages collected during training'));
   assert(prose.includes('BN needs real batches to estimate statistics, so it gets unreliable at tiny batch sizes.'));
   assert(f.$('.mechanism-scope').textContent.includes('BatchNorm needs real batches and gets unreliable at tiny batch sizes'));
-  assert(prose.includes('restore any mean and spread'), 'the panel\'s word "spread" is the chapter\'s');
-  assert(prose.includes('evaluate in train mode and your predictions depend on whatever else happens to be in the batch'));
+  assert(prose.includes('the BN row holds a near-constant spread'), 'the panel\'s word "spread" is the chapter\'s');
+  assert(prose.includes('a prediction made in train mode depends on the other images in the batch'));
   assert.equal(f.$('.mechanism-question').textContent,
     'In training mode, the same garment goes through BatchNorm twice, once with each of two batches of other garments. Its own value is 2 both times. Does its output change?');
   assert.equal(f.root.dataset.evidenceClass, 'declared-toy');
@@ -462,7 +462,7 @@ test('batch ruler: typography, voice and inertness', t => {
 test('integration: the excerpt follows the gamma and beta paragraph and precedes the two-machines warning', () => {
   const filter = fs.readFileSync(path.join(ROOT, scene.filter), 'utf8');
   assert.match(filter, /^(?:--[^\n]*\n)+if not FORMAT:match\("\^html"\) then return \{\} end/);
-  assert.doesNotMatch(filter, /batch-ruler|sane numbers/);
+  assert.doesNotMatch(filter, /batch-ruler|standardized activations/);
   const config = fs.readFileSync(path.join(ROOT, '_quarto.yml'), 'utf8');
   assert.match(config, /^\s+- interactives\/batch-ruler\/player\.js$/m);
   const chapter = chapterSource(NAME), prose = chapter.split(/\s+/).join(' ');

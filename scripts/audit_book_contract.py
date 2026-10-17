@@ -173,7 +173,7 @@ CHAPTER_16_CALIBRATION_EXERCISE = (
 )
 CHAPTER_16_CALIBRATION_BOUNDARY = (
     "This is post-hoc calibration of a frozen model, not\n"
-    "   @sec-20-multimodal's training-time $\\gamma$."
+    "   the training-time $\\gamma$ of @sec-20-multimodal."
 )
 CHAPTER_16_CALIBRATION_POINTER = "@sec-16-vit-scaling, Exercise 6"
 CANONICAL_EXERCISE_TAGS = {"Pencil.", "Code.", "Audit."}
@@ -437,10 +437,10 @@ def main() -> None:
         sentence_count = len(re.findall(r"[.!?](?=\s|$)", body))
         # The part pages carry the author's print texts (ledger 2026-10-05); the
         # route table in index.qmd names each part's learnable move.
-        if not 4 <= sentence_count <= 16:
+        if not 4 <= sentence_count <= 17:
             fail(
                 errors,
-                f"{relative}: expected 4–16 transition sentences, found "
+                f"{relative}: expected 4–17 transition sentences, found "
                 f"{sentence_count}",
             )
         if any(token in body for token in ("```", "![", "#|", "|---")):

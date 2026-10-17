@@ -59,7 +59,7 @@ maximum length, and it cannot finish before the last element arrives.
 Recurrence asks us to make the carried summary learnable: rather than compressing
 once, the model learns how to revise its memory after each new element.
 
-Four earlier tools do most of the work in this chapter: the kernel shared across space
+This chapter builds on four tools from earlier chapters: the kernel shared across space
 in @sec-07-filters-convolution and @sec-08-cnn, which becomes one rule shared across
 time; the product of Jacobians that vanished down deep networks in
 @sec-05-backpropagation, now measured across time; the softmax and the sigmoid of
@@ -68,18 +68,18 @@ multiplicative factors that control what a recurrent state keeps; and the additi
 of the residual connection of @sec-09-modern-cnns-transfer, which a recurrent
 architecture applies along the sequence.
 
-## Stretching the old toolkit
+## From fixed windows to recurrent models {#stretching-the-old-toolkit}
 
 **A window.** We predict the next element $\vect{x}_{t+1}$ from the last $k$,
 $\vect{x}_{t-k+1}, \dots, \vect{x}_t$, by sliding a width-$k$ window along the sequence
-and feeding each snapshot to an MLP. This is autoregression, and the
-*sliding* is a one-dimensional convolution: locality, transplanted from space to time. Windows are
-useful (they power real forecasting systems), but they inherit locality's blind
-spot: anything older than the last $k$ elements lies outside the window and cannot affect
-the prediction. The window's context length is therefore $k$, and no fixed $k$ covers every
-dependency, as in the sentence "The company whose first-day price we recorded back in
-January finally ...". In the list's terms, the window meets the first four goals and fails
-the fifth, and buying more reach costs parameters.
+and feeding each snapshot to an MLP. This is autoregression. Applying the same MLP at
+every window position reuses the locality and weight sharing of one-dimensional
+convolution, with the time axis in place of a spatial axis. Windows are useful (they power
+real forecasting systems), but their context length is fixed at $k$: anything older than
+the last $k$ elements lies outside the window and cannot affect the prediction. No fixed
+$k$ covers every dependency, as in the sentence "The company whose first-day price we
+recorded back in January finally ...". The window thus meets the first four goals and
+fails the fifth, and widening it adds parameters.
 
 **A function per timestep.** Next we let the model change over time: we learn $f_1$ for
 step one, $f_2$ for step two, and so on, and each passes a summary forward,
@@ -91,7 +91,7 @@ position must be learned again at the other. It fails the first and fourth goals
 
 Images posed the same problem in space: a separate template for every image position was
 wasteful and brittle, and convolution replaced the templates with one kernel shared across
-space. The move is the same here: **share the function across time**,
+space. The same remedy applies here: **share the function across time**,
 
 $$
 \vect{h}_t = f(\vect{h}_{t-1}, \vect{x}_t),
@@ -116,7 +116,7 @@ Feeding it back in gives the computation a property with a classical name, the
 model's next update, and earlier inputs affect that update only through
 $\vect{h}_{t-1}$. This interface permits streaming (process elements as they arrive), any
 sequence length (the loop runs once per element), and, later in this chapter, training
-on chopped-up chunks. It is a property of the model's computation. It does not
+on contiguous chunks. It is a property of the model's computation. It does not
 establish that $\vect{h}_{t-1}$ preserves every aspect of the past needed for optimal
 prediction.
 :::
@@ -193,10 +193,10 @@ $$
 \vect{h}_t = m_t\, f(\vect{h}_{t-1},\vect{x}_t) + (1-m_t)\,\vect{h}_{t-1}.
 $$ {#eq-masked-update}
 
-Each sequence then ends holding the state of its own last real element, exactly as if
-it had run alone.
+Each sequence then ends holding the state of its own last real element, the state it
+would hold if run alone.
 
-Unroll the loop on paper and the RNN is an ordinary
+Unroll the loop in time and the RNN is an ordinary
 feedforward network that happens to be $T$ layers deep with every layer's weights
 tied.
 
@@ -276,7 +276,8 @@ $$
 +\frac{\partial L_{t-1}}{\partial\vect{h}_{t-1}} .
 $$ {#eq-bptt}
 
-The Jacobian is a product of $T-1$ near-identical matrices. The second expression applies
+The Jacobian is a product of $T-1$ factors that share $\matr{W}_{hh}$, while the
+activation-derivative matrices $\matr{D}_t$ vary along the sequence. The second expression applies
 the chain rule in reverse-mode order to the adjoint $\vect{g}_t=\partial L/\partial\vect{h}_t$,
 starting from $\vect{g}_T=\partial L_T/\partial\vect{h}_T$ and ending at
 $\vect{g}_0=\matr{W}_{hh}^{\!\top}\matr{D}_1\vect{g}_1$, since no loss is attached to
@@ -285,8 +286,8 @@ $\matr{W}_{hh}^{\top}$ carries it to the previous state, and the loss $L_{t-1}$ 
 own gradient there.
 
 A deep network's gradient has the same form, a product of per-layer Jacobians. If the
-factors shrink the signal, the product decays exponentially; if they grow it, it explodes
-exponentially. Since $\tanh' \le 1$ and
+factors shrink the signal, the product decays exponentially, and if they amplify it, the
+product explodes exponentially. Since $\tanh' \le 1$ and
 $\matr{W}_{hh}$ repeats at every step, keeping every relevant direction near unit
 gain over a long sequence is a fragile special case. Initialization can at least start
 there: an orthogonal $\matr{W}_{hh}$ has every singular value equal to one, so wherever
@@ -294,11 +295,11 @@ the pre-activations sit near zero, where $\tanh'\approx 1$, each hop preserves t
 gradient's norm. Training moves $\matr{W}_{hh}$, and $\tanh'$ drops below one as
 pre-activations grow, so orthogonality governs only the start of training (Exercise 2).
 
-Earlier chapters measured depth in layers; here we measure it in *time*, and a paragraph
+Earlier chapters measured depth in layers. Here we measure it in *time*, and a paragraph
 of text, read one word per step, is about a hundred layers deep. We illustrate the effect
 of this depth in @fig-vanishing-time, which plots, for a freshly initialized vanilla RNN,
-the norm of the gradient that reaches the first input against the lag $T$, the length of
-the sequence (the first input lies $T-1$ steps before the last).
+the norm of the gradient that reaches the first input against the sequence length $T$.
+The first input is $T-1$ recurrent transitions from the final state.
 
 :::: {.plan-code}
 ::: {.plan}
@@ -309,8 +310,8 @@ the sequence (the first input lies $T-1$ steps before the last).
 
 ```{python}
 #| label: fig-vanishing-time
-#| fig-cap: "Norm of the gradient $\\partial L/\\partial\\vect{x}_1$ that reaches the first input of a freshly initialized vanilla RNN, against the lag $T$, the length of the sequence (the first input lies $T-1$ steps before the last). Here $L$ is the sum of the entries of the last state $\\vect{h}_T$ over the batch and the hidden units. The norm falls by about fifteen orders of magnitude from lag 1 to lag 60."
-#| fig-alt: "Log-scale line chart of the norm of the output gradient with respect to the first input versus lag. The vanilla RNN curve falls almost linearly on the log axis, from above one at lag 1 to roughly 10 to the minus 15 at lag 60."
+#| fig-cap: "Norm of the gradient $\\partial L/\\partial\\vect{x}_1$ that reaches the first input of a freshly initialized vanilla RNN, against the sequence length $T$. The first input is $T-1$ recurrent transitions from the final state. Here $L$ is the sum of the entries of the last state $\\vect{h}_T$ over the batch and the hidden units. The norm falls by about fifteen orders of magnitude from $T=1$ to $T=60$."
+#| fig-alt: "Log-scale line chart of the norm of the output gradient with respect to the first input versus sequence length. The vanilla RNN curve falls almost linearly on the log axis, from above one at length 1 to roughly 10 to the minus 15 at length 60."
 #| code-summary: "Code: gradient reaching the first input vs. lag"
 #| code-fold: false
 # [1]
@@ -341,11 +342,11 @@ plt.ylabel(r"$\|\partial L / \partial \mathbf{x}_1\|$")
 plt.legend(); plt.tight_layout(); plt.show()
 ```
 ::::
-By lag 60 the gradient reaching the first input is about $10^{-15}$: at initialization,
+At $T=60$ the gradient reaching the first input is about $10^{-15}$: at initialization,
 whatever happened at the start supplies almost no usable learning signal. That makes
 success fragile rather than mathematically impossible. The
-mirror-image failure, explosion, is just as real: one large spike in @eq-bptt's
-product can make an update destabilize training.
+mirror-image failure is explosion: one large spike in the product of @eq-bptt can make
+an update destabilize training.
 
 ::: {.callout-warning}
 ## Gradient clipping limits explosion, not vanishing
@@ -353,8 +354,8 @@ product can make an update destabilize training.
 In practice, explosion is handled with **gradient clipping**: if the gradient's norm
 exceeds a threshold, it is rescaled down to the threshold before the step
 (`nn.utils.clip_grad_norm_`; it appears in every training loop below). This
-tames the spikes so training survives,
-at the cost of damping legitimately large steps. It does *nothing* for vanishing
+keeps a spike from destabilizing training,
+at the cost of damping legitimately large steps. It has no effect on vanishing
 gradients, so clipping alone cannot lengthen the memory a recurrent network learns.
 :::
 
@@ -362,8 +363,9 @@ gradients, so clipping alone cannot lengthen the memory a recurrent network lear
 
 Full BPTT requires memory and compute for the entire sequence at each training
 update. The standard fix relies on the [Markov property](#stretching-the-old-toolkit) of
-the forward pass: the carried state and the next input together determine the next state. In **truncated BPTT**, contiguous chunks carry the recurrent
-state forward but detach it at each boundary. The values cross the boundary; the
+the forward pass: the carried state and the next input together determine the next state.
+In **truncated BPTT**, we cut the sequence into contiguous chunks, carry the recurrent
+state forward, and detach it at each boundary. The values cross the boundary, but the
 gradient graph does not. This bounds memory while preserving running context. For a cut
 after step $t$, the next state is
 $$
@@ -377,15 +379,15 @@ With a fixed horizon, the carried state still delivers the distant past to the f
 pass, but the gradient trains only the dependencies whose two ends fall inside one chunk
 of $K$ steps. A dependency that reaches $\ell$ steps back links the loss at step $t$ to the
 input at step $t-\ell$. The loss at the $j$th step of a chunk reaches back $j-1$ steps:
-just after a boundary ($j=1$) it reaches only its own input, and at the end of the chunk
+immediately after a boundary ($j=1$) it reaches only its own input, and at the end of the chunk
 ($j=K$) it reaches back $K-1$ steps. Only the losses at chunk steps $\ell+1,\dots,K$,
 that is, $K-\ell$ of the chunk's $K$ losses, therefore reach an input $\ell$ steps back:
 such a dependency gets gradient from a fraction $1-\ell/K$ of the losses, and from none
 once $\ell \ge K$. With $K=3$ and a cut after step 3, for example, the loss $L_6$ uses the
 value that entered at $\vect{x}_2$, four steps back; since $4 \ge K$, no gradient from
-$L_6$ reaches step 2. The model can use a longer dependency that its state happens to
-carry, but no gradient teaches it to keep one: a fixed horizon biases training toward
-short-range structure.
+$L_6$ reaches step 2. The carried state may still contain longer-range information, but no
+gradient from a loss in a later chunk reaches the computations before the cut, so a fixed
+horizon biases training toward short-range structure.
 
 Random cuts alone do not remove the bias, because long-range terms are still the ones
 most often cut. Dividing each surviving gradient term by the probability that the cuts
@@ -397,10 +399,11 @@ of steps whose activations must be stored varies from one update to the next. A 
 horizon stores activations for the same $K$ steps in every update and adds no reweighting
 variance. Most training therefore keeps the fixed horizon, at the price of its bias.
 
-The character model [later in this chapter](#the-book-reads-itself) uses a simpler finite-horizon recipe: it samples random
+The model that we train [later in this chapter](#the-book-reads-itself) to predict the next
+character in nine chapters of this book uses a simpler finite-horizon recipe: it samples random
 100-character windows and starts each from zero state. That is **fixed-window
 training**, not truncated BPTT, because no state is carried between windows. It is
-cheap and appropriate for this small demonstration. In production character models, contiguous
+computationally inexpensive and suitable for this small-scale demonstration. In production character models, contiguous
 chunks of roughly 20–50 steps with carried-and-detached state are common. In either
 recipe, clipping handles spikes; neither creates gradients beyond the truncation
 horizon.
@@ -426,7 +429,7 @@ what the carried state keeps. We want a memory pathway that is:
    output gate $\vect{o}_t$.
 
 Each gate is a small learned layer squashed by a sigmoid (a number in $(0,1)$ read as *what fraction passes*). The candidate
-content is shaped by $\tanh$, keeping it bounded and centered. Assembled, this is
+content passes through $\tanh$, which keeps each coordinate between $-1$ and $1$. Assembled, this is
 the **Long Short-Term Memory** cell (Hochreiter & Schmidhuber, 1997; the forget gate
 $\vect{f}_t$ was added by Gers, Schmidhuber & Cummins, 2000):
 
@@ -528,8 +531,8 @@ Let $\vect{\gamma}_t := \partial L/\partial\vect{c}_t$
 denote the loss sensitivity at the cell-state node. In the LSTM
 of @eq-lstm, the gates depend on
 $\vect{h}_{t-1}$ and $\vect{x}_t$, not directly on
-$\vect{c}_{t-1}$. Holding the previous hidden state and the
-current input fixed, the direct cell-state Jacobian is diagonal.
+$\vect{c}_{t-1}$. With the previous hidden state and the
+current input held fixed, the direct cell-state Jacobian is diagonal.
 The contribution propagated from $\vect{\gamma}_t$ along
 this path for $k$ steps is
 
@@ -556,7 +559,7 @@ below test how this choice affects training.
 PyTorch stores separate input-hidden and
 hidden-hidden bias vectors, then adds them. The code sets their **sum** to $+1$;
 setting both slices to $+1$ would silently create an effective bias of $+2$.
-@fig-highway-time repeats the measurement of @fig-vanishing-time for this LSTM: at lag 60
+@fig-highway-time repeats the measurement of @fig-vanishing-time for this LSTM: at $T=60$
 its input gradient is about ten orders of magnitude larger than the vanilla RNN's.
 
 :::: {.plan-code}
@@ -584,8 +587,8 @@ g_lstm = grad_at_first_input(lstm, lags)
 ```{python}
 #| echo: false
 #| label: fig-highway-time
-#| fig-cap: "The gradient-vs-lag experiment of @fig-vanishing-time, rerun on the same input sequences with an LSTM of the same size (4 inputs, 32 hidden units) whose effective forget-gate bias is initialized to +1. The vanilla RNN's input gradient decays exponentially with the lag; the LSTM's decays much more slowly and arrives at lag 60 attenuated, about ten orders of magnitude stronger."
-#| fig-alt: "Log-scale comparison of input-gradient norm versus lag. The vanilla RNN falls from above one to about 10 to the minus 15 by lag 60, while the LSTM with forget bias plus one declines much more slowly and remains near 10 to the minus 5."
+#| fig-cap: "The gradient measurement of @fig-vanishing-time, rerun on the same input sequences with an LSTM with the same input and hidden widths (4 inputs, 32 hidden units) whose effective forget-gate bias is initialized to $+1$. The vanilla RNN's input gradient decays exponentially with $T$; the LSTM's decays much more slowly and arrives at lag 60 attenuated, about ten orders of magnitude stronger."
+#| fig-alt: "Log-scale comparison of input-gradient norm versus sequence length. The vanilla RNN falls from above one to about 10 to the minus 15 by length 60, while the LSTM with forget bias plus one declines much more slowly and remains near 10 to the minus 5."
 plt.figure(figsize=(6.2, 3.2))
 plt.semilogy(lags, g_rnn, "o-", color="#E57200", ms=5, label="vanilla RNN")
 plt.semilogy(lags, g_lstm, "s-", color="#232D4B", ms=5, label="LSTM (forget bias +1)")
@@ -595,11 +598,11 @@ plt.legend(); plt.tight_layout(); plt.show()
 ```
 ## GRU: gating with one state {#gru-the-streamlined-cousin}
 
-The **Gated Recurrent Unit** (Cho et al., 2014) folds the same ideas into a
-smaller box: cell and hidden state merged into one $\vect{h}_t$, forget and input
-gates merged into a single **update gate** $\vect{z}_t$ (what you keep you do not
-overwrite, and vice versa), plus a **reset gate** $\vect{r}_t$ that can blank the
-past when a fresh start is called for:
+The **Gated Recurrent Unit** (Cho et al., 2014) implements the same ideas with
+fewer parts: cell and hidden state merged into one $\vect{h}_t$, forget and input
+gates merged into a single **update gate** $\vect{z}_t$ (what is kept is not
+overwritten, and vice versa), plus a **reset gate** $\vect{r}_t$ that scales the
+previous state before it enters the candidate:
 
 $$
 \begin{aligned}
@@ -611,13 +614,13 @@ $$
 $$ {#eq-gru}
 
 This follows Cho et al.'s original convention: $\vect{z}_t$ weights the old
-state, so it reads as **keep**. Some later references reverse the symbol and let
-$\vect{z}_t$ weight the candidate instead; compare the interpolation equation,
+state, so it reads as **keep**. Some later references reverse the convention and let
+$\vect{z}_t$ weight the candidate instead. Compare the interpolation equation,
 not the gate's name alone.
 
-The GRU has two gates instead of three and one state instead of two, and in most
-settings its performance is comparable to the LSTM's. The memory test below puts
-PyTorch's version beside the LSTM, and Exercise 3 builds one by hand. @fig-gru-cell draws the cell on the layout of @fig-lstm-conveyor.
+The GRU has two gates instead of three and one state instead of two. The memory test
+below compares PyTorch's version with the LSTM under one training protocol, and
+Exercise 3 builds one by hand. @fig-gru-cell draws the cell on the layout of @fig-lstm-conveyor.
 
 ```{python}
 #| label: fig-gru-cell
@@ -668,30 +671,32 @@ ax.text(8.5, 1.3, "$x_t$", ha="left", va="center", fontsize=9)
 plt.tight_layout(); plt.show()
 ```
 
-One convention matters before you compare code. @eq-gru applies the reset gate to
+One convention matters before we compare code. @eq-gru applies the reset gate to
 $\vect{h}_{t-1}$ **before** the candidate's hidden-state linear map. PyTorch's
 `nn.GRU` uses a reset-after form,
 $\tanh(\matr{W}_{in}\vect{x}_t + \vect{b}_{in} + \vect{r}_t \odot (\matr{W}_{hn}\vect{h}_{t-1} + \vect{b}_{hn}))$,
 for implementation efficiency.
 The gates serve the same purpose, but the two cells are not algebraically identical
 for the same weights. An exact manual-loop verification must implement PyTorch's
-ordering rather than @eq-gru's.
+ordering rather than that of @eq-gru.
 
 ## The memory test
 
-We measured the gradients above at initialization; now we train. The task is a two-company story: Company A's
+We measured the gradients above at initialization, before any training. The memory test
+asks whether training succeeds. As an analogy, consider two companies: Company A's
 prices open at 0, Company B's at 1, then both trade identically for days, and the
-correct day-5 prediction is whatever day 1 said. Solving it requires carrying one
-early bit across a long stretch of identical noise. As an executable task, the story
-becomes sequences of 80 random tokens, and the label to predict at the end is
-*the first token*. Chance is 25%. We compare six contenders, three seeds each: the
+correct day-5 prediction is whatever day 1 said. The executable task generalizes this to
+four-way recall: read an 80-token sequence and predict its first token at the end. The
+later tokens are distractors, and chance accuracy is 25%. We compare six configurations,
+three seeds each: the
 vanilla RNN; the LSTM and the GRU with PyTorch's default initialization; the LSTM with
 its forget-gate bias $\vect{b}_f$ set to $+1$ in every unit; and the GRU with its
 keep-gate bias $\vect{b}_z$ set the same way, at $+1$ and at $+2$.^[In both modules
 that gate's bias is the second slice of the stacked gate bias, so the same code sets
 it.] Each row also reports its **input-gradient norm at
-initialization**: the norm of the gradient reaching the first input at lag 80, measured
-as in @fig-vanishing-time on the third run's initialization, before any training.
+initialization**: the norm of the gradient reaching the first input of an 80-token
+sequence, measured as in @fig-vanishing-time on the third run's initialization, before any
+training.
 The printout below calls this norm the *signal at birth*. Predict
 the rows before running: is a gated *architecture* alone enough, and does the
 LSTM's $+1$ carry over to the GRU?
@@ -777,7 +782,7 @@ with keep bias $+2$ solve the task on all three tested seeds.
 The vanilla RNN solves it on one seed, while the remaining
 configurations stay near chance. The comparison shows that
 initialization materially affects the outcome in this task;
-gated architecture alone does not ensure successful training.
+a gated architecture alone does not ensure successful training.
 In these tested configurations the GRU succeeds at $+2$ but not at
 $+1$. Its update gate both keeps the old state and admits the candidate
 in @eq-gru, and equal bias settings in different cells do not imply
@@ -795,12 +800,12 @@ experiment, not a general threshold for successful training.
 
 ### Inspecting the forget gates {#watching-the-valves}
 
-The recall results suggest a check on the gates themselves. If the forget-bias
-model retains the first token along the direct cell-state path of @eq-lstm-highway
-across the eighty-step gap, its mean forget gate should
-hold clearly above the half-open point, step after step, while the default model's
-should stay near $\sigma(0) = \tfrac12$. The default-initialized LSTM is the
-control: it has the same architecture, was trained on the same data, and scores at chance.
+The recall results motivate a descriptive comparison: how do the mean forget-gate
+activations of the two trained LSTMs differ? The direct cell-state path of
+@eq-lstm-highway multiplies forget gates coordinate by coordinate, so a mean over
+units and probes describes the gates without testing that path. The default-initialized
+LSTM is the comparison: it has the same architecture, was trained on the same data, and
+scores at chance.
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
@@ -811,7 +816,7 @@ control: it has the same architecture, was trained on the same data, and scores 
 
 ```{python}
 #| label: fig-forget-gate-diagnostic
-#| fig-cap: "Mean forget-gate activation per timestep on 64 fresh probe sequences, replayed through the two trained LSTMs of the third run in the table above. The task-solving model (navy) holds its gates flat around 0.76 for all eighty steps. The default-initialized model (orange), same architecture and data, stays near $\\sigma(0)\\approx\\tfrac12$ at about 0.56 and scores at chance."
+#| fig-cap: "Mean forget-gate activation per timestep on 64 fresh probe sequences, replayed through the two trained LSTMs of the third run in the table above. The task-solving model (navy), with forget bias $+1$, holds its mean gate flat around 0.76 for all eighty steps. The default-initialized model (orange), same architecture and data, stays near $\\sigma(0)=\\tfrac12$, at about 0.56 and scores at chance."
 #| fig-alt: "Two lines over timesteps one to eighty. The navy line for the forget-bias model stays flat near 0.76. The orange line for the default model stays flat near 0.56, just above a dotted line at one half that the legend labels sigma of zero."
 #| code-summary: "Code: replay the trained LSTMs and read their forget gates"
 #| code-fold: false
@@ -877,11 +882,13 @@ each position mix information from other visible positions directly.
 :::
 <!-- /NOVEL -->
 
-## The book reads itself
+## Character-level language modeling {#the-book-reads-itself}
 
 We now apply fixed windows, clipping, gates, and a softmax over a vocabulary to real
 text. The task is the oldest one in language modeling: read a character, predict the
-next. The corpus is the markdown source of nine earlier chapters, Chapters
+next. A **language model** assigns, at every position, a probability distribution to the
+next token given the tokens before it. Ours reads and predicts single characters, so it is
+a **character-level language model**. The corpus is the markdown source of nine earlier chapters, Chapters
 [-@sec-01-linear-regression] to [-@sec-06-generalization-inductive-bias] and
 [-@sec-07-filters-convolution] to [-@sec-09-modern-cnns-transfer], with the code cells
 removed. Its prose and LaTeX mathematics come to about 150,000 characters, kept as a
@@ -1003,16 +1010,17 @@ held_out_loss = fixed_window_loss(model, valid_data, vocab=len(chars))
 print(f"held-out fixed-window loss {held_out_loss:.2f}")
 ```
 ::::
-The loss falls from the uniform-guessing value $\ln(V) \approx 4.6$ for the printed
-vocabulary size to 1.42 on the last sampled training minibatch. The deterministic held-out
-tail is harder, at 1.89, but both are far below uniform guessing. To see what the model
+Uniform guessing over the 104 characters gives a loss of $\ln 104 \approx 4.6$. The final
+sampled training minibatch has loss 1.42, and the deterministic fixed-window evaluation of
+the held-out tail gives 1.89. To see what the model
 has learned, we generate text: we feed a prompt, divide the last step's logits by a
 **temperature** $\tau$, take the softmax, and sample the next character from the
-result; that character goes back in, and the loop repeats. A temperature below 1 sharpens
-the distribution, and as $\tau \to 0$ each draw becomes the argmax; above 1 it flattens
-toward uniform. The sampler below uses $\tau = 0.8$. The hidden state streams, so nothing
-is recomputed, and generation can run past the 100 characters of a training window,
-although no training loss depended on a longer context.
+result. That character goes back in, and the loop repeats. A temperature below 1 sharpens
+the distribution, and as $\tau \to 0$ each draw becomes the argmax. A temperature above 1
+flattens it toward uniform. The sampler below uses $\tau = 0.8$. It carries the recurrent
+state forward, so earlier characters need not be reprocessed, and generation can run past
+the 100 characters of a training window, although no training loss depended on a longer
+context.
 
 :::: {.plan-code}
 ::: {.plan}
@@ -1043,8 +1051,9 @@ print(sample("The gradient ", n=300))
 ```
 ::::
 Trained on raw text in 100-character windows, the one-layer model has learned words,
-spacing, markdown furniture (headings, display-math dollar signs, backslashed macros), and
-the book's working vocabulary (Exercise, map, optimized, and misspelled cousins). Clauses
+spacing, markdown and LaTeX markup (headings, display-math dollar signs, backslashed
+macros), and the book's working vocabulary (`Exercise`, `map`, `optimized`, and misspelled
+variants). Clauses
 trail off, and equations open and never close: the sample reproduces local vocabulary and
 formatting but does not sustain coherent statements. This run does not separate the
 effects of corpus size, state width, training horizon, and optimization.
@@ -1120,10 +1129,10 @@ not improve the mean reliably: two runs are strongest, while the third ends at p
 
 ## What a single carried state does not provide {#what-a-fixed-size-state-cannot-hold}
 
-Against the six goals, the window met the first four and failed reach; a function per
-timestep failed two at once: any length and parameters independent of length. One shared
-recurrence met the first five on paper. On the sixth, at lag 80 on our task, the vanilla
-cell trained successfully on one of three seeds, while the LSTM with forget bias $+1$ and
+Against the six goals, a fixed window meets the first four but fails on reach. A separate
+function per timestep fails on both variable length and length-independent parameters. A
+single shared recurrence meets the first five by construction. On the sixth, with 80-token
+sequences on our task, the vanilla cell trained successfully on one of three seeds, while the LSTM with forget bias $+1$ and
 the GRU with keep bias $+2$ did so on all three tested seeds. Two needs outside the list
 remain.
 
@@ -1163,10 +1172,10 @@ Close the book for one minute and unroll the recurrence.
    can still depend on position through the state. The unrolled RNN is a deep network
    with tied weights.
 3. **Tied depth in time repeats the deep-network problem**: BPTT multiplies $T-1$
-   near-identical Jacobians (@eq-bptt) $\rightarrow$ vanishing or exploding,
+   stepwise Jacobians (@eq-bptt) $\rightarrow$ vanishing or exploding,
    unless their gains are carefully controlled. The recurrence gives computational reach
    to every earlier input, but a gradient must cross that product, and a finite training
-   horizon supplies none across its boundary. Clipping tames the explosions;
+   horizon supplies none across its boundary. Clipping limits explosion, and
    truncation caps the cost, but neither lengthens the range of dependencies that training
    can teach.
 4. **The LSTM engineers the memory**: an additive cell-state update, the residual
@@ -1174,14 +1183,15 @@ Close the book for one minute and unroll the recurrence.
    (forget, input, output; @eq-lstm). Along the direct cell-state path, the gradient
    contribution is scaled by a product of forget *gates*, not weight matrices
    (@eq-lstm-highway); the full gradient also follows paths through hidden states and gates.
-5. **Initialization affects recall**: at lag 80 the default LSTM
+5. **Initialization affects recall**: in 80-token sequences the default LSTM
    scores near chance; with the forget bias set to $+1$ it solves the task on all three
    tested seeds. The GRU packs the same ideas into two gates
    and one state (@eq-gru); in these tests it succeeded with keep bias $+2$ but
    not $+1$. At the one measured initialization, the two configurations that succeeded on
    all three seeds had the largest input-gradient norms: an association in this experiment,
    not a general threshold.
-6. **A one-layer character LSTM reproduces local features of this book** (words,
+6. **A one-layer character-level LSTM language model reproduces local features of this
+   book** (words,
    spacing, markdown and LaTeX markup) but does not sustain coherent statements; this
    experiment does not separate corpus size, state width, training horizon, and
    optimization. Two needs remain, revisiting and time in parallel: earlier inputs reach
@@ -1267,7 +1277,7 @@ in parallel.
   the 40th International Conference on Machine Learning (ICML)*, PMLR 202,
   26670–26698. What a plain linear RNN needs to match state-space layers.
 - Feng, L., Tung, F., Ahmed, M. O., Bengio, Y., & Hajimirsadeghi, H. (2024). [*Were RNNs
-  All We Needed?*](https://arxiv.org/abs/2410.01201) arXiv preprint arXiv:2410.01201.
+  All We Needed?*](https://arxiv.org/abs/2410.01201). arXiv preprint arXiv:2410.01201.
   Strips the LSTM and GRU down to input-only gates so the whole sequence trains in
   parallel.
 
@@ -1289,17 +1299,17 @@ in parallel.
    the norm in one step when all pre-activations are near zero?
    Why is a small initial hidden state alone insufficient to
    ensure this?
-   **(Code.)** Initialize $\matr{W}_{hh}$ with `nn.init.orthogonal_` and repeat
-   @fig-vanishing-time's measurement. Then record the gradient norm that
+   **(Code.)** Initialize $\matr{W}_{hh}$ with `nn.init.orthogonal_` and repeat the
+   measurement of @fig-vanishing-time. Then record the gradient norm that
    `clip_grad_norm_` returns in the memory test: what fraction of updates does it
    rescale for the vanilla RNN and for the forget-bias LSTM, and which cell trains
    mostly on clipped gradients?
 3. **(Code.)** Implement the reset-before GRU in @eq-gru as a manual loop. Then
    change only the candidate update to PyTorch's reset-after convention and verify
    that version against `nn.GRU`. **(Audit.)** The memory test left the GRU at chance
-   with the LSTM's $+1$ and solved it at $+2$. *Named wrong answer:*
-   “$\sigma(1)\approx 0.73$ is too leaky”: the LSTM runs at the same bias
-   value and solves the task. Along one trajectory at initialization for both cells at
+   with the LSTM's $+1$, and the GRU solved it at $+2$. *Common misconception:*
+   “both cells have bias $+1$, so they have the same retention.” Equal biases do not
+   imply equal realized gates or recurrent Jacobians. Along one trajectory at initialization for both cells at
    $+1$, measure the norm of the GRU's one-step Jacobian
    $\partial\vect{h}_t/\partial\vect{h}_{t-1}$ and of the LSTM's joint-state Jacobian
    $\partial(\vect{h}_t,\vect{c}_t)/\partial(\vect{h}_{t-1},\vect{c}_{t-1})$, and state
@@ -1309,16 +1319,18 @@ in parallel.
    Make $\vect{h}_0$ a learned `nn.Parameter` in the recall task and retrain.
    Where does its gradient come from, and when could a learned start plausibly
    matter?
-5. **(Code.)** Sample the character model at temperatures 0.2, 0.8, and 1.5, and
-   with the temperature near zero compare against picking the argmax at every
-   step. Connect what you see to @sec-02-logistic-softmax's hard-max-versus-softmax discussion:
-   which failure mode of the hard max does greedy decoding reproduce?
+5. **(Code.)** Sample the character-level language model at temperatures 0.2, 0.8, and
+   1.5, and with the temperature near zero compare against picking the argmax at every
+   step. As the temperature approaches zero, when does sampling reproduce the greedy
+   continuation? What differences in repetition and diversity do you observe at the other
+   temperatures?
 6. **(Code.)** **Both cells from scratch, on real reviews.** Write a vanilla RNN cell
    with separate input and recurrent maps: a Xavier-initialized $\matr{W}_{xh}$ and
    an orthogonal $\matr{W}_{hh}$ without a bias. Write an LSTM cell with one fused
    linear map from $[\vect{h}_{t-1},\vect{x}_t]$ to all four gate pre-activations and
-   its forget-gate bias set to $+1$. Unroll each over padded minibatches with
-   @eq-masked-update, read the final state into a two-class head, and train both on
+   its forget-gate bias set to $+1$. Unroll each over padded minibatches with the
+   masked update of @eq-masked-update, applied for the LSTM to both $\vect{h}_t$ and
+   $\vect{c}_t$, read the final hidden state into a two-class head, and train both on
    the IMDb movie reviews of Maas et al. (2011), using a capped vocabulary, an
    unknown-word token, and an embedding whose padding row stays at zero. Log the
    gradient norm before clipping, report validation accuracy and a confusion matrix
@@ -1343,9 +1355,9 @@ in parallel.
    pair $(\vect{a}_1\odot\vect{a}_2,\;\vect{a}_2\odot\vect{b}_1+\vect{b}_2)$.
    **(Code.)** Implement a doubling scan that produces every $\vect{c}_t$ in
    $\lceil\log_2 T\rceil$ rounds and assert that it matches the loop for $T=1000$.
-   Then enter this input-gated cell in the lag-80 memory test. What did removing
-   $\vect{h}_{t-1}$ from the gates cost, and what did it buy? The papers listed for
-   this exercise under Sources follow the idea from input-only gates to today's
+   Then add this input-gated cell to the 80-token memory test. What was lost, and what
+   was gained, by removing $\vect{h}_{t-1}$ from the gates? The papers listed for
+   this exercise under Sources follow the idea from input-only gates to current
    linear-recurrent and state-space layers; the test-time-regression
    interlude (@sec-interlude-test-time-regression) returns to fixed-state recurrences
    from another direction.

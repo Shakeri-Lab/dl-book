@@ -103,7 +103,7 @@ test('sigmoid squash: the chapter owns the curve; the plane behind it is a decla
   assert.equal(f.root.dataset.evidenceClass, 'schematic');
   for (const literal of scene.fixture.literals) assert(chapter.includes(literal), literal);
   // The three sentences this scene exists to make visible.
-  assert.match(chapter, /The sigmoid does not bend the boundary; it grades our confidence on either\nside of it/);
+  assert.match(chapter, /The sigmoid does not bend the boundary\. It assigns probabilities on either side\nof the boundary/);
   assert.match(chapter, /an unbounded score/);
   assert.match(chapter, /Near the boundary \$\\\\hat p\$ stays close to \$\\\\tfrac\{1\}\{2\}\$; far from it, \$\\\\hat p\$ saturates toward 0 or 1/);
   // The score axis is the chapter's own sweep, ends included.

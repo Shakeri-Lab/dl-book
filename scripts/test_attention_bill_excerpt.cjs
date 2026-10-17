@@ -90,7 +90,7 @@ test('attention bill: the existing manuscript owns the image, patch sizes, exact
   assert.equal(scene.anchor.type,'before-heading');
   assert.equal(scene.anchor.target,'CNN and ViT on 1,000 Fashion images');
   assert.deepEqual(scene.beats,[0,5,10,15,20,25,30,35]); assert.equal(scene.duration,40);
-  assert.match(chapter,/Ignoring `\[CLS\]`/);
+  assert.match(chapter,/If we ignore `\[CLS\]`/);
   assert(chapter.includes('$49^2=2{,}401$') && chapter.includes('$196^2=38{,}416$'));
   f.load(); f.open();
   assert.deepEqual(checkCounts(f,fx),{start:{tokens:49,entries:2401},end:{tokens:196,entries:38416},

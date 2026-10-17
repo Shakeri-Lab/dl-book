@@ -118,7 +118,7 @@ test('column space: the manuscript owns the geometry while the vectors are decla
   // The two facts this scene declines to draw are the chapter's own, named in the scope:
   // without full column rank many weights reach one minimum (the exercises name it rank
   // deficient), and forming X^T X squares the condition number (the chapter's footnote).
-  assert.match(chapter, /requires full column rank \(\$n \\ge d\$, with no\s+redundant features\)\.[\s\S]*?infinitely many\s+weight vectors achieve the exact same minimum error\./);
+  assert.match(chapter, /requires full column rank \(\$n \\ge d\$, with no\s+redundant features\)\.[\s\S]*?infinitely many\s+weight vectors achieve the same minimum error\./);
   assert.match(chapter, /First, forming\s+\$\\featurepart\{\\matr\{X\}\}\^\\top\\featurepart\{\\matr\{X\}\}\$ explicitly squares the condition\s+number/);
   assert.match(chapter, /rank deficient \(rank below \$d\$/);
   assert.match(read('column-space/panel.html'), /rank deficiency, from redundant features or more parameters than examples, where infinitely many weight vectors reach the same minimum error/);
