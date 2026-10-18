@@ -189,18 +189,18 @@ class Seq2Seq(nn.Module):
         self.out = nn.Linear(hidden, v_tgt)
 
     def encode(
-        self, S: torch.Tensor, lengths: torch.Tensor,
+        self, X: torch.Tensor, lengths: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        e = self.src_emb(S)                          # (B, T_src, embed)
+        e = self.src_emb(X)                          # (B, T_src, embed)
         if self.packed:                              # stop at each true length
             e = nn.utils.rnn.pack_padded_sequence(
                 e, lengths, batch_first=True, enforce_sorted=False)
         _, state = self.encoder(e)
         return state                                 # (h, c): the context
 
-    def forward(self, S: torch.Tensor, lengths: torch.Tensor,
-                T_in: torch.Tensor) -> torch.Tensor:  # teacher-forced pass
-        o, _ = self.decoder(self.tgt_emb(T_in), self.encode(S, lengths))
+    def forward(self, X: torch.Tensor, lengths: torch.Tensor,
+                Y_in: torch.Tensor) -> torch.Tensor:  # teacher-forced pass
+        o, _ = self.decoder(self.tgt_emb(Y_in), self.encode(X, lengths))
         return self.out(o)                           # (B, T_tgt, V_tgt) logits
 ```
 ::::
@@ -329,9 +329,9 @@ def batchify(prs: list[tuple[str, str]], idx: list[int]) -> tuple[
     lengths = torch.tensor([len(s) for s in srcs])
     tgts = [torch.tensor([BOS] + [tgt_stoi[c] for c in prs[i][1]] + [EOS])
             for i in idx]
-    S = nn.utils.rnn.pad_sequence(srcs, batch_first=True, padding_value=PAD)
-    T = nn.utils.rnn.pad_sequence(tgts, batch_first=True, padding_value=PAD)
-    return S, lengths, T
+    X = nn.utils.rnn.pad_sequence(srcs, batch_first=True, padding_value=PAD)
+    Y = nn.utils.rnn.pad_sequence(tgts, batch_first=True, padding_value=PAD)
+    return X, lengths, Y
 
 def train_seq2seq(mode: str = "tf", packed: bool = True, epochs: int = 25,
                   seed: int = 6050, batch: int = 128,
@@ -346,20 +346,20 @@ def train_seq2seq(mode: str = "tf", packed: bool = True, epochs: int = 25,
         model.train()
         perm = torch.randperm(n)
         for i in range(0, n, batch):
-            S, L, T = batchify(train_pairs, perm[i:i + batch].tolist())
+            X, lens, Y = batchify(train_pairs, perm[i:i + batch].tolist())
             if mode == "tf":  # ground-truth prefixes: one fused call
-                logits = model(S, L, T[:, :-1])
+                logits = model(X, lens, Y[:, :-1])
             else:             # free-running: its own predictions as prefixes
-                state = model.encode(S, L)
-                tok, outs = T[:, :1], []
-                for t in range(T.shape[1] - 1):
+                state = model.encode(X, lens)
+                tok, outs = Y[:, :1], []
+                for t in range(Y.shape[1] - 1):
                     o, state = model.decoder(model.tgt_emb(tok), state)
                     logit = model.out(o)
                     outs.append(logit)
                     tok = logit.argmax(-1)           # feed its own prediction
                 logits = torch.cat(outs, 1)
             loss = F.cross_entropy(logits.reshape(-1, V_tgt),
-                                   T[:, 1:].reshape(-1), ignore_index=PAD)
+                                   Y[:, 1:].reshape(-1), ignore_index=PAD)
             opt.zero_grad(); loss.backward()
             nn.utils.clip_grad_norm_(model.parameters(), 5.0)
             opt.step()
@@ -370,8 +370,8 @@ def train_seq2seq(mode: str = "tf", packed: bool = True, epochs: int = 25,
 @torch.no_grad()
 def translate(model: Seq2Seq, src: str, maxlen: int = 12) -> str:
     model.eval()
-    S = torch.tensor([[src_stoi[c] for c in src]])
-    state = model.encode(S, torch.tensor([len(src)]))
+    X = torch.tensor([[src_stoi[c] for c in src]])
+    state = model.encode(X, torch.tensor([len(src)]))
     tok, out = torch.tensor([[BOS]]), ""
     for _ in range(maxlen):
         o, state = model.decoder(model.tgt_emb(tok), state)
@@ -691,10 +691,10 @@ path and along the alternative gives
 
 $$
 \begin{gathered}
-\predictionpart{P(\texttt{A x <eos>})}\\
+\predictionpart{p(\texttt{A x <eos>})}\\
 = \predictionpart{0.60}\times\predictionpart{0.55}\times\predictionpart{0.80}
   = \predictionpart{0.264},\\[4pt]
-\predictionpart{P(\texttt{B y <eos>})}\\
+\predictionpart{p(\texttt{B y <eos>})}\\
 = \predictionpart{0.40}\times\predictionpart{0.95}\times\predictionpart{0.95}
   = \predictionpart{0.361}.
 \end{gathered}
@@ -730,8 +730,8 @@ optimal sequence in this tree, though a finite beam does not guarantee the best 
 def beam_search(model: Seq2Seq, src: str, k: int = 5,
                 maxlen: int = 12) -> list[tuple[str, float]]:
     model.eval()
-    S = torch.tensor([[src_stoi[c] for c in src]])
-    state = model.encode(S, torch.tensor([len(src)]))
+    X = torch.tensor([[src_stoi[c] for c in src]])
+    state = model.encode(X, torch.tensor([len(src)]))
     beams = [([], 0.0, state, False)]               # (tokens, logp, state, done)
     for _ in range(maxlen):
         cand = []
@@ -820,7 +820,7 @@ translation, with vocabularies of tens of thousands of tokens and long outputs.
 ## Length normalization
 
 Each token adds a log-probability $\le 0$ to a raw joint log score, so a raw beam tends
-to favor short outputs. Dividing each score by $L^{\alpha}$, with $L$ the number of
+to favor short outputs. Dividing each score by $(T+1)^{\alpha}$, with $L$ the number of
 scored tokens and $\alpha$ chosen on validation data, counteracts this; $\alpha = 1$
 ranks by the mean token log-probability. The normalized score is a different decoding
 objective, which a reported result should name. Every ten-character output has 11
@@ -881,7 +881,7 @@ Close the book for one minute and reconstruct the sequence pipeline.
    sequences, considers up to $kV$ extensions per step and surfaces high-scoring
    alternatives, but a finite beam does not guarantee the best sequence in every tree. Its raw joint log scores are
    log-probabilities of single sequences, not a posterior over the beam, and a beam can
-   contain invalid hybrids. Length normalization ($L^{\alpha}$) changes the decoding
+   contain invalid hybrids. Length normalization ($(T+1)^{\alpha}$) changes the decoding
    objective.
 5. **The handoff is the bottleneck.** In this model, one fixed-size
    $(\vect{h},\vect{c})$ pair, 256 scalars, carries all the source information the
