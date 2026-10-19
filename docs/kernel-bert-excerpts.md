@@ -29,7 +29,7 @@ The shared manuscript owns the mathematics and fixtures. Neither QMD is edited.
 | Source at baseline commit above | SHA-256 |
 |---|---|
 | `chapters/part4/12-kernel-regression.qmd` | `e7efbff5f57faa7ae0608294ea27b91296660b8d7377bad4c01d1e20dadfdbb0` |
-| `chapters/part4/15-bert-pretraining.qmd` | `fe844a4f7f68e11b6d6f3fedd577bc3b5396ce3dc9896d86ae56e9a4a6d58720` |
+| `chapters/part4/15-bert-pretraining.qmd` | `8832a4b61f6dd1d5e6d4ec01686530cbed6e60beffcf3ddaf29a410a54c3dbf2` |
 
 Read-only instructor collection:
 `/Users/hs9hd/Library/CloudStorage/Box-Box/Teaching/6050/Video_lectures/`.

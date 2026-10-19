@@ -119,7 +119,7 @@ Lecture paths are relative to
 
 | Source | SHA-256 |
 |---|---|
-| `chapters/part3/11-encoder-decoder.qmd` | `bb595e11cf62159ba3e0af1b468aa0471a47ca74bb5c9079d9f9b4b0ff36ebca` |
+| `chapters/part3/11-encoder-decoder.qmd` | `8a3e2784d1268ad06975c65d557f21a2363059e9c16617a2a90418fff4bdd122` |
 | `_freeze/chapters/part3/11-encoder-decoder/execute-results/html.json` | `429737532785f59bbdb71edb70c6c381395702a0451e482be84463676f0b85bf` |
 | `_freeze/chapters/part3/11-encoder-decoder/execute-results/tex.json` | `6d238b86b8b33fc244264b3428996d795b56c8a331f4b460cdf5fee52031476a` |
 | `6050-Ch11/lecture.jsx` | `00fc79dc8dee86830a59f74a91e43401c855e93638b9384a46395266b6d3271c` |

@@ -82,14 +82,14 @@ test('step length: the chapter owns the rates, the start and the rule of thumb',
   for (const literal of scene.fixture.literals) assert(chapter.includes(literal), literal);
   // Every literal this panel mirrors, in the exact form the manifest should name.
   for (const literal of [
-    'Few hyperparameters matter more. The learning rate $\\alpha$ scales every step, and its\nfailure modes are asymmetric:',
+    'Few hyperparameters matter more. The learning rate $\\eta$ scales every step, and its\nfailure modes are asymmetric:',
     'too small a learning rate can produce slow progress, while\none that is too large overshoots the valley and diverges.',
     'def losses_for(lr: float, steps: int = 60) -> list[float]:',
     '    w, b, out = torch.tensor(-0.5), torch.tensor(2.0), []',
     'for lr, style, color in [(0.005, "-", "#5379AA"), (0.12, "-", "#E57200"),\n                         (1.1, "--", "#722F37")]:',
     'Same problem, same steps, three learning rates. The smallest makes slow progress, the largest makes the loss climb at every step, and the middle one converges quickly.',
     'y1 = 2.5 * x1 - 1.0 + 0.4 * torch.randn(80)',
-    'For the normalized toy problems here, plain SGD often starts around\n$\\alpha = 0.1$.',
+    'For the normalized toy problems here, plain SGD often starts around\n$\\eta = 0.1$.',
     'if the loss decreases slowly, consider a larger learning rate;\nif it oscillates or explodes, a smaller one.',
     // Named in the scope as out of scope here, so the chapter must still say it.
     'Later in training, reducing the learning rate\ncan be useful because it makes the final steps smaller. This *decay* is a **learning-rate\nschedule**.'])

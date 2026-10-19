@@ -75,18 +75,18 @@ test('identity lane: the equation and the three stops are the chapter\'s, the nu
   const f = fixture(t, NAME), k = declared(f), chapter = chapterSource(NAME);
   for (const literal of scene.fixture.literals) assert(chapter.includes(literal), `the chapter no longer prints ${literal}`);
   assert.equal(f.root.dataset.evidenceClass, 'declared-toy', 'the chapter prints no Jacobian, so the values are declared');
-  assert(chapter.includes('H(x) = F(x) + x'));
+  assert(chapter.includes('u = F(x) + x'));
   // The panel's formula is the chapter's gradient line with its two terms wrapped for the wash.
   const tex = f.$('#eq-identity-lane-1').textContent;
   // \displaystyle is presentation only: the chapter sets this equation as display math.
   assert.equal(tex, '\\( \\displaystyle \\residualpart{\\frac{\\partial L}{\\partial x}} = \\residualpart{\\frac{\\partial L}{\\partial H}}\\left(\\class{il-branch}{\\frac{\\partial F}{\\partial x}} + \\class{il-lane}{I}\\right) \\)');
   const bare = tex.replace(/\\class\{[^}]*\}\{((?:[^{}]|\{[^{}]*\})*)\}/g, '$1').replace(/\\residualpart\{((?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*)\}/g, '$1');
   assert(bare.includes('\\frac{\\partial L}{\\partial x} = \\frac{\\partial L}{\\partial H}\\left(\\frac{\\partial F}{\\partial x} + I\\right)'), bare);
-  assert(chapter.includes('= \\frac{\\partial L}{\\partial H}\\left(\\frac{\\partial F}{\\partial x} + I\\right).'));
+  assert(chapter.includes('= \\frac{\\partial \\loss}{\\partial u}\\left(\\frac{\\partial F}{\\partial x} + I\\right).'));
   // Amplify, do nothing, mostly cancel: the chapter's own words for what the branch Jacobian does.
   assert(chapter.includes('the branch Jacobian, which can amplify, attenuate, or partly\ncancel that contribution.'));
   // The gradient at H already includes the final ReLU's derivative, which the panel leaves out.
-  assert(chapter.includes('Here $\\partial L/\\partial H$ already includes the derivative of\nthe final ReLU.'));
+  assert(chapter.includes('$\\partial \\loss/\\partial u$ already includes the derivative of\nthe final ReLU.'));
   const [reinforced, nothing, cancelled] = k.slopes;
   assert(reinforced > 0, 'the first stop amplifies the identity term');
   assert.equal(nothing, 0, 'the second stop is the chapter\'s F = 0');
@@ -492,7 +492,7 @@ test('integration: the excerpt follows the residual-block figure and precedes th
   const chapter = chapterSource(NAME);
   assert.equal((chapter.match(/^#\| label: fig-residual-stream$/gm) || []).length, 1, 'the cell label occurs once');
   const cell = chapter.indexOf('#| label: fig-residual-stream');
-  const equation = chapter.indexOf('$$ {#eq-residual}'), reading = chapter.indexOf('Here $\\partial L/\\partial H$ already includes the derivative of'), caveat = chapter.indexOf('cancel that contribution.');
+  const equation = chapter.indexOf('$$ {#eq-residual}'), reading = chapter.indexOf('Here $\\loss$ is the training loss, $I$ is the identity, and $\\partial \\loss/\\partial u$ already includes the derivative of'), caveat = chapter.indexOf('cancel that contribution.');
   assert(equation >= 0 && equation < cell, 'after the residual equation');
   assert(cell < reading && reading < caveat, 'before the paragraph that reads the equation and its caveat');
   assert.doesNotMatch(chapter.slice(chapter.indexOf('```', cell + 1) + 3, reading), /\S/, 'nothing between the figure cell and that paragraph');

@@ -674,8 +674,8 @@ test('integration: the excerpt is HTML-only, manifest-driven, and placed before 
   // After the figure it replays and the paragraph that closes the section's opening; before
   // the scope statement, the proof, the name and the audit.
   assert(chapter.indexOf('#| label: fig-self-attention-read') < at);
-  assert(chapter.indexOf('one token at a time.') < at);
-  for (const later of ['Consider first self-attention in the absence of positional encodings or attention masks.', 'Let $P$ be an $n\\times n$ permutation matrix',
+  assert(chapter.indexOf('depends on hidden states from preceding positions.') < at);
+  for (const later of ['Consider first self-attention in the absence of positional encodings or attention masks.', 'Let $\\matr{P}$ be an $n\\times n$ permutation matrix',
     'Self-attention is therefore *permutation equivariant*', '<!-- NOVEL: needs sign-off - seeded permutation'])
     assert(chapter.indexOf(later) > at, later);
   // The chapter's other replay sits two sections later, on a different anchor.

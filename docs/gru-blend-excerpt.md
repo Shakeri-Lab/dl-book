@@ -190,6 +190,6 @@ Lecture paths are relative to the lecture repository root.
 
 | Source | SHA-256 |
 |---|---|
-| `chapters/part3/10-sequences-rnn.qmd` | `4accbd831aabc1f7042386558c5ff4fd1bca112922984076938d9fd50d0db7d4` |
+| `chapters/part3/10-sequences-rnn.qmd` | `f39926326da7b36079466ecf41800a95cddece6a1f6c0c077f7dbf5f5d7b0c7c` |
 | `6050-Ch10/lecture.jsx` | `3a2cabb00546067f5c3c0a3715c043ac96ec4f09faa298815428089689a22350` |
 | `6050-Ch10/STORYBOARD.md` | `23204f3ef89ad845ee07ec11c6e618154391908294429381798f7c20de888902` |
