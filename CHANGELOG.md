@@ -1,3 +1,24 @@
+# Rolling post-v1.4: the print edition's notation, rules and density passes (October 18, 2026)
+
+- **What carried over.** Three passes the author approved for the Springer print edition on October 18,
+  2026: a notation pass (print rules R2 and R3), the rules pass for Chapters 4, 6 and 9, and a density
+  pass that reduced what print carries while keeping every idea. The per-row record is
+  `audits/voice/print_revisions_2026-10-18.md`.
+- **Notation.** The renames of the same morning's notation branch, completed here: Chapter 16's bold
+  matrices, $N_h$ heads of width $D_h$ and head index $h$; Chapter 12's direct-path index; Chapter 20's
+  scale denominator $q_{\max}$; Chapter 19's image index $i$.
+- **Rules pass.** Chapter 4 drops three pointers two or more chapters ahead and states the optimizer
+  comparison's protocol at its start; Chapter 6 states the clean accuracy once and separates statistical
+  from inductive bias; Chapter 9 leads each experiment with what it holds fixed.
+- **Density.** Restatements, previews, repeated protocol statements and the reopened-test-set
+  explanations are cut where this edition shares the sentence (Chapter 6 keeps the first explanation);
+  paper details move to Sources; Chapter 12's six goals are compressed where they are defined.
+- **What stays.** This edition is the companion: the check digits, settings, samples, derivations,
+  figures, tables and boxes that print moved here or removed for pages stay. The animation panels are
+  unchanged, so five of them show symbols the chapters have since renamed (listed in the record).
+- **Replays.** Eight scenes' fixture literals follow the chapters' current text, and the receipts record
+  the new chapter digests.
+
 # Rolling post-v1.4: the print edition's language pass (October 9 to 14, 2026)
 
 - **What carried over.** The Springer print edition's revisions of October 9 to 14, 2026: a language
