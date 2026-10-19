@@ -34,39 +34,24 @@ the streaming models developed in this chapter, we use six design goals to compa
 possible architectures:
 
 1. **Any length.** Accept a sequence of unknown length, with no maximum length
-   imposed by the architecture. Memory and compute still bound what can be processed.
-2. **Order.** Allow the representation to distinguish the
-   same elements in different orders. The sentences "the dog bit the man" and "the man
-   bit the dog" contain the same words but report different events, so a representation
-   that ignores word order cannot separate them.
+   imposed by the architecture.
+2. **Order.** Distinguish the same elements in different orders: "the dog bit the man"
+   and "the man bit the dog" contain the same words and report different events.
 3. **Streaming.** Update as each element arrives, so that an output for the elements seen
    so far is always available.
 4. **Parameters independent of length.** The rule that reads position 17 should be
    the rule that reads position 18, so a longer sequence costs no new parameters.
-5. **Reach.** Let the output at the current step depend on inputs arbitrarily far back,
-   not only on the most recent ones. In other words, the architecture sets no limit on the
-   model's **context length**, the number of past steps whose inputs enter the computation
-   of the current output. That an early input enters the computation does not by itself
-   ensure that its information is retained or that the dependency can be learned.
-6. **Trainable reach.** Make such a dependency learnable. If the correct output at the
-   current step depends on an input many steps back, the gradient of the loss must keep a
-   usable size as backpropagation carries it back across those steps to the early input:
-   if it shrinks to nearly zero, the parameter updates carry almost no information about
-   the dependency, and the reach exists only on paper.
+5. **Reach.** Let the output at the current step depend on inputs arbitrarily far back.
+   The architecture then sets no limit on the model's **context length**, the number of
+   past steps whose inputs enter the computation of the current output.
+6. **Trainable reach.** Make such a dependency learnable: the gradient that
+   backpropagation carries from the current output back to an early input must keep a
+   usable size, or the reach exists only on paper.
 
-The interlude's one-shot autoencoder fails the first and third outright: it needs a
+The interlude's one-shot autoencoder fails any length and streaming outright: it needs a
 maximum length, and it cannot finish before the last element arrives.
 Recurrence asks us to make the carried summary learnable: rather than compressing
 once, the model learns how to revise its memory after each new element.
-
-This chapter builds on four tools from earlier chapters: the kernel shared across space
-in @sec-07-filters-convolution and @sec-08-cnn, which becomes one rule shared across
-time; the product of Jacobians that vanished down deep networks in
-@sec-05-backpropagation, now measured across time; the softmax and the sigmoid of
-@sec-02-logistic-softmax, which become a distribution over the next character and
-multiplicative factors that control what a recurrent state keeps; and the additive form
-of the residual connection of @sec-09-modern-cnns-transfer, which a recurrent
-architecture applies along the sequence.
 
 ## From fixed windows to recurrent models {#stretching-the-old-toolkit}
 
@@ -78,8 +63,8 @@ convolution, with the time axis in place of a spatial axis. Windows are useful (
 real forecasting systems), but their context length is fixed at $k$: anything older than
 the last $k$ elements lies outside the window and cannot affect the prediction. No fixed
 $k$ covers every dependency, as in the sentence "The company whose first-day price we
-recorded back in January finally ...". The window thus meets the first four goals and
-fails the fifth, and widening it adds parameters.
+recorded back in January finally ...". The window thus fails reach, and widening it adds
+parameters.
 
 **A function per timestep.** Next we let the model change over time: we learn $f_1$ for
 step one, $f_2$ for step two, and so on, and each passes a summary forward,
@@ -87,7 +72,8 @@ $\vect{h}_t = f_t(\vect{h}_{t-1}, \vect{x}_t)$. The parameter count now
 grows with sequence *length*; a length-500 essay needs 500 learned functions, and
 no function exists for a position beyond the longest sequence seen in training. The
 functions at positions 17 and 18 have separate parameters, so a pattern learned at one
-position must be learned again at the other. It fails the first and fourth goals at once.
+position must be learned again at the other. It fails any length and length-independent
+parameters at once.
 
 Images posed the same problem in space: a separate template for every image position was
 wasteful and brittle, and convolution replaced the templates with one kernel shared across
@@ -103,8 +89,8 @@ third weight sharing: across examples, across space, and now across *time*.
 The rule's output
 can still depend on position and context through the accumulated
 state. This is a time-homogeneous update rule, not a claim that
-the data distribution is stationary. On paper, one shared $f$ meets the first five goals. The
-sixth is a question about gradients, taken up in the rest of this chapter.
+the data distribution is stationary. On paper, one shared $f$ meets every goal except trainable
+reach, a question about gradients taken up in the rest of this chapter.
 
 ::: {.callout-note}
 ## The hidden state and the Markov property
@@ -542,7 +528,7 @@ $$
 \frac{\partial\vect{c}_t}{\partial\vect{c}_{t-1}}
 \right|_{\vect{h}_{t-1},\,\vect{x}_t\,\mathrm{fixed}}
 &= \operatorname{diag}(\vect{f}_t),\\
-\vect{\gamma}_{t-k}^{\mathrm{direct}}
+\vect{\gamma}_{t-\ell}^{\mathrm{direct}}
 &= \left(\prod_{j=t-\ell+1}^{t}\vect{f}_j\right)
    \odot\vect{\gamma}_t .
 \end{aligned}
@@ -683,10 +669,7 @@ ordering rather than that of @eq-gru.
 ## The memory test
 
 We measured the gradients above at initialization, before any training. The memory test
-asks whether training succeeds. As an analogy, consider two companies: Company A's
-prices open at 0, Company B's at 1, then both trade identically for days, and the
-correct day-5 prediction is whatever day 1 said. The executable task generalizes this to
-four-way recall: read an 80-token sequence and predict its first token at the end. The
+asks whether training succeeds. The task is four-way recall: read an 80-token sequence and predict its first token at the end. The
 later tokens are distractors, and chance accuracy is 25%. We compare six configurations,
 three seeds each: the
 vanilla RNN; the LSTM and the GRU with PyTorch's default initialization; the LSTM with
@@ -788,14 +771,11 @@ $+1$. Its update gate both keeps the old state and admits the candidate
 in @eq-gru, and equal bias settings in different cells do not imply
 equal realized gate values or recurrent Jacobians (Exercise 3 compares the two cells' Jacobians).
 
-The initial-gradient measurements use the initialization of the third run only. For that
-initialization, the two configurations that succeed on all three
-training seeds also have larger measured gradients at the first
-input.^[@sec-a3-precision-performance
+The two configurations that succeed on all three seeds also start with the largest
+gradients at the first input.^[@sec-a3-precision-performance
 separates the mathematical attenuation of small gradients from the later question of
 whether a chosen dtype can still represent the resulting value or update.]
-This is a diagnostic association in the reported
-experiment, not a general threshold for successful training.
+This association in one experiment sets no general threshold for successful training.
 
 
 ### Inspecting the forget gates {#watching-the-valves}
@@ -1015,9 +995,9 @@ sampled training minibatch has loss 1.42, and the deterministic fixed-window eva
 the held-out tail gives 1.89. To see what the model
 has learned, we generate text: we feed a prompt, divide the last step's logits by a
 **temperature** $\tau$, take the softmax, and sample the next character from the
-result. That character goes back in, and the loop repeats. A temperature below 1 sharpens
-the distribution, and as $\tau \to 0$ each draw becomes the argmax. A temperature above 1
-flattens it toward uniform. The sampler below uses $\tau = 0.8$. It carries the recurrent
+result. That character goes back in, and the loop repeats. As in
+@sec-02-logistic-softmax, a temperature below 1 sharpens the distribution and one above 1
+flattens it. The sampler below uses $\tau = 0.8$. It carries the recurrent
 state forward, so earlier characters need not be reprocessed, and generation can run past
 the 100 characters of a training window, although no training loss depended on a longer
 context.
@@ -1129,12 +1109,8 @@ not improve the mean reliably: two runs are strongest, while the third ends at p
 
 ## What a single carried state does not provide {#what-a-fixed-size-state-cannot-hold}
 
-Against the six goals, a fixed window meets the first four but fails on reach. A separate
-function per timestep fails on both variable length and length-independent parameters. A
-single shared recurrence meets the first five by construction. On the sixth, with 80-token
-sequences on our task, the vanilla cell trained successfully on one of three seeds, while the LSTM with forget bias $+1$ and
-the GRU with keep bias $+2$ did so on all three tested seeds. Two needs outside the list
-remain.
+A shared recurrence meets the six goals on paper, and with gates and a suitable
+initialization it met trainable reach in the memory test. Two needs outside the list remain.
 
 The first is **revisiting** earlier evidence. In a recurrence, the input at step $s$
 reaches step $t$ only through the $t-s$ updates that follow it, the same chain that the
