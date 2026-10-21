@@ -141,4 +141,4 @@ templates, the U-curve — are left where they are.
 
 | Source | SHA-256 |
 |---|---|
-| `chapters/part1/06-generalization-inductive-bias.qmd` | `4f87bfead4d679d6407caad98a2ad9d073820921144cfd07346cb4d0901d4b3d` |
+| `chapters/part1/06-generalization-inductive-bias.qmd` | `9a239cebea38d54d77aa3f8f12422e470b12890e5b63b0e514ed39ae5bd36b4e` |

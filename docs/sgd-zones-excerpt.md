@@ -383,5 +383,5 @@ Lecture paths are relative to
 
 | Source | SHA-256 |
 |---|---|
-| `chapters/part1/04-training-loss-sgd.qmd` | `ca836f11567806c5fa456efe3782f424f99a1d680d39ad08e0e5a4c55fd0c046` |
+| `chapters/part1/04-training-loss-sgd.qmd` | `09b088cfb16ba24907a2abab259f4d38bcc1a82144704c78a3411463146ed0fe` |
 | `6050-Ch4/STORYBOARD.md` | `c5f8b635909b585d6c62f310ef2e16801c58421127d9ef6d536d7fbd331db9ce` |

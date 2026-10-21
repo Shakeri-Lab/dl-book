@@ -210,6 +210,6 @@ Lecture paths are relative to the lecture repository root.
 
 | Source | SHA-256 |
 |---|---|
-| `chapters/interludes/making-pca-learnable.qmd` | `945a38ad8ca146e663fa90e7a5883c4bb54c63529423bc9040f42f17b19634f0` |
+| `chapters/interludes/making-pca-learnable.qmd` | `8d6720ba3a1354b7ac0ea03ea1c6a84ddd7639d07a8197870adb07b4fad4d01a` |
 | `6050-Interlude-Autoencoders/lecture.jsx` | `2d2a0d2bd4c9a8314a79e9bb7ea0afa98077a6ec30ab5e4eb7613fa6e64e91f4` |
 | `6050-Interlude-Autoencoders/STORYBOARD.md` | `3d5686f60c10edb6e5b83236adeebccb933811718e3b08d86d10fe6b2921ddba` |

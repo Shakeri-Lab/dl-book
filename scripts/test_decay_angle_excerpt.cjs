@@ -65,7 +65,7 @@ test('decay angle: the chapter owns the angle relation, the shrink rule and the 
   // The three sentences this scene is built on, in the chapter's own words.
   assert(chapter.includes('the same nudge rotates a larger\nvector less'));
   assert(chapter.includes('\\vect{w}\\leftarrow(1-2\\eta\\lambda)\\vect{w}'));
-  assert(chapter.includes('it does not by itself explain or cure stalled\ntraining'));
+  assert(chapter.includes('so the shrink keeps\nlater updates able to change the weight\'s direction'));
   // The chapter, not the panel, is where the unpenalized intercept is stated.
   assert(chapter.includes('We normally do not penalize that\nintercept'));
   // The panel's own TeX mirrors the chapter's two expressions, uncoloured parts aside.

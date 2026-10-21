@@ -230,7 +230,7 @@ test('gate-product: the declared attributes reproduce the chapter literals they 
     'the chapter no longer says what a positive forget-gate bias does along the direct path');
   assert(chapter.includes('Forget-gate values near one reduce\nattenuation along this direct path'),
     'the chapter no longer says the direct-path product attenuates, which the arrival caption shows');
-  assert(chapter.includes('the displayed contribution is not the complete recurrent\nJacobian'),
+  assert(chapter.includes('this contribution is only one part of the full recurrent\nJacobian'),
     'the chapter no longer bounds the direct-path product, which the boundary repeats');
   for (const level of values.measured) assert(chapter.includes(String(level)),
     `the diagnostic caption no longer reports a mean gate of ${level}`);
@@ -1567,7 +1567,7 @@ test('integration: the excerpt is HTML-only, manifest-driven, and declared in th
   assert(scene.fixture.computedVariants.some(text => /1\.580 x 10\^13/.test(text) && /not the 10\^14/.test(text)), 'the manifest declares the computed ratio and the rounding trap');
   assert(scene.fixture.computedVariants.some(text => /one-parameter-control amendment/.test(text)), 'the manifest records the slider as the one parameter control');
   assert(scene.fixture.computedVariants.some(text => /1 \+ log10\(f\^k\)\/25/.test(text)), 'the manifest declares the log ink mapping');
-  assert(scene.fixture.literals.includes('the displayed contribution is not the complete recurrent\nJacobian'));
+  assert(scene.fixture.literals.includes('this contribution is only one part of the full recurrent\nJacobian'));
   assert.deepEqual(scene.beats, [0, 4, 12, 18, 24, 30, 36]);
   // The amendment is written into the authoring contract, and the receipt records it.
   const contract = fs.readFileSync(path.join(ROOT, 'docs', 'animation-authoring.md'), 'utf8').replace(/\s+/g, ' ');

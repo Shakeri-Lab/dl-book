@@ -98,7 +98,7 @@ test('same subspace: the manuscript owns the identity while the point and turn a
     'the chosen ambient point has a genuine discarded component, even though the picture looks along its projection');
   for(const literal of scene.fixture.literals) assert(chapter.includes(literal),literal);
   assert.match(chapter,/orthogonal[\s\S]*reconstruction projector stays fixed/);
-  assert.match(chapter,/not a claim that every optimizer run succeeds/);
+  assert.match(chapter,/It does not promise that every optimizer\s+run succeeds/);
 });
 
 test('same subspace: the intro points at the note that states the identity, not at whatever sits above the panel',t=>{

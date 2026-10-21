@@ -38,7 +38,7 @@ test('halving budget: the schedule is the interlude\'s, and it sums to the print
   const d = declared(f), rounds = schedule(d);
   const chapter = chapterSource(NAME);
   assert(chapter.includes('27 configurations run for one epoch, nine continue to a cumulative three,'));
-  assert(chapter.includes('$27+9(2)+3(6)+1(18)=81$ epoch-units. Training all 27 for 27 epochs would cost 729.'));
+  assert(chapter.includes('$27+9(2)+3(6)+1(18)=81$ epoch-units, where an epoch-unit is one configuration trained for one epoch. Training all 27 for 27 epochs would cost 729.'));
   assert.deepEqual(d.keep, [27, 9, 3, 1]);
   assert.deepEqual(d.rungs, [1, 3, 9, 27]);
   // The chapter's four terms, recovered one at a time from the declared schedule.
@@ -265,7 +265,7 @@ test('integration: the excerpt is HTML-only, manifest-driven, and declared in th
   // before the split section. The intervening "A practical search order" heading is
   // inside a callout, which is why it is not the anchor.
   assert(chapter.indexOf('$27+9(2)+3(6)+1(18)=81$') < chapter.indexOf(`## ${scene.anchor.target}`));
-  assert(chapter.indexOf('The reduced epoch count comes from pruning.') < chapter.indexOf(`## ${scene.anchor.target}`));
+  assert(chapter.indexOf('The saving comes from pruning.') < chapter.indexOf(`## ${scene.anchor.target}`));
   const callout = chapter.indexOf('## A practical search order');
   assert(chapter.lastIndexOf('::: {.callout-tip}', callout) > chapter.indexOf('$27+9(2)+3(6)+1(18)=81$'),
     'the nearer heading really does sit inside a callout');

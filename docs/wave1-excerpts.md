@@ -51,9 +51,9 @@ Digests recomputed with `shasum -a 256` while writing this receipt:
 
 | Source | SHA-256 |
 |---|---|
-| `chapters/part1/02-logistic-softmax.qmd` | `ae9575d5e7d0a73bf091b68cabeb5e184b44779a05bd94d39fcd077bf50ba89f` |
-| `chapters/part1/05-backpropagation.qmd` | `db10efe0559aee84c42ec4e625eba3d9db185807f509cad55ad4043181d092ec` |
-| `chapters/part3/10-sequences-rnn.qmd` | `f39926326da7b36079466ecf41800a95cddece6a1f6c0c077f7dbf5f5d7b0c7c` |
+| `chapters/part1/02-logistic-softmax.qmd` | `119424f3869fb1f1cba21397bc3849860ab90df362bfe073abe1aca0393a8256` |
+| `chapters/part1/05-backpropagation.qmd` | `fab3698b449b81027a97b244bb571468bb7bf520a2ed2cb71f73e1e2937276cc` |
+| `chapters/part3/10-sequences-rnn.qmd` | `d2284b4167d881cf1b3935427ce381a76817988e0bdcebd2de429f5520edec4a` |
 | `chapters/appendices/a3-precision-performance.qmd` | `878a18542000d1ae9f030741655b2d9f91197d0e7ca7c56e9b430e7aa51318d4` |
 
 The appendix is here because one witness `gate-product` displays is printed there and not

@@ -119,7 +119,7 @@ relative to `/Users/hs9hd/Library/CloudStorage/Box-Box/Teaching/6050/Video_lectu
 
 | Source | SHA-256 |
 |---|---|
-| `chapters/part1/05-backpropagation.qmd` | `db10efe0559aee84c42ec4e625eba3d9db185807f509cad55ad4043181d092ec` |
+| `chapters/part1/05-backpropagation.qmd` | `fab3698b449b81027a97b244bb571468bb7bf520a2ed2cb71f73e1e2937276cc` |
 | `_freeze/chapters/part1/05-backpropagation/execute-results/html.json` | `e8845fd6db7ba6a880fb3c0d4b8af936eed225a7994b34ea1feda63ba03bce97` |
 | `_freeze/chapters/part1/05-backpropagation/execute-results/tex.json` | `6e4c52785f505ae74fff06c9eeef9f76a423719f652b11695e515849f38593b0` |
 | `6050-Ch5/lecture.jsx` | `bf17cc90beb6552a8796a47aef03a05d81f25ca6528f6fd5add826955a1869d2` |
