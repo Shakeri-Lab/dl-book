@@ -99,7 +99,7 @@ query's row of the $n\times n$ attention matrix gives the weights on the rows of
 ```{python}
 #| label: fig-self-attention-read
 #| echo: false
-#| fig-cap: "Self-attention reuses the scaled dot-product operator within a single sequence, changing only where its inputs originate: one sequence $\\matr{X}$, transformed by learned projections $\\matr{W}_Q$, $\\matr{W}_K$, and $\\matr{W}_V$, supplies queries, keys, and values. The query for *bank* scores every key, itself included, and row-wise softmax normalizes the scores into weights summing to one. The output representation for *bank* is the weighted sum of the rows of $\\mathbf{V}$ (arrow widths reflect relative weights; numerical values and shading are illustrative). The remaining rows do the same for all other tokens concurrently."
+#| fig-cap: "Self-attention reuses the scaled dot-product operator within a single sequence, changing only where its inputs originate: one sequence $\\matr{X}$, transformed by learned projections $\\matr{W}_Q$, $\\matr{W}_K$, and $\\matr{W}_V$, supplies queries, keys, and values. The query for *bank* scores every key, itself included, and row-wise softmax normalizes the scores into weights summing to one. The output representation for *bank* is the weighted sum of the rows of $\\matr{V}$ (arrow widths reflect relative weights; numerical values and shading are illustrative). The remaining rows do the same for all other tokens concurrently."
 #| fig-alt: "Diagram of self-attention on the four-token sequence bank, by, the, river. The outlined token column X feeds three routes: arrows marked W Q to four query rows, a line marked W K to four key columns above a four-by-four grid, and a line marked W V to four value rows labeled by token. The grid is the row-wise softmax of Q times K transpose over the square root of d, shape n by n. Its top row, for bank, reads 0.20, 0.05, 0.05, 0.70 and sums to 1. Arrows from all four value rows, widest from river, form the output row for bank. The other rows are faint."
 #| code-summary: "Code: draw one sequence querying itself"
 import numpy as np
@@ -319,7 +319,7 @@ print(f"fixed-slot difference after adding position: {fixed_slot_change:.3f}")
 ```{python}
 #| echo: false
 #| label: fig-permutation-debt
-#| fig-cap: "Token content permuted across sequence slots (left). The audit (right) shows that bare self-attention output rematches under permutation to within numerical precision, whereas fixed positional signals break this equivariance."
+#| fig-cap: "Token content permuted across sequence slots (left). The audit (right, logarithmic axis) shows that bare self-attention output rematches under permutation to within numerical precision, whereas fixed positional signals break this equivariance."
 #| fig-alt: "Two-panel permutation audit. The left panel moves five colored word tiles from the sequence 'bank by the river' into a new slot order. The right log-scale bars show a rematched bare-attention difference near machine precision and an order-one difference after fixed position vectors are added."
 #| fig-width: 10
 #| fig-height: 3.4
@@ -350,8 +350,7 @@ plt.show()
 ```
 In the model without positional signals, the discrepancy is pure numerical roundoff,
 approximately $2.2\times10^{-16}$. Adding fixed positional vectors raises the error to
-1.581, breaking equivariance. Order is not inferred from content. It must be
-explicitly supplied.
+1.581, breaking equivariance. Order must be supplied to the model explicitly.
 
 ## Positional encoding: a bank of clocks {#position-as-a-bank-of-clocks}
 
@@ -378,11 +377,13 @@ Small $j$ yields a fast-turning clock, and large $j$ yields a slow one. Every si
 coordinate is paired with a cosine at the same frequency. The model receives
 
 $$
-Z_i=\sqrt d\,E_i+\operatorname{PE}(i),
+\vect{z}_i=\sqrt d\,\vect{e}_i+\operatorname{PE}(i),
 $$
 
-where $E_i$ is the token embedding. Scaling the embedding by $\sqrt d$ ensures its
-initial norm remains comparable to that of the positional vector.
+where $\vect{e}_i$ is the token embedding. With token embeddings initialized at coordinate standard
+deviation $1/\sqrt d$ (as in the [book-corpus experiment](#the-book-reads-itself-again)
+below), scaling by $\sqrt d$ gives unit-variance coordinates, so the embedding's norm,
+about $\sqrt d$, is comparable to the positional vector's $\sqrt{d/2}$.
 
 Pairing sine and cosine expresses relative shifts as linear rotations. For an angular
 frequency $\omega$, advancing position $i$ by an offset $\delta$ is an exact planar
@@ -581,7 +582,7 @@ axes[1, 1].legend(frameon=False)
 plt.tight_layout()
 plt.show()
 ```
-At $d=32$, each positional vector has Euclidean norm $\sqrt{d/2}=4$ because each
+At $d=32$, each positional vector has Euclidean norm $\sqrt{d/2}=4$, because each
 $\sin^2(\cdot)+\cos^2(\cdot)$ coordinate pair contributes one to the squared norm.
 Adding this vector does *not* preserve the norm of the combined token representation:
 the embedding and positional vector can reinforce or cancel each other depending on
@@ -894,7 +895,7 @@ assert (token_vars - 1).abs().max().item() < 1e-4
 ```{python}
 #| label: fig-transformer-block
 #| echo: false
-#| fig-cap: "A pre-LayerNorm Transformer block as two read–compute–write stages. The residual stream carries each token directly across both additions while LayerNorm feeds a normalized view to causal multi-head attention and then the position-wise FFN. The audit at right shows what LayerNorm changes: four tokens with different offsets and scales become the same centered, unit-variance profile before the learned affine rescaling."
+#| fig-cap: "A pre-LayerNorm Transformer block as two read–compute–write stages. The residual stream carries each token directly across both additions while LayerNorm feeds a normalized view to causal multi-head attention and then the position-wise FFN. The two panels at right show what LayerNorm changes: four tokens with different offsets and scales become the same centered, unit-variance profile before the learned affine rescaling."
 #| fig-alt: "Three-panel figure. The left panel is a horizontal pre-LayerNorm Transformer block: a residual stream bypasses a LayerNorm-to-causal-attention branch and adds its correction, then bypasses a LayerNorm-to-FFN branch and adds again. The middle panel shows four raw token feature profiles at different offsets and scales. The right panel shows those four profiles coinciding after independent normalization."
 #| fig-width: 10
 #| fig-height: 4.2
@@ -1082,10 +1083,11 @@ that persists across the depth of the network.
 ::: {.callout-note}
 ## What attention alone does to a stack of tokens
 
-An attention sublayer replaces each token representation with a convex combination of
-value vectors. Consequently, every output vector lies within the convex hull of the
-value vectors. Without residual shortcuts or feedforward layers, subsequent attention
-operations repeatedly average these convex combinations and can contract the token
+Within each attention head, every output is a convex combination of that head's value
+vectors, so it lies within their convex hull. The multi-head output concatenates these
+averages and applies the output projection, a linear map that can move the result outside
+the hull of the original value vectors. Without residual shortcuts or feedforward layers,
+stacked attention layers apply such averaging again and again and can contract the token
 representations toward a single shared representation.
 
 [Dong, Cordonnier, and Loukas](https://proceedings.mlr.press/v139/dong21a.html)
@@ -1097,11 +1099,12 @@ this collapse across pretrained language models when residual connections were r
 
 The residual update $\vect{x}\leftarrow \vect{x}+F(\vect{x})$ provides a bypass around
 every attention layer. The identity branch propagates token differences forward directly
-without averaging, so the collapse is no longer forced. Position-wise feedforward
-networks cannot prevent this collapse on their own: acting on each position identically,
-an FFN maps identical inputs to identical outputs. While feedforward layers can dilate
-existing token differences and slow the collapse, only the residual connections keep it
-from being forced across a deep stack of attention operations.
+without averaging, so the collapse is no longer forced. A shared position-wise FFN cannot
+restore distinctions once token representations are identical. It maps identical inputs to
+identical outputs. Feedforward layers can dilate existing token differences and slow the
+collapse, and residual connections provide a path that bypasses the repeated averaging. The
+cited collapse result holds under its stated assumptions. It does not describe every
+attention architecture without residual connections.
 :::
 
 ## From encoder–decoder translation to a causal language model {#from-the-original-transformer-to-this-experiment}
@@ -1335,10 +1338,10 @@ print(f"window schedule: {schedule_hash[:12]}…")
 The architecture contains 132,488 trainable parameters, 736 fewer than the LSTM of
 @sec-10-sequences-rnn (133,224 parameters), so the parameter counts match to within
 0.55%. Its model dimension is $d=84$, divided into $N_h=4$ heads of width $D_h=21$. Each
-of the two feedforward sublayers expands to $d_{\text{ff}}=168$ features. We initialize
-token embeddings with coordinate standard deviation $1/\sqrt d$ prior to the $\sqrt d$
-scaling, ensuring embedding features and sinusoidal coordinates begin on comparable
-scales. `ModuleList` registers the two repeated blocks with the model. The position
+of the two feedforward sublayers expands to $d_{\text{ff}}=168$ features, with a ReLU
+between its two linear layers. We initialize token embeddings with coordinate standard
+deviation $1/\sqrt d$ prior to the $\sqrt d$ scaling, ensuring embedding features and
+sinusoidal coordinates begin on comparable scales. `ModuleList` registers the two repeated blocks with the model. The position
 table is registered as a non-persistent buffer: it moves with the module across devices
 but is neither optimized nor included in the state-dictionary fingerprint, as its
 entries derive deterministically from the closed-form formula. With dropout disabled,
@@ -1491,7 +1494,7 @@ print(f"positional Transformer minus LSTM: {lstm_gap:.4f} loss")
 ```{python}
 #| echo: false
 #| label: fig-book-corpus-rematch
-#| fig-cap: "Matched training curves (left) and fixed-window held-out loss (right). Position lowers loss in this run, while the @sec-10-sequences-rnn LSTM has the lowest held-out loss of the three models."
+#| fig-cap: "Matched training curves (left) and fixed-window held-out loss (right). The curves are minibatch losses logged every 250 updates. Position lowers loss in this run, while the @sec-10-sequences-rnn LSTM has the lowest held-out loss of the three models."
 #| fig-alt: "Two-panel matched comparison. Training losses start together near 4.7, then the positional Transformer falls steadily to about 1.1 while the no-position model ends near 1.85. Held-out bars rank the Chapter 12 LSTM lowest at 1.8881, the positional Transformer at 1.9190, and the no-position Transformer highest at 2.3405."
 #| fig-width: 10
 #| fig-height: 4
@@ -1517,6 +1520,8 @@ axes[1].bar_label(bars, fmt="%.4f", padding=3)
 plt.tight_layout()
 plt.show()
 ```
+@fig-book-corpus-rematch plots both training curves alongside held-out losses: the
+curves separate within the first 250 updates, and the gap persists throughout training.
 The positional model has a loss of 1.1132 on a full deterministic pass over the
 training corpus and 1.9190 on the held-out tail. Removing positional encodings raises
 these values to 1.8672 and 2.3405, respectively. Positional encodings lower held-out
@@ -1775,7 +1780,7 @@ Close the book for one minute and reconstruct the Transformer block.
 <!-- print 2026-10-09, author-approved: Xiong et al. entry extended with pre-LayerNorm training without warmup -->
 - [Xiong et al., *On Layer Normalization in the Transformer Architecture*](https://proceedings.mlr.press/v119/xiong20b.html): a qualified comparison of pre- and post-LayerNorm optimization: post-LayerNorm's gradient growth near the output layers at initialization, and pre-LayerNorm training without warmup.
 <!-- print 2026-10-09, author-approved: Sources entry for Dong, Cordonnier, and Loukas (rank collapse without residuals) -->
-- [Dong, Cordonnier, and Loukas, *Attention Is Not All You Need: Pure Attention Loses Rank Doubly Exponentially with Depth*](https://proceedings.mlr.press/v139/dong21a.html): without residuals, a stack of attention layers drives the token vectors toward a common row, and FFNs only slow that collapse.
+- [Dong, Cordonnier, and Loukas, *Attention Is Not All You Need: Pure Attention Loses Rank Doubly Exponentially with Depth*](https://proceedings.mlr.press/v139/dong21a.html): bounds the distance of a pure-attention stack's output from a common row. For small projection norms and clustered tokens the bound shrinks doubly exponentially with depth. Residual connections remove this forced collapse, and FFNs can slow it.
 - [Geva et al., *Transformer Feed-Forward Layers Are Key-Value Memories*](https://aclanthology.org/2021.emnlp-main.446/): empirical evidence behind the associative-memory interpretation of FFNs.
 <!-- print 2026-10-09, author-approved: Sources entry for Haviv et al. (language models without positional encodings) -->
 - [Haviv et al., *Transformer Language Models without Positional Encodings Still Learn Positional Information*](https://aclanthology.org/2022.findings-emnlp.99/): causal language models trained without positional encodings come close to models with them in held-out loss and still carry each token's approximate position, and the authors conjecture that the causal mask supplies it.
