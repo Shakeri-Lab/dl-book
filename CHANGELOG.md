@@ -1,3 +1,44 @@
+# Rolling post-v1.4: the print edition's corrections of October 19 and the beta-reader edits of October 17 and 18
+
+- **What carried over.** The two sets of review corrections the author had written to the Springer print
+  master on October 19, 2026, and the print changes that fell between the October 14 and October 18
+  carries: the beta readers' edits of October 17 (Chapters 1 to 7, with the matching rename in Chapter 12)
+  and of October 18 morning (Chapters 8 to 13), and the author's unrecorded edits of October 18 to Chapter
+  14 and the Part I page. They make up 698 entries: 394 applied, 35 applied in part, 70 already here, 185
+  not carried (a standing rule or an earlier ruling keeps them out, or the change is not in the print
+  master) and 14 left for the author. The per-entry record is `audits/voice/print_revisions_2026-10-19.md`.
+- **Corrections of October 19.** Chapter 10 names the four full-data variants behind its scorecard with
+  their parameter counts from the run records (202,738; 76,698; 288,170; 1,084,010). Chapter 12: the
+  cumulative Jacobian product must stay well scaled, and near-unit gains per step are one way to keep it so.
+  Chapter 16 states the embedding initializer behind the $\sqrt d$ scaling, holds the rank-collapse box to its
+  assumptions (the convex hull holds per head, the output projection can leave it, and a shared
+  position-wise FFN cannot restore distinctions between identical tokens) and qualifies the Dong et al.
+  Sources entry. The Part IV page splits a long sentence, so the contract's part-page sentence cap rises from
+  17 to 18. Chapter 8's manual-convolution cell (print Listing 8.1) ends `conv2d` with `[0, 0]` in place of
+  `.squeeze()`, so a 1×1 output stays a 1×1 map.
+- **Beta-reader edits.** Terms are defined at first use, contrastive "X, not Y" sentences and
+  clause-joining semicolons are rewritten, and several passages gain worked examples. Chapter 5 calls
+  $\delta$ the loss derivative; Chapter 1 writes the angle as $\varphi$; Chapter 4 renames its estimator cases
+  and works two of them through numbers; Chapter 11 opens with compression.
+- **The author's edits of October 18.** Chapter 14 defines keys and values as terms in its opening example,
+  heads its table with them, and defines affinity, bandwidth and the normalized weights. The Part I page
+  states the shift result as nearly thirty points of accuracy.
+- **Also completed.** Notation renames the October 18 sweep missed (Chapters 7 to 13, 16 and 18 to 22),
+  and older print wordings in shared sentences that no earlier carry had taken.
+- **What stays.** The rules of October 16 and 18 hold: the wording reaches every shared sentence, the
+  animations stay intact, and this edition keeps its structure, figures, tables and boxes and remains the
+  companion. Passages this edition keeps but print's density pass later cut take the beta readers' wording.
+  Print's reorder of Chapter 14 and its move of Chapter 11's opening figure are among the entries left for
+  the author.
+- **Replays.** 37 fixture literals (21 scenes) and 22 scene-test strings (14 files) follow the carried text,
+  and 54 receipt digests are refreshed. No panel, player, timeline or visual changed, and the six sentences
+  kept for the animations are intact. Some panels now differ from their chapter in wording or symbols
+  (decay-angle, template-score, score-field, hinge-lift, batch-vote, derivative-gates, one-chain); the
+  record lists them.
+- **Unchanged.** One code line changed, in Chapter 8's manual-convolution cell, and its printed output did
+  not. No printed number changed. All 21 changed chapters with a freeze were re-rendered on the reference
+  machine, and every frozen stdout block is byte-identical to the branch base.
+
 # Rolling post-v1.4: the print edition's notation, rules and density passes (October 18, 2026)
 
 - **What carried over.** Three passes the author approved for the Springer print edition on October 18,
