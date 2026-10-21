@@ -436,11 +436,12 @@ def main() -> None:
         body = re.sub(r"^#\s+.+$", "", text, count=1, flags=re.MULTILINE).strip()
         sentence_count = len(re.findall(r"[.!?](?=\s|$)", body))
         # The part pages carry the author's print texts (ledger 2026-10-05); the
-        # route table in index.qmd names each part's learnable move.
-        if not 4 <= sentence_count <= 17:
+        # route table in index.qmd names each part's learnable move. The cap is 18
+        # since the author split a long Part IV sentence in two (print, 2026-10-19).
+        if not 4 <= sentence_count <= 18:
             fail(
                 errors,
-                f"{relative}: expected 4–17 transition sentences, found "
+                f"{relative}: expected 4–18 transition sentences, found "
                 f"{sentence_count}",
             )
         if any(token in body for token in ("```", "![", "#|", "|---")):
