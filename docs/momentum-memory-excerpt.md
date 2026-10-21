@@ -263,7 +263,7 @@ Lecture paths are relative to
 
 | Source | SHA-256 |
 |---|---|
-| `chapters/part1/04-training-loss-sgd.qmd` | `9ff89b661a0d32e7f0cce472a3b4a725095c516277e0fdb290096bea42b11be0` |
+| `chapters/part1/04-training-loss-sgd.qmd` | `09b088cfb16ba24907a2abab259f4d38bcc1a82144704c78a3411463146ed0fe` |
 | `6050-Ch4/STORYBOARD.md` | `c5f8b635909b585d6c62f310ef2e16801c58421127d9ef6d536d7fbd331db9ce` |
 
 `6050-Ch4/lecture.jsx` was not read; only the storyboard above was consulted, for

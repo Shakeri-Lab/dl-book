@@ -92,16 +92,16 @@ test('momentum memory: the mechanism it draws is the chapter\'s own printed pass
   // Every literal this panel mirrors, in the exact form the manifest should name.
   for (const literal of [
     '\\vect{v}^{(t)} = \\beta\\,\\vect{v}^{(t-1)} + \\nabla \\loss(\\vect{w}^{(t)}), \\qquad',
-    '\\vect{w}^{(t+1)} = \\vect{w}^{(t)} - \\alpha\\,\\vect{v}^{(t)},',
+    '\\vect{w}^{(t+1)} = \\vect{w}^{(t)} - \\eta\\,\\vect{v}^{(t)},',
     '$$ {#eq-momentum}',
     'with $\\beta \\in [0.9, 0.99]$.',
     'the iterate zigzags across the steep direction while inching along the\nshallow one.',
-    'in directions where\ngradients keep agreeing, speed builds; in directions where they flip sign every step,\nthey cancel.',
+    'In directions where gradients keep agreeing, speed builds. In\ndirections where they flip sign every step, they cancel.',
     'Momentum gives the update a memory. A running **velocity** accumulates\ngradients, and each step follows the velocity instead of the raw gradient:',
     // The declared beta is the low end of the printed range, and the chapter's own value.
     'momentum=0.9',
     // The chapter's rule-of-thumb step length, and the race that this panel is not.
-    'plain SGD often starts around\n$\\alpha = 0.1$',
+    'For plain SGD on normalized toy problems like these, $\\eta = 0.1$ is a reasonable first\ntry.',
     '#| label: fig-race'])
     assert(chapter.includes(literal),literal);
   assert.equal(scene.qmd,'chapters/part1/04-training-loss-sgd.qmd');

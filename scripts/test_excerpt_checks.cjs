@@ -413,7 +413,7 @@ const expected = {
   // every step, whatever the length.
   'pixel-skewer': () => {
     const chapter = fs.readFileSync(path.join(ROOT, 'chapters/part2/09-modern-cnns-transfer.qmd'), 'utf8');
-    const [, outC, inC] = /squeeze to (\d+) first, \$(\d+) \\times \1 \+/.exec(chapter).map(Number);
+    const [, outC, inC] = /squeeze to (\d+) channels first, it holds\s+\$(\d+) \\times \1 \+/.exec(chapter).map(Number);
     return [(inC * outC + outC).toLocaleString('en-US'), `${outC} × ${inC} weight matrix and ${outC} biases`,
       `nn.Linear(${inC}, ${outC})`, `${inC} channels squeezed to ${outC}`];
   },

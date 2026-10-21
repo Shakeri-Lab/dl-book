@@ -40,8 +40,9 @@ whose responses are easy to interpret.
 ## One-dimensional filtering: the moving average {#start-in-1d-the-moving-average}
 
 The core operation is simplest in one dimension when smoothing a noisy signal. A
-moving average replaces each point by the mean of its neighborhood: locality, with
-*uniform* weights:
+moving average replaces each point by the mean of the points around it. Each output reads
+only a small neighborhood of the input, which is locality, and every point in that
+neighborhood gets the same weight, a *uniform* weight.
 
 :::: {.plan-code}
 ::: {.plan}
@@ -79,7 +80,7 @@ averaging step that produces one point of the smoothed curve.
 #| echo: false
 #| label: fig-moving-average
 #| fig-alt: "Two panels. Top: a jagged noisy signal fluctuates around a smooth periodic trend, and the nine-point moving-average curve follows the central oscillation without the high-frequency variation; a small box near t equal to 2 marks one window of nine samples, with a dot on the curve at its center. Bottom: the nine samples of that window drawn as stems at offsets minus four to plus four, with a dashed line at their mean and a dot at offset zero, labeled as the output at the center."
-#| fig-cap: "A window of uniform weights, slid along a noisy signal, averaging as it goes. Top: the signal, 300 samples of $\\sin t$ on $[0, 4\\pi]$ with Gaussian noise of standard deviation 0.35, and its nine-point moving average, computed with `F.conv1d`; the box marks one window, and the dot on the curve is that window's output. Bottom: the nine samples in the box, drawn larger as stems from zero, each multiplied by its weight $1/9$; the nine products sum to the samples' mean, the output at the window's center."
+#| fig-cap: "A window of uniform weights, slid along a noisy signal, averaging as it goes. Top: the signal, 300 samples of $\\sin t$ on $[0, 4\\pi]$ with Gaussian noise of standard deviation 0.35, and its nine-point moving average, computed with `F.conv1d`. The box marks one window, and the dot on the curve is that window's output. Bottom: the nine samples in the box, drawn larger as stems from zero, each multiplied by its weight $1/9$. The nine products sum to the samples' mean, the output at the window's center."
 fig, (top, bottom) = plt.subplots(2, 1, figsize=(6.4, 5.2), height_ratios=[3, 2])
 plt.sca(top)
 plt.plot(t, noisy, color="#B8B8A8", lw=0.8, label="noisy signal")
@@ -131,19 +132,19 @@ carry it:
 ```{python}
 #| label: manual-conv
 #| code-fold: false
-def manual_conv2d(x: torch.Tensor, k: torch.Tensor) -> torch.Tensor:
+def manual_conv2d(x: torch.Tensor, v: torch.Tensor) -> torch.Tensor:
     """Cross-correlate an image and kernel over a view of sliding patches."""
-    kh, kw = k.shape                               # [1]
+    kh, kw = v.shape                               # [1]
     patches = x.unfold(0, kh, 1).unfold(1, kw, 1)  # [2][5]
-    return (patches * k).sum(dim=(-1, -2))         # [3][4]
+    return (patches * v).sum(dim=(-1, -2))         # [3][4]
 
-def conv2d(x: torch.Tensor, k: torch.Tensor) -> torch.Tensor:
-    return F.conv2d(x[None, None], k[None, None]).squeeze()
+def conv2d(x: torch.Tensor, v: torch.Tensor) -> torch.Tensor:
+    return F.conv2d(x[None, None], v[None, None])[0, 0]
 
 torch.manual_seed(6050)
 x_test = torch.rand(10, 12)
-k_test = torch.randn(3, 3)
-gap = (manual_conv2d(x_test, k_test) - conv2d(x_test, k_test)).abs().max()
+v_test = torch.randn(3, 3)
+gap = (manual_conv2d(x_test, v_test) - conv2d(x_test, v_test)).abs().max()
 print(f"recipe vs. torch.conv2d: max |diff| = {gap:.1e}")
 ```
 ::::
@@ -192,7 +193,7 @@ subset:
 ```{python}
 #| label: fig-filter-zoo
 #| fig-alt: "Three rows across five columns. The top row prints each 3-by-3 kernel as a grid of numbers shaded by sign: identity has a single 1 at the center; blur has nine entries of 1/9; sharpen has 5 at the center and −1 at its four neighbors; the vertical Sobel kernel has −1, −2, −1 down its left column and 1, 2, 1 down its right; the horizontal Sobel kernel has −1, −2, −1 across its top row and 1, 2, 1 across its bottom. Below, a synthetic shapes scene and a boot pass through each kernel: blur softens both inputs, sharpen strengthens local contrast, and the two Sobel outputs illuminate boundaries of different orientations."
-#| fig-cap: "One operation, five kernels. The top row prints the nine weights of each 3×3 kernel (identity, blur, sharpen, and two Sobel edge detectors), shaded on one scale centered at zero; each column below applies that kernel to the same two inputs. The middle row is the synthetic scene ($64 \\times 64$, zero except for a rectangle, a disk and diagonal stripes of intensities 0.9, 0.6 and 0.8); the bottom row is the first ankle boot among the development images, scaled to $[0, 1]$. The vertical-edge kernel responds strongly to vertical boundaries, the horizontal one to horizontal boundaries."
+#| fig-cap: "One operation, five kernels. The top row prints the nine weights of each 3×3 kernel (identity, blur, sharpen, and two Sobel edge detectors), shaded on one scale centered at zero. Each column below applies that kernel to the same two inputs. The middle row is the synthetic scene ($64 \\times 64$, zero except for a rectangle, a disk and diagonal stripes of intensities 0.9, 0.6 and 0.8). The bottom row is the first ankle boot among the development images, scaled to $[0, 1]$. The vertical-edge kernel responds strongly to vertical boundaries, the horizontal one to horizontal boundaries."
 #| code-summary: "Code: the zoo"
 #| code-fold: false
 #| classes: responsive-wide-opt-in
@@ -224,20 +225,20 @@ from matplotlib.colors import LinearSegmentedColormap
 fig, axes = plt.subplots(3, 5, figsize=(7.8, 5.0))
 # [3]
 signed = LinearSegmentedColormap.from_list("signed", ["#4A5566", "white", "#6F6152"])
-scale = max(k.abs().max().item() for k in kernels.values())   # shared by all five
-for col, (name, k) in enumerate(kernels.items()):
-    axes[0, col].imshow(k, cmap=signed, vmin=-scale, vmax=scale)
+scale = max(v.abs().max().item() for v in kernels.values())   # shared by all five
+for col, (name, v) in enumerate(kernels.items()):
+    axes[0, col].imshow(v, cmap=signed, vmin=-scale, vmax=scale)
     for i in range(3):
         for j in range(3):
-            w = k[i, j].item()
+            w = v[i, j].item()
             label = str(Fraction(w).limit_denominator(9)).replace("-", "\u2212")
             axes[0, col].text(j, i, label, ha="center", va="center", fontsize=8,
                               color="white" if abs(w) > 0.6 * scale else "#232D4B")
     axes[0, col].set_title(name, fontsize=9)
 # [4]
 for row, image in enumerate([make_shapes(), boot], start=1):
-    for col, (name, k) in enumerate(kernels.items()):
-        axes[row, col].imshow(conv2d(image, k), cmap="gray")
+    for col, (name, v) in enumerate(kernels.items()):
+        axes[row, col].imshow(conv2d(image, v), cmap="gray")
 for ax in axes.flat:
     ax.set_xticks([]); ax.set_yticks([])
 plt.tight_layout(); plt.show()
@@ -252,15 +253,15 @@ suggest, and none of its coefficients was learned.
 ## Naming the operation
 
 This sliding sum of products is called **cross-correlation**. To write it down, we index
-the kernel $V$ by offsets from its center: the entry $[V]_{u,v}$ sits $u$ rows and $v$ columns
-from the center, with $u$ and $v$ running from $-\Delta$ to $\Delta$. Here negative $u$ lies
-above the center and negative $v$ to its left, so in a $3 \times 3$ kernel $[V]_{-1,-1}$ is
+the kernel $V$ by offsets from its center: the entry $[V]_{a,b}$ sits $a$ rows and $b$ columns
+from the center, with $a$ and $b$ running from $-\Delta$ to $\Delta$. Here negative $a$ lies
+above the center and negative $b$ to its left, so in a $3 \times 3$ kernel $[V]_{-1,-1}$ is
 the top-left entry. With the kernel centered on pixel $(i, j)$ of the image $X$, the entry
-$[V]_{u,v}$ lies over the pixel $[X]_{i+u,\,j+v}$, and the output $[H]_{i,j}$ sums these
+$[V]_{a,b}$ lies over the pixel $[X]_{i+a,\,j+b}$, and the output $[Z]_{i,j}$ sums these
 products over the window:
 
 $$
-[H]_{i,j} \;=\; \sum_{u=-\Delta}^{\Delta}\;\sum_{v=-\Delta}^{\Delta} [V]_{u,v}\,[X]_{i+u,\,j+v} .
+[Z]_{i,j} \;=\; \sum_{a=-\Delta}^{\Delta}\;\sum_{b=-\Delta}^{\Delta} [V]_{a,b}\,[X]_{i+a,\,j+b} .
 $$ {#eq-crosscorr}
 
 This is the sliding dot product written entry by entry, for each center $(i, j)$ at least
@@ -340,8 +341,7 @@ for that invariance.
 In @sec-08-cnn, pooling discards some position information to gain local shift
 tolerance, and @sec-09-modern-cnns-transfer pools each feature map over the whole image.
 Edge effects, strides and pooling windows can still change intermediate responses under a
-shift, so whether a whole network is shift invariant must be measured at its output, not
-presumed.
+shift, so whether a whole network is shift invariant must be measured at its output.
 
 ## The matrix view: a structured, weight-shared linear map
 
@@ -354,9 +354,10 @@ three weights in the columns of the inputs under its window and zeros everywhere
 With $v_1 = v_2 = v_3 = 1/3$, the matrix computes a three-point moving average.
 
 The matrix has two kinds of structure. Half its entries are zero here, and nearly all of
-them for an image, because each output depends only on its window (locality). The nonzero
-entries repeat along each diagonal in a banded *Toeplitz* pattern, because each row shifts
-the same three weights one column to the right (weight sharing). Whereas a dense
+them for an image, because each output depends only on its window (locality). Each row also
+shifts the same three weights one column to the right (weight sharing), so every diagonal of
+the matrix holds one constant value. A matrix whose diagonals are constant is called a
+*Toeplitz* matrix, and this one is a banded Toeplitz matrix. Whereas a dense
 $4 \times 6$ matrix has 24 independent entries, this one has 3.
 
 The saving grows with the input. A dense layer from our 28×28 images to an equal-sized
@@ -413,7 +414,7 @@ three limitations:
 
 1. **Predefined features.** These kernels were selected for
    specific low-level operations, such as smoothing or detecting
-   intensity changes, rather than fitted to the classification task.
+   intensity changes, and nothing fitted them to the classification task.
 2. **Manual feature engineering.** Choosing which kernels to use, and how to combine
    them, can require task-specific expertise and experimentation.
 3. **No adaptation.** A fixed kernel does not adapt automatically when the task or data
@@ -447,7 +448,7 @@ Close the book for one minute and reconstruct the sliding operation.
 2. **Locality and sharing are built in**: in the $3\times3$ example, locality fixes
    most matrix entries at zero, while sharing reduces the independent weights from about
    615,000 to 9.
-3. **Equivariance is exact on the interior**, not approximate: filter-then-shift equals
+3. **Equivariance is exact on the interior**: filter-then-shift equals
    shift-then-filter wherever both operations use the same pixels. Boundary handling
    must be specified separately. Pooling in @sec-08-cnn adds some local shift tolerance
    on top of that equivariance.
@@ -479,11 +480,11 @@ Close the book for one minute and reconstruct the sliding operation.
    and why?
    **(Code.)** (b) Run it on `make_shapes()` and check that it fires on the stripes.
 3. **(Pencil.)** Prove translation equivariance from @eq-crosscorr: substitute the
-   shifted image $[X']_{i,j} = [X]_{i-s,j}$ and show $[H']_{i,j} = [H]_{i-s,j}$. Why does the
+   shifted image $[X']_{i,j} = [X]_{i-s,j}$ and show $[Z']_{i,j} = [Z]_{i-s,j}$. Why does the
    same argument fail for the MLP of @sec-06-generalization-inductive-bias? State where the proof applies at a
    finite image boundary.
-4. **(Code.)** True convolution flips the kernel: run `conv2d` with `k` and with
-   `k.flip(0, 1)` for the blur and for Sobel. Which outputs differ, which do not,
+4. **(Code.)** True convolution flips the kernel: run `conv2d` with `v` and with
+   `v.flip(0, 1)` for the blur and for Sobel. Which outputs differ, which do not,
    and what property of the kernel determines the difference?
 5. **(Code.)** The box blur is *separable*: show that convolving with the $3\times3$
    uniform kernel equals convolving with a $3\times1$ column of $\tfrac13$s and then a

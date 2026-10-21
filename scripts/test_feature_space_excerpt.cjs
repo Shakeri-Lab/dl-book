@@ -117,7 +117,7 @@ test('feature space: the manuscript owns the sentence while the cloud and the ma
   const moons = chapter.indexOf('moon2 = torch.stack([1 - torch.cos(t), 0.4 - torch.sin(t)], 1)');
   const figure = chapter.indexOf('#| label: fig-feature-space'), sentence = chapter.indexOf('space in which the boundary is');
   assert(moons > 0 && sentence > moons && figure > sentence, 'the chapter states the moons, then the sentence, then the figure');
-  assert.match(chapter, /the decision boundary sits at\nthe exact coordinate \$-b\/\\lVert\\vect\{w\}\\rVert\$/);
+  assert.match(chapter, /the decision boundary sits at\nthe single coordinate value \$-b\/\\lVert\\vect\{w\}\\rVert\$/);
   assert.match(f.$('.mechanism-intro').textContent, /figure above prints the start and the end side by side/);
   // The panel links the collapse equation by anchor, never by a guessed number.
   assert.match(read('feature-space/panel.html'), /href="#eq-collapse"/);

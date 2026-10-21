@@ -144,9 +144,9 @@ test('quant: the declared attributes reproduce the chapter literals they mirror'
   assert.deepEqual(fx.values, [-1, -0.79, -0.54, -0.11, 0.08, 0.31, 0.72, 1]);
   assert.deepEqual(fx.grid, [-3, 4, 3]); assert.deepEqual(fx.bits, [2, 3, 4, 8]); assert.deepEqual(fx.timeline, [8, 3]); assert.equal(fx.n, 1e9);
   // The rule is the chapter's equation, and the bound its sentence.
-  assert(chapter.includes('Q=2^{b-1}-1,'), 'Q = 2^(b-1) - 1 is the chapter\'s');
-  assert(chapter.includes('s=\\frac{\\max_{ij}|W_{ij}|}{Q}.'), 's = max|W| / Q is the chapter\'s');
-  assert(chapter.includes('\\operatorname{round}(W_{ij}/s),-Q,Q'), 'round(W/s) clipped to +-Q is the chapter\'s');
+  assert(chapter.includes('q_{\\max}=2^{b-1}-1,'), 'q_max = 2^(b-1) - 1 is the chapter\'s');
+  assert(chapter.includes('s=\\frac{\\max_{ij}|W_{ij}|}{q_{\\max}}.'), 's = max|W| / q_max is the chapter\'s');
+  assert(chapter.includes('\\operatorname{round}(W_{ij}/s),-q_{\\max},q_{\\max}'), 'round(W/s) clipped to +-q_max is the chapter\'s');
   assert(chapter.includes('$|W_{ij}-\\hat W_{ij}|\\le s/2$'), '|error| <= s/2 is the chapter\'s sentence');
   assert(chapter.includes('{#eq-symmetric-quantization}') && chapter.includes('{#eq-quant-payload}'));
   // The chapter's grid IS the rule at b = 3: codes -3..3 over Q = 3, s = 1 / 3 because max|values| = 1.

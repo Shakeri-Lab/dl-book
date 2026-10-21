@@ -6,37 +6,37 @@
      seeds: sources/2-1-backprop.tex, sources/2-2_Autodiff.tex,
             code/notebooks/source/m02-03-shared.ipynb (autograd rules, cell 5) -->
 
-Recall the update rule that ended @sec-01-linear-regression: new parameters come from
-old parameters by stepping against the gradient,
+Recall the gradient-descent update of @sec-01-linear-regression: new parameters come
+from old parameters by stepping against the gradient,
 $\vect{w}^{(t+1)} = \vect{w}^{(t)} - \eta\,\nabla_{\vect{w}}\loss$. For linear
 regression we could write that gradient down by hand. A modern network has millions,
-sometimes billions, of parameters composed through many layers. Estimating each partial
-derivative by perturbing one parameter at a time and rerunning the network
-(*finite differences*) would require additional forward passes for each parameter, which
-is infeasible. @sec-03-nonlinearity-mlp named the underlying difficulty: with no targets
-for the hidden units, the output error must be apportioned among the hidden weights.
-That is the credit assignment problem.
+sometimes billions, of parameters composed through many layers. We could estimate
+each partial derivative by perturbing one parameter at a time and rerunning the network, a
+method called *finite differences*, but that needs at least one extra forward pass per
+parameter: millions of passes for a single gradient. @sec-03-nonlinearity-mlp named
+the underlying difficulty, the *credit assignment problem*. A hidden unit has no target of
+its own, so we must work out how much each hidden weight contributed to the output error.
 
-Backpropagation provides the exact algorithmic solution. It computes *all* the partial
+Backpropagation solves this problem exactly. It computes *all* the partial
 derivatives in one backward sweep whose cost is a small constant multiple of the forward
 graph's operations. It is the multivariable chain rule, organized for computational
-reuse. We will derive it as a recursion on sensitivities, implement it
+reuse. We will derive it as a recursion on loss derivatives, implement it
 from scratch on a batch, and analyze its arithmetic and memory costs.
 
 ## One neuron, one chain
 
 Start with the smallest possible case: one neuron on one training example. The
 previous activation $a^{(l-1)}$ is multiplied by a weight $w$ and shifted by a bias $b$,
-giving the pre-activation $z = w\,a^{(l-1)} + b$; the activation function produces
-$a^{(l)} = \sigma(z)$, written $a$ below; and $a$ feeds a loss $L$.
+giving the pre-activation $z = w\,a^{(l-1)} + b$. The activation function produces
+$a^{(l)} = \sigma(z)$, written $a$ below, and $a$ feeds a loss $\loss$.
 
-To see how much $L$ changes when $w$ changes slightly, follow the chain: a change in
-$w$ changes $z$, the change in $z$ changes $a$, and the change in $a$ changes $L$. The
-chain rule multiplies these local sensitivities:
+To see how much $\loss$ changes when $w$ changes slightly, follow the chain: a change in
+$w$ changes $z$, the change in $z$ changes $a$, and the change in $a$ changes $\loss$. The
+chain rule multiplies these local derivatives:
 
 $$
-\frac{\partial L}{\partial w}
-= \frac{\partial L}{\partial a}\cdot
+\frac{\partial \loss}{\partial w}
+= \frac{\partial \loss}{\partial a}\cdot
   \frac{\partial a}{\partial z}\cdot
   \frac{\partial z}{\partial w} .
 $$ {#eq-chain}
@@ -44,8 +44,8 @@ $$ {#eq-chain}
 ```{python}
 #| label: fig-chain-graph
 #| echo: false
-#| fig-alt: "Four boxes in a row, joined by blue forward arrows: the weight w, the pre-activation z equals w times a superscript l minus 1 plus b, the activation a superscript l equals sigma of z, and the loss L. The middle two boxes note the values they keep. Below, dark-red arrows run right to left through four sensitivity boxes, from 1 under L to dL/da, dL/dz equals delta, and dL/dw, each arrow labeled with the local derivative it multiplies. Dotted arrows carry the kept values down to the derivatives that reuse them."
-#| fig-cap: "Computation as a graph. The forward pass (top, blue) computes each value and keeps what the backward pass will reuse. The backward pass (bottom, dark red) starts from $\\partial L/\\partial L = 1$ and multiplies one local derivative per edge, right to left. Each box on the lower lane is the loss's sensitivity to the node above it; the one at $z$ is the $\\delta$ of the next section."
+#| fig-alt: "Four boxes in a row, joined by blue forward arrows: the weight w, the pre-activation z equals w times a superscript l minus 1 plus b, the activation a superscript l equals sigma of z, and the loss. The middle two boxes note the values they keep. Below, dark-red arrows run right to left through four derivative boxes, from 1 under the loss to the derivatives of the loss with respect to a, z (which equals delta) and w, each arrow labeled with the local derivative it multiplies. Dotted arrows carry the kept values down to the derivatives that reuse them."
+#| fig-cap: "Computation as a graph. The forward pass (top, blue) computes each value and keeps what the backward pass will reuse. The backward pass (bottom, dark red) starts from $\\partial \\mathcal{L}/\\partial \\mathcal{L} = 1$ and multiplies one local derivative per edge, right to left. Each box on the lower lane is the derivative of the loss with respect to the node above it. The one at $z$ is the $\\delta$ of the next section."
 #| code-summary: "Code: draw the computation graph"
 import matplotlib.pyplot as plt
 import matplotlib.patches as mp
@@ -58,7 +58,7 @@ nodes = [(0.8, 1.1, "parameter", r"$w$", None, ORANGE),
           r"keeps $a^{(l-1)}$", INK),
          (6.35, 2.05, "activation", r"$a^{(l)} = \sigma(z)$",
           r"keeps $a^{(l)}$", GREEN),
-         (8.95, 1.1, "loss", r"$L$", None, WINE)]
+         (8.95, 1.1, "loss", r"$\mathcal{L}$", None, WINE)]
 y0, h = 2.35, 0.78
 for xc, wd, role, formula, cache, col in nodes:
     ax.add_patch(mp.FancyBboxPatch((xc - wd / 2, y0 - h / 2), wd, h,
@@ -78,13 +78,13 @@ ax.text(0.25, 3.55, "forward: compute each value and keep what the backward pass
         color=BLUE, fontsize=9, va="center")
 
 yb = 0.72                                                   # backward lane
-chips = [r"$\partial L/\partial w$", r"$\partial L/\partial z = \delta$",
-         r"$\partial L/\partial a$", r"$1$"]
+chips = [r"$\partial \mathcal{L}/\partial w$", r"$\partial \mathcal{L}/\partial z = \delta$",
+         r"$\partial \mathcal{L}/\partial a$", r"$1$"]
 for (xc, *_), chip in zip(nodes, chips):
     ax.text(xc, yb, chip, ha="center", va="center", fontsize=11, color=WINE,
             bbox=dict(boxstyle="round,pad=0.3", fc="#F6EEEF", ec=WINE, lw=1.0))
 local = [r"$\times\, a^{(l-1)}$", r"$\times\, \sigma'(z) = a^{(l)}(1-a^{(l)})$",
-         r"$\times\, \partial L/\partial a$"]
+         r"$\times\, \partial \mathcal{L}/\partial a$"]
 gaps = [(0.8, 3.35, 0.58, 0.8), (3.35, 6.35, 0.8, 0.56), (6.35, 8.95, 0.56, 0.26)]
 for (xl, xr, pl, pr), lab in zip(gaps, local):
     ax.annotate("", xy=(xl + pl, yb), xytext=(xr - pr, yb),
@@ -104,54 +104,54 @@ plt.tight_layout(); plt.show()
 
 Two properties shown in @fig-chain-graph generalize to any network, however deep:
 
-1. **The forward pass caches.** Computing $L$ produces the intermediate values
-   ($z$, $a$) along the way; we keep them, because the backward pass will need them.
+1. **The forward pass caches.** Computing $\loss$ produces the intermediate values
+   ($z$, $a$) along the way. We keep them because the backward pass will need them.
 2. **The backward pass reuses.** It uses cached values, multiplying local derivatives
    along each path and summing contributions from multiple paths.
-   The whole sweep costs a small constant multiple of one forward pass; for
+   The whole sweep costs a small constant multiple of one forward pass. For
    matrix-multiply layers the multiple is about two, as the batched code below makes
    visible.
 
-## Sensitivity propagation: the four layer equations
+## Propagating loss derivatives: the four layer equations {#sensitivity-propagation-the-four-layer-equations}
 
-For a full layer of neurons, the sums multiply quickly. The remedy is to introduce one
-sensitivity vector per layer and propagate it backward. At the output, the loss is an
-explicit function of the network's last values; for a weight ten layers deep, the
-dependence runs through every layer in between. Backpropagation carries the loss's
-sensitivity from the output, where it is explicit, back to each layer that needs it.
+For a full layer of neurons, the number of chain-rule paths grows quickly. The remedy is to
+introduce one derivative vector per layer and propagate it backward. At the output, the loss is
+an explicit function of the network's last values. For a weight ten layers deep, the dependence
+runs through every layer in between. Backpropagation carries the loss derivative from the
+output, where it is explicit, back to each layer that needs it.
 
 ::: {.callout-note}
-## The layer sensitivity
+## The loss derivative at a layer
 
-Define, for each layer $l$, the **sensitivity**
+Define, for each layer $l$, the **loss derivative**
 
 $$
-\delta^{(l)} \;:=\; \frac{\partial L}{\partial \vect{z}^{(l)}} ,
+\delta^{(l)} \;:=\; \frac{\partial \loss}{\partial \vect{z}^{(l)}} ,
 $$
 
-the gradient of the loss with respect to that layer's *pre-activations*. Entry $j$
-has a first-order meaning: if $z^{(l)}_j$ moved by a small $\varepsilon$, the loss
-would move by about $\delta^{(l)}_j\,\varepsilon$. Automatic differentiation calls such
-a quantity an **adjoint**: the derivative of the final output with respect to an
-intermediate value, computed backward from the output.
+the gradient of the loss with respect to that layer's *pre-activations*. Entry
+$j$ measures how much unit $j$ is to blame for the loss: if $z^{(l)}_j$ moved by a small
+$\varepsilon$, the loss would move by about $\delta^{(l)}_j\,\varepsilon$. To reduce the
+loss, $z^{(l)}_j$ should move against the sign of $\delta^{(l)}_j$. Automatic
+differentiation calls such a quantity an **adjoint**: the derivative of the final output
+with respect to an intermediate value, computed backward from the output.
 :::
 
 For fully connected layers with elementwise activation functions, backpropagation takes
 the following four forms. Here $\odot$ denotes the elementwise (Hadamard) product.
 
-**1. Start at the output layer $L$, where the sensitivity is explicit:**
+**1. Start at the output layer $L$, where the loss derivative is explicit:**
 
 $$
-\delta^{(L)} = \frac{\partial L}{\partial \vect{a}^{(L)}} \odot \sigma'(\vect{z}^{(L)}) .
+\delta^{(L)} = \frac{\partial \loss}{\partial \vect{a}^{(L)}} \odot \sigma'(\vect{z}^{(L)}) .
 $$ {#eq-bp1}
 
 For the half-squared-error convention
-$L=\tfrac12\|\vect{a}^{(L)}-\vect{y}\|^2$,
-$\partial L / \partial \vect{a}^{(L)}$ is the prediction error
+$\loss=\tfrac12\|\vect{a}^{(L)}-\vect{y}\|^2$,
+$\partial \loss / \partial \vect{a}^{(L)}$ is the prediction error
 $\vect{a}^{(L)} - \vect{y}$. Other conventions contribute a known scale: mean squared
-error, for example, contributes $2/n$ for $n$ scalar outputs. In every case the output
-error is then multiplied by the activation derivative, which measures how sensitive the
-activation was to its input.
+error, for example, contributes $2/D_{\text{out}}$ for $D_{\text{out}}$ scalar outputs. In
+every case the output error is then multiplied by the activation derivative.
 
 **2. Propagate one layer back:**
 
@@ -159,7 +159,7 @@ $$
 \delta^{(l)} = \Bigl( (\matr{W}^{(l+1)})^\top \delta^{(l+1)} \Bigr) \odot \sigma'(\vect{z}^{(l)}) .
 $$ {#eq-bp2}
 
-The sensitivity travels backward through the same weights the signal traveled forward
+The loss derivative travels backward through the same weights the signal traveled forward
 through. Unit $j$ of layer $l$ fed every unit $i$ of layer $l+1$ through the weight
 $W^{(l+1)}_{ij}$, so it collects $\sum_i W^{(l+1)}_{ij}\,\delta^{(l+1)}_i$, which is entry
 $j$ of $(\matr{W}^{(l+1)})^\top\delta^{(l+1)}$: hence the transpose. The activation
@@ -205,8 +205,8 @@ delta[0] = (Ws[1].T @ delta[1]) * sp(zs[0])          # eq. 2 again
 ```{python}
 #| echo: false
 #| label: fig-delta-pullback
-#| fig-alt: "Seven vertical strips of numbers read right to left: the single output sensitivity, its product with the transposed weights, the layer's four sigmoid derivatives in gray, the resulting four-entry sensitivity, and the same three steps again for the first hidden layer. Arrows labeled W transpose join each sensitivity to the next pulled-back strip; equals signs and elementwise-product signs sit between the others. Color fades toward the input. One row is outlined where a derivative near zero shrinks a large pulled-back value."
-#| fig-cap: "@eq-bp2 as two operations, run right to left on a 3–4–4–1 network (random weights, one example): multiply by $\\matr{W}^\\top$, which sends each sensitivity back to every unit that fed it, then multiply elementwise by the activation derivative $\\sigma'(z) \\le 0.25$ (gray). The numbers are the executed values; blue is negative and dark red positive on one shared scale, so the fading toward the input shows the derivatives at work. The outlined row has the smallest derivative: a large pulled-back value leaves it as a small sensitivity."
+#| fig-alt: "Seven vertical strips of numbers read right to left: the single output loss derivative, its product with the transposed weights, the layer's four sigmoid derivatives in gray, the resulting four-entry loss derivative, and the same three steps again for the first hidden layer. Arrows labeled W transpose join each loss derivative to the next pulled-back strip; equals signs and elementwise-product signs sit between the others. Color fades toward the input. One row is outlined where a derivative near zero shrinks a large pulled-back value."
+#| fig-cap: "@eq-bp2 as two operations, run right to left on a 3–4–4–1 network (random weights, one example): multiply by $\\matr{W}^\\top$, which sends each loss derivative back to every unit that fed it, then multiply elementwise by the activation derivative $\\sigma'(z) \\le 0.25$ (gray). The numbers are the executed values. Blue is negative and dark red positive on one shared scale, so the fading toward the input shows the activation derivatives at work. The outlined row has the smallest activation derivative: a large pulled-back value leaves it as a small loss derivative."
 import matplotlib.patches as mp
 from matplotlib.colors import LinearSegmentedColormap
 
@@ -258,25 +258,26 @@ ax.text(lefts[0], 1.2, "backward, right to left: pull back through $W^\\top$, th
 ax.set_xlim(-0.1, x + cw + 0.1); ax.set_ylim(-1.5, 1.4); ax.axis("off")
 plt.tight_layout(); plt.show()
 ```
-**3. Convert sensitivities into weight gradients:**
+**3. Convert loss derivatives into weight gradients:**
 
 $$
-\frac{\partial L}{\partial \matr{W}^{(l)}} = \delta^{(l)} \, (\vect{a}^{(l-1)})^\top .
+\frac{\partial \loss}{\partial \matr{W}^{(l)}} = \delta^{(l)} \, (\vect{a}^{(l-1)})^\top .
 $$ {#eq-bp3}
 
 **4. And into bias gradients:**
 
 $$
-\frac{\partial L}{\partial \vect{b}^{(l)}} = \delta^{(l)} .
+\frac{\partial \loss}{\partial \vect{b}^{(l)}} = \delta^{(l)} .
 $$ {#eq-bp4}
 
-Check the shapes in @eq-bp3. With $m$ neurons
-in layer $l$ and $k$ in layer $l-1$, $\delta^{(l)}$ is $(m \times 1)$, and
-$(\vect{a}^{(l-1)})^\top$ is $(1 \times k)$. Their **outer product** is an $m \times k$
-matrix, matching the dimensions of $\matr{W}^{(l)}$, and entry $(i,j)$ is the sensitivity of
-neuron $i$ times the activation of neuron $j$ that fed it,
-$\partial L/\partial W^{(l)}_{ij} = \delta^{(l)}_i\,a^{(l-1)}_j$. A weight's gradient is
-*sensitivity out times signal in*:
+Check the shapes in @eq-bp3. With $D_{\text{out}}$ neurons
+in layer $l$ and $D_{\text{in}}$ in layer $l-1$, $\delta^{(l)}$ is $(D_{\text{out}} \times 1)$,
+and $(\vect{a}^{(l-1)})^\top$ is $(1 \times D_{\text{in}})$. Their **outer product** is a
+$D_{\text{out}} \times D_{\text{in}}$ matrix, matching the dimensions of $\matr{W}^{(l)}$, and
+entry $(i,j)$ is the loss derivative of neuron $i$ times the activation of neuron $j$ that
+fed it, $\partial \loss/\partial W^{(l)}_{ij} = \delta^{(l)}_i\,a^{(l-1)}_j$. A weight's
+gradient is *derivative out times signal in*, and the matrix form maps directly onto the
+parallel matrix multiplies that GPUs are built for.
 
 :::: {.plan-code}
 ::: {.plan}
@@ -297,8 +298,8 @@ G = torch.outer(d2, a1)                    # eq. 3
 ```{python}
 #| echo: false
 #| label: fig-outer-product
-#| fig-alt: "A four-entry sensitivity column times a four-entry activation row equals a four-by-four gradient matrix. Signed values are shaded blue for negative and dark red for positive; the positive activations are green. One entry of the column, one of the row, and their product cell in the matrix are outlined, with the multiplication written beside the matrix."
-#| fig-cap: "@eq-bp3 with the sensitivities and activations from the network of @fig-delta-pullback: a $(4 \\times 1)$ sensitivity column times a $(1 \\times 4)$ activation row gives the whole $(4 \\times 4)$ gradient at once. The outlined cells trace the largest entry, $\\delta_i\\,a_j$; every other cell is built the same way. Sensitivities and gradients share the signed blue-to-dark-red scale; the activations, all positive, are green."
+#| fig-alt: "A four-entry loss-derivative column times a four-entry activation row equals a four-by-four gradient matrix. Signed values are shaded blue for negative and dark red for positive; the positive activations are green. One entry of the column, one of the row, and their product cell in the matrix are outlined, with the multiplication written beside the matrix."
+#| fig-cap: "@eq-bp3 with the loss derivatives and activations from the network of @fig-delta-pullback: a $(4 \\times 1)$ derivative column times a $(1 \\times 4)$ activation row gives the whole $(4 \\times 4)$ gradient at once. The outlined cells trace the largest entry, $\\delta_i\\,a_j$. Every other cell is built the same way. Loss derivatives and gradients share the signed blue-to-dark-red scale. The activations, all positive, are green."
 import matplotlib.patches as mp
 from matplotlib.colors import LinearSegmentedColormap
 
@@ -330,7 +331,7 @@ block(a1[None, :], 1.4, 0.25, lambda v: plt.cm.Greens(0.1 + 0.5 * v),
       r"$(a^{(1)})^\top$", r"$1 \times 4$", 2.0)
 ax.text(3.8, 0.0, "=", ha="center", va="center", fontsize=14)
 block(G, 4.25, 1.0, lambda v: signed(0.5 + 0.5 * v / gmax),
-      r"$\partial L/\partial W^{(2)}$", r"$4 \times 4$, the shape of $W^{(2)}$", gmax)
+      r"$\partial \mathcal{L}/\partial W^{(2)}$", r"$4 \times 4$, the shape of $W^{(2)}$", gmax)
 for x0, y0, i, j in [(0.0, 1.0, i0, 0), (1.4, 0.25, 0, j0), (4.25, 1.0, i0, j0)]:
     ax.add_patch(mp.Rectangle((x0 + j * c, y0 - (i + 1) * c), c, c, fill=False,
                               ec="black", lw=2.4, zorder=4))
@@ -341,9 +342,6 @@ ax.text(6.55, 0.0, (f"entry $({i0 + 1},{j0 + 1})$:\n"
 ax.set_xlim(-0.1, 7.9); ax.set_ylim(-1.45, 1.45); ax.axis("off")
 plt.tight_layout(); plt.show()
 ```
-The matrix form needs no explicit summations, and it maps directly onto the parallel
-matrix multiplies that GPUs are built for. The same reverse-mode principle applies to
-larger models, using the local derivative of each operation.
 
 ## Manual implementation and autograd verification {#build-it-then-check-it-against-autograd}
 
@@ -369,15 +367,15 @@ _ = torch.manual_seed(6050)
 
 The code makes one change of layout: it processes $n$ examples at once, stored as rows
 as in @sec-01-linear-regression. Stack the activations into
-$\matr{A}^{(l-1)} \in \mathbb{R}^{n\times k}$ and the sensitivities into
-$\matr{\Delta}^{(l)} \in \mathbb{R}^{n\times m}$, row $i$ holding example $i$'s
-$\delta^{(l)}$. The single-example outer product of @eq-bp3 then becomes one matrix
+$\matr{A}^{(l-1)} \in \mathbb{R}^{n\times D_{\text{in}}}$ and the loss derivatives into
+$\matr{\Delta}^{(l)} \in \mathbb{R}^{n\times D_{\text{out}}}$, row $r$ holding example
+$r$'s $\delta^{(l)}$. The single-example outer product of @eq-bp3 then becomes one matrix
 product that sums the per-example outer products,
 
 $$
-\frac{\partial L}{\partial \matr{W}^{(l)}}
+\frac{\partial \loss}{\partial \matr{W}^{(l)}}
 = (\matr{\Delta}^{(l)})^\top \matr{A}^{(l-1)}
-= \sum_{i=1}^{n} \delta^{(l)}_i \,(\vect{a}^{(l-1)}_i)^\top ,
+= \sum_{r=1}^{n} \delta^{(l)}_r \,(\vect{a}^{(l-1)}_r)^\top ,
 $$
 
 and @eq-bp2, transposed row by row, becomes
@@ -388,7 +386,8 @@ already sits inside $\matr{\Delta}^{(2)}$, so the sum is the batch average.
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
 1. Draw a batch of 32 inputs and targets and the two-layer weights.
-2. Cache the forward pass, propagate the sensitivities backward, and form the gradients.
+2. Cache the forward pass, propagate the loss derivatives backward, and form the
+   gradients.
 3. Rebuild the network from `requires_grad` copies and let autograd differentiate it.
 4. Print the largest gap between each hand-computed gradient and autograd's.
 :::
@@ -439,25 +438,25 @@ four equations *are* what autograd computes: the framework builds the computatio
 during the forward pass and then traverses it backward, caching and reusing intermediate
 results as we did.
 
-**Two products backward for each product forward.** The forward pass computed the
-output layer with one matrix product, $\matr{A}^{(1)}(\matr{W}^{(2)})^\top$. Its backward pass
-needed two, one for each input of that product: $\matr{\Delta}^{(2)}\matr{W}^{(2)}$ carries the
-sensitivity to the layer's input, and $(\matr{\Delta}^{(2)})^\top\matr{A}^{(1)}$ forms the weight
-gradient. For an $n\times k$ input and an
-$m\times k$ weight, each of the three products costs $2nmk$ floating-point operations,
+The code also shows where the backward cost comes from. The forward pass computed the
+output layer with one matrix product, $\matr{A}^{(1)}(\matr{W}^{(2)})^\top$. The backward pass
+needed two matrix products for it, one for each input of that product:
+$\matr{\Delta}^{(2)}\matr{W}^{(2)}$ carries the loss derivative to the layer's input, and
+$(\matr{\Delta}^{(2)})^\top\matr{A}^{(1)}$ forms the weight gradient. For an $n\times k$ input
+and an $m\times k$ weight, each of the three products costs $2nmk$ floating-point operations,
 so a matrix-multiply layer's backward pass costs about twice its forward pass and a
 training step about three forward passes. That is the small constant multiple stated
 at the start of the chapter. (The first layer needs no input gradient, because nothing
-upstream of the input $\matr{X}$ is trained; our code never forms one.)
+upstream of the input $\matr{X}$ is trained, and our code never forms one.)
 
-**Caching costs memory.** The backward pass read the hidden activations $\matr{A}^{(1)}$,
-for the activation derivative $\sigma'(\matr{Z}^{(1)})$ and the gradient of $\matr{W}^{(2)}$,
-and the input $\matr{X}$, for the gradient of $\matr{W}^{(1)}$, so both had to survive the
-forward pass.
+Caching also costs memory. The backward pass read the hidden activations
+$\matr{A}^{(1)}$ twice, once for the activation derivative $\sigma'(\matr{Z}^{(1)})$ and once
+for the gradient of $\matr{W}^{(2)}$. It also read the input $\matr{X}$ for the gradient of
+$\matr{W}^{(1)}$. Both therefore had to stay in memory after the forward pass.
 Here $\matr{A}^{(1)}$ alone holds $32 \times 8 = 256$ numbers, more than all $57$ parameters
 of the network, and it grows with the batch size while the parameter count does not. A deep
-network keeps about one such block per layer until the backward pass consumes it,
-which is why training a network takes more memory than running it, and why evaluation
+network keeps about one such block per layer until the backward pass has used it. This is
+why training a network takes more memory than running it, and why evaluation
 code runs under `torch.no_grad()`, where no graph is recorded and nothing is kept for a
 backward pass. Recomputing some activations during the backward pass instead of storing
 them, *gradient checkpointing*, trades extra arithmetic for memory (Chen et al., 2016).
@@ -469,17 +468,17 @@ each layer feeds a single successor. Real computational workflows form directed
 acyclic graphs (DAGs): a single intermediate value may branch into multiple downstream
 operations. Extending reverse-mode differentiation to arbitrary DAGs requires two rules:
 
-1. **Reverse topological ordering.** The backward sweep must visit nodes in reverse
-   topological order, ensuring every downstream consumer of an intermediate tensor has
-   finished propagating its sensitivity before that tensor sends its own gradient
-   upstream.
+1. **Reverse topological ordering.** A *topological order* lists the nodes so that each
+   comes after every node it depends on. The backward sweep visits them in the reverse of
+   that order, so every downstream consumer of an intermediate tensor has finished
+   propagating its derivative before that tensor sends its own gradient upstream.
 2. **Gradient accumulation.** When an intermediate variable branches into multiple
-   operations, the multivariable chain rule dictates that its total sensitivity is the
-   sum of the sensitivities along each path. Autograd engines therefore accumulate
-   adjoint contributions using addition rather than overwriting.
+   operations, the multivariable chain rule makes its total derivative the sum of the
+   derivatives along each path. Autograd engines therefore add each new contribution to
+   the stored adjoint.
 
 A small engine shows both rules. Each `Value` node records its parents and a local
-derivative rule; its `grad` field holds its adjoint $\partial L/\partial v$, and the
+derivative rule; its `grad` field holds its adjoint $\partial \loss/\partial v$, and the
 rule passes that adjoint on to the parents.
 
 This teaching implementation is adapted from Andrej Karpathy's
@@ -588,10 +587,10 @@ Autograd uses the same reverse pass we built manually, and that pass explains it
 practical rules. The five rules below cover the common autograd errors, and
 @fig-autograd-rules draws four of them in PyTorch syntax.
 
-![Four autograd rules in PyTorch syntax. (a) After the backward pass, the leaf `w` holds its gradient; the non-leaf `y_hat` used its gradient and released it. (b) A second backward pass adds into `w.grad` until `optimizer.zero_grad()` resets it. (c) Of four ways to write an update, only the in-place one with recording paused keeps `w` a trainable leaf. (d) A loss stored from a forward pass that is never backpropagated keeps its graph and cached activations alive; `loss.item()` and `loss.detach()` keep only the value.](../../figures/generated/5_5_autograd_rules.svg){#fig-autograd-rules width=100% fig-alt="Four panels. Panel a: the code w equals torch.randn of 3 with requires_grad True, y_hat equals w times 2 summed, y_hat.backward. An orange leaf box w with is_leaf True points to a gray box y_hat with grad_fn SumBackward0; a dark-red backward arrow fills w.grad with 2, 2, 2, while y_hat.grad is None. Panel b: w.grad reads 2, 2, 2 after one backward call and 4, 4, 4 after a second, then None after optimizer.zero_grad. Panel c: four update lines; only with torch.no_grad, w minus-equals lr times w.grad, is checked, giving the same leaf with new values; rebinding w gives a non-leaf whose next grad is None, an in-place update with recording on raises RuntimeError, and rebinding under no_grad gives requires_grad False. Panel d: appending loss to a list during evaluation keeps the loss, its grad_fn chain, and cached activations alive; appending loss.item gives a Python float, and loss.detach gives the same value with its history cut."}
+![Four autograd rules in PyTorch syntax. (a) After the backward pass, the leaf `w` holds its gradient, and the non-leaf `y_hat` used its gradient and released it. (b) A second backward pass adds into `w.grad` until `optimizer.zero_grad()` resets it. (c) Of four ways to write an update, only the in-place one with recording paused keeps `w` a trainable leaf. (d) A loss stored from a forward pass that is never backpropagated keeps its graph and cached activations alive. `loss.item()` and `loss.detach()` keep only the value.](../../figures/generated/5_5_autograd_rules.svg){#fig-autograd-rules width=100% fig-alt="Four panels. Panel a: the code w equals torch.randn of 3 with requires_grad True, y_hat equals w times 2 summed, y_hat.backward. An orange leaf box w with is_leaf True points to a gray box y_hat with grad_fn SumBackward0; a dark-red backward arrow fills w.grad with 2, 2, 2, while y_hat.grad is None. Panel b: w.grad reads 2, 2, 2 after one backward call and 4, 4, 4 after a second, then None after optimizer.zero_grad. Panel c: four update lines; only with torch.no_grad, w minus-equals lr times w.grad, is checked, giving the same leaf with new values; rebinding w gives a non-leaf whose next grad is None, an in-place update with recording on raises RuntimeError, and rebinding under no_grad gives requires_grad False. Panel d: appending loss to a list during evaluation keeps the loss, its grad_fn chain, and cached activations alive; appending loss.item gives a Python float, and loss.detach gives the same value with its history cut."}
 
 **Rule 1: by default, only leaf tensors retain gradients.** A *leaf* is a tensor you
-created directly (your parameters); a *non-leaf* is the result of an operation
+created directly (your parameters). A *non-leaf* is the result of an operation
 (activations, losses). For a leaf that requires gradients and contributes to the loss,
 the backward pass accumulates its gradient in the attribute `.grad`, while intermediate
 gradients are used and released. Call
@@ -628,15 +627,15 @@ print(f"after 2nd pass: {w.grad.tolist()}")            # doubled -- rule 2
 ```
 ::::
 **Rule 3: update parameters in place, with recording paused.** Write the update as
-`w -= lr * w.grad` inside `with torch.no_grad():`. Both halves matter. Pausing the recording
-keeps the step itself off the graph, and the in-place subtraction changes the values of the
-existing leaf, so `w` remains the same trainable tensor that the optimizer and the next
-backward pass refer to. Drop either half and the update breaks
-(@fig-autograd-rules, panel c): the rebinding `w = w - lr * w.grad` creates a new
-non-leaf whose gradient is not populated on the next pass; an in-place update with recording
-on raises an error; and a rebinding with recording paused yields a tensor that no longer
-requires gradients, so learning silently stops. Assigning a plain tensor to a
-registered module parameter fails loudly instead. The idiom:
+`w -= lr * w.grad` inside `with torch.no_grad():`. Both parts of this idiom matter: the
+in-place subtraction and the paused recording. Pausing the recording keeps the step itself
+off the graph. The in-place subtraction changes the values of the existing leaf, so `w`
+remains the same trainable tensor that the optimizer and the next backward pass refer to.
+Drop either part and the update breaks (@fig-autograd-rules, panel c). The rebinding
+`w = w - lr * w.grad` creates a new non-leaf whose gradient is not populated on the
+next pass. An in-place update with recording on raises an error. A rebinding with recording
+paused yields a tensor that no longer requires gradients, so learning silently stops.
+Assigning a plain tensor to a registered module parameter fails loudly instead. The idiom:
 
 :::: {.plan-code}
 ::: {.plan}
@@ -688,14 +687,18 @@ the next pass.
 
 ## Activation derivatives and depth {#the-gate-and-the-problem-with-deep-chains}
 
-In @eq-bp2, the transposed weight matrix combines sensitivities from the next layer, and
-the activation derivative scales each resulting component. A derivative near zero
-attenuates that component; a derivative equal to one leaves it unchanged at this
-operation.
+In @eq-bp2, the transposed weight matrix combines loss derivatives from the next layer,
+and the activation derivative scales each resulting component. A derivative near zero
+attenuates that component, and a derivative equal to one leaves it unchanged.
 
-For the logistic sigmoid, $\sigma'(z) = \sigma(z)(1-\sigma(z))$. Its maximum
-value, at $z = 0$, is exactly $0.25$; as the activation saturates toward either endpoint,
-its derivative approaches zero.
+For the logistic sigmoid,
+
+$$
+\sigma'(z) = \sigma(z)(1-\sigma(z)) \leq \frac14 .
+$$
+
+The maximum occurs at $z=0$. As the activation saturates toward either endpoint, its
+derivative approaches zero.
 
 :::: {.plan-code}
 ::: {.plan}
@@ -730,27 +733,29 @@ axes[1].plot(z, relu_gate, color="#232D4B")
 axes[1].set_title(r"ReLU gate"); axes[1].set_xlabel("$z$")
 plt.tight_layout(); plt.show()
 ```
-Products of these derivatives produce one of the central failure modes of deep networks.
-The chain rule *multiplies* local Jacobians across layers. The activation-derivative
-part of a sigmoid path contributes at most $0.25$ per layer, so that part is bounded by
-$0.25^k$ after $k$ gates. Ten gates in, its ceiling is below one in a million. The
-weight matrices and branching paths also scale the full network Jacobian, so
-$0.25^k$ bounds the activation-derivative product alone, not the complete gradient; it
-isolates why repeated sigmoid derivatives strongly favor vanishing signals.
+Products of these derivatives cause one of the central failure modes of deep networks. The
+chain rule *multiplies* the local *Jacobians*, the matrices of partial derivatives of
+each layer's outputs with respect to its inputs. Along a sigmoid path, each activation
+derivative contributes a factor of at most $0.25$, so the product of $k$ such factors is at
+most $0.25^k$. After ten factors the bound is below one in a million. The weight matrices and
+branching paths also scale the full Jacobian, so this bound covers the activation-derivative
+product alone. It still shows why repeated sigmoid derivatives strongly favor vanishing
+signals.
 
 Now replace the sigmoid with ReLU. $\mathrm{ReLU}(z) = \max(0, z)$ has derivative
-$1$ for $z > 0$ and $0$ for $z < 0$. At the kink $z=0$, PyTorch uses derivative $0$;
-exact zeros can occur with zero biases or sparse activations. The derivative is either
-one or zero. At an active unit the sensitivity passes through this factor unchanged; the
-surrounding weight matrices can still amplify or attenuate it, which is where the weight
+$1$ for $z > 0$ and $0$ for $z < 0$. At the kink $z=0$, PyTorch uses derivative $0$,
+and exact zeros can occur with zero biases or sparse activations. The derivative is therefore
+either one or zero. At an active unit the loss derivative passes through this factor unchanged.
+The surrounding weight matrices can still amplify or attenuate it, which is where the weight
 scale comes in.
 
 We test the argument in two networks that differ only in the activation function. Both
-have 30 layers, one with sigmoid units and one with ReLU. Both get the same He-scaled
-weights and input batch, and we record how much gradient reaches each layer. We
-compute the diagnostic in float64 so the norm itself does not underflow; then we ask the
-practical float32 question: would a learning-rate-$0.1$ update actually change the first
-layer's stored weights?
+have 30 layers, one with sigmoid units and one with ReLU. Both get the same weights and
+input batch, every weight drawn from $\mathcal{N}(0,\, 2/D_{\text{in}})$ with
+$D_{\text{in}} = 64$, a scale the next section explains. We record how much gradient
+reaches each layer. We compute the diagnostic in float64 so the norm itself does not
+underflow; then we ask the practical float32 question: would a learning-rate-$0.1$ update
+actually change the first layer's stored weights?
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
@@ -764,7 +769,7 @@ layer's stored weights?
 ```{python}
 #| label: fig-vanishing
 #| fig-alt: "On a logarithmic gradient-norm axis across thirty layers, the sigmoid curve is extremely small near the input and grows toward the output, while the ReLU curve remains many orders of magnitude higher at early layers."
-#| fig-cap: "Gradient reaching each layer of two matched 30-layer MLPs (float64 norm, log scale). With the same He-scaled weights and inputs, repeated sigmoid derivatives leave a nonzero but unusably small first-layer signal; ReLU preserves enough signal for a float32 update to change every first-layer weight."
+#| fig-cap: "Gradient reaching each layer of two matched 30-layer MLPs (float64 norm, log scale). With the same weights and inputs, repeated sigmoid derivatives leave a nonzero but unusably small first-layer signal. ReLU preserves enough signal for a float32 update to change every first-layer weight."
 #| code-summary: "Code: the depth experiment"
 #| code-fold: false
 from torch import nn
@@ -808,7 +813,7 @@ for act, color in [(nn.Sigmoid, "#232D4B"), (nn.ReLU, "#E57200")]:
     plt.semilogy(diagnostics[act.__name__]["norms"], "o-", ms=3,
                  color=color, label=act.__name__)
 plt.xlabel("layer (0 = closest to input)")
-plt.ylabel(r"$\|\partial L / \partial W^{(l)}\|$")
+plt.ylabel(r"$\|\partial \mathcal{L} / \partial W^{(l)}\|$")
 # [4]
 plt.legend(); plt.tight_layout(); plt.show()
 
@@ -819,8 +824,8 @@ for name, result in diagnostics.items():
 ```
 ::::
 Read the slopes, then read the printed counts of nonzero gradient entries and changed
-weights. All 4,096 sigmoid first-layer entries survive the float32 cast as nonzero
-numbers. They are so small, however, that subtracting $0.1g$ changes none of the stored
+weights. All 4,096 sigmoid first-layer entries remain nonzero after the float32 cast.
+They are so small, however, that subtracting $0.1g$ changes none of the stored
 float32 weights. The ReLU network changes all 4,096.
 That distinction matters, and @sec-a3-precision-performance names both failures: a displayed float32 norm can underflow while individual entries
 remain nonzero, and a nonzero entry can still produce an update that rounds away when
@@ -830,28 +835,31 @@ subtracted from a larger stored weight.
 
 The weights also scale the signal at each layer, so their initial scale is a second
 factor we choose. If each layer multiplies the variance of the signal by more than one,
-activations explode after enough layers; by less than one, they vanish. Forward activation
-scales and backward sensitivity scales are related but distinct, and keeping each roughly
-constant gives the two conditions below. A good initialization keeps the variance roughly
-constant in both directions.
+activations explode after enough layers. If it multiplies the variance by less than one,
+they vanish. Forward activation scales and backward derivative scales are related but
+distinct, and keeping each roughly constant gives the two conditions below.
 
 The variance scales predictably through the dot product. For
-$z = \sum_{i=1}^{n_{\text{in}}} w_i x_i$ with independent, zero-mean inputs and weights,
-$\var(z) = n_{\text{in}} \var(w) \var(x)$. Keeping $\var(z) = \var(x)$ demands the first
+$z = \sum_{i=1}^{D_{\text{in}}} w_i x_i$ with independent, zero-mean inputs and weights,
+$\var(z) = D_{\text{in}} \var(w) \var(x)$. Keeping $\var(z) = \var(x)$ demands the first
 condition below. On the backward pass, each input unit collects a sum over the units it
-fed, so keeping the variance of the sensitivities constant demands the second:
+fed, so keeping the variance of the loss derivatives constant demands the second:
 
 $$
-\var(w) = \frac{1}{n_{\text{in}}} \quad \text{(forward)}, \qquad
-\var(w) = \frac{1}{n_{\text{out}}} \quad \text{(backward)}.
+\var(w) = \frac{1}{D_{\text{in}}} \quad \text{(forward)}, \qquad
+\var(w) = \frac{1}{D_{\text{out}}} \quad \text{(backward)}.
 $$
 
-**Xavier initialization** balances the forward and backward variance criteria,
-$\var(w) = 2/(n_{\text{in}} + n_{\text{out}})$. **He initialization** accounts
-for ReLU discarding half its input distribution by doubling the forward recipe,
-$\var(w) = 2/n_{\text{in}}$. A PyTorch linear layer follows neither recipe by default: it
-draws its weights uniformly with variance $1/(3n_{\text{in}})$, a sixth of the He value
-$2/n_{\text{in}}$, so a deep ReLU stack without normalization needs an explicit choice.
+The two conditions disagree when $D_{\text{in}} \ne D_{\text{out}}$.
+[Glorot and Bengio (2010)](https://proceedings.mlr.press/v9/glorot10a.html) compromised
+with $\var(w) = 2/(D_{\text{in}} + D_{\text{out}})$, which lies between them. This recipe is
+called **Xavier initialization**, after Xavier Glorot. Both conditions assume an activation
+that keeps the variance. ReLU sets about half of its inputs to zero and so halves the mean
+square. [He et al. (2015)](https://openaccess.thecvf.com/content_iccv_2015/html/He_Delving_Deep_into_ICCV_2015_paper.html)
+therefore doubled the forward recipe to $\var(w) = 2/D_{\text{in}}$, now called
+**He initialization**, after Kaiming He. A PyTorch linear layer follows neither recipe by
+default: it draws its weights uniformly with variance $1/(3D_{\text{in}})$, a sixth of the
+He value, so a deep ReLU stack without normalization needs an explicit choice.
 
 :::: {.plan-code}
 ::: {.plan}
@@ -865,7 +873,7 @@ $2/n_{\text{in}}$, so a deep ReLU stack without normalization needs an explicit 
 ```{python}
 #| label: fig-init
 #| fig-alt: "Activation standard deviation is traced across forty ReLU layers. One naive scale collapses toward zero, another grows explosively, and the He-initialized trace stays roughly level."
-#| fig-cap: "Activation standard deviation through 40 ReLU layers of width $n = 256$. Each fixed weight scale multiplies the signal by a roughly constant factor per layer, a straight line on the log axis; the He-initialized trace stays near its starting scale in this run."
+#| fig-cap: "Activation standard deviation through 40 ReLU layers of width $D = 256$. Each fixed weight scale multiplies the signal by a roughly constant factor per layer, a straight line on the log axis. The He-initialized trace stays near its starting scale in this run."
 #| code-summary: "Code: signal energy vs depth"
 #| code-fold: false
 from collections.abc import Callable
@@ -902,10 +910,10 @@ plt.legend(); plt.tight_layout(); plt.show()
 Over 40 layers, the two fixed scales, $0.05$ and $0.12$, move the signal by many orders of
 magnitude before training starts, while the He scale keeps it level. Initialization sets
 the starting scale of the weights, and the choice of activation determines the derivative
-factors; together they determine whether the forward and backward signals survive depth
-at the start of training. Two later tools work on the same problem during training:
-normalization layers rescale intermediate computations, and skip connections add paths
-that bypass a block's activation derivatives and weights alike. Normalization and
+factors. Together they determine whether the forward and backward signals keep their scale
+through depth at the start of training. Two later tools work on the same problem during
+training: normalization layers rescale intermediate computations, and skip (residual)
+connections add paths that bypass a block's activation derivatives and weights alike. Normalization and
 residual connections appear in @sec-09-modern-cnns-transfer, and layer normalization
 becomes part of every Transformer block in @sec-14-self-attention-transformer.
 
@@ -915,7 +923,7 @@ becomes part of every Transformer block in @sec-14-self-attention-transformer.
 Close the book for one minute and run the chain rule backward.
 
 - What does each layer cache on the forward pass, and what does that cost in memory?
-- Why does the sensitivity $\delta$ pass through a transposed weight matrix?
+- Why does the loss derivative $\delta$ pass through a transposed weight matrix?
 - How do activation derivatives and initialization together control gradient scale with depth?
 :::
 
@@ -924,13 +932,13 @@ Close the book for one minute and run the chain rule backward.
 1. **The graph.** Any network is a computation graph. The forward pass computes and
    caches, while the backward pass multiplies local derivatives in reverse and sums
    contributions from multiple paths.
-2. **The sensitivity.** $\delta^{(l)} = \partial L / \partial \vect{z}^{(l)}$ reduces
+2. **The loss derivative.** $\delta^{(l)} = \partial \loss / \partial \vect{z}^{(l)}$ reduces
    the computation to four equations: start at the output (@eq-bp1), propagate through
    $\matr{W}^\top$ and the activation derivative (@eq-bp2), then read off weight and
    bias gradients (@eq-bp3, @eq-bp4). On a batch, each forward matrix product costs two
    backward ones, so the sweep delivers *every* gradient for about twice the forward
    arithmetic, at the memory cost of the cached activations.
-3. **We verified it**: our hand-built equations match PyTorch's autograd to
+3. **We verified it.** Our hand-built equations match PyTorch's autograd to
    $10^{-8}$. The scalar engine illustrates reverse topological order and adjoint
    accumulation by addition.
 4. **Activation derivatives and depth.** The sigmoid-derivative product along a
@@ -976,7 +984,7 @@ early layers, what attenuates it, and what its scale is.
 1. **(Pencil.)** Derive the four layer equations for a network whose output layer uses
    the identity activation and squared-error loss (the network of our verification
    cell). Confirm that your $\delta^{(2)}$ matches the one that cell computes.
-2. **(Pencil.)** In @eq-bp2, why does the sensitivity pass through
+2. **(Pencil.)** In @eq-bp2, why does the loss derivative pass through
    $(\matr{W}^{(l+1)})^\top$ rather than $\matr{W}^{(l+1)}$? Argue from shapes: what
    are the dimensions of $\delta^{(l)}$, $\delta^{(l+1)}$, and $\matr{W}^{(l+1)}$? Then
    check that the batched form
@@ -1004,12 +1012,12 @@ early layers, what attenuates it, and what its scale is.
 7. **(Pencil.)** Let $\hat{\vect{y}} = \operatorname{softmax}(\vect{o})$ for logits
    $\vect{o} \in \mathbb{R}^K$. Show that its Jacobian is
    $\partial\hat{\vect{y}}/\partial\vect{o} = \operatorname{diag}(\hat{\vect{y}}) -
-   \hat{\vect{y}}\hat{\vect{y}}^\top$, and that for any upstream sensitivity
-   $\vect{u} = \partial L/\partial\hat{\vect{y}}$ the vector–Jacobian product is
-   $\partial L/\partial\vect{o} = \hat{\vect{y}} \odot \bigl(\vect{u} -
+   \hat{\vect{y}}\hat{\vect{y}}^\top$, and that for any upstream derivative
+   $\vect{u} = \partial \loss/\partial\hat{\vect{y}}$ the vector–Jacobian product is
+   $\partial \loss/\partial\vect{o} = \hat{\vect{y}} \odot \bigl(\vect{u} -
    \langle\vect{u}, \hat{\vect{y}}\rangle\,\mathbf{1}\bigr)$, which costs $O(K)$
    where forming the Jacobian costs $O(K^2)$. Choose $\vect{u}$ for
-   $L = -\log \hat{y}_c$ and recover @eq-ce-grad; choose it for squared error against a
+   $\loss = -\log \hat{y}_c$ and recover @eq-ce-grad. Choose it for squared error against a
    one-hot target and recover the row formula in Exercise 4
    of @sec-02-logistic-softmax.
    **(Code.)** Implement `softmax_vjp(y_hat, u)`, check it against

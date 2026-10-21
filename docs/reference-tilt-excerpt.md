@@ -84,7 +84,7 @@ Lecture paths below are relative to
 
 | Source | SHA-256 |
 |---|---|
-| `chapters/part5/18-alignment.qmd` | `cb4ee9690e12f6f32fa9f5fa16ca67eed0cd4f901a6ff099f8744818f42674c0` |
+| `chapters/part5/18-alignment.qmd` | `264b1e07fd72f83bf28792f811ae3dd4620785d3fc3633bac6132f79136d6cc6` |
 | `6050-Ch18/lecture.jsx` | `b6249e488ae52885878af68311b57b07e064a8e1d1ff97a333e1d94c62ebcd14` |
 | `6050-Ch18/STORYBOARD.md` | `ab55d9c8a65e83d285dc6c9a5b68ddfad53022d04fa9901eaf9aca7fc67e11c2` |
 | `6050-Ch18/ch18-data.js` | `6d2e39ae7ca6cad71629827bc7c951dfc6f1289f88a1da93aa24e55028e06b16` |

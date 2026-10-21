@@ -12,42 +12,48 @@
 @sec-11-encoder-decoder ended with a machine that could translate, and a remaining
 architectural limitation: every source fact had to cross a single fixed-size bridge
 before the decoder wrote its first token. The encoder had computed a state at every
-source position, but the decoder received only the last one.
+source position, but the decoder received only the last one. What if every encoder
+state were kept instead?
 
-What if every encoder state were kept instead? The retained states form a **memory
-bank**. At each step, the decoder forms a query, compares it with every stored state,
-and retrieves a weighted mixture of the relevant content. Each entry is still
-compressed, but the last one is no longer the only path for source information. This
-chapter asks how a query should read that bank: with a smooth, similarity-weighted
-rule, not a nearest-neighbor rule whose selected index changes discretely as the query
-moves.
+The retained states form a **memory bank**. At each step, the decoder forms a query,
+compares it with every stored state, and retrieves a weighted mixture of the relevant
+content. Each entry is still compressed, but the last one is no longer the only path for
+source information. This chapter asks how a query should read that bank: with a smooth,
+similarity-weighted rule, not a nearest-neighbor rule whose selected index changes
+discretely as the query moves.
 
-We start with three observed pairs, calling each location $x_i$ a key $k_i$ and its
-response $y_i$ a value $v_i$:
+We start with three observed pairs. Each stored location is a **key** $k_i$, and the
+response stored with it is a **value** $v_i$:
 
-| observation | location $x_i$ | response $y_i$ |
+| observation | key $k_i$ | value $v_i$ |
 |---:|---:|---:|
 | 1 | 1 | 1.5 |
 | 2 | 3 | 2.8 |
 | 3 | 5 | 1.8 |
 
-For a query $q=3.5$, comparing $q$ to each key using a Gaussian kernel (bandwidth
-$h=0.6$) yields the weights $(0.0002, 0.9413, 0.0585)$ plotted in @fig-kernel-lookup.
-The weighted mixture of the values is $2.7412$. The second pair dominates because its
-key ($k_2=3$) lies closest to the query, while the distant first key receives
-negligible weight. The specified metric and bandwidth determined the weights without a
-learned similarity function.
+For a query $q=3.5$, @fig-kernel-lookup works through one read of this bank. Each
+key's distance from the query, $|q-k_i|$, becomes an **affinity**: a number between 0
+and 1 that equals 1 at distance zero and falls off over a scale set by a **bandwidth**
+$h$. The Gaussian rule, $\exp(-|q-k_i|^2/2h^2)$, is a bell centered on the query, and
+a key's affinity is the height of the bell where the key stands. Dividing the three
+affinities by their sum gives **weights** $\alpha_i$ that are nonnegative and sum to
+one, $(0.0002, 0.9413, 0.0585)$ at $h=0.6$, and the weighted mixture of the values,
+$\sum_i\alpha_i v_i=2.7412$, is the prediction. The second pair dominates because its
+key, $k_2=3$, is nearest the query. The first key stands far out in the bell's tail
+and receives negligible weight. The metric and the bandwidth were specified in
+advance. Nothing about the similarity was learned.
 
 ## Linear regression as a weighted combination of targets {#chapter-1-already-mixed-old-answers}
 
-The linear regression of @sec-01-linear-regression already predicts by mixing the
-observed targets. Through its hat matrix, every fitted value is a weighted combination
-of the training targets, and the same algebra gives the weights at a new query.
+Linear regression, the model of @sec-01-linear-regression, already predicts by mixing
+the observed targets: its hat matrix writes every fitted value as a weighted combination
+of the training targets, with coefficients that depend on the inputs alone, and the
+same algebra gives the coefficients at a new query.
 
 Let the augmented design matrix $\widetilde{\matr{X}}\in\mathbb{R}^{n\times(d+1)}$
 include the intercept column, let $\widetilde{\vect{q}}\in\mathbb{R}^{d+1}$ be a new
 query with its leading 1, and let $\vect{y}\in\mathbb{R}^{n}$ contain the observed
-targets. Assuming full column rank,
+targets, this chapter's values. Assuming $\widetilde{\matr{X}}$ has full column rank,
 
 $$
 \hat{\vect{\beta}}
@@ -73,22 +79,24 @@ $(\widetilde{\matr{X}}^\top\widetilde{\matr{X}})^{-1}$.
 ::: {.callout-warning}
 ## Trap: weighted combination does not mean weighted average
 
-The prediction $\hat f(\vect{q})$ of @sec-01-linear-regression is a weighted combination
-of the training targets. With an intercept, the weights sum to one because OLS reproduces a
-constant response. But **weighted combination** is not the same as **weighted
-average**. The entries of $\vect{\lambda}$ may be negative.
+The OLS prediction $\hat f(\vect{q})$ is a weighted combination of the training targets,
+with the coefficients $\vect{\lambda}(\vect{q})$ of @eq-ols-target-weights as the
+weights. They are coefficients on the targets, not distances, similarities or regression
+parameters, and nothing forces them to be positive. With an intercept, they sum to one
+because OLS reproduces a constant response. But **weighted combination** is not the
+same as **weighted average**.
 
-For keys $(-2,-1,0,1,2)$ and query $q=1.5$, the OLS weights are
+For keys $(-2,-1,0,1,2)$ and query $q=1.5$, the coefficients are
 
 $$
-(-0.10, 0.05, 0.20, 0.35, 0.50).
+\vect{\lambda}(q)=(-0.10, 0.05, 0.20, 0.35, 0.50).
 $$
 
 They sum to one, yet the first is negative. If the targets are $(1,0,0,0,0)$, OLS
 predicts $-0.10$, outside the observed range $[0,1]$. Linear regression is allowed to
 leave the observed targets' convex hull even when the query lies inside the observed
-key range. For local smoothing, we impose three conditions: nearer evidence receives
-more weight, every weight is nonnegative, and the weights sum to one.
+key range. The kernel rule of @eq-nadaraya-watson keeps the two properties that OLS
+lacks: nearer evidence receives more weight, and every weight is nonnegative.
 :::
 
 ## Similarity weights and local prediction {#the-magnifying-glass-becomes-a-kernel}
@@ -104,25 +112,32 @@ $$
 \qquad h>0.
 $$ {#eq-gaussian-kernel}
 
-The bandwidth $h$ sets the effective scale of the kernel. Smaller values restrict
-influence to nearby keys, while larger values average over a broader neighborhood.
+This kernel is also called the radial basis function (RBF) kernel: it depends on
+$\vect{q}$ and $\vect{k}$ only through their distance. The bandwidth $h$ sets the
+effective scale of the kernel. Smaller values restrict influence to nearby keys, while
+larger values average over a broader neighborhood.
 
-Given observed pairs $(\vect{x}_i,y_i)$, normalize the affinities,
+Call each stored location a **key** $\vect{k}_i$ and the response stored with it a
+**value** $\vect{v}_i$. In the opening example both are scalars, and in general both
+may be vectors. Given the stored pairs $(\vect{k}_i,\vect{v}_i)$, normalize the
+affinities,
 
 $$
 \alpha_i(\vect{q})
-= \frac{\kappa_h(\vect{q},\vect{x}_i)}
-       {\sum_{j=1}^{n}\kappa_h(\vect{q},\vect{x}_j)},
+= \frac{\kappa_h(\vect{q},\vect{k}_i)}
+       {\sum_{j=1}^{n}\kappa_h(\vect{q},\vect{k}_j)},
 \qquad
-\hat f_h(\vect{q})=\sum_{i=1}^{n}\alpha_i(\vect{q})y_i.
+\hat f_h(\vect{q})=\sum_{i=1}^{n}\alpha_i(\vect{q})\,\vect{v}_i.
 $$ {#eq-nadaraya-watson}
 
 This is the **Nadaraya--Watson estimator**, proposed independently by
 [Nadaraya](https://doi.org/10.1137/1109020) and
 [Watson](https://www.jstor.org/stable/25049340) in 1964. For the strictly positive Gaussian kernel, each $\alpha_i>0$ and
 $\sum_i\alpha_i=1$. Scalar predictions remain between the smallest and largest
-observed values. Unlike OLS, this operator smooths locally while keeping every
-prediction inside the observed values' convex hull.
+observed values: the operator smooths locally and keeps every prediction inside the
+observed values' convex hull, which the previous section showed linear regression does
+not. On the three pairs of the opening at $h=0.6$, @eq-nadaraya-watson is the
+arithmetic of @fig-kernel-lookup.
 
 As $h\to0^+$, the weight concentrates on the nearest key, approaching the
 nearest-neighbor rule of the chapter opening, with exact ties splitting the mass. At
@@ -130,11 +145,8 @@ $h=0$ the formula is undefined. As $h\to\infty$, squared distances become neglig
 relative to $2h^2$, affinities tend to 1, and weights approach $1/n$, so predictions
 approach the mean of the observed responses.
 
-In general, the stored input locations are the **keys**
-$\vect{k}_i$ and their associated responses the **values**
-$\vect{v}_i$, which may be vectors. For a query
-$\vect{q}$, consider fitting one constant vector to these
-values, weighted by their keys' similarity to the query.
+For a query $\vect{q}$, consider fitting one constant vector to the stored values,
+weighted by their keys' similarity to the query.
 
 <!-- NOVEL: needs sign-off - local-fit precision audit. -->
 ::: {.callout-warning}
@@ -254,8 +266,8 @@ axes[1].set(ylabel="normalized weight", ylim=(0, 1.05),
             title="Similarity decides the mix")
 plt.show()
 ```
-The same code compares the signed OLS weights with the nonnegative, normalized kernel
-weights:
+The same code compares the signed OLS coefficients with the nonnegative, normalized
+kernel weights:
 
 :::: {.plan-code}
 ::: {.plan}
@@ -291,10 +303,15 @@ print(f"witness predictions: OLS {ols_weights @ witness_values[:, 0]:.4f}, "
 ::: {.callout-note}
 ## Which kernels make a convex average?
 
-The term *kernel* also denotes convolution filters and inner-product maps.
-@eq-nadaraya-watson forms a convex average when its numerators are nonnegative and its
-denominator is positive: a Gaussian yields positive weights, while a compact-support
-kernel may yield zeros.
+Any kernel with nonnegative values makes @eq-nadaraya-watson a convex average,
+provided at least one affinity at the query is positive so that the denominator is not
+zero. The Gaussian is positive everywhere. A kernel that is zero beyond a cut-off
+distance (the triangular and Epanechnikov kernels of classical smoothing) gives far keys
+weight exactly zero and is undefined at a query beyond every cut-off. Positive
+semidefiniteness, the property kernel methods require of their inner-product kernels,
+is a different condition and is not needed here. The word kernel also names the
+convolution filters of @sec-07-filters-convolution. @sec-13-attention returns to the
+distinction.
 :::
 
 ## Softmax normalization of similarity scores {#chapter-2s-scores-to-weights-machine}
@@ -310,31 +327,31 @@ $$
   \log\kappa_h(\vect{q},\vect{k}_i)\right).
 $$ {#eq-log-kernel-softmax}
 
-The **score** is the log-kernel. With the Gaussian,
+The **score** $s_i$ is the log-kernel, $\kappa_h(\vect{q},\vect{k}_i)=\exp(s_i)$.
+With the Gaussian,
 
 $$
-a_i(\vect{q})
-= -\frac{\norm{\vect{q}-\vect{k}_i}^2}{2h^2}.
+s_i(\vect{q})
+= -\frac{\norm{\vect{q}-\vect{k}_i}^2}{2h^2},
 $$
 
-This also makes the temperature connection exact. If the unscaled score is
-$s_i=-\norm{\vect{q}-\vect{k}_i}^2$, then
+a scaled negative squared distance: the score is not Gaussian, its exponential is.
+Written this way, the bandwidth is a softmax temperature,
 
 $$
-\vect{\alpha}(\vect{q})
-= \operatorname{softmax}\!\left(\frac{\vect{s}}{\tau}\right),
-\qquad \tau=2h^2.
+\alpha_i(\vect{q})
+= \operatorname{softmax}_i\!\left(-\frac{\norm{\vect{q}-\vect{k}_i}^2}{\tau}\right),
+\qquad \tau=2h^2,
 $$ {#eq-bandwidth-temperature}
 
-Smaller bandwidths correspond to lower temperatures and sharper lookup, whereas larger
-bandwidths produce higher temperatures and diffuse averaging. The factor $2$ belongs to
-this score convention. Defining $s_i=-\norm{\vect{q}-\vect{k}_i}^2/2$ would yield
-temperature $h^2$ instead.
+so the narrowing and broadening of the kernel in the previous section is the sharpening
+and flattening of a softmax. The 2 in $\tau$ belongs to the convention that the raw
+score is the full squared distance. Halving the raw score gives $\tau=h^2$.
 
-The implementation never computes $\kappa_h$ before taking its logarithm. It computes
-the log-score, subtracts the largest score in each row, and only then exponentiates.
-That is the numerically stable softmax of @sec-02-logistic-softmax, applied to kernel
-scores.
+The implementation works with scores throughout: it computes $s_i$, subtracts the
+largest score in each row, and only then exponentiates, so $\kappa_h$ itself is never
+formed. That is the numerically stable softmax of @sec-02-logistic-softmax, applied to
+kernel scores.
 
 ## Bandwidth: bias versus variance {#bandwidth-the-honesty-gate}
 
@@ -343,10 +360,10 @@ bandwidth smooths away genuine curvature and introduces approximation bias.
 @sec-01-linear-regression called this bias versus variance. Here $h$ controls the
 trade-off.
 
-Because this is a synthetic laboratory, we can do something ordinary observed data
-does not permit:
-hold 60 key locations fixed, redraw the response noise 1,000 times, yielding 1,000
-noisy worlds that share the keys, and compare every prediction with the known function
+Since we generate the data ourselves, we can do what observed data never permits. The
+keys are 60 fixed locations $x_i$. The values are noisy responses $y_i$, redrawn 1,000
+times to give 1,000 noisy worlds that share the keys. Every prediction is compared with
+the known, noiseless function
 
 $$
 f(x)=\sin(1.5x)+0.3\cos(4x),
@@ -355,19 +372,20 @@ f(x)=\sin(1.5x)+0.3\cos(4x),
 $$
 
 We generate the key locations as seeded uniform draws on $[-3,3]$ and evaluate the
-predictions at 241 query locations on $[-2.9,2.9]$, none of which shares an exact
-coordinate with a key. Holding the design fixed lets us
-separate squared bias from variance over independent noise draws. The population
-identity
+predictions at 241 fixed query locations on $[-2.9,2.9]$, none of which coincides with
+a key, so that every prediction is a read between stored points rather than a copy of
+one stored value. Holding the design fixed lets us separate squared bias from variance
+over independent noise draws. The population identity
 
 $$
 \operatorname{MSE}=\operatorname{bias}^2+\operatorname{variance}
 $$
 
-has no irreducible-noise term because evaluation is against noiseless $f$. Predicting
-a fresh noisy response would add the irreducible variance $0.25^2$ to every MSE that the
-sweep prints. In our finite 1,000-world ensemble, the analogous empirical decomposition
-holds up to floating-point roundoff.
+has no irreducible-noise term because the comparison target is $f(q)$, the noiseless
+function value at the query, not a fresh noisy response. Predicting a fresh noisy
+response would add the irreducible variance $0.25^2$ to every MSE that the sweep
+prints. In our finite 1,000-world ensemble, the analogous empirical decomposition holds
+up to floating-point roundoff.
 
 The weights depend only on query--key geometry and bandwidth, so kernel regression is a
 linear smoother: for each bandwidth, `gaussian_attention` forms one $241\times60$
@@ -566,9 +584,8 @@ plt.show()
 ```
 Each query row is a probability distribution over the keys, concentrated near the
 query. Where keys are dense, weight is divided among several neighbors. Where keys are
-sparse, one or two keys carry most of a row's mass. Bandwidth $h$ acts as a temperature
-dial: changing $h$ changes the width of the band as temperature changes the spread of a
-softmax distribution.
+sparse, one or two keys carry most of a row's mass. The width of the band is the
+temperature $\tau=2h^2$ of @eq-bandwidth-temperature made visible.
 
 There is one numerical trap. A Gaussian is mathematically positive everywhere, but a
 distant query and small bandwidth can make every directly exponentiated kernel value
@@ -630,15 +647,9 @@ encoder states from @sec-11-encoder-decoder, and the table below lists them:
 | **weights** | normalized fixed similarities $\alpha_i(\vect{q})$ | how much each slot contributes |
 | **output** | $\sum_i\alpha_i\vect{v}_i$ | a query-specific context vector |
 
-The opening example fills every kernel-regression role. The query is the location
-$q=3.5$. The keys are the stored locations 1, 3, and 5, and the values are their
-responses 1.5, 2.8, and 1.8. Gaussian similarity at $h=0.6$, normalized, gives the
-weights $(0.0002, 0.9413, 0.0585)$, and the prediction is the mixture $2.7412$. The
-attentive date model of @sec-13-attention puts the sequence-memory roles to work on the
-date task of @sec-11-encoder-decoder. When the decoder is about to write the year, its
-state supplies the query, and the encoder states supply the keys to match and the values
-to read. @sec-13-attention measures how strongly the weights concentrate on the encoder
-states indexed by the four year characters at the end of the source.
+The opening example fills every kernel-regression role: the query is the location
+$q=3.5$, the keys are the stored locations, the values their responses, the weights the
+normalized Gaussian affinities of @fig-kernel-lookup, and the output their mixture.
 
 Queries specify what is needed, keys provide what to compare against, and values provide
 what to retrieve. In the simplest sequence model, the same encoder state can serve as
@@ -674,8 +685,11 @@ similarity rule is fixed in the same way:
 
 The query, keys, values, scores, row-wise softmax, and weighted pooling establish the
 full dataflow of attention. The compatibility function is the next component to make
-learnable. @sec-13-attention learns the score, then returns to the date task of
-@sec-11-encoder-decoder to measure where the decoder's weights concentrate.
+learnable. @sec-13-attention learns the score and puts the sequence-memory roles of the
+table above to work on the date task of @sec-11-encoder-decoder: when the decoder is
+about to write the year, its state supplies the query and the encoder states supply the
+keys and the values, and the chapter measures how strongly the weights concentrate on
+the four year characters at the end of the source.
 :::
 
 ::: {.callout-note}
@@ -691,14 +705,14 @@ Close the book for one minute and reconstruct the weighted prediction.
 ## Okay, so: attention is normalized memory mixing
 
 1. **The linear prediction of @sec-01-linear-regression already mixed training targets.** OLS gives
-   $\hat f(\vect{q})=\vect{\lambda}(\vect{q})^\top\vect{y}$, but its weights may
-   be signed, so the prediction can leave the targets' convex hull.
-2. **Nadaraya--Watson turns locality into a convex mixture.** A nonnegative kernel
-   scores query--key similarity, normalization makes the weights sum to one, and the
-   weighted values form the prediction.
-3. **Bandwidth determines the softmax temperature.** For Gaussian distance scores,
-   temperature $\tau=2h^2$ balances variance against bias. In the fixed-design sweep
-   over the 1,000 noisy worlds, the lowest MSE on the grid was $0.0236$, at $h=0.18$.
+   $\hat f(\vect{q})=\vect{\lambda}(\vect{q})^\top\vect{y}$, but its coefficients on
+   the targets may be signed, so the prediction can leave the targets' convex hull.
+2. **Nadaraya--Watson is a convex mixture, and a local one.** Nonnegative affinities
+   and normalization make the read a convex mixture. A kernel that decays with distance
+   makes it local.
+3. **Bandwidth and temperature are one dial.** For Gaussian distance scores
+   $\tau=2h^2$, and it balances variance against bias: in the fixed-design sweep over
+   the 1,000 noisy worlds, the lowest MSE on the grid was $0.0236$, at $h=0.18$.
 4. **The softmax of @sec-02-logistic-softmax is the normalization.** Positive-kernel weights equal
    `softmax(log kernel)`. Computing log-scores directly and shifting each row avoids
    the distant-query `0/0` trap.
@@ -749,11 +763,12 @@ rule, then comparing the information retained and the computation required.
 
 1. **(Pencil.)** Prove that @eq-nadaraya-watson is a convex combination when
    $\kappa_h\ge0$ and its denominator is positive. Then prove that a scalar prediction
-   lies in $[\min_i v_i,\max_i v_i]$. Which step fails for the OLS weights in
+   lies in $[\min_i v_i,\max_i v_i]$. Which step fails for the OLS coefficients in
    @eq-ols-target-weights?
-2. **(Pencil.)** For keys $(-2,-1,0,1,2)$, derive the five OLS target weights at
+2. **(Pencil.)** For keys $(-2,-1,0,1,2)$, derive the five OLS target coefficients at
    $q=1.5$ without using code. Verify that they sum to one, identify the negative
-   weight, and construct a second target vector for which OLS leaves the target range.
+   coefficient, and construct a second target vector for which OLS leaves the target
+   range.
 3. **(Code.)** Split a fresh noisy sample from this chapter's function into training,
    validation, and sealed test sets. Select $h$ on validation data, report the test MSE
    once, and compare your selected curve with the synthetic-truth grid minimum above.
@@ -767,7 +782,7 @@ rule, then comparing the information retained and the computation required.
    each feature using training-set statistics. What does this reveal about the metric
    hidden inside a fixed kernel?
 6. **(Pencil.)** Differentiate @eq-local-constant-fit with respect to the vector
-   $\vect{c}$. Solve the stationarity equation, then substitute
+   $\vect{c}$, set the gradient to zero and solve for $\vect{c}$, then substitute
    $\kappa(\vect{q},\vect{k}_i)=\exp(\vect{q}^{\top}\vect{k}_i/\sqrt d)$. Why would
    the stronger claim that an unrestricted function fitted with no regularizer must
    average be false?

@@ -60,7 +60,7 @@ test('Greedy tree: fixture is shared with the static chapter, not the trained da
   const chapter=chapterSource(NAME);
   for(const literal of scene.fixture.literals) assert(chapter.includes(literal),literal);
   assert.match(chapter,/tbl-greedy-tree/);
-  assert.match(chapter,/specified toy decoder, not a measured model/);
+  assert.match(chapter,/specified toy, and no model was\s+trained for it/);
   assert.match(chapter,/finite beam does not guarantee/);
   assert.match(chapter,/### Search exposes alternatives/);
 });

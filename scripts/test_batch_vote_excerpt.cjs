@@ -162,7 +162,7 @@ test('batch vote: the chapter owns both laws; the population is a declared toy p
   assert.match(chapter, /gradient standard deviation scales like \$1\/\\sqrt\{B\}\$/);
   assert.match(chapter, /For a uniform subset without\nreplacement, multiply by/);
   assert.match(chapter, /finite-population\s+correction \$\(n-B\)\/\(n-1\)\$/);
-  assert.match(chapter, /a minibatch average is an unbiased\nestimator of the full objective/);
+  assert.match(chapter, /batch average of the \$\\ell_i\$ has the same expected value as the full average, and so does\nits gradient/);
   assert.match(chapter, /\{#sec-04-estimator-cases\}/);
   // The chapter's own gradient convention, which the toy problem reuses.
   assert.match(chapter, /return 2 \* A\[idx\]\.T @ residual \/ len\(residual\)/);

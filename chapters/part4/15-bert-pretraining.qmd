@@ -173,21 +173,15 @@ sets four of its works side by side.
 ::: {#tbl-2018-convergence}
 | Work | Pretraining signal | What moved downstream |
 |---|---|---|
-| ELMo | Forward and backward LSTM language models | Fixed contextual features |
-| ULMFiT | Causal language modeling | The entire adapted language model |
-| GPT | Causal Transformer language modeling | A pretrained Transformer plus task head |
+| [ELMo](https://aclanthology.org/N18-1202/) | Forward and backward LSTM language models | Fixed contextual features |
+| [ULMFiT](https://aclanthology.org/P18-1031/) | Causal language modeling | The entire adapted language model |
+| [GPT](https://cdn.openai.com/research-covers/language-unsupervised/language_understanding_paper.pdf) | Causal Transformer language modeling | A pretrained Transformer plus task head |
 | BERT | Masked tokens in full context, plus next sentence prediction | A deeply bidirectional Transformer encoder plus task head |
 
 Four 2018 works, with the pretraining signal of each and what moved downstream.
 :::
 
-[ELMo](https://aclanthology.org/N18-1202/) demonstrated that a word's useful vector
-should depend on its sentence. [ULMFiT](https://aclanthology.org/P18-1031/) supplied
-a robust recipe for adapting a pretrained language model rather than freezing it.
-[GPT](https://cdn.openai.com/research-covers/language-unsupervised/language_understanding_paper.pdf)
-paired Transformer pretraining with supervised fine-tuning.
-BERT pretrained every encoder layer with joint left-and-right
-context. The workflow mattered as much as the architecture: learn broadly from
+The workflow mattered as much as the architecture: learn broadly from
 raw text first, then spend scarce labels on adaptation.
 
 ## The masked-language-model objective
@@ -195,15 +189,15 @@ raw text first, then spend scarce labels on adaptation.
 Let a tokenized sequence be
 
 $$
-x=(x_1,\ldots,x_T),\qquad x_t\in\{1,\ldots,|V|\},
+x=(x_1,\ldots,x_T),\qquad x_t\in\{1,\ldots,V\},
 $$
 
-where $T$ is the sequence length and $V$ is the vocabulary. Choose a random set $M$ of
-eligible positions, then apply a corruption operator $c$ to obtain
-$\widetilde{x}=c(x,M)$. A bidirectional encoder with parameters $\theta$ produces
+where $T$ is the sequence length and $V$ is the vocabulary size. Choose a random set
+$\mathcal{S}$ of eligible positions, then apply a corruption operator $c$ to obtain
+$\widetilde{x}=c(x,\mathcal{S})$. A bidirectional encoder with parameters $\theta$ produces
 
 $$
-H=f_\theta(\widetilde{x})\in\mathbb{R}^{T\times d}.
+\matr{H}=f_\theta(\widetilde{x})\in\mathbb{R}^{T\times d}.
 $$
 
 An output head maps each selected hidden state to vocabulary logits. The MLM loss
@@ -212,17 +206,17 @@ is
 $$
 \mathcal{L}_{\mathrm{MLM}}(\theta)
 =-
-\frac{1}{|M|}
-\sum_{i\in M}
-\log p_\theta\!\left(x_i\mid \widetilde{x}\right).
+\frac{1}{|\mathcal{S}|}
+\sum_{t\in \mathcal{S}}
+\log p_\theta\!\left(x_t\mid \widetilde{x}\right).
 $$
 
 Every term conditions on the same jointly corrupted sequence $\widetilde{x}$, not on its own
-clean sequence with only $x_i$ removed. For a batch, let $M$ denote the selected
+clean sequence with only $x_t$ removed. For a batch, let $\mathcal{S}$ denote the selected
 example–position pairs across all sequences. Token IDs have shape $(B,T)$, hidden states
-$(B,T,d)$, and dense vocabulary logits $(B,T,|V|)$. Boolean selection gathers $|M|$ rows,
-so cross-entropy receives a logit matrix of shape $(|M|, |V|)$ and a target vector of $|M|$
-token indices. Unselected positions can affect
+$(B,T,d)$, and dense vocabulary logits $(B,T,V)$. Boolean selection gathers $|\mathcal{S}|$
+rows, so cross-entropy receives a logit matrix of shape $(|\mathcal{S}|, V)$ and a target
+vector of $|\mathcal{S}|$ token indices. Unselected positions can affect
 the representations but contribute no direct MLM loss.
 
 ### Fifteen percent, then 80/10/10
@@ -381,9 +375,7 @@ plt.show()
 Original BERT pre-generated several masked versions of its training examples;
 [RoBERTa](https://arxiv.org/abs/1907.11692) later redrew masks as examples were presented. Our controlled experiment uses the
 latter *dynamic corruption* choice: the same sentence presents different prediction targets
-on later passes. To keep the corruption draws separate from model initialization, the
-experiment uses a dedicated seeded generator. Reproducing a run requires controlling the
-corruption stream as well as the initial weights.
+on later passes.
 
 ::: {.callout-tip}
 ## Audit the selector before the loss
@@ -537,7 +529,7 @@ its final hidden state feeds a sequence-level head. In a bidirectional encoder, 
 can read `[CLS]` and `[CLS]` reads every token, in every layer. For $K$ classes,
 
 $$
-\ell=W_{\mathrm{cls}}h_{\mathrm{CLS}}+b,
+\vect{z}=W_{\mathrm{cls}}h_{\mathrm{CLS}}+\vect{b},
 \qquad W_{\mathrm{cls}}\in\mathbb{R}^{K\times d}.
 $$
 
@@ -637,16 +629,15 @@ not performance at equal total compute.
 ## A controlled transfer-learning experiment {#a-controlled-transfer-lab}
 
 In @sec-09-modern-cnns-transfer, we listed three conditions that bear on whether
-transfer helps: scarce target labels, a feature-hungry target task, and pretraining
-data that plausibly covers the target's features at a matched scale. Testing these
-conditions requires separate controls. A first pilot asked a tiny encoder to tell true continuations of passages in
+transfer helps. A first pilot asked a tiny encoder to tell true continuations of passages in
 this book from segments spliced in from distant passages. The five-seed MLM gain was small, faded as labels increased, and
 lost to a weighted lexical-overlap baseline. We rejected that task as
 the chapter's affirmative experiment: this pilot did not isolate what pretraining
 contributed.
 
-The replacement experiment is synthetic: its generator controls which strings appear
-during pretraining while removing spelling, frequency, and downstream-context shortcuts.
+The replacement experiment is synthetic, and its generator controls each of the three
+conditions: it decides which strings appear during pretraining and removes spelling,
+frequency, and downstream-context shortcuts.
 
 <!-- NOVEL: needs sign-off - synthetic distributional-transfer experiment. -->
 
@@ -1142,10 +1133,10 @@ control token's context or identity to the encoder input.
 
 We save the encoder's initial weights, then pretrain it with MLM. The scratch arm starts
 from the saved initialization, and the pretrained arm starts from the weights after MLM.
-Both arms receive the same labeled word types, identical classifier-head
-tensors, the same number of full-batch updates, and the same learning rates. We give
-the encoder 600 MLM updates and each downstream arm 160 full-batch updates. All
-encoder weights move in both arms. We run the study once for each of five seeds, and
+Both arms share everything downstream, as
+[the fine-tuning section](#fine-tuning-means-the-backbone-moves) requires, and all encoder
+weights move in both. We give the encoder 600 MLM updates and each downstream arm 160
+full-batch updates. We run the study once for each of five seeds, and
 each seed repeats initialization, corruption, MLM, label selection, and
 fine-tuning, not merely the last classifier fit.
 
@@ -1370,10 +1361,9 @@ for count in LABEL_COUNTS:
 ::::
 Across 1,032,096 eligible positions, the five runs select 155,019 (15.020%). The
 realized branches are 80.04% mask, 9.98% random, and 9.99% unchanged. Each update
-averages cross-entropy over the selected positions in the jointly corrupted batch, and its
-expectation need not equal a corpus-wide token-weighted mean. The number of selected
-positions varies from batch to batch, so this objective assigns equal weight to every
-minibatch, and a selected token in a batch with few selections has more influence on the
+computes $\mathcal{L}_{\mathrm{MLM}}$ on its own batch, and the number of selected positions
+varies from batch to batch. The training objective assigns equal weight to every
+minibatch, so a selected token in a batch with few selections has more influence on the
 update. A token-weighted loss would instead weight every selected token equally across the
 corpus. The minibatch size (64 sentences) is therefore part of the objective's definition,
 matching Case 3 of @sec-04-estimator-cases. Both scratch
@@ -1537,10 +1527,10 @@ results do not form a learning curve on a fixed evaluation set.
 The representation diagnostic agrees with the task result. In the run evaluated for
 geometry, mean centered cosine similarity starts at $-0.0347$ within a family and $-0.0160$
 between families, showing no initial separation. After MLM, it reaches $0.5323$ within and
-$-0.5517$ between. *Centered cosine* first subtracts the mean representation,
-then unit-normalizes each vector and takes a dot product: a positive value means two
-centered vectors point in similar directions, a negative value that they point in
-opposing directions. Pretraining
+$-0.5517$ between (@fig-pretraining-pays, right). *Centered cosine* first subtracts the
+mean representation, then unit-normalizes each vector and takes a dot product: a positive
+value means two centered vectors point in similar directions, a negative value that they
+point in opposing directions. Pretraining
 has organized neutral-context token states around
 the latent source regularity, and a few labels recover that organization for
 covered types excluded from the downstream labeled set.
@@ -1571,7 +1561,8 @@ representations around that regularity.**
 ## Three pretraining families
 
 Pretraining is a regime, not an architecture. The visibility rule and pretraining
-objective determine what a model can learn, and how it will later be used.
+objective determine what a model can learn, and how it will later be used
+(@tbl-pretraining-families).
 
 | Family | Visibility during pretraining | Objective | Characteristic use |
 |---|---|---|---|
@@ -1781,9 +1772,9 @@ Close the book for one minute and reconstruct masked-language-model pretraining.
    policy, how many positions are expected to be selected, replaced by `[MASK]`,
    replaced by a random token, and left unchanged? How many contribute direct MLM
    loss? Explain why 12% is not the supervision rate.
-3. **(Code.)** For token IDs $(B,T)$, width $d$, and vocabulary size $|V|$, add
-   assertions for hidden states $(B,T,d)$, dense logits $(B,T,|V|)$, selected
-   logits of shape $(|M|,|V|)$, and a target vector of length $|M|$. Assert that `[PAD]`, `[CLS]`,
+3. **(Code.)** For token IDs $(B,T)$, width $d$, and vocabulary size $V$, add
+   assertions for hidden states $(B,T,d)$, dense logits $(B,T,V)$, selected
+   logits of shape $(|\mathcal{S}|,V)$, and a target vector of length $|\mathcal{S}|$. Assert that `[PAD]`, `[CLS]`,
    and `[SEP]` are never selected. Show numerically that selected-only
    cross-entropy matches dense cross-entropy when unselected targets use
    `ignore_index`.

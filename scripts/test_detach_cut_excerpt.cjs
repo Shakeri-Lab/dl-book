@@ -406,6 +406,6 @@ test('integration: the excerpt is HTML-only and closes the finite-horizon subsec
   assert(chapter.indexOf('### Training with a finite horizon') < at);
   assert(at < chapter.indexOf('## GRU: gating with one state {#gru-the-streamlined-cousin}'));
   // Directly after the paragraph that ends the fixed-window discussion.
-  const paragraph = 'neither creates gradients beyond the truncation\nhorizon.';
+  const paragraph = 'clipping handles spikes, and no gradient crosses the horizon.';
   assert.equal(chapter.slice(chapter.indexOf(paragraph) + paragraph.length, at).trim(), '');
 });

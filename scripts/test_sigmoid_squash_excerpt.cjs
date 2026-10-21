@@ -103,9 +103,9 @@ test('sigmoid squash: the chapter owns the curve; the plane behind it is a decla
   assert.equal(f.root.dataset.evidenceClass, 'schematic');
   for (const literal of scene.fixture.literals) assert(chapter.includes(literal), literal);
   // The three sentences this scene exists to make visible.
-  assert.match(chapter, /The sigmoid does not bend the boundary\. It assigns probabilities on either side\nof the boundary/);
+  assert.match(chapter, /The sigmoid leaves the boundary flat and assigns probabilities on either\nside of it\./);
   assert.match(chapter, /an unbounded score/);
-  assert.match(chapter, /Near the boundary \$\\\\hat p\$ stays close to \$\\\\tfrac\{1\}\{2\}\$; far from it, \$\\\\hat p\$ saturates toward 0 or 1/);
+  assert.match(chapter, /Near the line \$\\\\hat p\$ stays close to \$\\\\tfrac\{1\}\{2\}\$, and far from it \$\\\\hat p\$ saturates toward 0 or 1/);
   // The score axis is the chapter's own sweep, ends included.
   assert(chapter.includes(`o = torch.linspace(${source.range[0]}, ${source.range[1]}, ${source.samples})`));
   // The scene's own schematic contract: the crossing point really is on the boundary, the

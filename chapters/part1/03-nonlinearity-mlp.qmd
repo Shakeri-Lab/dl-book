@@ -31,14 +31,17 @@ outputs 1 exactly when its two binary inputs *differ*:
 | 1 | 0 | 1 |
 | 1 | 1 | 0 |
 
-Among the four points, no single line separates the 1s from the 0s. The positive
-examples sit on one diagonal and the negatives on the other, so every line puts at
-least one point on the wrong side. A linear classifier cannot represent this
-function, no matter how it is trained.
+Among the four points, no single line separates the 1s from the 0s. The two points labeled
+1, $(0,1)$ and $(1,0)$, sit on one diagonal of the unit square, and the two labeled 0,
+$(0,0)$ and $(1,1)$, sit on the other. Both diagonals pass through the center
+$(\tfrac12,\tfrac12)$ of the square. A line that puts both 1-points on one side also puts the
+midpoint between them, the center, on that side. A line that puts both 0-points on the other
+side puts the same center there too. No line can do both, so every line misclassifies at least
+one point. A linear classifier cannot represent this function, no matter how it is trained.
 
 With the four points weighted equally, each input on its own carries no evidence about
-the label: whether $x_1$ is 0 or 1, the label is 1 half the time, and the same holds
-for $x_2$, so the correlation between either input and the label is zero. The label
+the label. Whether $x_1$ is 0 or 1, the label is 1 half the time, and the same holds
+for $x_2$. The correlation between either input and the label is therefore zero. The label
 depends only on the *interaction* of the two inputs. Because a linear score
 $\vect{w}^\top\vect{x} + b$ sums separate per-coordinate contributions, it has no term
 that can capture that interaction.
@@ -47,20 +50,25 @@ that can capture that interaction.
 ## Historical context: the credit assignment problem
 
 In 1969, Marvin Minsky and Seymour Papert published *Perceptrons*, proving that
-single-layer models cannot solve XOR. The limitations of a single-layer perceptron do
-not imply the same limitations for multilayer networks, which could already represent
-XOR. The distinction here is between representing a function and finding parameters
-that implement it.
+single-layer models cannot solve XOR. Multilayer networks could already represent XOR. What
+was missing was a reliable way to find their parameters.
 
-Without target labels for intermediate layers, assigning each hidden weight its share
-of an output error is the **credit assignment problem**. @sec-05-backpropagation
-develops backpropagation, the gradient-computation method used to train the networks
-in this book.
+A hidden unit, one that sits between the input and the output, has no target of its own. When
+the output is wrong, it is unclear how much each hidden weight contributed to the error and how
+it should change. Assigning each hidden weight its share of the output error is the **credit
+assignment problem**. @sec-05-backpropagation develops backpropagation, which solves it by
+computing the gradient of the loss with respect to every weight.
 :::
 
-We confirm the linear model's limit empirically: we train a linear model and a small MLP on the four points. The framework loop
-previewed in @sec-01-linear-regression does the training; @sec-04-training-loss-sgd and
-@sec-05-backpropagation explain the optimizer and `backward()`.
+We confirm the linear model's limit empirically. We train two models on the four XOR points
+using the binary cross-entropy loss from @sec-02-logistic-softmax: a single linear layer,
+`nn.Linear(2, 1)`, and a two-layer network with a *hidden layer* of four units between two
+linear transformations. Each hidden unit applies the ReLU nonlinearity of the next section, and
+the layer is hidden because its outputs are neither inputs nor targets. Such a network is the
+simplest **multilayer perceptron** (MLP). We train both models by *full-batch* gradient descent,
+in which every step uses all four points. Both runs reuse the training loop structure
+introduced in @sec-01-linear-regression (we formally analyze the optimizer and `backward()`
+in @sec-04-training-loss-sgd and @sec-05-backpropagation).
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
@@ -113,12 +121,11 @@ print(f" MLP (4 hidden): accuracy {mlp_acc:.0%}")
 ```
 ::::
 The trained linear model converges to the cross-entropy optimum for this symmetric
-dataset: it assigns a probability of exactly 0.5 to all four points, yielding a loss
-of $\log 2 \approx 0.693$. The linear model's logits differ from zero only by
-floating-point rounding, so thresholding them at 0 can report an apparent accuracy
-of 25%, 50%, or 75%; that number is a numerical artifact, not evidence of learning.
-Geometrically, any flat linear boundary can separate at most three of the
-four points (75%), whereas the four-unit ReLU network achieves 100%.
+dataset: it assigns a probability of exactly 0.5 to all four points, for a loss
+of $\log 2 \approx 0.693$. Its logits differ from zero only by floating-point rounding, so
+thresholding them at 0 can report an apparent accuracy of 25%, 50%, or 75%. That
+number reflects rounding alone. At best, a line classifies three of the four points correctly
+(75%). The network with four hidden units classifies all four correctly.
 
 :::: {.plan-code}
 ::: {.plan}
@@ -169,9 +176,9 @@ its output.
 The artificial neuron takes its conceptual inspiration from biology: a cell integrates
 incoming signals and fires only when the accumulated stimulus crosses a threshold.
 Early models formalized this as a hard step function, but step functions have zero
-derivatives almost everywhere, which halts gradient descent. A computationally simple
-alternative keeps the threshold at zero but lets the response grow linearly above it,
-the **rectified linear unit** (ReLU):
+derivatives almost everywhere, which halts gradient descent. The **rectified linear unit**
+(ReLU) is a computationally simple alternative. It keeps the threshold at zero and lets the
+response grow linearly above it:
 
 $$
 \mathrm{ReLU}(z) = \max(0, z), \qquad
@@ -181,8 +188,8 @@ $$ {#eq-neuron}
 The affine combination $\vect{w}^\top\vect{x} + b$ is the stimulus. Recall
 from @sec-01-linear-regression that it measures the similarity between the input
 and the template $\vect{w}$, shifted by the bias $b$. Below threshold, the neuron
-remains silent with an output of zero; above threshold, it fires with an intensity
-directly proportional to the stimulus.
+remains silent with an output of zero. Above threshold, it fires with an intensity
+proportional to the stimulus.
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
@@ -209,7 +216,7 @@ surface = torch.relu(w[0] * x1 + w[1] * x2 + b)
 #| echo: false
 #| label: fig-neuron-hinge
 #| fig-alt: "The left panel shows a ReLU response that is zero for negative stimulus and linear for positive stimulus. The right panel shows a two-dimensional neuron's zero-response half-plane and rising positive contours, with the weight vector perpendicular to the threshold boundary."
-#| fig-cap: "One neuron, two views. Left: the ReLU activation introduces a hinge at zero: silent on the negative half-line, linearly responsive on the positive side. Right: in the input plane, this cutoff defines a threshold hyperplane perpendicular to $\\vect{w}$; activation increases linearly as inputs advance into the active half-space."
+#| fig-cap: "One neuron, two views. Left: the ReLU activation introduces a hinge at zero: silent on the negative half-line, linearly responsive on the positive side. Right: in the input plane, this cutoff defines a threshold hyperplane perpendicular to $\\vect{w}$. Activation increases linearly as inputs advance into the active half-space."
 fig, axes = plt.subplots(1, 2, figsize=(8.2, 3.35))
 axes[0].plot(z, response, color="#2F855A", lw=2.5)
 axes[0].axvspan(-3, 0, color="#B8B8A8", alpha=0.18)
@@ -231,18 +238,19 @@ plt.tight_layout(); plt.show()
 
 In one dimension, a single neuron turns a straight line into a **hinge**. In two
 dimensions, it divides the plane into a flat zero-floor and a rising ramp separated
-by a crease: an inactive half-space where the neuron stays silent, and an active
-half-space where it fires, with $\vect{w}$ standing perpendicular to the dividing
+by a crease. The neuron stays silent on the inactive half-space and fires on the active
+one, and $\vect{w}$ stands perpendicular to the dividing
 boundary. That threshold boundary is the elementary building block of everything that
 follows.
 
-At the sharp corner $z = 0$, the classical derivative is undefined. In theory,
-any slope in the subgradient interval $[0, 1]$ is valid. In practice, frameworks
-settle on a definitive convention by setting the derivative at zero to 0. Because
-exact zeros occur systematically with zero-initialized biases, sparse activations,
-and symmetric data, this choice determines whether a unit at exactly $z = 0$ receives
-any gradient. We analyze the gradient through this
-derivative in @sec-05-backpropagation; Exercise 3 inspects units that stay
+At the corner $z = 0$, the derivative is undefined, and any slope in the interval
+$[0, 1]$ is a valid subgradient. Frameworks settle the choice by convention, and PyTorch sets
+the derivative at zero to 0. The *pre-activation* $z = \vect{w}^\top\vect{x} + b$, the
+input to the activation, is exactly zero more often than one might expect. A ReLU layer outputs
+many exact zeros, so a unit in the next layer can receive an all-zero input. With a
+zero-initialized bias, that unit's pre-activation is then exactly $z = 0$. Under this
+convention, such a unit passes no gradient back for that input. @sec-05-backpropagation
+analyzes the gradient through this derivative, and Exercise 3 inspects units that stay
 permanently silent.
 
 ## Layers of hinges: bumps and polytopes
@@ -351,20 +359,23 @@ The theorem guarantees less than is often assumed:
 ::: {.callout-warning}
 ## Trap: universal approximation is not a training guarantee
 
-1. It does not tell you **how to find the weights**. Existence of a good network is
-   not a training algorithm. Finding the weights is the job of the loss and the
-   optimizer, and nothing guarantees gradient descent lands on the theorem's solution.
+1. It does not tell you **how to find the weights**. The theorem proves only that suitable
+   weights exist. Finding them is the job of the loss and the optimizer, and nothing
+   guarantees that gradient descent reaches such weights.
 2. It does not say the network is **small**. Tiling a complicated function with
    one-layer bumps can require astronomically many units.
 3. In its usual uniform-approximation form, it speaks of **continuous functions on
    closed and bounded regions**. It guarantees that an approximation exists over the
-   whole region, not that fitting finitely many samples will find one, and it says
-   nothing about inputs *beyond* the region. A continuous ReLU network cannot uniformly approximate a jump to
-   arbitrary accuracy: near the jump its worst-case error stays at least half the jump
-   size. Under a mean-square ($L_2$) criterion, however, it can squeeze the transition
-   into a narrow interval and make the *average* error arbitrarily small. The norm and
-   the target class matter. Approximation is still not generalization; that distinction
-   is the subject of @sec-06-generalization-inductive-bias.
+   whole region. It does not promise that fitting finitely many samples will find one,
+   and it says nothing about inputs *beyond* the region. A step function that jumps from
+   0 to 1 at $x = 0$ lies outside that class. A ReLU network computes a continuous
+   function $g$. If $g$ stays on one side of $\tfrac12$, it misses one side of the step
+   by at least $\tfrac12$. Otherwise $g$ crosses $\tfrac12$ somewhere. The step is 0 or 1
+   at that point, so the error there is $\tfrac12$. The worst-case error therefore stays
+   at least half the jump size. Under a mean-square ($L_2$) criterion, however, the
+   network can squeeze the transition into a narrow interval, and the *average* error
+   becomes arbitrarily small. Approximation and generalization are separate questions,
+   and @sec-06-generalization-inductive-bias takes up the second.
 :::
 
 ## Why depth: boundaries that bend
@@ -380,7 +391,7 @@ its units is constant, and those regions are polyhedra whose walls are the units
 boundaries. Deeper layers add walls that kink wherever
 they cross earlier ones. Exercise 4 has you draw this tiling and count its cells.
 
-This folding compounds through repeated composition, and one dimension already shows how.
+One dimension already shows how this folding compounds.
 A single hidden layer of $k$ ReLU units cuts a line into at most $k+1$ linear pieces,
 so the pieces grow linearly with width. Now let two units fold the interval $[0,1]$
 into a tent, $t(x) = 2\,\mathrm{ReLU}(x) - 4\,\mathrm{ReLU}(x - \tfrac{1}{2})$, which
@@ -394,8 +405,8 @@ The same holds beyond one dimension: for suitable ReLU constructions at fixed in
 dimension, achievable region counts grow exponentially with depth, while a single
 hidden layer's count grows polynomially with width
 ([Montúfar et al. (2014)](https://papers.nips.cc/paper_files/paper/2014/hash/fa6f2a469cc4d61a92d96e74617c3d2a-Abstract.html)).
-This is an existence construction, not a promise that gradient descent finds or uses
-all those regions. It is an argument for the representational efficiency of depth:
+Gradient descent need not find such networks or use all their regions. The
+construction is an argument for the representational efficiency of depth:
 deep networks fold space recursively and represent partitions that a shallow network
 would need exponentially more units to match.
 
@@ -407,10 +418,9 @@ We now build the model as a reusable class.
 ## Coding hygiene: call the base-class initializer first
 
 Every model you write from now on subclasses `nn.Module`, and the first line of your
-`__init__` is always `super().__init__()`. The base-class initializer establishes the
-module's internal state: it sets up parameter registration, `.parameters()`, and
-everything the optimizer and autograd need. Forget it and PyTorch raises an immediate exception,
-so the mistake is easy to find.
+`__init__` is always `super().__init__()`. The base-class initializer sets up
+parameter registration, `.parameters()`, and everything the optimizer and autograd need.
+Forget it and PyTorch raises an exception at once.
 :::
 
 :::: {.plan-code}
@@ -435,7 +445,7 @@ class MLP(nn.Module):
 ```
 ::::
 The problem is two interleaved moons, the classic shape no line can
-separate well. The training loop is unchanged. Only the model is new:
+separate well. The training loop is unchanged, and only the model is new:
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
@@ -499,14 +509,15 @@ for ax, (acc, Z), title in zip(
 axes[0].set_ylabel("$x_2$")
 plt.tight_layout(); plt.show()
 ```
-The linear readout never had a curve. The MLP learns a bent boundary in input space by
-learning features on which its readout is linear: a **space in which the boundary is
-straight**. Its readout is still a linear model, $\vect{w}^\top \phi_\theta(\vect{x}) + b$:
-project the hidden activations onto the readout direction
-$\hat{\vect{w}} = \vect{w}/\lVert\vect{w}\rVert$ and the decision boundary sits at
-the exact coordinate $-b/\lVert\vect{w}\rVert$, a straight line. In the vocabulary of
-@sec-02-logistic-softmax, the hidden layers form a backbone $\phi_\theta$ and this readout is its
-classification head. @fig-feature-space visualizes this exact division: a linear readout operating on learned nonlinear features, with the moons plotted in the backbone's coordinates.
+The MLP's output layer is still linear. The network bends the boundary in input space by
+learning features on which a linear readout suffices: a **space in which the boundary is
+straight**. In the vocabulary of @sec-02-logistic-softmax, the hidden layer forms a
+backbone $\phi_\theta$, and the output layer is its classification head, the linear model
+$\vect{w}^\top \phi_\theta(\vect{x}) + b$. Project the hidden activations onto the readout
+direction $\hat{\vect{w}} = \vect{w}/\lVert\vect{w}\rVert$ (here the hat marks a unit
+vector), and the decision boundary sits at
+the single coordinate value $-b/\lVert\vect{w}\rVert$. @fig-feature-space plots the
+moons in these learned coordinates.
 
 :::: {.plan-code}
 ::: {.plan}
@@ -539,7 +550,7 @@ with torch.no_grad():
 #| echo: false
 #| label: fig-feature-space
 #| fig-alt: "Left: the two-moons input plane shaded by the learned scalar feature, with the decision boundary as a dashed piecewise-linear contour weaving between the crescents. Right: the same four hundred points plotted in learned feature coordinates, where the two classes form separated clouds split by an exact vertical line."
-#| fig-cap: "The learned feature space, on the trained moons MLP from @fig-moons. Left: the scalar feature $\\hat{\\vect{w}}^\\top\\phi_\\theta(\\vect{x})$ over the input plane; the dashed contour is the decision boundary, kinked wherever hidden units switch on or off. Right: the same points with coordinates (readout direction, top orthogonal principal component of $\\phi_\\theta$): the classes separate, and the boundary is the exact vertical line $\\hat{\\vect{w}}^\\top\\phi = -b/\\lVert\\vect{w}\\rVert$. The network learns nonlinear features until a linear readout suffices."
+#| fig-cap: "The learned feature space, on the trained moons MLP from @fig-moons. Left: the scalar feature $\\hat{\\vect{w}}^\\top\\phi_\\theta(\\vect{x})$ over the input plane. The dashed contour is the decision boundary, kinked wherever hidden units switch on or off. Right: the same points with coordinates (readout direction, top orthogonal principal component of $\\phi_\\theta$): the classes separate, and the boundary is the exact vertical line $\\hat{\\vect{w}}^\\top\\phi = -b/\\lVert\\vect{w}\\rVert$. The network learns nonlinear features on which a linear readout suffices."
 fig, axes = plt.subplots(1, 2, figsize=(7.8, 3.4))
 axes[0].contourf(gx3, gy3, field, levels=18, cmap="RdBu_r")
 axes[0].contour(gx3, gy3, field, levels=[boundary], colors="k",
@@ -556,15 +567,21 @@ axes[1].set_xlabel(r"$\hat{w}\cdot\phi_\theta(x)$")
 axes[1].set_ylabel("top orthogonal PC")
 plt.tight_layout(); plt.show()
 ```
-On XOR, *two* hidden units suffice in principle, yet minimal networks are fragile:
-across random seeds they often stall at 50% accuracy with silent units (Exercise 3).
-Extra hidden units cost little and improve optimization reliability.
-@sec-04-training-loss-sgd examines how stochastic gradients aid exploration, though
+On XOR, *two* hidden units suffice in principle. The units
+$\mathrm{ReLU}(x_1 - x_2)$ and $\mathrm{ReLU}(x_2 - x_1)$ respond to $x_1 > x_2$ and to
+$x_2 > x_1$, and their sum $\lvert x_1 - x_2\rvert$ is 1 on the two 1-points and 0 on the
+two 0-points. Trained from random starting weights, such a minimal network often fails. If
+one of its two units becomes silent on all four points, its output and its gradient are zero
+there, so it stops learning. The remaining unit and the readout then draw a single straight
+boundary, which cannot represent XOR. Across random seeds, two-unit networks often stall at
+50% accuracy with silent units (Exercise 3). With more hidden units, the network keeps enough
+active units even if some fall silent. Extra units cost little and make training more
+reliable. @sec-04-training-loss-sgd examines how stochastic gradients aid exploration, though
 noise alone does not guarantee escape.
 
 ## Representation without spatial structure {#a-cautionary-tale-representation-without-structure}
 
-Take image classification as an example. A popular story is often told
+Consider image classification. A popular story is often told
 about the hidden layers of a deep network: the first layer detects edges, the next
 combines them into textures and parts, and the next assembles objects, forming a
 tidy hierarchy of increasingly abstract features.
@@ -572,9 +589,9 @@ tidy hierarchy of increasingly abstract features.
 A fully connected network on raw images does not impose that hierarchy. An MLP treats
 its input as one long, flat vector. In a dense weight matrix, neighboring pixels are no
 closer than pixels in opposite corners of the frame: every first-layer unit reads the
-whole frame, with a separate coefficient for each pixel. Spatial regularities may still
-be learned, but locality is not built in, and nothing in the architecture encourages a
-local-to-global hierarchy. Such a hierarchy is not a property of depth itself.
+whole frame, with a separate coefficient for each pixel. The network may still learn
+spatial regularities, but locality is not built in, and nothing in the architecture
+encourages a local-to-global hierarchy. Such a hierarchy is not a property of depth itself.
 Architectures that build locality in encourage it, and Part II builds one.
 
 The MLP can represent nonlinear rules, but its architecture does not encode the spatial
@@ -593,18 +610,18 @@ Close the book for one minute and explain the hinge.
 
 ## Okay, so: nonlinear features, linear readout {#okay-so-one-bend-changed-everything}
 
-1. **Linear stacks collapse** (@eq-collapse), and no line can separate the four XOR
-   points.
-2. **A neuron is a thresholded similarity score**: below the boundary silent, above it
-   proportional. One neuron yields one boundary; a layer forms a
-   polyhedral partition; three hinges make a compact bump.
-3. **Sums of bumps approximate functions** (universal approximation), but the theorem promises
-   existence, not learnability, economy, or generalization.
-4. **Depth folds boundaries**: suitable deep constructions can create region counts
-   that grow exponentially with depth, yielding large efficiency gaps relative to
-   comparable shallow constructions.
-5. **The MLP is a class now** (`nn.Module`, base-class initializer first), and it
-   separates what no line can.
+1. **Linear stacks collapse.** Without a nonlinearity, any stack of linear layers is one
+   linear layer (@eq-collapse), and no line separates the four XOR points.
+2. **A neuron is a thresholded similarity score.** It is silent below its boundary and
+   proportional to the score above it. One neuron yields one boundary, a layer forms a
+   polyhedral partition, and three hinges make a compact bump.
+3. **Sums of bumps approximate functions.** The universal approximation theorem promises
+   only existence: it says nothing about how to learn the weights, how many units are
+   needed, or how the network generalizes.
+4. **Depth folds boundaries.** Suitable deep constructions create region counts that grow
+   exponentially with depth, far beyond what comparable shallow constructions reach.
+5. **The MLP is a module.** It subclasses `nn.Module`, calls the base-class initializer
+   first, and separates what no line can.
 
 ## Sources and further reading {.unnumbered}
 
@@ -645,9 +662,9 @@ Close the book for one minute and explain the hinge.
 2. **(Pencil.)** Using the hinge construction, give explicit weights and biases for a
    one-hidden-layer network that outputs exactly 1 on $[0,1]$ and 0 outside
    $[-0.2, 1.2]$, a trapezoid. How many hidden units did you need?
-3. **(Code.)** Retrain the XOR network with `hidden_dim = 2` across ten different
-   seeds. How often does it reach 100%? Inspect a failed run: what happened to its
-   hidden units? (Hint: check how many are permanently silent.)
+3. **(Code.)** Retrain the XOR network with 2 hidden units in place of 4 across ten
+   different seeds. How often does it reach 100%? Inspect a failed run: what happened
+   to its hidden units? (Hint: check how many are permanently silent.)
 4. **(Pencil.)** For $k$ lines in general position in two dimensions, derive the
    maximum region count
    $1+k+\binom{k}{2}=\sum_{i=0}^{2}\binom{k}{i}$.
@@ -661,7 +678,8 @@ Close the book for one minute and explain the hinge.
    discretization effect, for example by labeling connected components with
    `scipy.ndimage.label` at a finer resolution. Compare with a parameter-matched
    wide network, $2 \to 26 \to 1$: both have 105 parameters. Report the grid
-   resolution with each count: a sampled count is a lower bound, not an exact count.
+   resolution with each count, because a sampled count is only a lower bound on the true
+   count.
 5. **(Code.)** Replace the moons MLP's ReLU with `nn.Identity()` and retrain. Explain
    the resulting boundary in one sentence using @eq-collapse.
 6. **(Pencil.)** Let $\sigma$ be smooth and choose an offset $c$ with
@@ -679,7 +697,7 @@ Close the book for one minute and explain the hinge.
    $u=0.6$, $v=0.4$. Explain both the approximation-error regime and the eventual
    roundoff regime, and estimate the $\lambda$ where they balance. *Optional
    extension:* compose seven of these approximate products into a balanced tree for
-   $x_1x_2\cdots x_8$; how
-   does depth change the error, and how would you choose $\lambda$ at each level? *Common misconception:* “expand the logistic sigmoid at $c=0$”;
-   that is its inflection point, where $\sigma''(0)=0$ and the proposed denominator
+   $x_1x_2\cdots x_8$. How
+   does depth change the error, and how would you choose $\lambda$ at each level? *Common misconception:* “expand the logistic sigmoid at $c=0$.”
+   That is its inflection point, where $\sigma''(0)=0$ and the proposed denominator
    vanishes.

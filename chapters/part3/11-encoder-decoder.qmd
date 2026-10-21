@@ -23,7 +23,8 @@ on a second sequence, the source: an encoder processes the source, and a decoder
 the encoder's final state to generate the target sequence. The architecture is simple,
 but training and evaluation require several choices: how to handle padding, which
 previous tokens to supply during training, and how to select a complete output at
-inference.
+inference. These rules do not depend on recurrence, and they carry over to the
+attention-based decoders of Parts IV and V.
 
 The components are not new. In the autoencoder interlude, an encoder compressed a fixed
 object and a decoder reconstructed it. Here both maps are recurrent, and every source
@@ -39,13 +40,6 @@ adds three goals:
 3. **Conditioning on source and target history.** Each output token may use information
    from the whole source and from the target tokens already generated.
 
-A simple design that meets all three reuses two recurrent machines already built: one
-that reads a sequence into its final state, as the networks of the memory test in
-@sec-10-sequences-rnn do, and the character-level language model of that chapter, which
-writes one token at a time from a state. The rules for training and decoding that we
-develop for this pair do not depend on recurrence, and they carry over to the
-attention-based decoders of Parts IV and V.
-
 ## The encoder's final state initializes the decoder {#two-rnns-and-a-handoff}
 
 An **encoder** reads the source sequence into a **context**, and a **decoder**
@@ -58,7 +52,7 @@ pair is a language model conditioned on the source.
 
 Our laboratory task keeps the core mechanics of translation:
 **date normalization**. The source language consists of human-readable dates in several
-formats, or dialects. The target language is ISO 8601:
+formats, or dialects, and the target language is ISO 8601:
 
 ```
 march 5, 2021        -> 2021-03-05
@@ -146,26 +140,26 @@ print(f"source vocab {V_src}, target vocab {V_tgt}")
 ```
 ::::
 The rejection loop prevents duplicate source strings across the data splits: it runs
-**before** the 8,000/500/500 train/validation/test split, so exact-string memorization
-cannot help. We use validation sources for every learning curve and reserve test sources
-for one final audit after the design is fixed. The same underlying date may appear in
-another written dialect, testing structural generalization across formats.
+**before** the split of the 9,000 pairs into 8,000 for training and 500 each for
+validation and testing, so exact-string memorization cannot help. The same underlying
+date may appear in another written dialect, testing structural generalization across
+formats.
 
 We use three special tokens, the same conventions as a full
 translation pipeline: `<pad>` fills the short sequences of a batch out to a
 rectangle, `<bos>` is the decoder's first input, and `<eos>` ends every target, so the
-output ends where the model emits it. A token here is one character;
-words or subword pieces would change sequence lengths and vocabulary sizes, not the
-rules for training and decoding.
+output ends where the model emits it. A token here is one character. Words or subword
+pieces would change sequence lengths and vocabulary sizes, and the rules for training
+and decoding would stay the same.
 
 The character-level language model fed each character in as a one-hot vector, and a
 weight matrix times a one-hot vector selects one column of the matrix, as the product
 $\matr{W}_{xh}\vect{x}_t$ of the vanilla RNN (@eq-rnn-cell) does. `nn.Embedding` is a
 weight matrix of its own, a table with one trainable row per vocabulary entry. A
 token's one-hot row vector times the table selects the token's row, its embedding.
-`nn.Embedding` fetches that row by its index instead of multiplying: *the address is
-hard, the content is learned*. The token with index 17 always fetches row 17 of its
-table, and the numbers in that row are trained like any other weight.
+`nn.Embedding` fetches that row by its index instead of multiplying. Which row a token
+reads is fixed by its index, and the numbers stored in the row are learned. For example,
+the token with index 17 always fetches row 17 of its table.
 
 :::: {.plan-code}
 ::: {.plan}
@@ -189,18 +183,18 @@ class Seq2Seq(nn.Module):
         self.out = nn.Linear(hidden, v_tgt)
 
     def encode(
-        self, S: torch.Tensor, lengths: torch.Tensor,
+        self, X: torch.Tensor, lengths: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        e = self.src_emb(S)                          # (B, T_src, embed)
+        e = self.src_emb(X)                          # (B, T_src, embed)
         if self.packed:                              # stop at each true length
             e = nn.utils.rnn.pack_padded_sequence(
                 e, lengths, batch_first=True, enforce_sorted=False)
         _, state = self.encoder(e)
         return state                                 # (h, c): the context
 
-    def forward(self, S: torch.Tensor, lengths: torch.Tensor,
-                T_in: torch.Tensor) -> torch.Tensor:  # teacher-forced pass
-        o, _ = self.decoder(self.tgt_emb(T_in), self.encode(S, lengths))
+    def forward(self, X: torch.Tensor, lengths: torch.Tensor,
+                Y_in: torch.Tensor) -> torch.Tensor:  # teacher-forced pass
+        o, _ = self.decoder(self.tgt_emb(Y_in), self.encode(X, lengths))
         return self.out(o)                           # (B, T_tgt, V_tgt) logits
 ```
 ::::
@@ -294,13 +288,17 @@ two computations:
    target positions from both the cross-entropy sum and its denominator. Our targets
    have equal length, so target padding is not tested here, and the loss is a mean of
    per-example terms, Case 1 of @sec-04-estimator-cases. With variable lengths, the
-   calculation is a token mean within each batch, a ratio of two minibatch sums, which
-   puts it in Case 2: as an estimate of the corpus-wide token risk it is generally
-   biased, by an amount that depends on how batches are sampled.
-2. **The encoder.** A zero padding embedding does not make an LSTM update the identity.
-   Processing padded positions can change the final state, making it depend on the
-   padding length as well as the source. Decoding an unpadded sequence can then supply a
-   different context from the one used during training.
+   number of graded tokens changes from one minibatch to the next, so the token mean
+   within each batch divides one random sum by another. That puts it in Case 2: as an
+   estimate of the average token loss over the whole corpus, it is slightly biased, by
+   an amount that depends on how minibatches are drawn.
+2. **The encoder.** An **input mask** marks which source positions the encoder may
+   read: 1 on real characters and 0 on padding. A zero embedding for the padding token
+   is not enough. An LSTM still updates its state at a step whose input is zero, so
+   running over the padding changes the final state, and the change depends on how much
+   padding the batch happened to add. At inference the source is unpadded, so the
+   decoder would then receive a different context from the ones it saw in training. A
+   recurrent encoder avoids this by stopping at each source's true length.
 
 The naive model is `Seq2Seq` with `packed=False`, so its encoder reads every source to
 the end of the batch's padded rectangle. It trains on the same data and budget as the
@@ -329,9 +327,9 @@ def batchify(prs: list[tuple[str, str]], idx: list[int]) -> tuple[
     lengths = torch.tensor([len(s) for s in srcs])
     tgts = [torch.tensor([BOS] + [tgt_stoi[c] for c in prs[i][1]] + [EOS])
             for i in idx]
-    S = nn.utils.rnn.pad_sequence(srcs, batch_first=True, padding_value=PAD)
-    T = nn.utils.rnn.pad_sequence(tgts, batch_first=True, padding_value=PAD)
-    return S, lengths, T
+    X = nn.utils.rnn.pad_sequence(srcs, batch_first=True, padding_value=PAD)
+    Y = nn.utils.rnn.pad_sequence(tgts, batch_first=True, padding_value=PAD)
+    return X, lengths, Y
 
 def train_seq2seq(mode: str = "tf", packed: bool = True, epochs: int = 25,
                   seed: int = 6050, batch: int = 128,
@@ -346,20 +344,20 @@ def train_seq2seq(mode: str = "tf", packed: bool = True, epochs: int = 25,
         model.train()
         perm = torch.randperm(n)
         for i in range(0, n, batch):
-            S, L, T = batchify(train_pairs, perm[i:i + batch].tolist())
+            X, lens, Y = batchify(train_pairs, perm[i:i + batch].tolist())
             if mode == "tf":  # ground-truth prefixes: one fused call
-                logits = model(S, L, T[:, :-1])
+                logits = model(X, lens, Y[:, :-1])
             else:             # free-running: its own predictions as prefixes
-                state = model.encode(S, L)
-                tok, outs = T[:, :1], []
-                for t in range(T.shape[1] - 1):
+                state = model.encode(X, lens)
+                tok, outs = Y[:, :1], []
+                for t in range(Y.shape[1] - 1):
                     o, state = model.decoder(model.tgt_emb(tok), state)
                     logit = model.out(o)
                     outs.append(logit)
                     tok = logit.argmax(-1)           # feed its own prediction
                 logits = torch.cat(outs, 1)
             loss = F.cross_entropy(logits.reshape(-1, V_tgt),
-                                   T[:, 1:].reshape(-1), ignore_index=PAD)
+                                   Y[:, 1:].reshape(-1), ignore_index=PAD)
             opt.zero_grad(); loss.backward()
             nn.utils.clip_grad_norm_(model.parameters(), 5.0)
             opt.step()
@@ -370,8 +368,8 @@ def train_seq2seq(mode: str = "tf", packed: bool = True, epochs: int = 25,
 @torch.no_grad()
 def translate(model: Seq2Seq, src: str, maxlen: int = 12) -> str:
     model.eval()
-    S = torch.tensor([[src_stoi[c] for c in src]])
-    state = model.encode(S, torch.tensor([len(src)]))
+    X = torch.tensor([[src_stoi[c] for c in src]])
+    state = model.encode(X, torch.tensor([len(src)]))
     tok, out = torch.tensor([[BOS]]), ""
     for _ in range(maxlen):
         o, state = model.decoder(model.tgt_emb(tok), state)
@@ -406,7 +404,7 @@ print(f"packed (true lengths): validation exact match "
 ```
 ::::
 Exact match on all unambiguous validation dates is 37.3% for the naive model and 95.7%
-for the packed one, a 58.4-point gap. The sealed test set remains untouched until we fix
+for the packed one. The sealed test set remains untouched until we fix
 both training-mode designs below.
 
 Take the naive model and one short validation
@@ -461,9 +459,10 @@ plt.tight_layout(); plt.show()
 
 The masked update of @eq-masked-update keeps the old state on
 every padded step, so each sequence ends holding the state of its own last real token.
-Its mask $m_t$ marks the source positions the encoder may read, not the target positions
-the loss grades. `pack_padded_sequence` is the framework's version of that update: rather
-than computing the padded steps and throwing them away, it never runs them. If that reading
+Its mask $m_t$ is the input mask, which marks the source positions the encoder may read.
+It is a different mask from the one that marks the target positions the loss grades.
+`pack_padded_sequence` is the framework's version of that update: rather than computing
+the padded steps and throwing them away, it never runs them. If that reading
 is right, a hand-written masked loop must reproduce the packed encoder's final states,
 and the naive encoder must disagree with them for exactly the sources that carried
 padding.
@@ -549,11 +548,10 @@ executes sequentially across steps, because step $t$'s input does not exist unti
 $t-1$ is computed.
 
 **Teacher forcing** ("tf") conditions each step on the *observed* previous token
-instead. It fixes every decoder input before the forward pass, so the whole target goes
-through the decoder in **one fused decoder call** (the `model(S, L, T[:, :-1])` line)
-instead of a Python feedback loop. Whether positions then run one after another or all
-at once is a property of the decoder, not of teacher forcing: inside that call the
-recurrent decoder still computes each state from the previous one.
+instead. It knows every decoder input before the forward pass begins, so the whole
+target can enter the decoder in a single call, as in the "tf" branch, instead of a
+Python loop that feeds one token at a time. Inside that call a recurrent decoder still
+computes each state from the previous one, so its positions still run one after another.
 From the first epoch, every step is nevertheless conditioned on a correct prefix. The
 comparison below measures how the two modes differ in validation
 accuracy during training. The computational difference can be read off the training
@@ -588,7 +586,7 @@ for label, candidate in [("naive padding", naive),
 #| echo: false
 #| label: fig-tf-vs-fr
 #| fig-alt: "Exact-match accuracy rises with epoch for both training modes. The teacher-forcing curve lies well above the free-running curve in early and middle epochs, and the two curves meet near the top by epoch twenty. At the last checkpoint the teacher-forcing curve dips while the free-running curve stays near the top."
-#| fig-cap: "Exact match of the two training modes at eight checkpoint epochs, on the first 400 unambiguous validation sources. Teacher forcing scores higher from epoch 4 through the middle epochs (53.75% vs. 23.75% at epoch 6; 95.00% vs. 81.25% at epoch 12); by epoch 20 the validation curves meet."
+#| fig-cap: "Exact match of the two training modes at eight checkpoint epochs, on the first 400 unambiguous validation sources. Teacher forcing scores higher from epoch 4 through the middle epochs, and by epoch 20 the validation curves meet."
 plt.figure(figsize=(6, 3.2))
 plt.plot(cps, [tf_curve[c] for c in cps], "o-", color="#232D4B", lw=2,
          label="teacher forcing")
@@ -599,9 +597,8 @@ plt.legend(); plt.tight_layout(); plt.show()
 ```
 On the first 400 unambiguous validation sources, which @fig-tf-vs-fr scores at every
 checkpoint, the teacher-forced model peaks at 99.50% at epoch 20 and ends at 95.75% at
-epoch 25, so the comparison depends on which checkpoint we keep for each model. That
-choice is part of the design and must be fixed before the test split is opened; here
-every model is kept as it stands after its last epoch. Free-running, which scores
+epoch 25, so the comparison depends on which checkpoint we keep for each model. Here every
+model is kept as it stands after its last epoch. Free-running, which scores
 higher on validation only at the last checkpoint, also scores higher in the test audit
 above. Evaluated on a single seed per mode, these runs do not establish whether that
 advantage generalizes across initializations.
@@ -610,10 +607,10 @@ Teacher forcing is the common default, and in this comparison it gained validati
 accuracy faster early in training. It also creates a mismatch called **exposure bias**:
 at inference the decoder conditions on its own predictions, which can form prefixes
 unlike any seen in training. Exposure bias comes from maximum likelihood on observed
-prefixes, not from recurrence, so it affects every autoregressive decoder (one that
-feeds its own outputs back as inputs) trained by teacher forcing. Training never
-presents the decoder with a prefix that contains its own error, so an early error at
-inference may also affect the tokens after it. We can look for this effect in the
+prefixes, whatever the decoder's architecture, so it affects every autoregressive
+decoder (one that feeds its own outputs back as inputs) trained by teacher forcing.
+Training never presents the decoder with a prefix that contains its own error, so an
+early error at inference may also affect the tokens after it. We can look for this effect in the
 teacher-forced model's residual errors:
 
 :::: {.plan-code}
@@ -647,9 +644,9 @@ wrong character changes the prefix for every character after it.
 Scheduled sampling (Bengio et al., 2015) mixes the two training modes. At *each
 timestep*, the decoder receives the observed previous token with probability $\epsilon$
 and its own prediction with probability $1 - \epsilon$, and $\epsilon$ is annealed from
-1 toward 0 as training proceeds. The choice is made **per token, not per sequence**;
-committing a whole sequence to model predictions early in training can let consecutive
-errors amplify. Each step still scores the observed next token, but once some inputs are
+1 toward 0 as training proceeds. The choice is made **per token**. Committing a whole
+sequence to model predictions early in training can let consecutive errors amplify.
+Each step still scores the observed next token, but once some inputs are
 model predictions, the summed loss is no longer the conditional negative log-likelihood
 of the observed target. Mixing also has a cost in any architecture: a mixed-in
 prediction must be generated before it is read, so not all decoder inputs are known
@@ -661,12 +658,12 @@ with both training modes.
 
 Given a trained decoder, we want to find the output sequence with the highest
 probability. That is a *search problem* over a tree whose nodes branch
-$V=V_{\text{tgt}}$ ways; exhaustive search examines $V^{T}$ sequences, so practical
+$V=V_{\text{tgt}}$ ways. Exhaustive search examines $V^{T}$ sequences, so practical
 searches walk that tree heuristically.
 
-**Greedy search**, which `translate` performs for every exact-match score above, applies
-the hard argmax of @fig-soft-vs-hard to each next-token distribution: it takes the
-single most probable token at each step and never revises a choice. Token selection
+**Greedy search**, which `translate` performs for every exact-match score so far in this
+chapter, applies the hard argmax of @fig-soft-vs-hard to each next-token distribution: it
+takes the single most probable token at each step and never revises a choice. Token selection
 examines $V$ scores at each of $T$ steps. The most probable token at each step need not
 lead to the most probable sequence, as illustrated by the stylized example below.
 
@@ -691,10 +688,10 @@ path and along the alternative gives
 
 $$
 \begin{gathered}
-\predictionpart{P(\texttt{A x <eos>})}\\
+\predictionpart{p(\texttt{A x <eos>})}\\
 = \predictionpart{0.60}\times\predictionpart{0.55}\times\predictionpart{0.80}
   = \predictionpart{0.264},\\[4pt]
-\predictionpart{P(\texttt{B y <eos>})}\\
+\predictionpart{p(\texttt{B y <eos>})}\\
 = \predictionpart{0.40}\times\predictionpart{0.95}\times\predictionpart{0.95}
   = \predictionpart{0.361}.
 \end{gathered}
@@ -703,7 +700,8 @@ $$
 The best complete sequence begins with the less likely first token. No hidden
 continuation overturns this result: the largest probability mass entering an
 `other` branch is $0.60\times0.45=0.27$, and multiplying by further probabilities
-cannot increase it. This is a specified toy decoder, not a measured model.
+cannot increase it. The decoder here is a specified toy, and no model was
+trained for it.
 
 **Beam search** carries a *beam* of the $k$ best partial sequences, called
 *hypotheses*, expands each by all $V$ tokens and keeps the $k$ best by *cumulative*
@@ -730,8 +728,8 @@ optimal sequence in this tree, though a finite beam does not guarantee the best 
 def beam_search(model: Seq2Seq, src: str, k: int = 5,
                 maxlen: int = 12) -> list[tuple[str, float]]:
     model.eval()
-    S = torch.tensor([[src_stoi[c] for c in src]])
-    state = model.encode(S, torch.tensor([len(src)]))
+    X = torch.tensor([[src_stoi[c] for c in src]])
+    state = model.encode(X, torch.tensor([len(src)]))
     beams = [([], 0.0, state, False)]               # (tokens, logp, state, done)
     for _ in range(maxlen):
         cand = []
@@ -757,9 +755,8 @@ def beam_search(model: Seq2Seq, src: str, k: int = 5,
 
 Call a numeric date **ambiguous** when both of its first two fields are at most 12.
 These are the dates the exact-match scores exclude, and unless the two fields are
-equal, each has two readings. The generator used the two conventions in the ratio
-70/30. Greedy decoding returns one sequence; beam search shows which complete
-alternatives the model ranks highly:
+equal, each has two readings. Greedy decoding returns one sequence, and beam search
+shows which complete alternatives the model ranks highly:
 
 :::: {.plan-code}
 ::: {.plan}
@@ -783,13 +780,14 @@ for s, t in amb[:4]:
 ```
 ::::
 Each displayed score sums the token log-probabilities along one sequence, including
-`<eos>` when it was reached; for a finished sequence it is the log-probability the
+`<eos>` when it was reached. For a finished sequence it is the log-probability the
 model assigns to that whole output given the source. These **raw joint log scores** are
-log-probabilities of single sequences, not a normalized distribution over the printed
-beam, so two of them, exponentiated, cannot be read as a 70/30 posterior. The last three
-dates pair the month/day and day/month readings; the first pairs the month/day reading
-with `1995-09-20`, a hybrid that matches neither convention: beam search ranks
-sequences under the model and does not enforce copying of the source fields.
+log-probabilities of single sequences. They do not form a normalized distribution over
+the printed beam, so two of them, exponentiated, cannot be read as a 70/30 posterior. The
+last three dates pair the month/day and day/month readings; the first pairs the
+month/day reading with `1995-09-20`, a hybrid that matches neither convention. Beam
+search ranks sequences under the model, and nothing in it forces the output to copy the
+source fields.
 
 For 200 random test dates, ambiguous ones included, we compare the best sequence of a
 beam of width 5 with the greedy output:
@@ -820,7 +818,7 @@ translation, with vocabularies of tens of thousands of tokens and long outputs.
 ## Length normalization
 
 Each token adds a log-probability $\le 0$ to a raw joint log score, so a raw beam tends
-to favor short outputs. Dividing each score by $L^{\alpha}$, with $L$ the number of
+to favor short outputs. Dividing each score by $(T+1)^{\alpha}$, with $T+1$ the number of
 scored tokens and $\alpha$ chosen on validation data, counteracts this; $\alpha = 1$
 ranks by the mean token log-probability. The normalized score is a different decoding
 objective, which a reported result should name. Every ten-character output has 11
@@ -834,8 +832,8 @@ Every source fact the decoder uses passes through the handoff: the encoder's fin
 $(\vect{h},\vect{c})$ pair, the 256 scalars of @fig-encoder-decoder-handoff. The date
 task fits within that handoff because a date holds only three facts: a day, a month and
 a year. The teacher-forced model's residual digit and order errors are consistent with
-reconstruction from a compressed summary rather than direct access to source positions.
-By themselves, they do not prove that compression caused each error. A forty-word
+reconstruction from a compressed summary, without direct access to source positions,
+although they cannot show that compression caused each error. A forty-word
 sentence must pass through the same pair, and a wider state may add capacity but gives
 no direct access to earlier source positions. States for those positions already exist:
 the encoder computes one at every source position (the gray states
@@ -859,7 +857,7 @@ Close the book for one minute and reconstruct the sequence pipeline.
 
 1. **A sequence-to-sequence model is a conditional language model**, here two RNNs and
    a handoff: `<bos>` starts the decoder, `<eos>` lets it choose its length, and
-   embeddings replace one-hots (hard address, learned content).
+   embeddings replace one-hots (a fixed row per token, with learned numbers).
 2. **Padding affects two computations**: the loss, where `ignore_index`
    removes padded targets from the sum and its denominator, and the encoder, where packing
    (`pack_padded_sequence`, the framework's form of the masked update) keeps
@@ -869,19 +867,19 @@ Close the book for one minute and reconstruct the sequence pipeline.
 3. **Teacher forcing** conditions the decoder on observed prefixes; its token
    losses sum to the conditional negative log-likelihood of the observed target, and our
    loop averages them over nonpadding positions. The decoder's inputs are known in
-   advance, so one fused call replaces the Python feedback loop, but each step still
+   advance, so a single call replaces the Python feedback loop, but each step still
    waits for the state of the previous step. **Exposure bias** is the mismatch between
    training on observed prefixes and generating from the model's own. Teacher forcing
-   gained validation accuracy faster early in training; free-running scored higher on
-   the test set, with one seed per mode and last-epoch checkpoints. Scheduled sampling
+   gained validation accuracy faster early in training, and free-running scored higher
+   on the test set, with one seed per mode and last-epoch checkpoints. Scheduled sampling
    mixes the two per token, so its decoder inputs are no longer all known before the
    forward pass.
-4. **Decoding is approximate search.** Greedy maximizes each step, not the sequence,
-   and can miss the highest-probability sequence. Beam search carries $k$ partial
+4. **Decoding is approximate search.** Greedy search maximizes each step in turn and
+   can miss the highest-probability sequence. Beam search carries $k$ partial
    sequences, considers up to $kV$ extensions per step and surfaces high-scoring
    alternatives, but a finite beam does not guarantee the best sequence in every tree. Its raw joint log scores are
-   log-probabilities of single sequences, not a posterior over the beam, and a beam can
-   contain invalid hybrids. Length normalization ($L^{\alpha}$) changes the decoding
+   log-probabilities of single sequences and form no posterior over the beam, and a beam
+   can contain invalid hybrids. Length normalization ($(T+1)^{\alpha}$) changes the decoding
    objective.
 5. **The handoff is the bottleneck.** In this model, one fixed-size
    $(\vect{h},\vect{c})$ pair, 256 scalars, carries all the source information the
@@ -909,8 +907,8 @@ score.
 
 1. **(Pencil.)** Count this chapter's parameters: two embeddings, two LSTMs, one
    output layer, with $V_{\text{src}} = 37$, $V_{\text{tgt}} = 14$, embedding size $e = 32$,
-   and hidden size $h = 128$. First derive that an LSTM holds
-   $4\left[(e + h)h + 2h\right]$ parameters (PyTorch keeps two bias vectors). Which
+   and hidden size $d_h = 128$. First derive that an LSTM holds
+   $4\left[(e + d_h)d_h + 2d_h\right]$ parameters (PyTorch keeps two bias vectors). Which
    components hold most of the parameters, and why is the answer different
    from @sec-08-cnn's LeNet audit?
 2. **(Pencil.)** With vocabulary $10^4$ and output length 10, compare the number
@@ -924,7 +922,7 @@ score.
    $\epsilon$ linearly $1 \to 0$ over 25 epochs. Compare its learning curve with
    both curves in @fig-tf-vs-fr. Does it match teacher forcing's early accuracy
    *and* free-running's final accuracy?
-4. **(Code.)** Add length normalization ($/L^{\alpha}$) to `beam_search` and
+4. **(Code.)** Add length normalization ($/(T+1)^{\alpha}$) to `beam_search` and
    sweep $\alpha \in \{0, 0.7, 1\}$ on the date task. Confirm that a common length
    divisor preserves the ranking within a set of equal-length candidates, then inspect
    whether normalization changes the selected output when candidates have different
