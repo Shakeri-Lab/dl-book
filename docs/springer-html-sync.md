@@ -122,6 +122,7 @@ The [validation record](../audits/springer-sync-2026-10-31/validation.json) reco
   that its fresh execution differed only in the creation-date metadata.
 
 The local HTML asset check permits missing generated notebook downloads; publication
-CI supplies those separately after clean execution. Notebook source-export checks
-must use a committed source revision. No full notebook execution, GPU rerun, Springer
+CI supplies those separately after clean execution. All 26 public notebook and internal
+reference source exports pass their structure and commit-pin checks at source revision
+`827622d3264d73eb75b5728a3615e04144578a5d`. No full notebook execution, GPU rerun, Springer
 rebuild, merge or deployment is claimed by this local validation.
