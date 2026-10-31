@@ -93,6 +93,7 @@ test('score field: fixture and insertion are the existing analytic manuscript ex
     'score_prior = np.array([0.5, 0.5])']) assert(chapter.includes(literal));
   assert.equal(scene.anchor.type,'after-cell'); assert.equal(scene.anchor.target,'cell-fig-score-mixture');
   assert.equal(scene.qmd,'chapters/part5/19-generative.qmd');
+  assert(f.$('[data-formula]').textContent.includes('\\frac{\\mu_j-\\featurepart{x}}{\\sigma^2}'), 'component variance uses the chapter’s sigma notation');
   assert.deepEqual(scene.beats,[0,4,10,14,18,23,28,32,36]); assert.equal(scene.duration,40);
   const filter=fs.readFileSync(path.join(ROOT,scene.filter),'utf8');
   assert.match(filter,/^(?:--[^\n]*\n)+if not FORMAT:match\("\^html"\) then return \{\} end/);

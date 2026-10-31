@@ -89,8 +89,15 @@ test('batch ruler: the formula and the two machines are the chapter\'s own', t =
   // what the warning after the panel says, and the question asks what that warning answers.
   assert(prose.includes('use stored running averages collected during training, including when they process one image at a time.'));
   assert(f.$('.mechanism-scope').textContent.includes('running averages collected during training'));
-  assert(prose.includes('BN needs real batches to estimate statistics, so it gets unreliable at tiny batch sizes.'));
-  assert(f.$('.mechanism-scope').textContent.includes('BatchNorm needs real batches and gets unreliable at tiny batch sizes'));
+  assert(prose.includes('the current minibatch **and both spatial axes** ($N$, $H$, and $W$), normalizes the'));
+  assert(prose.includes('count the values they average per channel, over the batch and both spatial axes, as well as the number of images.'));
+  assert(prose.includes('The replay uses a simplified setting with one value per image in one channel.'));
+  const scope = f.$('.mechanism-scope').textContent;
+  assert(scope.includes('one image supplies only one value, so its variance is zero'));
+  assert(scope.includes('the count per channel also includes both spatial axes'));
+  assert(scope.includes('the number of images alone does not determine how many values enter the statistics'));
+  assert(f.$('.mechanism-boundary').textContent.includes('evaluation uses stored running statistics'));
+  assert.doesNotMatch(scope, /BatchNorm needs real batches|gets unreliable at tiny batch sizes/);
   assert(prose.includes('the BN row holds a near-constant spread'), 'the panel\'s word "spread" is the chapter\'s');
   assert(prose.includes('a prediction made in train mode depends on the other images in the batch'));
   assert.equal(f.$('.mechanism-question').textContent,
@@ -429,7 +436,7 @@ test('batch ruler: typography, voice and inertness', t => {
   assert.doesNotMatch(prose, /\d-\d|(?<![\w.])-\d|\de[-+]?\d/, 'an ASCII minus or e-notation in the prose');
   // One visible boundary sentence, the rest closed inside the scope disclosure.
   const boundary = f.$('.mechanism-boundary > p').textContent.trim();
-  assert.equal(boundary, 'Each garment is one number here; BatchNorm2d pools every pixel of the channel as well, and the running statistics are declared, not trained.');
+  assert.equal(boundary, 'One value per image represents one channel here; BatchNorm2d pools batch and both spatial axes, and evaluation uses stored running statistics, declared rather than trained in this toy.');
   assert.equal(f.root.querySelectorAll('.mechanism-boundary > p').length, 1);
   assert(boundary.split(/\s+/).length <= 30);
   assert.equal(f.$('.mechanism-scope').open, false);

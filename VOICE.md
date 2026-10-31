@@ -9,6 +9,21 @@ part. `docs/style-guide.md` remains the teaching guide; where the two disagree o
 register, this sheet governs. Amended for Stage B and again for Stage B2 (2026-09-26):
 where earlier text and this sheet differ, this sheet wins.
 
+**Current authority, October 31, 2026.** The author's current Springer manuscript
+is the source of truth for shared language, under
+[Format Authority](docs/style-guide.md#format-authority). Treat it as read-only during
+HTML synchronization. HTML keeps its interactive and executable material, and recorded
+cell outputs remain the evidence for numerical claims. Restoring author text does not
+authorize changing numerical results or silently carrying an evidence conflict.
+
+The current synchronization request authorizes shared prose, terminology and display-label
+updates, together with their coupled fixture and test strings. It supersedes older
+holds in D13, N1 and the historical carry ledgers for that scope. Keep IDs, numerical
+algorithms and interaction behavior stable; unrelated structural or experimental
+changes still need their own task authorization. Older dated decisions remain history,
+and the current rule does not mean their implementations or this branch have passed
+verification. The register rules below continue to govern new prose.
+
 **Register.** Clear, precise, and formal enough for a Springer series. Warmth comes
 from orientation (why this step, where it leads, what to expect, what to skip) and from
 the chapter's own concrete objects. Never from exclamation, jokes, pop culture, or
@@ -355,7 +370,8 @@ counts, CI, voice lint, cross-volume references, em dashes), plus:
 - **I19 Printed-number audit (report only).** Every percentage, and every count of three
   or more digits, in running prose that no printed cell output or caption on the same
   page shows at the prose's own precision, listed per page for the author
-  (`audit_voice_ledger.py --numbers`). The printout is the source of truth.
+  (`audit_voice_ledger.py --numbers`). The cell's recorded output is the numerical
+  evidence; this use of “printout” does not mean the Springer manuscript or a saved PDF.
 
 ## Enforcement
 

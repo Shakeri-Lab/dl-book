@@ -360,7 +360,7 @@ test('Derivative gates: the same component carries forward values and a reverse 
       assert.match(f.$('[data-upstream-value]').textContent,/^unit(?: probe)?: 1$/);
     }
   }
-  assert.match(f.$('[data-signal-legend]').textContent,/filled area.*sensitivity.*ring.*location/);
+  assert.match(f.$('[data-signal-legend]').textContent,/area.*probe magnitude.*ring.*location/);
   const css=read('derivative-gates/player.css');assert.match(css,/\.dg-locator\s*\{[^}]*fill:\s*none/);
   assert.match(css,/\.dg-sensitivity\s*\{[^}]*fill:\s*var\(--dg-error\)/);
 });
@@ -775,7 +775,7 @@ test('Derivative gates: every printed number is typeset, and is announced on the
   for(const time of [0,2.5,5,8,10,13.5,15,18,20,25,30,32.5,35,40]) {
     f.seek(time);assert.doesNotMatch(scrubber(f).getAttribute('aria-valuetext').replace(/^\d+:\d\d of \d+:\d\d\. /,''),/\d/,`the scrubber repeats a number at ${time}s`);
   }
-  f.seek(40);assert.match(picture(f).getAttribute('aria-label'),/10 gates, ceiling 9\.54 × 10⁻⁷\./);
+  f.seek(40);assert.match(picture(f).getAttribute('aria-label'),/10 factors, ceiling 9\.54 × 10⁻⁷\./);
   assert.equal(f.$('[data-bound-value]').textContent,'10 factors: at most 9.54 × 10⁻⁷');
   f.seek(34);assert.equal(f.$('[data-bound-value]').textContent,'8 factors: at most 1.53 × 10⁻⁵');
   f.seek(32.75);assert.equal(f.$('[data-bound-value]').textContent,'5 factors: at most 0.0009766');

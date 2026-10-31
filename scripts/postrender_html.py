@@ -6,9 +6,12 @@ from __future__ import annotations
 import ast
 from datetime import date
 import html
+import json
 from pathlib import Path
 import re
 from urllib.parse import quote, urljoin
+
+from print_companions import add_companions, add_search_companions, load_manifest
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -208,6 +211,7 @@ def transformed_page(
     site_url: str,
     stamp: str,
     figure_alts: dict[str, str],
+    companions: dict,
 ) -> str:
     canonical = canonical_for(page, site_url)
     updated = CANONICAL_RE.sub("\n", page_text)
@@ -217,6 +221,7 @@ def transformed_page(
     updated = updated.replace("</head>", f"{link}\n</head>", 1)
     updated = add_missing_source_alts(updated, figure_alts)
     updated = move_skip_link_first(updated)
+    updated = add_companions(updated, page.relative_to(OUTPUT_ROOT).as_posix(), companions)
     return add_stamp(updated, stamp)
 
 
@@ -225,14 +230,15 @@ def update_page(
     site_url: str,
     stamp: str,
     figure_alts: dict[str, str],
+    companions: dict,
 ) -> bool:
     original = page.read_text(encoding="utf-8")
-    updated = transformed_page(original, page, site_url, stamp, figure_alts)
+    updated = transformed_page(original, page, site_url, stamp, figure_alts, companions)
     # Native Quarto and standalone pages place their head/footer whitespace
     # differently. Converge within one invocation so repeated profile renders are
     # byte-idempotent rather than relying on a second post-render pass.
-    updated = transformed_page(updated, page, site_url, stamp, figure_alts)
-    if transformed_page(updated, page, site_url, stamp, figure_alts) != updated:
+    updated = transformed_page(updated, page, site_url, stamp, figure_alts, companions)
+    if transformed_page(updated, page, site_url, stamp, figure_alts, companions) != updated:
         raise RuntimeError(f"{page}: HTML metadata transform did not reach a fixpoint")
     if updated == original:
         return False
@@ -248,14 +254,24 @@ def main() -> int:
     site_url, display_date, version, status = source_metadata()
     stamp = edition_stamp(display_date, version, status, site_url)
     figure_alts = source_figure_alts()
+    companions = load_manifest()
     pages = sorted(
         page
         for page in OUTPUT_ROOT.rglob("*.html")
         if "site_libs" not in page.relative_to(OUTPUT_ROOT).parts
     )
     changed = sum(
-        update_page(page, site_url, stamp, figure_alts) for page in pages
+        update_page(page, site_url, stamp, figure_alts, companions) for page in pages
     )
+    search_path = OUTPUT_ROOT / "search.json"
+    if search_path.is_file():
+        records = json.loads(search_path.read_text(encoding="utf-8"))
+        updated_records = add_search_companions(records, companions)
+        if updated_records != records:
+            search_path.write_text(
+                json.dumps(updated_records, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
     print(
         f"postrender HTML metadata: updated {changed} of {len(pages)} page(s) "
         f"for {status} v{version}, {display_date}"

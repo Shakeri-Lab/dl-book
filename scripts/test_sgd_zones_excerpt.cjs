@@ -111,7 +111,7 @@ test('sgd zones: the mechanism it draws is the chapter\'s own printed passage', 
     '\\E\\bigl[\\nabla \\loss_{\\mathcal{B}}(\\vect{w})\\bigr] = \\nabla \\loss(\\vect{w}).',
     'In either case, the minibatch gradient\nequals the full-data gradient in expectation.',
     'The full gradient is large relative to\n  the batch noise, so most batch directions make useful progress, and their mean is the\n  full descent direction.',
-    'inside what we will call the **region of confusion**:',
+    'inside a **region of stochastic fluctuations near the optimum**:',
     '    assert torch.allclose(directions.mean(0), full_direction, atol=2e-6)',
     '1. Shuffle the training data.',
     '32 examples against a million',
@@ -317,7 +317,7 @@ test('sgd zones: the answer is withheld until the walk has played', t => {
   }
   f.seek(20); assert.equal(f.root.dataset.revealed,'true');
   f.seek(25); assert(visible(f.$('[data-confusion]')));
-  assert.match(f.$('[data-confusion-label]').textContent,/region of confusion/);
+  assert.match(f.$('[data-confusion-label]').textContent,/stochastic fluctuations/);
 });
 
 test('sgd zones: each beat reveals exactly what its caption describes', t => {
@@ -449,7 +449,7 @@ test('sgd zones: the panel names its schematic variants and its boundary', t => 
   assert.match(boundary,/the noise does not grow, the signal vanishes/);
   assert.match(boundary,/schematic/);
   assert.match(boundary,/never printed/);
-  assert.match(boundary,/region of confusion is about the gradient estimate/);
+  assert.match(boundary,/region of stochastic fluctuations near the optimum is about the gradient estimate/);
   assert.match(boundary,/not about the loss/);
   assert.match(boundary,/rigidity is a property of this declared partition/);
   assert.match(boundary,/declared magnification/);

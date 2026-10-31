@@ -7,10 +7,10 @@
 //   layout() -> the only place that measures.
 //
 // One picture: the chapter's residual block laid left to right, x, the learned branch F,
-// the sum and H(x), with the identity lane arcing from x over F to the sum. The tracked
+// the sum and u, with the identity lane arcing from x over F to the sum. The tracked
 // object is the gradient, a wine arrow whose length is its value on one shared scale and
 // whose direction is its sign: a positive packet points along its route toward x, a
-// negative one points back toward the output. It arrives at H(x) as 1 and splits at the sum
+// negative one points back toward the output. It arrives at u as 1 and splits at the sum
 // into two copies (the same gradient seen twice). One rides the lane back unchanged; the
 // other crosses F, where it is multiplied by the branch's local slope: it shrinks, vanishes
 // at 0, and flips when the slope is negative. Under x the copies are laid head to tail on a
@@ -22,7 +22,7 @@
   if (!root || root.dataset.ready) return;
   const $ = selector => root.querySelector(selector);
   const numbersOf = name => root.dataset[name].trim().split(/\s+/).map(Number);
-  // The panel is the one in-repo mirror of the fixture: the gradient arriving at H(x), the
+  // The panel is the one in-repo mirror of the fixture: the gradient arriving at u, the
   // learned branch's local slope at the timeline's three stops (reinforced, doing nothing,
   // mostly cancelled) and the dial's range. The chapter
   // (chapters/part2/09-modern-cnns-transfer.qmd, the residual equation's gradient line)
@@ -113,7 +113,7 @@
       laneLabel: 46, branchLabel: 162, letterY: 110, slopeY: 139, xLabel: [-7, 108], hLabel: [0, 138],
       pulse: 4, flow: [6, 3.5]}
   };
-  // Where a packet rests: its head just clear of H(x)'s node, and each copy just clear of
+  // Where a packet rests: its head just clear of u's node, and each copy just clear of
   // the sum at its route's entrance.
   const REST_GAP = 3, ENTRY_GAP = 3, BOX_MARGIN = 5;
 
@@ -237,7 +237,7 @@
       parts.push(`<path class="il-flow" d="M${pt(px, py)}L${pt(px - dx * len - dy * half, py - dy * len + dx * half)}L${pt(px - dx * len + dy * half, py - dy * len - dx * half)}Z"></path>`);
     };
 
-    // 1. Scenery: the wires, the learned branch, the lane, the sum, x and H(x).
+    // 1. Scenery: the wires, the learned branch, the lane, the sum, x and u.
     parts.push(`<path class="il-wire il-stub" d="M${pt(m.up, y)}H${num(X - m.node - 2)}M${pt(m.out + m.node + 2, y)}H${num(m.down)}"></path>`);
     parts.push(`<path class="il-wire" d="M${pt(X + m.node, y)}H${num(bx)}M${pt(bx + bw, y)}H${num(PX - r)}M${pt(PX + r, y)}H${num(m.out - m.node)}"></path>`);
     flow(bx, y, 1, 0); flow(PX - r, y, 1, 0); flow(m.out - m.node, y, 1, 0); flow(PX, y - r, 0, 1);
@@ -248,7 +248,7 @@
     parts.push(`<circle class="il-node" data-mark="x" cx="${num(X)}" cy="${num(y)}" r="${num(m.node)}"></circle>`);
     parts.push(`<circle class="il-node" data-mark="output" cx="${num(m.out)}" cy="${num(y)}" r="${num(m.node)}"></circle>`);
     text(X + m.xLabel[0], m.xLabel[1], 'x', 'il-symbol il-feature-text', 'end', ' data-label="x"', m.symbol);
-    text(m.out + m.hLabel[0], m.hLabel[1], 'H(x)', 'il-symbol il-feature-text', 'middle', ' data-label="output"', m.symbol);
+    text(m.out + m.hLabel[0], m.hLabel[1], 'u', 'il-symbol il-feature-text', 'middle', ' data-label="output"', m.symbol);
     text(bx + bw / 2, m.letterY, 'F', 'il-symbol', 'middle', ' data-label="F"', m.letter);
     text(bx + bw / 2, m.slopeY, `slope ${fmt(st.slope)}`, 'il-slope-text', 'middle', ' data-value="slope"', m.small);
     text((X + PX) / 2, m.laneLabel, 'identity lane', 'il-lane-text', 'middle', ' data-label="lane"', m.small);
@@ -364,12 +364,12 @@
   // before the copies have been laid under it.
   function describe(st) {
     const s = st.slope;
-    const block = `One residual block: x feeds the learned branch F, local slope ${fmt(s)}, and the identity lane, which arcs over F; the two meet at the sum, whose output is H of x.`;
+    const block = `One residual block: x feeds the learned branch F, local slope ${fmt(s)}, and the identity lane, which arcs over F; the two meet at the sum, whose output is u.`;
     const now = {
       block: !st.pulse ? '' : st.pulse.out === null ? 'x flows forward along both routes to the sum.'
-        : 'The sum flows on to H of x.',
-      incoming: `A gradient of ${fmt(IN)} arrives at H of x.`,
-      arrived: `A gradient of ${fmt(IN)} sits at H of x.`,
+        : 'The sum flows on to u.',
+      incoming: `A gradient of ${fmt(IN)} arrives at u.`,
+      arrived: `A gradient of ${fmt(IN)} sits at u.`,
       fork: `The gradient of ${fmt(IN)} reaches the sum and splits into two copies.`,
       waiting: `One copy of ${fmt(IN)} waits at the entrance of the identity lane, the other at the entrance of F.`,
       travel: 'The lane\'s copy rides back along the lane while the other copy crosses F.',

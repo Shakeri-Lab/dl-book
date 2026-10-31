@@ -335,7 +335,7 @@ test('step length: every printed number is house style and every mark stays insi
       for (const node of drawing(f).querySelectorAll('[data-value]')) {
         const text = node.textContent.trim();
         if (text === '·') { assert(!visible(node), 'a withheld number is not drawn'); continue; }
-        shown(text.replace(/^(?:L|α|wall α) ?/, ''));
+        shown(text.replace(/^(?:L|η|wall η) ?/, ''));
       }
       const wording = [...texts.map(node => node.textContent), f.$('[data-caption]').textContent,
         f.$('[data-figure] svg').getAttribute('aria-label'),

@@ -1,5 +1,12 @@
 # Bootstrap prompt for a fresh chat session
 
+**Current override, October 31, 2026:** the Springer manuscript governs shared
+language, and remains read-only during HTML synchronization. Preserve HTML-only
+teaching material, interactive behavior and executable evidence. Follow
+[Format Authority](style-guide.md#format-authority). Older checkpoints and workspace
+instructions below are historical, not current authority or verification receipts.
+Read the current task before choosing a working tree, rendering, or publishing.
+
 Paste everything between the rules into a new Claude Code session started in
 `~/Library/CloudStorage/Box-Box/Teaching/6050/dl-book`. It orients the agent, pins the non-negotiables, and stops
 it from editing before you have said what you want done.
@@ -7,7 +14,7 @@ it from editing before you have said what you want done.
 Keep this file current: if a rule changes or the state moves, edit the prompt here
 rather than re-deriving it in chat.
 
-**Animation work override — Chapter 11 approved publication, September 13, 2026:**
+**Historical animation checkpoint: Chapter 11 approved publication, September 13, 2026:**
 Use `/Users/hs9hd/dl-book-html-release`. Derivative gates is pushed as `00c0730`.
 Run `34770754602` has a Chapter 8 download HTTP 503 and the known Chapter 18
 same-runtime signed-zero failure; do not claim deployment or weaken gates.
@@ -332,9 +339,14 @@ answer.**
 - **Book voice is self-contained.** Arguments, omissions, analogies, and evidence do
   not defer to an off-page narrator. Keep exact source paths in hidden provenance,
   not learner-facing Sources entries.
-- **HTML is the source of truth.** Review and approve the canonical HTML edition
-  first. The Quarto PDF editions are retired (September 30, 2026); the print edition
-  is a separate Springer manuscript converted from each chapter's TeX freeze.
+- **Shared language follows Springer (author instruction, October 31, 2026).**
+  Use the current manuscript source snapshot when the saved PDF is older, and keep
+  Springer read-only during HTML synchronization. Preserve HTML-only explanations,
+  code, interactive plots and stable IDs. Recorded executable outputs govern numerical
+  evidence; report conflicts instead of changing results or silently copying a disputed
+  claim. Earlier panel/fixture holds yield to the current authorized language scope.
+  The HTML and TeX freezes are this repository's execution artifacts, not the
+  independently edited Springer master. Follow `docs/style-guide.md` Format Authority.
 - **Unnumbered-section figures are independent.** Experiment, autoencoder, and
   test-time-regression figures use `EX.`, `AE.`, and `TTR.` namespaces; epilogue
   figures use `E.` in both formats. Experiment-interlude tables use `EX.` too.
@@ -354,11 +366,13 @@ answer.**
   ordinary language, but do not reveal the later construction's name or finished
   interpretation before the reader has built enough behavior to earn it. Keep the
   destination in `docs/arc-seeds.md`, not in premature learner-facing slogans.
-- **Box caution.** The working tree is in Box; GitHub is the source of truth. If git objects ever look corrupt, re-clone rather than repair in place, and never let a render run while Box is mid-sync of the same folder.
-- **Freeze discipline.** Any prose edit invalidates that chapter's freeze cache.
-  Re-render the chapter with **no `--to` flag** (both formats), then the project —
-  otherwise the TeX freeze the Springer manuscript is converted from goes stale. Renders are slow: a heavy chapter is 20–40
-  minutes, the full book about 40. Run them in the background and keep working.
+- **Box caution.** GitHub records this repository's committed state; it does not override Springer's shared-language authority. If git objects ever look corrupt, re-clone rather than repair in place, and never let a render run while Box is mid-sync of the same folder.
+- **Freeze discipline.** A language-only carry must preserve recorded execution and
+  output payloads while refreshing reviewed prose consistently in both freeze formats.
+  Record the source snapshot and exact edits; a new source hash does not mean new
+  numerical evidence. Refresh changed display assets and verify the rendered result.
+  Execution changes follow the ordinary two-freeze workflow. Freeze parity does not
+  establish Springer parity, and a successful render does not establish deployment.
 - **Refactors must be content-bit-identical** on the frozen stdout. Snapshot the
   `cell-output-stdout` blocks from
   `_freeze/<chapter>/execute-results/html.json`, re-render, and diff.

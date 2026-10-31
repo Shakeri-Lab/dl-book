@@ -8,7 +8,7 @@
   // 330-345): the velocity is a running sum of gradients, so components that keep their
   // sign build while components that flip sign cancel. The valley, the start, the step
   // length and the particular beta are this panel's declared computed variant; beta sits
-  // at the low end of the chapter's printed range.
+  // at the chapter's chosen value, within 0 <= beta < 1.
   const [curveAcross,curveAlong]=declared('curvature');
   const [startAcross,startAlong]=declared('start');
   const alpha=Number(root.dataset.rate), beta=Number(root.dataset.beta);
@@ -55,7 +55,7 @@
 
   // One act of the scene: the declared loop played out in the recursion's own order.
   // Inside each step the running sum first shrinks by the memory, then this step's
-  // gradient is added to its tip, and only then does the iterate move by minus alpha v.
+  // gradient is added to its tip, and only then does the iterate move by minus eta v.
   // Plain SGD is this same function with memory 0: the one term collapses to nothing
   // before the next arrives, which is what "no memory" looks like.
   function play(run,memory,from,perStep,held) {

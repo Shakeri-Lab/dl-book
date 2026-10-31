@@ -94,11 +94,11 @@ test('momentum memory: the mechanism it draws is the chapter\'s own printed pass
     '\\vect{v}^{(t)} = \\beta\\,\\vect{v}^{(t-1)} + \\nabla \\loss(\\vect{w}^{(t)}), \\qquad',
     '\\vect{w}^{(t+1)} = \\vect{w}^{(t)} - \\eta\\,\\vect{v}^{(t)},',
     '$$ {#eq-momentum}',
-    'with $\\beta \\in [0.9, 0.99]$.',
+    'where $0 \\le \\beta < 1$.',
     'the iterate zigzags across the steep direction while inching along the\nshallow one.',
     'In directions where gradients keep agreeing, speed builds. In\ndirections where they flip sign every step, they cancel.',
     'Momentum gives the update a memory. A running **velocity** accumulates\ngradients, and each step follows the velocity instead of the raw gradient:',
-    // The declared beta is the low end of the printed range, and the chapter's own value.
+    // The declared beta is the chapter's own comparison value.
     'momentum=0.9',
     // The chapter's rule-of-thumb step length, and the race that this panel is not.
     'For plain SGD on normalized toy problems like these, $\\eta = 0.1$ is a reasonable first\ntry.',
@@ -120,8 +120,8 @@ test('momentum memory: the declared valley is a narrow bowl the chapter\'s beta 
   const f=fixture(t,NAME), fx=declared(f);
   assert(fx.across>0&&fx.along>0,'a genuine bowl, so "downhill" means something');
   assert(fx.across/fx.along>=20,`curvature ratio ${fx.across/fx.along} is not a narrow valley`);
-  // beta inside the chapter's printed range, and the low end of it.
-  assert(fx.beta>=0.9&&fx.beta<=0.99,`beta ${fx.beta} is outside the chapter's range`);
+  // beta inside the chapter's admissible range, and fixed at its comparison value.
+  assert(fx.beta>=0&&fx.beta<1,`beta ${fx.beta} is outside the chapter's range`);
   assert.equal(fx.beta,0.9);
   // The whole point of the start: both components of the first gradient are the same
   // number, so nothing the scene shows can be blamed on one direction's gradient being
@@ -457,7 +457,7 @@ test('momentum memory: the panel names its computed variants and its boundary', 
   assert.match(boundary,/both runs here use the same/);
   assert.match(boundary,/quadratic valley is the easy case/);
   assert.match(boundary,/schematic/);
-  assert.match(boundary,/low end of the chapter's printed range/);
+  assert.match(boundary,/value the chapter's own/);
   assert.match(boundary,/same recursion with nothing kept/);
   assert.match(boundary,/oscillation boundary/);
   assert.match(boundary,/Nothing is trained/);

@@ -175,7 +175,7 @@ layer to the first.
 
 ```{python}
 #| label: sensitivity-values
-#| code-summary: "Code: propagate the sensitivities"
+#| code-summary: "Code: propagate the loss derivatives"
 #| code-fold: false
 import torch
 import matplotlib.pyplot as plt
@@ -211,7 +211,7 @@ import matplotlib.patches as mp
 from matplotlib.colors import LinearSegmentedColormap
 
 signed = LinearSegmentedColormap.from_list("signed", ["#2B6CB0", "#FFFFFF", "#722F37"])
-pulled = [Ws[1].T @ delta[1], Ws[2].T @ delta[2]]           # W^T delta, before the gate
+pulled = [Ws[1].T @ delta[1], Ws[2].T @ delta[2]]           # W^T delta, before the activation derivative
 gates = [sp(zs[0]), sp(zs[1])]
 strips = [(delta[0], "s", r"$\delta^{(1)}$"), (gates[0], "g", r"$\sigma'(z^{(1)})$"),
           (pulled[0], "s", r"$W^{(2)\top}\delta^{(2)}$"),
@@ -227,7 +227,7 @@ for k, (vec, kind, label) in enumerate(strips):
     y_top = ch * n / 2
     for i, v in enumerate(vec.tolist()):
         if kind == "g":
-            face = plt.cm.Greys(0.05 + 0.35 * v / 0.25)       # gate: 0 to 0.25
+            face = plt.cm.Greys(0.05 + 0.35 * v / 0.25)       # activation derivative: 0 to 0.25
             ink = "black"
         else:
             face = signed(0.5 + 0.5 * v / vmax)
@@ -249,11 +249,11 @@ for k, (vec, kind, label) in enumerate(strips):
         else:
             ax.text(xm, 0, op, ha="center", va="center", fontsize=13)
         x += cw + gap
-closed = int(torch.argmin(gates[0]))                      # the most nearly closed gate
+closed = int(torch.argmin(gates[0]))                      # the smallest activation derivative
 for xl in lefts[:3]:
     ax.add_patch(mp.Rectangle((xl, ch * 2 - (closed + 1) * ch), cw, ch, fill=False,
                               ec="black", lw=2.4, zorder=4))
-ax.text(lefts[0], 1.2, "backward, right to left: pull back through $W^\\top$, then gate",
+ax.text(lefts[0], 1.2, "backward, right to left: multiply by $W^\\top$, then by $\\sigma'(z)$",
         fontsize=9, color="#722F37", va="center")
 ax.set_xlim(-0.1, x + cw + 0.1); ax.set_ylim(-1.5, 1.4); ax.axis("off")
 plt.tight_layout(); plt.show()
@@ -289,7 +289,7 @@ parallel matrix multiplies that GPUs are built for.
 #| code-summary: "Code: form the outer-product gradient"
 #| code-fold: false
 # [1]
-d2 = delta[1]                              # layer-2 sensitivity  (4,)
+d2 = delta[1]                              # layer-2 loss derivative  (4,)
 a1 = torch.sigmoid(zs[0])                  # layer-1 activations  (4,)
 G = torch.outer(d2, a1)                    # eq. 3
 ```
@@ -412,9 +412,11 @@ L = ((Z2.squeeze() - y) ** 2).mean()
 
 # backward pass -- the four equations (batch-averaged)
 sig_prime = A1 * (1 - A1)                     # sigma'(z) = sigma(z)(1 - sigma(z))
-delta2 = 2 * (Z2.squeeze() - y)[:, None] / n  # eq. 1 (identity output: no gate)
-delta1 = (delta2 @ W2) * sig_prime            # eq. 2: back through W^T, then gated
-grads = {                                     # eqs. 3 & 4: sensitivity out x signal in
+delta2 = 2 * (Z2.squeeze() - y)[:, None] / n  # eq. 1 (identity output: derivative 1)
+# eq. 2: back through W^T, then multiply by sigma'
+delta1 = (delta2 @ W2) * sig_prime
+# eqs. 3 & 4: loss derivative out x signal in
+grads = {
     "W2": delta2.T @ A1, "b2": delta2.sum(0),
     "W1": delta1.T @ X,  "b1": delta1.sum(0),
 }
@@ -526,7 +528,7 @@ class Value:
     def sigmoid(self) -> "Value":
         s = 1 / (1 + 2.718281828459045 ** (-self.data))
         out = Value(s, (self,))
-        def rule():                      # sigma' = s (1 - s), the gate
+        def rule():                      # activation derivative: sigma' = s (1 - s)
             self.grad += s * (1 - s) * out.grad
         out._backward_rule = rule
         return out
@@ -702,12 +704,12 @@ derivative approaches zero.
 
 :::: {.plan-code}
 ::: {.plan}
-1. Evaluate the sigmoid and ReLU derivative gates.
+1. Evaluate the sigmoid and ReLU activation derivatives.
 :::
 
 ```{python}
 #| label: derivative-gates
-#| code-summary: "Code: evaluate the two derivative gates"
+#| code-summary: "Code: evaluate the two activation derivatives"
 #| code-fold: false
 import matplotlib.pyplot as plt
 
@@ -728,9 +730,9 @@ fig, axes = plt.subplots(1, 2, figsize=(7.4, 2.9), sharey=True)
 axes[0].plot(z, sigmoid_gate, color="#232D4B")
 axes[0].axhline(0.25, ls="--", color="#E57200", lw=1)
 axes[0].text(2.1, 0.26, "ceiling: 0.25", color="#E57200", fontsize=9)
-axes[0].set_title(r"sigmoid gate $\sigma'(z)$"); axes[0].set_xlabel("$z$")
+axes[0].set_title(r"sigmoid derivative $\sigma'(z)$"); axes[0].set_xlabel("$z$")
 axes[1].plot(z, relu_gate, color="#232D4B")
-axes[1].set_title(r"ReLU gate"); axes[1].set_xlabel("$z$")
+axes[1].set_title(r"ReLU derivative"); axes[1].set_xlabel("$z$")
 plt.tight_layout(); plt.show()
 ```
 Products of these derivatives cause one of the central failure modes of deep networks. The
@@ -860,6 +862,14 @@ therefore doubled the forward recipe to $\var(w) = 2/D_{\text{in}}$, now called
 **He initialization**, after Kaiming He. A PyTorch linear layer follows neither recipe by
 default: it draws its weights uniformly with variance $1/(3D_{\text{in}})$, a sixth of the
 He value, so a deep ReLU stack without normalization needs an explicit choice.
+
+Write $\sigma_w$ for the standard deviation of the weights, so $\var(w) = \sigma_w^2$.
+A ReLU output is not zero-mean. With zero-mean weights, the rule above still holds with
+the mean square $\E[x^2]$ in place of $\var(x)$. When the pre-activations are symmetric
+about zero, as they are at this initialization, ReLU keeps half of the mean square.
+In a layer of width $D$ the mean square therefore changes by the factor
+$D\sigma_w^2/2$, and from the second layer on the standard deviation of the activations
+is multiplied by about $\sigma_w\sqrt{D/2}$ per layer.
 
 :::: {.plan-code}
 ::: {.plan}

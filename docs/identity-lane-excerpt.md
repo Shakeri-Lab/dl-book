@@ -31,11 +31,11 @@ plus the slope, so a slope of −0.9 leaves 0.1.
 ## What moves, and why two frames could not do it
 
 One picture: the block laid left to right as the chapter's figure lays it, x, the learned
-branch F (a box outlined in orange, since it holds the learned weights), the sum and H(x), with
+branch F (a box outlined in orange, since it holds the learned weights), the sum and u, with
 the identity lane arcing from x over F to the sum. The one tracked object is the gradient, a
 wine arrow whose length is its value on one shared scale (60 drawing units per unit wide, 30
 narrow) and whose direction is its sign: a positive copy points along its route toward x, a
-negative one back toward the output. It arrives at H(x) as 1 and splits at the sum into two
+negative one back toward the output. It arrives at u as 1 and splits at the sum into two
 copies, the same gradient seen twice. The lane's copy rides back unchanged; the other crosses
 F, slowing while the branch rescales it: it shrinks, vanishes at slope 0, and at a negative
 slope shrinks through nothing and grows back pointing the other way. Under x the copies are
@@ -50,13 +50,13 @@ carries both, and the dial then shows that every slope simply adds to the lane's
 
 | attribute | value | what it mirrors |
 |---|---|---|
-| `data-incoming` | 1 | declared: the gradient ∂L/∂H arriving at H(x), one unit |
+| `data-incoming` | 1 | declared: the gradient ∂L/∂H arriving at u, one unit |
 | `data-slopes` | 0.5, 0, −0.9 | declared: the branch's local slope ∂F/∂x at the timeline's three stops, the chapter's "reinforce" and "partly cancel", and 0 its "to represent: $F = 0$." |
 | `data-range` | −1 to 1 | declared: the dial's range |
 | `data-evidence-class` | `declared-toy` | the chapter prints no Jacobian |
 
 The chapter literals bound in the manifest are the one-change sentence ("The one change is
-that each block computes $F(x)$ and outputs $F(x) + x$."), `H(x) = F(x) + x`, the gradient line of the
+that each block computes $F(x)$ and outputs $F(x) + x$."), `u = F(x) + x`, the gradient line of the
 residual equation, the two sentences of the "not magical" caveat, and "to represent: $F = 0$."
 The panel's formula is the chapter's gradient line with its two bracketed terms wrapped in
 `\class{il-branch}` and `\class{il-lane}`; the suite strips the wrappers and finds the chapter's
@@ -92,11 +92,11 @@ Duration 40 s, beats `0 5 10 15 20 25 30 35`.
 
 | beat | s | what happens |
 |---|---|---|
-| 0 | 0–5 | the block, forward: x flows along both routes to the sum, which gives H(x) |
-| 1 | 5–10 | a gradient of 1 arrives at H(x), reaches the sum and splits; one copy of 1 waits at each route's entrance |
+| 0 | 0–5 | the block, forward: x flows along both routes to the sum, which gives u |
+| 1 | 5–10 | a gradient of 1 arrives at u, reaches the sum and splits; one copy of 1 waits at each route's entrance |
 | 2 | 10–15 | both copies travel back; the lane's keeps 1, the one through F scales to 0.5; laid head to tail under x, 1.5 is stated at 12.5 s, once they have arrived |
 | 3 | 15–20 | the slope glides to 0 in 1.4 s: the copy through F shrinks to an open ring, and exactly 1 reaches x |
-| 4 | 20–25 | the question: the slope is set at once to −0.9 (on F and on the dial); a gradient of 1 sits at H(x); nothing moves, and neither the copy through F nor anything under x is drawn |
+| 4 | 20–25 | the question: the slope is set at once to −0.9 (on F and on the dial); a gradient of 1 sits at u; nothing moves, and neither the copy through F nor anything under x is drawn |
 | 5 | 25–30 | the reveal: the gradient splits again, the copy through F flips to −0.9, and head to tail with the lane's 1 it leaves 0.1, stated at 27.7 s |
 | 6 | 30–35 | the dial sweeps −0.9 → 0.5 → −1 and rests at −1 from 33.5 s; what reaches x follows 1 plus the slope, 1.5 at 0.5 and 0 at −1 |
 | 7 | 35–40 | the slope glides home to −0.9 (35 to 35.6 s); the final frame: copies 1 and −0.9, 0.1 reaching x; a route, not a guarantee |
@@ -119,7 +119,7 @@ its keys never reach the pane's beat seeking. It is inert and hidden until the p
 
 Wine is the gradient and its copies, and every number they carry. Orange is the learned
 branch's weights and nothing else: only the outline of F wears it. Ink is the identity lane,
-the sum, the slope written on F, the dial and the head-to-tail ties; blue is x and H(x), and the
+the sum, the slope written on F, the dial and the head-to-tail ties; blue is x and u, and the
 forward pass in the first beat; the wires and the scale are grey. The formula washes, in ink,
 the term each copy is travelling through, and only the branch's term while its slope moves.
 The chapter's matplotlib figure, redrawn at the author's request, now draws the identity path
@@ -185,6 +185,6 @@ Lecture paths are relative to the lecture repository root.
 
 | Source | SHA-256 |
 |---|---|
-| `chapters/part2/09-modern-cnns-transfer.qmd` | `749546c78f9f902d373d871b8050f1b17da9cdcd64e7cfa403221748c7789f08` |
+| `chapters/part2/09-modern-cnns-transfer.qmd` | `9079282536dca703edfc0c59a795171ac44e9aadda8f27dbb814eea44aacf3f2` |
 | `6050-Ch9/lecture.jsx` | `446a5c3f889149b46f5fe275c37414d3240bb1b4dc27b347e9212d9f0527402a` |
 | `6050-Ch9/STORYBOARD.md` | `ebe6a9b53bd79c911bb967e84538a8c2a261d3db4db439313de291fc78f2ee5e` |
