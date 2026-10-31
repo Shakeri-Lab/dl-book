@@ -64,7 +64,7 @@
     path.push([w-eta*gb[0],b-eta*gb[1]]);
   }
   const startSignal=Math.hypot(...fullGradient(startW,startB));
-  // The region of confusion is where the signal falls under that floor. Mean squared
+  // The region of stochastic fluctuations is where the signal falls under that floor. Mean squared
   // error is exactly quadratic, so the boundary is an exact ellipse about the optimum:
   // ||grad L|| = ||2 M (theta - theta*)|| with the constant M = [[m2, m1], [m1, 1]].
   const hw=noiseFloor/(2*Math.sqrt(m2*m2+m1*m1)), hb=noiseFloor/(2*Math.sqrt(m1*m1+1));
@@ -84,7 +84,7 @@
   const REST=[3,8.5,13.5,20,24.3,30,35,38];
   const walkAt=time=>clamp((time-beats[3])/(beats[7]-beats[3]))*stepCount;
   const stageNames=['The full gradient','Five batches of four','Gradient plus noise',
-    'Stepping in','Under the floor','Region of confusion','Milling','Two zones, one rule'];
+    'Stepping in','Under the floor','Stochastic fluctuations','Milling','Two zones, one rule'];
   // Each sentence is true of its reduced-motion still and of the motion it introduces.
   // None of them names the answer to the prediction beat 3 poses.
   const captions=[
@@ -93,7 +93,7 @@
     'Each batch is that same gradient plus its own fixed noise. The five noise vectors cancel.',
     'Now step toward the optimum. Will the five still agree once the iterate arrives?',
     'The signal has dropped under the noise floor. The spread is opening past a right angle.',
-    'The region of confusion: batches disagree because the signal went, not because the noise grew.',
+    'The region of stochastic fluctuations: batches disagree because the signal went, not because the noise grew.',
     'Inside it the iterate mills around and never settles. Same rule, same noise throughout.',
     'The floor never moved; the signal collapsed. That is why the step must eventually shrink.'
   ];
@@ -146,7 +146,7 @@
   const confusion=make('g',{'data-confusion':''});
   const confusionArea=make('path',{class:'sz-confusion-area'},confusion);
   const confusionEdge=make('path',{class:'sz-confusion-edge'},confusion);
-  const confusionText=label('region of confusion','sz-error',{'text-anchor':'middle','data-confusion-label':''},confusion);
+  const confusionText=label('stochastic fluctuations','sz-error',{'text-anchor':'middle','data-confusion-label':''},confusion);
   const optimum=make('g',{'data-optimum':''});
   const optimumMark=make('path',{class:'sz-optimum'},optimum);
   const optimumText=label('empirical optimum','sz-ink',{'text-anchor':'middle','data-optimum-label':''},optimum);
