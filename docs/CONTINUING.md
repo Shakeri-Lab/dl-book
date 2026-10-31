@@ -1,5 +1,20 @@
 # Continuing the Book — Handoff & Roadmap
 
+> **Current override, October 31, 2026.** Shared language follows the current Springer
+> manuscript. Keep that manuscript read-only while updating this HTML companion, and
+> preserve interactive plots, executable evidence and HTML-only explanations. The
+> [Format Authority](style-guide.md#format-authority) rule supersedes earlier
+> HTML-first statements, dated checkpoints and blanket prose/fixture holds in this
+> history. Distinguish current manuscript source from an older saved PDF, and distinguish
+> recorded execution evidence from a language carry. This branch's checks and publication
+> status must be reported separately; earlier successful runs do not certify current work.
+>
+> `data/print-companions.json` records the current mapping of 200 active printed
+> Experiment/Animation labels to HTML destinations, with manuscript source locations
+> and hashes. Commented-out draft entries are excluded. Maintain that mapping
+> from active manuscript content and preserve target IDs. A valid destination still
+> needs to fulfill the prose promise made by its printed label.
+
 *Written 2026-07-09 after Chapter 11 shipped; updated 2026-07-16 for the structural,
 course-alignment, test-time memory/control, release-polish, and v1.0 stewardship
 passes. This is the master handoff document:
@@ -1014,11 +1029,12 @@ from `main` via GitHub Actions → `gh-pages`; the book PDFs are retired).
 forward pointers and mutual colophon links complete the D23 reciprocity contract; any
 future move of a declared anchor requires a coordinated update in both repositories.
 
-**Format authority:** HTML is the source of truth for the book's content, order,
-semantics, and interactive/responsive presentation. PDF is the print/offline
-conversion of that edition. PDF-specific work may adjust pagination, line breaks,
-float placement, and print-safe sizing, but must not introduce a separate substantive
-edition. Resolve disagreements in the shared Quarto source or conversion layer.
+**Format authority (updated October 31, 2026):** the current Springer manuscript
+governs shared language; HTML retains its interactive/responsive presentation,
+executable evidence and additional teaching material. Update HTML from the reviewed
+manuscript snapshot without editing Springer. The older two-format conversion policy
+is superseded by [Format Authority](style-guide.md#format-authority). The two execution
+freezes in this repository are not the Springer master.
 
 | Part | Chapters | Status |
 |---|---|---|
@@ -1304,6 +1320,13 @@ solvers in the test-time-regression interlude change the statistical contract in
 
 ## 2. The working protocol (refined over chapters 7–20 and Appendices A–E)
 
+For an authorized language-only synchronization, follow the current
+[Format Authority](style-guide.md#format-authority) before the execution workflow below.
+Preserve recorded numerical evidence through a reviewed prose-cache refresh; rerunning
+training is not a prerequisite to changing words. Code or experimental changes require
+the corresponding execution and numerical checks. Neither workflow edits the Springer
+manuscript as a side effect.
+
 The single most important lesson of this project: **pre-test every experiment
 regime before writing a word of prose.** Roughly half of all planned experiments
 failed their first design (see §5 case law). The loop that works:
@@ -1327,18 +1350,21 @@ failed their first design (see §5 case law). The loop that works:
    (`docs/arc-seeds.md`) — both harvesting due seeds and planting contracted ones.
 5. **Render the chapter — BOTH formats**: `quarto render chapters/…/XX.qmd`
    (NO `--to html` flag! An HTML-only render leaves the TeX freeze (`tex.json`)
-   stale, and the Springer manuscript is converted from it; the frozen-stdout audit
-   fails on the mismatched source hash). Because `pdf` is a single-file book format,
+   stale; the frozen-stdout audit fails on the mismatched source hash). Springer was
+   initially converted from this freeze and is now edited independently; refreshing
+   the freeze does not synchronize that manuscript. Because `pdf` is a single-file book format,
    this re-executes only the chapter but also compiles a whole-book PDF into `_book`;
-   delete it, or render `--to html` again, before auditing. Review HTML first because
-   it is canonical.
+   delete it, or render `--to html` again, before auditing. Review the HTML presentation
+   against the current Springer language and the recorded executable evidence.
 6. **Verify**: extract every printed output from
    `_freeze/…/execute-results/html.json` and check each against the prose; `Read`
    every generated figure PNG and check it against its caption (mis-captioned
    figures happened twice before this habit).
-7. **Fix prose to match outputs** (never the reverse unless the experiment is
-   wrong). Batch all fixes, then re-render once — *any* qmd edit invalidates the
-   freeze and forces full re-execution (5–15 min for training-heavy chapters).
+7. **Resolve prose/output conflicts against evidence** (never change outputs merely
+   to fit prose). Record any conflict with the Springer wording for author review.
+   Batch execution changes before re-rendering. For an authorized prose-only carry,
+   use the evidence-preserving refresh described by the current Format Authority
+   rather than treating an invalidated source hash as a reason to rerun training.
 8. **Full book render**: export
    `QUARTO_PYTHON="$HOME/.venvs/dl-book/bin/python"` and render the canonical HTML with
    `quarto render --to html`. The book PDFs are retired (September 30, 2026); the chapter's TeX

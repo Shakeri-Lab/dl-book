@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Test-only checks for the identity-lane scene in Chapter 10
 // (chapters/part2/09-modern-cnns-transfer.qmd, the residual block). Nothing here ships. The
-// suite takes the gradient arriving at H(x), the three slopes and the dial's range from the
+// suite takes the gradient arriving at u, the three slopes and the dial's range from the
 // panel's own attributes and reads the picture back out of the SVG: every copy's value is
 // recovered from its drawn length on the scale under x, laid head to tail, so the printed
 // "reaches x" is the length the two copies actually leave, 1 plus the slope, at every tenth
@@ -79,9 +79,9 @@ test('identity lane: the equation and the three stops are the chapter\'s, the nu
   // The panel's formula is the chapter's gradient line with its two terms wrapped for the wash.
   const tex = f.$('#eq-identity-lane-1').textContent;
   // \displaystyle is presentation only: the chapter sets this equation as display math.
-  assert.equal(tex, '\\( \\displaystyle \\residualpart{\\frac{\\partial L}{\\partial x}} = \\residualpart{\\frac{\\partial L}{\\partial H}}\\left(\\class{il-branch}{\\frac{\\partial F}{\\partial x}} + \\class{il-lane}{I}\\right) \\)');
+  assert.equal(tex, '\\( \\displaystyle \\residualpart{\\frac{\\partial \\loss}{\\partial x}} = \\residualpart{\\frac{\\partial \\loss}{\\partial u}}\\left(\\class{il-branch}{\\frac{\\partial F}{\\partial x}} + \\class{il-lane}{I}\\right) \\)');
   const bare = tex.replace(/\\class\{[^}]*\}\{((?:[^{}]|\{[^{}]*\})*)\}/g, '$1').replace(/\\residualpart\{((?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*)\}/g, '$1');
-  assert(bare.includes('\\frac{\\partial L}{\\partial x} = \\frac{\\partial L}{\\partial H}\\left(\\frac{\\partial F}{\\partial x} + I\\right)'), bare);
+  assert(bare.includes('\\frac{\\partial \\loss}{\\partial x} = \\frac{\\partial \\loss}{\\partial u}\\left(\\frac{\\partial F}{\\partial x} + I\\right)'), bare);
   assert(chapter.includes('= \\frac{\\partial \\loss}{\\partial u}\\left(\\frac{\\partial F}{\\partial x} + I\\right).'));
   // Amplify, do nothing, mostly cancel: the chapter's own words for what the branch Jacobian does.
   assert(chapter.includes('the branch Jacobian, which can amplify, attenuate, or partly\ncancel that contribution.'));
@@ -94,7 +94,7 @@ test('identity lane: the equation and the three stops are the chapter\'s, the nu
   assert(cancelled < -0.5 && cancelled > k.range[0], 'the third stop cancels most of the identity term, but not all');
   assert.deepEqual(k.range, [-1, 1]);
   assert(k.slopes.every(s => s >= k.range[0] && s <= k.range[1]), 'every stop lies on the dial');
-  assert.equal(k.incoming, 1, 'one unit of gradient arrives at H(x)');
+  assert.equal(k.incoming, 1, 'one unit of gradient arrives at u');
   // The question offers the right answer and both misreadings, each computed from the fixture.
   const question = f.$('.mechanism-question').textContent;
   assert(question.includes(`local slope ${shown(cancelled)}`));
@@ -180,10 +180,10 @@ test('identity lane: from the ask until the reveal nothing says what reaches x',
       assert.equal(f.$('[data-caption]').textContent, `Now the learned slope is ${shown(s2)}. How much of the ${shown(k.incoming)} reaches x?`);
       for (const name of ['lane-copy', 'learned-copy', 'reached']) assert.equal(mark(f, name), null, `${where}: ${name} is drawn`);
       assert.equal(drawing(f).querySelectorAll('[data-value="learned-copy"], [data-value="reached"], [data-value="lane-copy"]').length, 0);
-      // The slope label and the dial read −0.9; the gradient of 1 waits at H(x).
+      // The slope label and the dial read −0.9; the gradient of 1 waits at u.
       assert.equal(value(f, 'slope').textContent, `slope ${shown(s2)}`);
       assert.equal(dial(f).getAttribute('aria-valuetext'), `slope ${two(s2)}`);
-      assert(mark(f, 'incoming'), `${where}: the gradient of 1 sits at H(x)`);
+      assert(mark(f, 'incoming'), `${where}: the gradient of 1 sits at u`);
       assert.equal(value(f, 'incoming').textContent, shown(k.incoming));
       const said = [...texts(f).map(node => node.textContent), described(f), scrubbed(f), dial(f).getAttribute('aria-valuetext')];
       for (const text of said) {

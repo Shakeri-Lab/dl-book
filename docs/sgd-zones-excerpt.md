@@ -5,12 +5,12 @@ descent" and §"The two zones of SGD", adapted from the `TwoZones` scene of the
 DS 6050 Chapter 4 film. The insertion point is `before-heading` → `The learning
 rate` in `chapters/part1/04-training-loss-sgd.qmd`, so the panel lands at the end
 of §"The two zones of SGD", after the `fig-sgd-zones` cell and the paragraph that
-follows it, and immediately before the section that introduces `α`:
+follows it, and immediately before the section that introduces `η`:
 `04-training-loss-sgd.html#sgd-zones-excerpt`. The shared manuscript, its figure
 and all frozen evidence are unchanged; nothing here is added to the PDF.
 
 This scene merges two of the author's picks — "the gradient descent and SGD +
-batch directions" and "two noise zones and the region of confusion" — because the
+batch directions" and "two noise zones and the region of stochastic fluctuations near the optimum" — because the
 first alone is thin and the second repeats its setup. One fan of batch arrows,
 seen at two distances from the optimum, answers both.
 
@@ -49,7 +49,7 @@ iterate. Everything else is the mechanism seen at two distances from the optimum
    `‖∇L‖` and an ink mark reads the typical `‖ξ‖`. The wine mark slides from
    2.8814 to about 0.13; the ink mark is drawn once and is at the same pixel at
    every one of the eighty times the suite samples. The shaded strip below it is
-   the region of confusion expressed as a number, and the iterate crosses into it
+   the region of stochastic fluctuations near the optimum expressed as a number, and the iterate crosses into it
    in plain sight one beat before any caption names it.
 
 **Verdict on the first/last-frame test: passes.** Side by side, the first and last
@@ -73,7 +73,7 @@ numbers are in `chapters/part1/04-training-loss-sgd.qmd`.
 | The algorithm's shuffle | `1. Shuffle the training data.` | 80 |
 | The decomposition the scene draws | `\nabla\loss_{\mathcal B}(\vect{w}) = \nabla\loss(\vect{w}) + \vect{\xi}_{\mathcal B}, \qquad \E[\vect{\xi}_{\mathcal B}]=\vect{0}.` | 109–112 |
 | The far zone | "Far from the optimum, the full gradient is large relative to the batch noise …" | 115–116 |
-| The near zone and the name | "Near the optimum, the full gradient shrinks while batches can still disagree ("go left" — "go right") … **region of confusion**" | 117–119 |
+| The near zone and the name | "Near the optimum, the full gradient shrinks while batches can still disagree ("go left" — "go right") … **region of stochastic fluctuations near the optimum**" | 117–119 |
 | Batch size | `batch_size = 4` | 147 |
 | Equal batches partitioning the data | `batches = torch.randperm(len(x1)).reshape(-1, batch_size)` | 148 |
 | Mean of batch directions is the full direction | `    assert torch.allclose(directions.mean(0), full_direction, atol=2e-6)` | 173 |
@@ -113,14 +113,14 @@ This scene declares a **different problem** — twenty replicated points on
 `y = −2x + 1.5`, a negative slope — over its **own window** `[−2.5, −0.6] ×
 [0.1, 2.0]`, with **no contour rings at all**, a diamond iterate travelling up and
 to the left, a fan of five arrows and a rigid dashed pentagon, a shaded ellipse
-labelled *region of confusion*, and a horizontal two-mark ruler under the plane
+labelled *region of stochastic fluctuations near the optimum*, and a horizontal two-mark ruler under the plane
 instead of a bar shelf. The two pictures share only the fact that both are
 parameter planes, which is what the chapter's own two figures share too.
 
 Why these twenty. `mean(x) = 0` and `mean(x²) = 1.25`, so the Hessian of the mean
 squared error is the constant `H = 2·diag(1.25, 1)`, positive definite with
-eigenvalues `2.5` and `2`; at the declared `α = 0.12` the per-step contraction
-factors are `1 − αλ = 0.70` and `0.76`, both strictly inside `(0, 1)`. The
+eigenvalues `2.5` and `2`; at the declared `η = 0.12` the per-step contraction
+factors are `1 − ηλ = 0.70` and `0.76`, both strictly inside `(0, 1)`. The
 residuals sum to zero (`Σ r = 0`) and their `x`-weighted sum is zero
 (`Σ x r = 0`), which puts the **empirical optimum exactly on the declared line**,
 at `(−2, 1.5)` — verified in the browser and in the suite rather than assumed.
@@ -153,20 +153,20 @@ partition, not a general law**, and the panel's scope says so.
 | `‖∇L‖` at the start | `2.881405906844782` |
 | Signal-to-noise at the start | `2.881406 / 0.556067 = 5.181765` |
 | Widest batch direction at the start | `10.19°` off the full descent direction |
-| Learning rate | `0.12` (declared; the chapter's own `α = 0.1` is printed in the *next* section) |
+| Learning rate | `0.12` (declared; the chapter's own `η = 0.1` is printed in the *next* section) |
 | Steps | `25` = five epochs, each a declared permutation of the five batches |
 | Declared order | `2 4 0 3 1` · `4 0 3 1 2` · `0 3 1 2 4` · `3 1 2 4 0` · `1 2 4 0 3` |
 | Signal crosses the floor | between step 4 (`0.9298`) and step 5 (`0.5352`) |
 | Landing after 25 steps | `(−1.948977, 1.490757)`, `‖∇L‖ = 0.128891` |
 | Badge at the last frame | `÷ 22`, from `round(2.881406 / 0.128891) = round(22.355)` |
-| Region of confusion | the exact set `‖∇L(θ)‖ ≤ 0.556067`, an ellipse with semi-axes `0.222427` in `w` and `0.278033` in `b` |
+| Region of stochastic fluctuations near the optimum | the exact set `‖∇L(θ)‖ ≤ 0.556067`, an ellipse with semi-axes `0.222427` in `w` and `0.278033` in `b` |
 | Tail distance from the optimum (last ten steps) | `0.0558 0.0140 0.0796 0.0907 0.0713 0.0532 0.0327 0.0800 0.0866 0.0734` — never zero, never monotone |
 | Arrow magnification `κ` | `0.25` parameter units per gradient unit, the same at every time |
 | Ruler span | `3` gradient units across the drawn rule |
 
 Two scales appear, and they are different things. The **arrows** are drawn at the
 fixed magnification `κ = 0.25`, so their lengths compare across the whole
-timeline; the **step** actually taken is `α = 0.12` times the batch gradient, a
+timeline; the **step** actually taken is `η = 0.12` times the batch gradient, a
 shorter vector that is never drawn. The chapter's own figure instead normalises
 its batch arrows to unit length and picks a different arrow length per panel
 (`arrow_lengths = [0.72, 0.46]`), which makes the two zones incomparable by eye —
@@ -217,7 +217,7 @@ the rule.
 | 2 | 10–15 | 0 | Ink legs join the full arrow's head to each tip, the dashed pentagon closes through them, a hollow ring marks their centroid on that head, and the ruler gains its fixed ink mark at 0.5561 with the shaded strip below it. | Each batch is that same gradient plus its own fixed noise. The five noise vectors cancel. |
 | 3 | 15–20 | 0 → 6.25 | The legs retire; the iterate steps, the trail draws, the full arrow shortens, the pentagon translates without changing, the wine mark slides left past the ink one. The prediction is asked. | Now step toward the optimum. Will the five still agree once the iterate arrives? |
 | 4 | 20–25 | 6.25 → 12.5 | More steps; the signal is now 0.4860, below the floor, and the fan has opened past a right angle. | The signal has dropped under the noise floor. The spread is opening past a right angle. |
-| 5 | 25–30 | 12.5 → 18.75 | The ellipse and its label cross-fade in over the final 0.6 s before the beat; the iterate is inside it. | The region of confusion: batches disagree because the signal went, not because the noise grew. |
+| 5 | 25–30 | 12.5 → 18.75 | The ellipse and its label cross-fade in over the final 0.6 s before the beat; the iterate is inside it. | The region of stochastic fluctuations near the optimum: batches disagree because the signal went, not because the noise grew. |
 | 6 | 30–35 | 18.75 → 25 | The last steps: the trail knots inside the ellipse and never closes on the optimum. | Inside it the iterate mills around and never settles. Same rule, same noise throughout. |
 | 7 | 35–40 | 25 | A hollow wine mark appears where the signal started, with a bracket to the current mark and the badge `÷ 22`; the ink mark has not moved. | The floor never moved; the signal collapsed. That is why the step must eventually shrink. |
 
@@ -241,7 +241,7 @@ and requires exactly one drawn state in every beat interval.
 
 Beat 3's caption asks whether the five will still agree once the iterate arrives,
 and the answer is named at beat 4, five seconds later. From `t = 0` to `t = 20`
-the region of confusion is undrawn and unnamed, the start ghost and the badge are
+the region of stochastic fluctuations near the optimum is undrawn and unnamed, the start ghost and the badge are
 undrawn, and no accessible string — caption, SVG `aria-label`, scrubber value
 text, or any drawn label — matches
 `confus…|disagree…|every direction|opposite|bounce|mill…|useless`. Up to the
@@ -288,7 +288,7 @@ disclosure:
   Every gradient, noise vector, mean, spread, step and ruler reading is computed
   in the browser from the twenty declared points. The decomposition, the
   unbiasedness statement, `batch_size = 4` and the two zones are the chapter's.
-- The **region of confusion is about the gradient estimate**, not the loss. It is
+- The **region of stochastic fluctuations near the optimum is about the gradient estimate**, not the loss. It is
   the exact set where the full gradient is shorter than a typical batch noise
   vector; the loss inside it is near its minimum, not confused. Its ellipse is
   this panel's computed level set, whereas the chapter draws a circle of radius
@@ -298,7 +298,7 @@ disclosure:
   batch's noise varies with the parameters, and only its expectation is pinned to
   zero.
 - The arrows are drawn at one declared magnification; the step actually taken is
-  `α` times the batch gradient, a shorter vector that is never drawn.
+  `η` times the batch gradient, a shorter vector that is never drawn.
 - The batch order is a **declared deterministic list** of five epochs, each a
   permutation of the five batches. The chapter prescribes a shuffle, and its own
   honest fine print (lines 86–98) notes that after the first batch moves `w`, the
@@ -349,12 +349,12 @@ points independently of the player, differentiates each batch loss by central
 differences, and checks: the chapter literals verbatim and the anchor; five equal
 batches whose residuals sum to zero unweighted and `x`-weighted, so the empirical
 optimum is exactly the declared line, with a positive-definite Hessian and a
-convergent contraction at `α = 0.12`; unbiasedness to `10⁻¹²` at six parameter
+convergent contraction at `η = 0.12`; unbiasedness to `10⁻¹²` at six parameter
 vectors inside and outside the window, against a second, numerical route to each
 batch gradient; that the five noise vectors are identical at all six and sum to
 zero; that the fan is inside 15° at the start and spans at least three quadrants
 at the optimum; that the walk is the declared loop with every epoch a permutation
-and every step exactly `−α` times one batch gradient, that the signal starts above
+and every step exactly `−η` times one batch gradient, that the signal starts above
 five times the floor and crosses it before half the steps, and that the tail never
 reaches the optimum and is not monotone; that each drawn tip is the full arrow's
 head displaced by that batch's noise at the drawing scale, identical at eight
@@ -383,5 +383,5 @@ Lecture paths are relative to
 
 | Source | SHA-256 |
 |---|---|
-| `chapters/part1/04-training-loss-sgd.qmd` | `09b088cfb16ba24907a2abab259f4d38bcc1a82144704c78a3411463146ed0fe` |
+| `chapters/part1/04-training-loss-sgd.qmd` | `4d72ac11caaafc80a003d93fde15eb82e21165d76e650253f44c1632c639c4e4` |
 | `6050-Ch4/STORYBOARD.md` | `c5f8b635909b585d6c62f310ef2e16801c58421127d9ef6d536d7fbd331db9ce` |

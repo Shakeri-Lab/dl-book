@@ -119,7 +119,7 @@ On our convex least-squares bowl the two regimes are easy to see:
   (recall @fig-gd-path), but
   individual batches still disagree because different examples
   pull in different directions. With a fixed learning rate the iterate keeps bouncing
-  inside what we will call the **region of confusion**:
+  inside a **region of stochastic fluctuations near the optimum**:
 
 :::: {.plan-code .plan-code-wide}
 ::: {.plan}
@@ -132,8 +132,8 @@ On our convex least-squares bowl the two regimes are easy to see:
 ```{python}
 #| label: fig-sgd-zones
 #| fig-alt: "Two panels show batch descent arrows on the same convex loss contours. Far from the optimum, orange batch arrows cluster around a blue full-gradient arrow. At the optimum, the blue mean is nearly zero while orange batch arrows point in conflicting directions inside a shaded region."
-#| fig-cap: "The two regimes at fixed parameter vectors. Left: equal-size batch directions vary, but their mean overlaps the full descent direction and points down the convex bowl. Right: at the empirical optimum the full gradient is essentially zero while individual batches still disagree, so finite steps create a region of confusion. Within each panel every batch arrow is drawn at the same length, so the arrows compare directions only. The shaded disc is schematic."
-#| code-summary: "Code: expectation and the region of confusion"
+#| fig-cap: "The two regimes at fixed parameter vectors. Left: equal-size batch directions vary, but their mean overlaps the full descent direction and points down the convex bowl. Right: at the empirical optimum the full gradient is essentially zero while individual batches still disagree, so finite steps create a region of stochastic fluctuations near the optimum. Within each panel every batch arrow is drawn at the same length, so the arrows compare directions only. The shaded disc is schematic."
+#| code-summary: "Code: expectation and stochastic fluctuations near the optimum"
 #| code-fold: false
 import torch
 import numpy as np
@@ -208,7 +208,8 @@ axes[0].legend(loc="upper right", fontsize=8)
 axes[1].add_patch(plt.Circle(optimum.numpy(), 0.82, color="#722F37",
                              alpha=0.09, zorder=0))
 axes[1].text(float(optimum[0]), float(optimum[1]) - 1.05,
-             "region of confusion", ha="center", color="#722F37")
+             "region of stochastic\nfluctuations near the optimum",
+             ha="center", color="#722F37")
 plt.tight_layout()
 plt.show()
 ```
@@ -354,7 +355,7 @@ $$
 \vect{w}^{(t+1)} = \vect{w}^{(t)} - \eta\,\vect{v}^{(t)},
 $$ {#eq-momentum}
 
-with $\beta \in [0.9, 0.99]$. The comparison below uses $\beta = 0.9$, a common choice. This
+where $0 \le \beta < 1$. The comparison below uses $\beta = 0.9$, a common choice. This
 is the ball rolling downhill. In directions where gradients keep agreeing, speed builds. In
 directions where they flip sign every step, they cancel. The zigzag is damped, and momentum
 can reduce the influence of short-lived changes in the gradient.
@@ -452,6 +453,7 @@ The cell gets the comparison's gradients from `backward()`, as in
 2. Define the reusable `race` helper.
 3. Implement the optimizer comparison.
 4. Add a legend naming each optimizer and show the loss curves.
+5. Print the least-squares loss and each optimizer's loss after 40 and 120 updates.
 :::
 
 ```{python}
@@ -485,12 +487,21 @@ def race(kind: str, steps: int = 120, B: int = 16) -> list[float]:
 
 plt.figure(figsize=(6.2, 3.6))
 # [3]
+histories = {}
 for kind, color in [("SGD", "#5379AA"), ("momentum", "#232D4B"),
                     ("Adam", "#E57200")]:
-    plt.semilogy(race(kind), color=color, label=kind)
+    histories[kind] = race(kind)
+    plt.semilogy(histories[kind], color=color, label=kind)
 plt.xlabel("step"); plt.ylabel("full-batch loss (log scale)")
 # [4]
 plt.legend(); plt.tight_layout(); plt.show()
+
+# [5]
+w_ls = torch.linalg.lstsq(Xr, yr).solution
+print(f"least-squares loss: {((Xr @ w_ls - yr) ** 2).mean().item():.4f}")
+print("optimizer       step 40   step 120")
+for kind, hist in histories.items():
+    print(f"{kind:12s} {hist[39]:10.4f} {hist[119]:10.4f}")
 ```
 ::::
 The trajectories isolate how each update rule responds to unequal curvature. Per-direction
@@ -726,7 +737,7 @@ subject of @sec-05-backpropagation.
 2. **(Code.)** On the least-squares problem of @fig-sgd-zones, run 100 SGD steps from
    the far point $(-0.5, 2)$ with one fixed learning rate (for example $\eta = 0.05$),
    drawing at each step an independent uniform subset of $B$ of the 80 examples, for
-   $B \in \{1, 4, 16, 80\}$. Measure the radius of the region of confusion as the
+   $B \in \{1, 4, 16, 80\}$. Measure the radius of the region of stochastic fluctuations near the optimum as the
    root-mean-square distance of the last 30 iterates from the optimum,
    $\bigl(\tfrac{1}{30}\sum_{t=71}^{100}\lVert\vect{w}^{(t)}-\hat{\vect{w}}\rVert_2^2\bigr)^{1/2}$.
    Distinguish persistent stochastic variation from unfinished descent: zero batch noise

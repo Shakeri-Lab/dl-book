@@ -67,8 +67,9 @@ EPILOGUE = ROOT / "chapters/epilogue.qmd"
 RMSPROP_PROVENANCE = (
     "- Tieleman and Hinton, “Lecture 6.5 — RMSProp,” *COURSERA: Neural Networks for"
 )
-CANONICAL_EDITION_SENTENCE = (
-    "The HTML edition on this website is the canonical text."
+SHARED_LANGUAGE_AUTHORITY = (
+    "The current Springer manuscript governs the language shared by the printed book and\n"
+    "this website."
 )
 EDITION_STATUS_RE = re.compile(
     r"^dlbook-edition-status:\s*(stable|rolling)\s*$",
@@ -609,8 +610,10 @@ def main() -> None:
             errors,
             "index.qmd: canonical HTML cannot be stable while its derived PDF is rolling",
         )
-    if index_text.count(CANONICAL_EDITION_SENTENCE) != 1:
-        fail(errors, "index.qmd: canonical-HTML sentence must appear exactly once")
+    if index_text.count(SHARED_LANGUAGE_AUTHORITY) != 1:
+        fail(errors, "index.qmd: Springer shared-language authority must appear exactly once")
+    if "The HTML edition on this website is the canonical text." in index_text:
+        fail(errors, "index.qmd: obsolete HTML-first language authority remains")
     if index_text.count(SUPPORT_URL) != 1:
         fail(errors, "index.qmd: optional support URL must appear exactly once")
     if index_text.count(SUPPORT_FREE_CONTRACT) != 1:

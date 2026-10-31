@@ -1,5 +1,9 @@
 # Wave 1 mechanism excerpts — implementation receipt
 
+## Print-language synchronization, 2026-10-31
+
+The one-chain panel now calls the computed loss quantities “loss derivatives” instead of “sensitivities.” Its locally defined `L`, printed `dL/dw` witness, finite differences, local activation derivatives, numeric computation, and controls are unchanged.
+
 Three new optional HTML explanations of existing book examples: `softmax-shift-excerpt`
 (Chapter 2), `one-chain-excerpt` (Chapter 5), `gate-product-excerpt` (Chapter 10).
 
@@ -52,7 +56,7 @@ Digests recomputed with `shasum -a 256` while writing this receipt:
 | Source | SHA-256 |
 |---|---|
 | `chapters/part1/02-logistic-softmax.qmd` | `119424f3869fb1f1cba21397bc3849860ab90df362bfe073abe1aca0393a8256` |
-| `chapters/part1/05-backpropagation.qmd` | `fab3698b449b81027a97b244bb571468bb7bf520a2ed2cb71f73e1e2937276cc` |
+| `chapters/part1/05-backpropagation.qmd` | `c13f3a90b14cd8def1acbb4a67e8c0beb143eba7ec77399b13dcb7c74526065e` |
 | `chapters/part3/10-sequences-rnn.qmd` | `d2284b4167d881cf1b3935427ce381a76817988e0bdcebd2de429f5520edec4a` |
 | `chapters/appendices/a3-precision-performance.qmd` | `878a18542000d1ae9f030741655b2d9f91197d0e7ca7c56e9b430e7aa51318d4` |
 

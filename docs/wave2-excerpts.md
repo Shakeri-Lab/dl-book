@@ -1,5 +1,9 @@
 # Wave 2 mechanism excerpts — implementation receipt
 
+## Print-language synchronization, 2026-10-31
+
+The quantization-grid panel now names the maximum signed code `q_max`, matching `q_{\max}` in the current chapter. The formula, transcript, scope text, and accessible labels use that notation. Internal `Q` variables and CSS/data hooks remain stable; all grids, rounding, numbers, and controls are unchanged. Earlier entries below retain the notation used during those dated reviews.
+
 Five optional HTML explanations of existing book examples, each ported from the scene of the
 DS 6050 lecture film that already draws it (`docs/wave2-plan.md`, Route B): `pooling-bins-excerpt`
 (Chapter 8), `hinge-bump-excerpt` (Chapter 3), `lstm-valves-excerpt` (Chapter 10),

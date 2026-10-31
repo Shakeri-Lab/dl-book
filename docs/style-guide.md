@@ -6,17 +6,49 @@
 
 ## Format Authority
 
-The **HTML edition is the book's source of truth**. Author and review the reading
-order, wording, equations, code surfaces, figures, cross-references, and responsive
-behavior in HTML first. The two Quarto PDF editions were derived conversions (the
-two-sided print edition and the one-sided, open-any continuous edition); they were retired
-on September 30, 2026, and the print edition is now a separate Springer manuscript converted from
-each chapter's TeX freeze. Both had to preserve the HTML edition's content, semantics, and order,
-while allowing only format-required differences such as pagination, line breaking,
-float placement, and print-safe sizing. Never solve a PDF layout problem by changing, omitting, or
-reordering substantive content only in PDF. When the formats appear to disagree,
-repair the shared Quarto source or conversion layer so the PDF follows the canonical
-HTML edition.
+**Author's instruction, October 31, 2026: the current Springer manuscript is the
+source of truth for shared book language.** Carry its wording and qualifications into
+the HTML companion. Use the current manuscript source snapshot when a saved PDF is
+older. Treat the Springer tree as read-only during HTML synchronization; report a
+print-side discrepancy rather than repairing the manuscript as a side effect.
+
+HTML retains its interactive plots, executable cells, diagnostics, accessible
+transcripts, and additional explanations. Preserve existing anchors and interaction
+behavior. Different figures may need different captions, and section placement remains
+a separate editorial decision. An earlier decision to hold panel or fixture wording
+explains a historical difference; it does not override the author's current
+synchronization instruction. Update coupled prose, visible labels, panel text,
+transcripts, accessibility text and their expected strings together within the
+authorized scope.
+
+Recorded executable outputs and their producing code remain the evidence for numerical
+claims. Do not change results to fit a sentence or copy a disputed numerical or causal
+claim merely to make the editions agree. Record the conflict for author review while
+preserving the evidence. The HTML and TeX execution freezes belong to this repository;
+they are not the independently edited Springer master. Matching freeze hashes or
+stdout does not certify agreement with that manuscript.
+
+For an authorized language-only carry, preserve numerical execution and output
+payloads. A reviewed refresh of cached prose must record the source snapshot and exact
+edits, keep both freeze formats consistent, and distinguish a display-label redraw
+from new experimental evidence. Verify the resulting HTML and all affected contracts;
+a source edit, cache refresh or successful build alone does not establish deployment.
+The ordinary execution workflow still applies when the experiment itself changes.
+These rules do not certify that the current branch's checks have passed.
+
+**Historical policy, superseded October 31, 2026:**
+
+> The **HTML edition is the book's source of truth**. Author and review the reading
+> order, wording, equations, code surfaces, figures, cross-references, and responsive
+> behavior in HTML first. The two Quarto PDF editions were derived conversions (the
+> two-sided print edition and the one-sided, open-any continuous edition); they were retired
+> on September 30, 2026, and the print edition is now a separate Springer manuscript converted from
+> each chapter's TeX freeze. Both had to preserve the HTML edition's content, semantics, and order,
+> while allowing only format-required differences such as pagination, line breaking,
+> float placement, and print-safe sizing. Never solve a PDF layout problem by changing, omitting, or
+> reordering substantive content only in PDF. When the formats appear to disagree,
+> repair the shared Quarto source or conversion layer so the PDF follows the canonical
+> HTML edition.
 
 ## Voice in One Paragraph
 

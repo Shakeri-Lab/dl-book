@@ -11,6 +11,9 @@ repository. The examples are written directly in Python and PyTorch and are CPU-
 **Read it:** <https://shakeri-lab.github.io/dl-book/> (the canonical HTML edition; the
 website serves HTML only)
 
+The current Springer manuscript governs shared language; HTML supplies the interactive
+companion and executable evidence, under the [format-authority rule](docs/style-guide.md#format-authority).
+
 **Support it:** The complete book remains free at $0. Optional contributions toward
 continued corrections, figures, and open releases are welcome at
 [Buy Me a Coffee](https://buymeacoffee.com/hshakeri).
@@ -49,10 +52,11 @@ export QUARTO_PYTHON="$HOME/.venvs/dl-book/bin/python"
 quarto render --to html
 ```
 
-CI publishes this HTML bundle and builds no PDF. The book PDFs are retired (September 30, 2026):
-the print edition is a separate Springer manuscript, converted from each chapter's TeX
-freeze (`_freeze/**/execute-results/tex.json` and `figure-pdf/`). Rendering a chapter
-with no `--to` flag keeps that freeze current.
+CI publishes this HTML bundle and builds no PDF. The book PDFs are retired (September 30, 2026).
+The separate Springer manuscript was initially converted from each chapter's TeX freeze
+(`_freeze/**/execute-results/tex.json` and `figure-pdf/`) and is now edited independently.
+Rendering a chapter with no `--to` flag keeps this repository's freeze current; it does
+not synchronize the Springer manuscript.
 
 Execution uses Quarto **freeze** — CI never runs cells; after exporting
 `QUARTO_PYTHON`, refresh a chapter's cache with

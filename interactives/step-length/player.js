@@ -36,8 +36,8 @@
 
   // --- The scene's arithmetic, all of it from the declared fixture -------------------
   // A quadratic bowl in one parameter: L(w) = ½ c (w − w*)², so L'(w) = c (w − w*) and
-  // full-batch descent is w ← w − α L'(w), that is (w − w*) ← (1 − αc)(w − w*). The walk
-  // shrinks exactly when |1 − αc| < 1, i.e. when α < 2/c: the threshold this scene is
+  // full-batch descent is w ← w − η L'(w), that is (w − w*) ← (1 − ηc)(w − w*). The walk
+  // shrinks exactly when |1 − ηc| < 1, i.e. when η < 2/c: the threshold this scene is
   // about. It is computed here from the declared curvature, never typed.
   const loss = w => 0.5 * C * (w - WSTAR) ** 2;
   const slopeAt = w => C * (w - WSTAR);
@@ -273,7 +273,7 @@
       show(chevron, escaped);
       show(startLine, rateShown);
       show(mirror, wallShown); show(wallValue, wallShown);
-      wallValue.textContent = wallShown ? `wall α ${say(THRESHOLD)}` : '·';
+      wallValue.textContent = wallShown ? `wall η ${say(THRESHOLD)}` : '·';
       // A number sits beside the mark it measures, inside the picture at either width: the
       // loss above the ball, the rate under the step arrow whose length it sets. Once the
       // ball is pinned to the frame both stack below it, clear of the header row.
@@ -286,7 +286,7 @@
       lossValue.textContent = `L ${magnitude(loss(trueW))}`;
       const rateX = escaped ? bx : (bx + toX(stepTip)) / 2;
       attrs(rateValue, {x: clampTo(rateX, g.left + rateHalf, g.right - rateHalf), y: rateY});
-      rateValue.textContent = rateShown ? `α ${rate(alpha)}` : '·';
+      rateValue.textContent = rateShown ? `η ${rate(alpha)}` : '·';
       show(rateValue, rateShown);
       // The control's own marks: the wall as soon as the scene names it, the chapter's
       // rule-of-thumb rate with the caption that recommends it.

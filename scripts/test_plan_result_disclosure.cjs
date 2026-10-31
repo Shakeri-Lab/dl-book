@@ -36,11 +36,13 @@ function panel(id, withResults = true) {
 function figureOnlyPanel(id) {
   return `<div class="plan-code plan-code-wide" id="${id}">
     <div class="plan"><ol><li>Draw the figure.</li></ol></div>
+    <p class="print-companion-label" id="${id}-experiment"><a href="#fig-${id}">Experiment 4.C</a></p>
     <div class="cell" id="${id}-cell"><div class="sourceCode">
       <pre class="sourceCode" tabindex="0"><code class="sourceCode">
         <span id="${id}-line1"><span class="co"># [1]</span></span>
         <span id="${id}-line2">plt.show()</span>
       </code></pre><button class="code-copy-button">Copy</button></div>
+      <p class="print-companion-label" id="${id}-figure-label"><a href="#fig-${id}">Experiment 4.D</a></p>
       <div class="cell-output cell-output-display" id="${id}-figure"><div id="fig-${id}" class="quarto-float quarto-figure">
         <figure class="figure"><div><img class="figure-img" alt="A plot" src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs="></div>
         <figcaption>Figure 1: A plot.</figcaption></figure></div></div>
@@ -48,6 +50,7 @@ function figureOnlyPanel(id) {
       <div class="cell-output cell-output-display" id="${id}-imgtable"><img alt="" src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs="><table><tr><td>2</td></tr></table></div>
     </div>
     <style>.mechanism-excerpt { color: #263445; }</style>
+    <p class="print-companion-label" id="${id}-animation"><a href="#${id}-excerpt">Animation 4.A</a></p>
     <details class="mechanism-excerpt" id="${id}-excerpt"><summary>Watch the replay</summary></details>
     <script>/* replay loader */</script>
   </div>`;
@@ -163,6 +166,25 @@ function expectEvidenceInView(context) {
     assert(evidence.parentElement.classList.contains("plan-code-evidence-holder"));
   }
 }
+
+test("print companion labels remain reading material with source and replay closed", () => {
+  for (const untilFound of [true, false]) {
+    const context = fixture({ untilFound });
+    for (const label of context.third.querySelectorAll(".print-companion-label")) {
+      expectRendered(context, label);
+      assert(!label.classList.contains("plan-code-until-found-container"));
+      assert.equal(label.getAttribute("hidden"), null);
+      assert.equal(label.getAttribute("aria-hidden"), null);
+      assert(!context.third.querySelector(".plan-code-results")?.contains(label));
+    }
+    context.third.querySelector(".plan-code-show-all").click();
+    context.third.querySelector(".plan-code-show-all").click();
+    for (const label of context.third.querySelectorAll(".print-companion-label")) {
+      expectRendered(context, label);
+    }
+    context.dom.window.close();
+  }
+});
 
 test("plots and rendered tables show while code is closed; source and printed text stay collapsed", () => {
   const context = fixture();

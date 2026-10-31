@@ -112,17 +112,17 @@
   }
   window.BookDerivativeGates = Object.freeze({ buildState });
   const names = ['Forward value', 'Send a unit backward probe', 'The slope is the multiplier',
-    'A large forward activation', 'A tiny backward sensitivity', 'Substitute active ReLU',
+    'A large forward activation', 'A tiny activation derivative', 'Substitute active ReLU',
     'Equal steps on a log ruler', 'A ceiling, not a whole-network gradient'];
   const captions = [
     'Forward: z = 0 gives a = 0.5. Would a larger output pass more gradient back?',
-    'Backward, a unit sensitivity is multiplied by the tangent’s slope at the cached point. Predict that slope.',
+    'Backward, a unit probe is multiplied by the tangent’s slope at the cached point. Predict that slope.',
     'At its steepest the sigmoid passes one quarter. Now z rises: watch the tangent as the output grows.',
     'The output is now almost one, and the tangent is almost flat. Predict the backward multiplier.',
     'Loud forward, quiet backward: the flat tangent is the multiplier. Drag z to −6: quiet both ways.',
     'Swap in ReLU at the same z. Active, its slope is one: the probe passes whole. Inactive ReLU blocks it.',
-    'Deeper paths multiply gate after gate. Even at best, ×¼ each: ten equal steps down a log ruler.',
-    'Ten best-case sigmoid gates: below one millionth, yet not zero. Weights and branching, omitted here, also scale the full gradient.'
+    'Deeper paths multiply local derivatives. Even at best, ×¼ each: ten equal steps down a log ruler.',
+    'Ten best-case sigmoid derivatives: below one millionth, yet positive. Weights and branching also scale the full gradient.'
   ];
   // While the reader holds z, one sentence that is true at every z; the picture carries the numbers.
   const dragCaptions = {
@@ -214,7 +214,7 @@
   const legendMore = label('ring = location', 'dg-small dg-muted', { 'data-signal-legend-more': '' });
   const chain = make('g', { 'data-factor-chain': '', 'data-quantity': 'sigmoid-activation-factor-ceiling' });
   const chainTitle = label('Isolate the sigmoid factors', '', { 'data-chain-title': '' }, chain);
-  const chainNote = label('Best case at every gate · weights omitted', 'dg-small dg-muted', { 'data-chain-note': '' }, chain);
+  const chainNote = label('Best case at every factor · weights omitted', 'dg-small dg-muted', { 'data-chain-note': '' }, chain);
   const chainWire = make('path', { class: 'dg-reverse-wire', 'data-chain-wire': '' }, '', chain);
   const chainRing = make('circle', { r: 16, class: 'dg-locator', 'data-chain-locator': '' }, '', chain);
   const chainPulse = make('circle', { class: 'dg-sensitivity', 'data-chain-pulse': '' }, '', chain);
@@ -236,7 +236,7 @@
   const ticks = tickExponents.map(exponent => ({ exponent,
     mark: make('path', { class: 'dg-ruler-tick', 'data-ruler-tick': exponent }, '', ruler),
     text: label(exponent ? power(exponent) : '1', 'dg-small', { 'data-ruler-label': exponent }, ruler) }));
-  const rulerTitle = label('sensitivity remaining · log scale', 'dg-small dg-muted', { 'data-ruler-title': '' }, ruler);
+  const rulerTitle = label('derivative product · log scale', 'dg-small dg-muted', { 'data-ruler-title': '' }, ruler);
   const hopArcs = Array.from({ length: fixture.maxGates }, (_, i) =>
     make('path', { class: 'dg-hop', 'data-hop': i + 1 }, '', ruler));
   const reluMarker = make('path', { class: 'dg-relu-marker', 'data-relu-marker': '', 'data-exponent': 0 }, '', ruler);
@@ -304,7 +304,7 @@
     const points = [[narrow ? width - end : r0, chainY], ...positions,
       [narrow ? (lastRow % 2 === 0 ? end : width - end) : r10, positions[positions.length - 1][1]]];
     attrs(chainTitle, { x: cx, y: chainTop }); attrs(chainNote, { x: cx, y: chainTop + 17 });
-    write(chainNote, tight ? 'Best case · weights omitted' : 'Best case at every gate · weights omitted');
+    write(chainNote, tight ? 'Best case · weights omitted' : 'Best case at every factor · weights omitted');
     attrs(chainWire, { d: path(points) });
     chainNodes.forEach((gate, i) => {
       const [x, y] = positions[i];
@@ -348,7 +348,7 @@
       attrs(reluLabel, { x: width - 10, y: ruleY + 54, 'text-anchor': 'end' }); attrs(scope, { x: cx, y: ruleY + 71 });
     }
     // Width-only parts of the component picture: what no act moves.
-    write(legend, tight ? 'filled area = sensitivity' : 'filled area = sensitivity · ring = location');
+    write(legend, tight ? 'area = probe magnitude' : 'area = probe magnitude · ring = location');
     write(upstream, tight ? 'unit: 1' : 'unit probe: 1');
     geometry = { points, ruleY, rulerX, hopHeight, lengths, chainTop };
     placedMix = null;
@@ -445,7 +445,7 @@
           ? ` A unit backward probe is multiplied by the tangent’s slope, ${number(state.factor)}. The forward value stays cached.`
           : ' The backward factor is withheld until a unit probe crosses the component.');
     const described = `${names[stage]}.${local}`
-      + (state.chainVisible ? ` Best-case sigmoid factors only: ${state.gateCount} gates, ceiling ${number(state.bound)}. On the log ruler that is ${state.gateCount} equal steps from 1; an active ReLU path stays at 1. Not the complete network gradient.` : '');
+      + (state.chainVisible ? ` Best-case sigmoid factors only: ${state.gateCount} factors, ceiling ${number(state.bound)}. On the log ruler that is ${state.gateCount} equal steps from 1; an active ReLU path stays at 1. Not the complete network gradient.` : '');
     if (svg.getAttribute('aria-label') !== described) svg.setAttribute('aria-label', described);
     // The face: the point rides the curve, and the tangent there tilts with the slope. The
     // needle has one pixel length at every z, so only its tilt changes.
@@ -465,7 +465,7 @@
     show(legendMore, state.backwardVisible && geometry.tight);
     write(gateLabel, !state.revealed ? '× slope = ?' : state.kink ? '× 0 (kink rule)' : `× slope = ${number(state.factor)}`);
     write(downstream, state.delivered ? number(state.factor) : '?');
-    // Filled area, not radius, encodes sensitivity. The hollow locator has no magnitude meaning.
+    // Filled area, not radius, encodes probe magnitude. The hollow locator has no magnitude meaning.
     // A factor of exactly zero delivers nothing: no packet is drawn, only where it would be.
     const pulseX = rx + (lx - rx) * state.localProgress, opacity = pixel(state.probeOpacity);
     attrs(probe, { opacity }); show(probe, opacity > 0);

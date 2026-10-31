@@ -14,7 +14,7 @@ the iterate up in every direction?
 learning rate in disguise. It is neither. The velocity is a *running sum*, so it is
 **selective**: the components of the gradient that keep their sign accumulate against
 their own history, and the components that reverse subtract from it. The zigzag damps and
-the crawl accelerates from the same rule, at the same instant, with the same `α`.
+the crawl accelerates from the same rule, at the same instant, with the same `η`.
 
 **The picture.** A narrow quadratic valley (steep across, shallow along) runs left to
 right with its bottom at the right, drawn as nested level curves. Below it, two rails on
@@ -28,12 +28,12 @@ sum is written out term by term, head to tail, one term per row — so the tip o
   floor in 3.3658 units of progress). Plain SGD is drawn as the *same* recursion with
   nothing kept, `β = 0`, so its rails carry one term that collapses to nothing before the
   next arrives.
-- **Beat 2** resets to the same start with the same `α`, ghosts the plain path, empties
+- **Beat 2** resets to the same start with the same `η`, ghosts the plain path, empties
   both rails, and asks the reader to predict. The answer is withheld from the drawing, the
   caption, the SVG description and the scrubber text until the picture itself supplies it.
 - **Beats 3–6** run momentum. Inside each step the picture performs the recursion in its
   printed order: the chain **shrinks by `β`**, then this step's gradient is **added to its
-  tip**, and only then does the iterate move by `−α v`. The formula's two halves light in
+  tip**, and only then does the iterate move by `−η v`. The formula's two halves light in
   the same order.
 - **Beat 7** overlays both paths with their step counts and how far each still is from the
   bottom.
@@ -62,12 +62,12 @@ Everything the manuscript owns, mirrored verbatim, from
 | What | Lines | Form in the panel |
 |---|---|---|
 | The velocity recursion `@eq-momentum` | 337–340 | The one typeset formula line, linked as `#eq-momentum` |
-| `β ∈ [0.9, 0.99]` | 342 | Named in the intro; the declared `β` is checked against it |
+| `0 ≤ β < 1` | 342 | Named in the intro; the declared `β` is checked against it |
 | "the iterate zigzags across the steep direction while inching along the shallow one" | 332–334 | Beat 1's caption and transcript item 2 |
 | "in directions where gradients keep agreeing, speed builds; in directions where they flip sign every step, they cancel" | 342–345 | The mechanism the two rails draw |
 | "give the update a memory … a running **velocity** that accumulates gradients" | 334–336 | The summary and the intro |
 | `momentum=0.9` (the chapter's own race cell) | 401 | The declared `β`, and the scope says so |
-| `plain SGD often starts around $\alpha = 0.1$` | 262–263 | Scope only: the declared `α` is not this number |
+| `plain SGD often starts around $\eta = 0.1$` | 262–263 | Scope only: the declared `η` is not this number |
 
 ### Declared computed variants
 
@@ -84,13 +84,13 @@ it. Everything drawn is computed in the browser from the panel's `data-*` attrib
    **exactly 10**: `40 × 0.25 = 10` and `1 × 10 = 10`. This is the fixture's whole point —
    it removes the confound that the steep direction merely has larger gradients. The band
    on each rail is that same `10`.
-3. **The step length, `α = 0.05`, the same for both runs.** With curvature 40 this gives
-   `αλ = 2` exactly, so plain SGD's across component sits on the oscillation boundary and
-   neither grows nor dies: `±0.25` at every step, a perfect zigzag. Along, `αλ = 0.05`, a
-   crawl. A smaller `α` would damp the zigzag *and* slow the crawl further, which is the
-   one-dial problem momentum is for. The chapter's printed rule-of-thumb `α = 0.1` is a
+3. **The step length, `η = 0.05`, the same for both runs.** With curvature 40 this gives
+   `ηλ = 2` exactly, so plain SGD's across component sits on the oscillation boundary and
+   neither grows nor dies: `±0.25` at every step, a perfect zigzag. Along, `ηλ = 0.05`, a
+   crawl. A smaller `η` would damp the zigzag *and* slow the crawl further, which is the
+   one-dial problem momentum is for. The chapter's printed rule-of-thumb `η = 0.1` is a
    different number for a different (normalized) problem and is not used.
-4. **`β = 0.9`,** the low end of the chapter's printed `[0.9, 0.99]` and the value its own
+4. **`β = 0.9`,** the value the chapter's own
    race cell passes to `torch.optim.SGD`. At this setting the across gradient reverses
    about every second step rather than literally every step (plain SGD's reverses every
    step); the arithmetic of cancellation is the same either way, and the scope says so.
@@ -122,13 +122,13 @@ Gradients and velocities under `β = 0.9`, all exact:
   summing to `2.8355`. Along: `4.783, 5.0487, 5.0635, 4.7986, 4.2376, 3.379, 2.2372,
   0.8442`, summing to `30.3916`. Both sums are the velocity, checked against the
   recursion independently in the suite.
-- After the same eight steps at the same `α`: plain SGD is `6.6342` from the bottom,
+- After the same eight steps at the same `η`: plain SGD is `6.6342` from the bottom,
   momentum `0.6754` past it. Plain SGD crossed the valley floor eight times covering
   `3.3658`; momentum crossed it four times covering `10.6754`.
 
 ### Transfer check
 
-> **Check yourself.** Raise `β` from 0.9 to 0.95 and hold `α`. One direction's gradient
+> **Check yourself.** Raise `β` from 0.9 to 0.95 and hold `η`. One direction's gradient
 > stays at 10 every step; another alternates between `+10` and `−10`. What does each
 > direction's velocity settle to?
 >
@@ -186,18 +186,18 @@ band, a link or a path.
 ## Teaching boundary
 
 The one visible sentence: *Momentum is not a larger learning rate: both runs here use the
-same `α = 0.05`, and a quadratic valley is the easy case that real loss surfaces are not.*
+same `η = 0.05`, and a quadratic valley is the easy case that real loss surfaces are not.*
 
 Inside the closed **Scope and caveats** disclosure: that the valley, start, step length,
 `β` and step count are declared and computed, and why none of them could come from the
-chapter's seeded race; that `β = 0.9` is the low end of the printed range and reverses the
+chapter's seeded race; that `β = 0.9` is the chapter's chosen value and reverses the
 across gradient about every second step rather than literally every step; that plain SGD
 is the same recursion with `β = 0` and that during its sweep the rail reads the gradient at
-the drawn position; that `αλ = 2` exactly, so the zigzag neither grows nor dies, and a
-smaller `α` would damp it *and* slow the crawl; the drawing devices (equal scale on both
+the drawn position; that `ηλ = 2` exactly, so the zigzag neither grows nor dies, and a
+smaller `η` would damp it *and* slow the crawl; the drawing devices (equal scale on both
 parameter axes in the wide layout, about 2× across-magnification in the narrow one, one
 declared 2.2 px-per-unit magnification shared by both gradient legs, one shared rail scale,
-and the convention that `v` points uphill while the step is `−αv`); that the along
+and the convention that `v` points uphill while the step is `−ηv`); that the along
 component keeps its sign at all eight steps and the eighth carries the iterate `0.6754`
 *past* the bottom; that **nothing is trained, no loss is plotted**, and the step counts are
 not a claim that one optimizer wins at a shared learning rate — the chapter's own
@@ -239,7 +239,7 @@ has. There is no walker, no shelf, no arrow fan, no ruler, and no confusion regi
 inherited 21 transport checks, the strict beat-hold check, the 6 grammar checks, and 14
 scene checks of this scene's own arithmetic and drawing: a second implementation of both
 runs and of the running sum; the declared loss differentiated by central differences; the
-equality of the two first gradient components; `αλ = 2`; every sign-change count; that
+equality of the two first gradient components; `ηλ = 2`; every sign-change count; that
 every reversal shrinks the across sum below its own decayed history and every agreeing
 term grows the along sum above it; that each drawn link is the term `β^(t−j) g(j)` at the
 rail's declared scale and that the chain's tip is the published velocity; that the three
@@ -263,7 +263,7 @@ Lecture paths are relative to
 
 | Source | SHA-256 |
 |---|---|
-| `chapters/part1/04-training-loss-sgd.qmd` | `09b088cfb16ba24907a2abab259f4d38bcc1a82144704c78a3411463146ed0fe` |
+| `chapters/part1/04-training-loss-sgd.qmd` | `4d72ac11caaafc80a003d93fde15eb82e21165d76e650253f44c1632c639c4e4` |
 | `6050-Ch4/STORYBOARD.md` | `c5f8b635909b585d6c62f310ef2e16801c58421127d9ef6d536d7fbd331db9ce` |
 
 `6050-Ch4/lecture.jsx` was not read; only the storyboard above was consulted, for

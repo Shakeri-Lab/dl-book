@@ -161,8 +161,8 @@ house-colour figure to reconcile.
 
 ## Teaching boundary
 
-> Each garment is one number here; BatchNorm2d pools every pixel of the channel as well, and
-> the running statistics are declared, not trained.
+> One value per image represents one channel here; BatchNorm2d pools batch and both spatial
+> axes, and evaluation uses stored running statistics, declared rather than trained in this toy.
 
 The scope disclosure adds, in six short paragraphs: the toy values, and that the spread is the
 square root of the variance, the mean of the squared deviations over the batch, as the formula
@@ -170,9 +170,9 @@ computes it; that ε is taken as 0 and PyTorch's default of 10⁻⁵ moves no dr
 γ = 1 and β = 0 are a new layer's values, so the output is the reading itself; that the running
 statistics stand in for the chapter's running averages collected during training, declared as
 the two batches' averages, and that PyTorch's own are momentum-weighted and track the unbiased
-variance, so a trained layer would hold other values; that in this one-number toy a batch of one
-garment would leave no spread to measure, the extreme case of the chapter's warning about tiny
-batches; and the palette key.
+variance, so a trained layer would hold other values; that one image in this one-value toy
+has zero variance, while BatchNorm2d also pools the spatial axes, so image count alone does
+not determine how many values enter the statistics; and the palette key.
 
 Deliberately left out: the pooling over N, H and W and the centring and scaling motions, which
 `layernorm-axis` animates; the running estimates' actual values under PyTorch's momentum-weighted
@@ -217,6 +217,6 @@ Lecture paths are relative to the lecture repository root.
 
 | Source | SHA-256 |
 |---|---|
-| `chapters/part2/09-modern-cnns-transfer.qmd` | `749546c78f9f902d373d871b8050f1b17da9cdcd64e7cfa403221748c7789f08` |
+| `chapters/part2/09-modern-cnns-transfer.qmd` | `9079282536dca703edfc0c59a795171ac44e9aadda8f27dbb814eea44aacf3f2` |
 | `6050-Ch9/lecture.jsx` | `446a5c3f889149b46f5fe275c37414d3240bb1b4dc27b347e9212d9f0527402a` |
 | `6050-Ch9/STORYBOARD.md` | `ebe6a9b53bd79c911bb967e84538a8c2a261d3db4db439313de291fc78f2ee5e` |

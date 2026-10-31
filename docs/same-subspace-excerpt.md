@@ -9,7 +9,7 @@ own local review. Mask-before-softmax was separately pushed as `6cde283`.
 If the latent coordinates change, must the reconstruction move?
 
 Placement: `chapters/interludes/making-pca-learnable.qmd`, after the existing
-“Same subspace, not the same coordinates” explanation and before “What if the map
+“Same subspace, different coordinates” explanation and before “What if the map
 could bend?” at `making-pca-learnable.html#same-subspace-excerpt`.
 
 The manuscript already states the orthogonal-basis identity
@@ -145,7 +145,7 @@ Lecture paths are relative to
 
 | Source | SHA-256 |
 |---|---|
-| `chapters/interludes/making-pca-learnable.qmd` | `8d6720ba3a1354b7ac0ea03ea1c6a84ddd7639d07a8197870adb07b4fad4d01a` |
+| `chapters/interludes/making-pca-learnable.qmd` | `8d10f2b4c308bfbb68a28689f1612bc35c36e2b38bd607911991de1007ce447b` |
 | `chapters/part3/11-encoder-decoder.qmd` | `eae2c94dd03c4ba32e1d71aa8873ff256bc7fd6b79405e5437197d124325608f` |
 | `6050-Interlude-Autoencoders/lecture.jsx` | `2d2a0d2bd4c9a8314a79e9bb7ea0afa98077a6ec30ab5e4eb7613fa6e64e91f4` |
 | `6050-Interlude-Autoencoders/STORYBOARD.md` | `3d5686f60c10edb6e5b83236adeebccb933811718e3b08d86d10fe6b2921ddba` |
@@ -183,7 +183,7 @@ defects. The design, fixture, 40-second duration and beats are unchanged.
   that no scene attribute is written during a hold.
 - **Intro wording.** "The identity above" pointed at the SVD and tanh callout,
   which sits between the identity and the panel. The identity is stated in the
-  note "Same subspace, not the same coordinates", two blocks earlier in the same
+  note "Same subspace, different coordinates", two blocks earlier in the same
   section, "Make PCA learnable". The intro now says "the orthogonal-basis identity
   in this section's note" and names it. A test checks that section, note, identity
   and insertion point still appear in that order in the `.qmd`. The `.qmd` is

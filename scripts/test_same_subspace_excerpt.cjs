@@ -109,7 +109,7 @@ test('same subspace: the intro points at the note that states the identity, not 
   assert(title,'the intro names the note by its title');
   // The pointer is true only while that note, holding the identity, sits in the same
   // section as the panel: after the section's H2 and before the heading the panel precedes.
-  const section=chapter.indexOf('\n## Make PCA learnable'),note=chapter.indexOf(`\n## ${title[1]}\n`);
+  const section=chapter.indexOf('\n## Make PCA learnable'),note=chapter.search(new RegExp(`\n## ${title[1]}(?: \\{#[\\w-]+\\})?\n`));
   const identity=chapter.indexOf('(\\matr{V}_k\\matr{Q})(\\matr{V}_k\\matr{Q})^\\top'),anchor=chapter.indexOf(`\n## ${scene.anchor.target}`);
   assert(section>=0&&note>section&&identity>note&&anchor>identity,'section, note, identity and insertion point appear in that order');
   // "This section" is true only if no other section heading intervenes: every later

@@ -1,5 +1,14 @@
 # CLAUDE.md — Pipeline Runbook
 
+> **Current authority, October 31, 2026.** The Springer manuscript governs shared
+> language; this repository supplies the HTML companion and its executable evidence.
+> Keep Springer read-only during HTML synchronization. Preserve HTML-only material,
+> interactions and stable anchors, and reconcile coupled labels and fixtures within
+> the author's authorized scope. Follow [Format Authority](docs/style-guide.md#format-authority),
+> which supersedes older HTML-first wording and blanket prose-edit holds below.
+> A matched HTML/TeX freeze is not a comparison with the Springer master. Current
+> verification and publication require their own receipts; this rule is not a pass claim.
+
 > **Fresh session?** Paste `docs/NEW-CHAT-PROMPT.md` to bootstrap, then read
 > `docs/CONTINUING.md` — its top state block and §9 carry the current picture
 > (release v1.4, September 28, 2026: interludes numbered as chapters; Plan v2 complete; Plan → Code panels shipped; open decisions
@@ -89,8 +98,10 @@ PDF, and the contract and asset audits fail if a PDF, a PDF link, or the retired
 `download.html` page returns. The book PDFs (print, continuous and press) are retired
 (September 30, 2026): the print edition moves to a separate Springer SNmono manuscript,
 so there are no local print proofs, and the contract audit fails if their profiles or
-scripts return. The chapter TeX freeze (`tex.json`, `figure-pdf/`) stays, because that
-manuscript is converted from it. Never commit to `gh-pages` manually.
+scripts return. The chapter TeX freeze (`tex.json`, `figure-pdf/`) stays as a conversion
+input. The Springer manuscript was initially converted from it and is now edited
+independently; refreshing this repository's freeze does not synchronize Springer.
+Never commit to `gh-pages` manually.
 
 **This repo lives in Box** (author's decision, July 25 2026):
 `~/Library/CloudStorage/Box-Box/Teaching/6050/dl-book`, alongside the rest of the
@@ -99,7 +110,8 @@ manuscript is converted from it. Never commit to `gh-pages` manually.
 - **The virtualenv is outside Box** at `~/.venvs/dl-book` — 1.1 GB of
   platform-specific binaries that Box should never sync. Always render with
   `QUARTO_PYTHON=$HOME/.venvs/dl-book/bin/python` (or activate it first).
-- **GitHub remains the source of truth.** Box has corrupted git objects on this
+- **GitHub records this repository's committed state.** This does not assign shared-language
+  authority to HTML. Box has corrupted git objects on this
   project before (`mmap failed`, `early EOF`, `invalid index-pack output`, all on
   the course-site repo). If `git fsck` ever complains here, do not repair in
   place: re-clone from GitHub and copy back any uncommitted work.
@@ -146,7 +158,10 @@ compositions for figures. Full guide: `docs/dl-course-code.md`.
    and numerical audits keep visible code. Pure concept-diagram drawing cells use
    `#| echo: false`; split mixed cells first so hiding coordinates never hides an
    implementation or evidence.
-7. **Execute + render** (this refreshes the committed freeze cache — CI never executes):
+7. **Execute + render** for execution changes (this refreshes the committed freeze cache — CI never executes).
+   For an authorized language-only carry, first follow the current
+   [Format Authority](docs/style-guide.md#format-authority) and its evidence-preserving
+   cache requirements; do not rerun training solely to refresh prose.
    ```bash
    export QUARTO_PYTHON="$HOME/.venvs/dl-book/bin/python"
    quarto render chapters/partN/XX-*.qmd  # NO --to flag!

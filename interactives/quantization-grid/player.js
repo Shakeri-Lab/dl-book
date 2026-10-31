@@ -431,7 +431,7 @@
     if (!dragged) slider.value = String(BITS.indexOf(b));
     const readoutText = `<i>b</i> = ${b} bits`;
     if (readoutKey !== readoutText) { readoutKey = readoutText; readout.innerHTML = readoutText; }
-    slider.setAttribute('aria-valuetext', `b = ${b} bits: Q = ${grid.Q}, ${grid.ticks} ticks, spacing s = ${fmtS(grid, grid.s)}, largest error ${fmtS(grid, grid.maxError)}, ${grid.collisions.length} collision${grid.collisions.length === 1 ? '' : 's'}, payload ${gb(grid)} GB per billion weights.`);
+    slider.setAttribute('aria-valuetext', `b = ${b} bits: q max = ${grid.Q}, ${grid.ticks} ticks, spacing s = ${fmtS(grid, grid.s)}, largest error ${fmtS(grid, grid.maxError)}, ${grid.collisions.length} collision${grid.collisions.length === 1 ? '' : 's'}, payload ${gb(grid)} GB per billion weights.`);
 
     // Redraw only when the picture actually changes, and only from cached geometry.
     const stateKey = [stage, mode, b, dragged, state.gridIn.toFixed(3), state.outIn.toFixed(3), !!state.next,
@@ -447,7 +447,7 @@
       const where = dragged || !state.mix ? `Each dot stands on its nearest tick: ${grid.recon.map(tick3).join(', ')}.`
         : state.mix === 1 ? `Every dot has a tick of its own: ${grid.recon.map(v => fmtS(grid, v)).join(', ')}.`
           : 'The dots are moving between the two grids.';
-      svg.setAttribute('aria-label', `${STAGES[stage]}.${dragged ? ' Reader-set' : ''} b = ${b}, Q = ${grid.Q}, ${grid.ticks} ticks ${fmtS(grid, grid.s)} apart. ${where}`
+      svg.setAttribute('aria-label', `${STAGES[stage]}.${dragged ? ' Reader-set' : ''} b = ${b}, q max = ${grid.Q}, ${grid.ticks} ticks ${fmtS(grid, grid.s)} apart. ${where}`
         + (merged ? ` Collisions: ${merged}.` : ' No collisions.')
         + (state.bracketIn ? ` Largest error ${fmtS(grid, grid.maxError)}, bound s/2 = ${fmtS(grid, grid.bound)}.` : '')
         + (state.payloadIn || dragged ? ` Payload ${gb(grid)} GB per billion weights, against ${gb(G8)} GB at eight bits.` : ''));

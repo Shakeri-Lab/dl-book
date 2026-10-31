@@ -600,12 +600,12 @@ test('quant: the intro says only what the reader needs before pressing play; eve
   // It says where the fixture comes from, and nothing else.
   assert.match(introText, /left panel of the figure above/);
   assert.match(introText, /np\.arange\(-3, 4\) \/ 3/);
-  for (const moved of ['slider', '8-bit', 'Q = 2', 'payload', 'collision']) {
+  for (const moved of ['slider', '8-bit', 'q max = 2', 'payload', 'collision']) {
     assert(!introText.includes(moved), `"${moved}" belongs below the pane, not in the intro`);
   }
   // Every honest qualifier that left the intro or the picture landed in the boundary prose.
   const boundary = f.root.querySelector('.mechanism-boundary').textContent;
-  for (const kept of ['the chapter prints none of them', 'Q = 127, 255 ticks', 's = 0.0079', '0.0039',
+  for (const kept of ['the chapter prints none of them', 'qmax = 127, 255 ticks', 's = 0.0079', '0.0039',
     'the one control', 'Nb', 'not a checkpoint size', '64 × 256', 'per-row scales and zero-points',
     'empty socket', '±1.00 are the only two the grid leaves alone']) {
     assert(boundary.includes(kept), `the boundary paragraph dropped "${kept}"`);
@@ -675,8 +675,8 @@ test('quant: the formula is the chapter\'s rule in the book\'s macros with s and
   // All three clauses stay. Dropping the Q = 2^(b-1) - 1 clause would leave Q undefined in
   // the s = max|w| / Q the panel prints, and the readout no longer names Q.
   assert(source.includes('\\widehat{w} = \\class{qg-s}{s}\\,\\operatorname{round}(\\parameterpart{w}/\\class{qg-s}{s})'));
-  assert(source.includes('\\class{qg-s}{s} = \\frac{\\max|\\parameterpart{w}|}{\\class{qg-Q}{Q}}'));
-  assert(source.includes('\\class{qg-Q}{Q} = 2^{b-1}-1'));
+  assert(source.includes('\\class{qg-s}{s} = \\frac{\\max|\\parameterpart{w}|}{\\class{qg-Q}{q_{\\max}}}'));
+  assert(source.includes('\\class{qg-Q}{q_{\\max}} = 2^{b-1}-1'));
   assert.equal((source.match(/\\parameterpart\{w\}/g) || []).length, 2, 'w is the parameter, twice');
   assert.deepEqual(source.match(/\d+/g), ['2', '1', '1'], 'the only digits are the rule\'s own: no live number inside the formula');
   assert.equal(f.root.querySelectorAll('span[id^="eq-"]').length, 1);
@@ -786,9 +786,9 @@ test('quant: dragging the slider pauses, takes over, and recomputes every mark f
         `${q.ticks} ticks · s = ${fmt(q, q.s)} · ${plain(q.payloadGB)} GB per billion weights`, label);
       assert.equal(w.$('[data-bits-readout]').textContent.replace(/\s+/g, ' '), `b = ${b} bits`, label);
       assert.equal(slider(w).getAttribute('aria-valuetext'),
-        `b = ${b} bits: Q = ${q.Q}, ${q.ticks} ticks, spacing s = ${fmt(q, q.s)}, largest error ${fmt(q, q.maxError)}, `
+        `b = ${b} bits: q max = ${q.Q}, ${q.ticks} ticks, spacing s = ${fmt(q, q.s)}, largest error ${fmt(q, q.maxError)}, `
         + `${q.collisions.length} collision${q.collisions.length === 1 ? '' : 's'}, payload ${plain(q.payloadGB)} GB per billion weights.`, label);
-      assert.match(w.$('[data-figure] svg').getAttribute('aria-label'), new RegExp(`Reader-set b = ${b}, Q = ${q.Q}, ${q.ticks} ticks`), label);
+      assert.match(w.$('[data-figure] svg').getAttribute('aria-label'), new RegExp(`Reader-set b = ${b}, q max = ${q.Q}, ${q.ticks} ticks`), label);
       assert.equal(caption(w).textContent,
         `b = ${b} bits — ${q.collisions.length ? `${['no', 'one', 'two', 'three', 'four'][q.collisions.length]} group${q.collisions.length === 1 ? '' : 's'} collide` : 'nothing collides'}; largest error ${fmt(q, q.maxError)}.`, label);
       // All eight weights stay on the reader's picture, the six the ruler does not name as

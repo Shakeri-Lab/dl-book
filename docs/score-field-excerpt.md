@@ -1,5 +1,9 @@
 # Score field: source and acceptance receipt
 
+## Print-language synchronization, 2026-10-31
+
+The score formula now uses `\sigma^2` for the component variance, matching the current chapter equation. This is a displayed-symbol change only: `data-scale`, `score_scale`, and all numerical calculations stay unchanged. The current Springer figure caption still uses the older symbol `s`; the manuscript is not edited in this pass.
+
 **Author-approved for publication, September 11, 2026.** The author approved this
 scene after browser review. Reference tilt was pushed separately as `bc1133f`;
 deployment of this scene must be verified independently. The insertion is
